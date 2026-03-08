@@ -756,6 +756,8 @@ class PDFoverseerApp:
     # ── Issues management ─────────────────────────────────────────────────────
 
     def _add_issue(self, issue: PageIssue):
+        if issue.issue_type == "inferida":
+            return  # solo mostrar incompletas genuinas
         self.issues.append(issue)
         self._update_issues_button()
         if self.detail_frame.winfo_ismapped():
