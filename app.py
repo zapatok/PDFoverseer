@@ -121,8 +121,11 @@ class PDFoverseerApp:
         # Issues store
         self.issues: list[PageIssue] = []
         self._current_preview_tk: Optional[ImageTk.PhotoImage] = None
-        self._adjustments: dict[int, int] = {}   # issue_idx → -1, 0, +1
+        self._current_preview_pil: Optional[Image.Image] = None
+        self._adjustments: dict[int, int] = {}   # issue_idx → -1
         self._selected_issue_idx: int = -1
+        self._zoom_level: float = 1.0  # 1.0 = fit to canvas
+        self._row_to_issue: dict[int, int] = {}  # listbox_row → issue_idx
 
         # Build all views
         self._build_shared_top()
@@ -374,27 +377,35 @@ class PDFoverseerApp:
         )
         self.btn_open_loc.pack(side=tk.LEFT)
 
-        # RIGHT: Image preview + adjustment buttons
-        right = tk.Frame(paned, bg=BG_PANEL, highlightbackground=SURFACE,
-                          highlightthickness=1)
-        paned.add(right, minsize=400)
+        # RIGHT: Image preview + adjustment
+        self.preview_right = tk.Frame(paned, bg=BG_PANEL, highlightbackground=SURFACE,
+                                      highlightthickness=1)
+        paned.add(self.preview_right, minsize=400)
+
+        # ── Status badge (TOP of preview, above image) ──────────────────
+        self.lbl_adj_badge = tk.Label(
+            self.preview_right, text="✅ INCLUIDA", fg="#11111b",
+            bg=GREEN, font=("Segoe UI", 11, "bold"), pady=4,
+        )
+        self.lbl_adj_badge.pack(fill=tk.X)
 
         self.lbl_preview_title = tk.Label(
-            right, text="Selecciona un problema para ver la página",
+            self.preview_right, text="Selecciona un problema para ver la página",
             fg=DIM, bg=BG_PANEL, font=("Segoe UI", 10, "bold"),
-            anchor="w", padx=8, pady=6,
+            anchor="w", padx=8, pady=4,
         )
         self.lbl_preview_title.pack(fill=tk.X)
 
-        preview_outer = tk.Frame(right, bg=BG_LOG)
-        preview_outer.pack(fill=tk.BOTH, expand=True)
+        # ── Canvas with scrollbars ───────────────────────────────────
+        self.preview_outer = tk.Frame(self.preview_right, bg=BG_LOG)
+        self.preview_outer.pack(fill=tk.BOTH, expand=True)
 
-        self.preview_canvas = tk.Canvas(preview_outer, bg=BG_LOG, highlightthickness=0)
+        self.preview_canvas = tk.Canvas(self.preview_outer, bg=BG_LOG, highlightthickness=0)
 
-        sb_pv = tk.Scrollbar(preview_outer, orient=tk.VERTICAL,
+        sb_pv = tk.Scrollbar(self.preview_outer, orient=tk.VERTICAL,
                               command=self.preview_canvas.yview,
                               bg=SURFACE, troughcolor=BG_PANEL)
-        sb_ph = tk.Scrollbar(preview_outer, orient=tk.HORIZONTAL,
+        sb_ph = tk.Scrollbar(self.preview_outer, orient=tk.HORIZONTAL,
                               command=self.preview_canvas.xview,
                               bg=SURFACE, troughcolor=BG_PANEL)
 
@@ -407,15 +418,9 @@ class PDFoverseerApp:
 
         self.preview_image_id = None
 
-        # ── Toggle bar + status indicator ───────────────────────────────────
-        adj_frame = tk.Frame(right, bg=BG_PANEL)
+        # ── Bottom bar: toggle button + hints ─────────────────────────
+        adj_frame = tk.Frame(self.preview_right, bg=BG_PANEL)
         adj_frame.pack(fill=tk.X, padx=8, pady=(4, 8))
-
-        self.lbl_adj_badge = tk.Label(
-            adj_frame, text="✅ INCLUIDA", fg=GREEN, bg=SURFACE,
-            font=("Segoe UI", 10, "bold"), padx=10, pady=3,
-        )
-        self.lbl_adj_badge.pack(side=tk.LEFT, padx=(0, 8))
 
         self.btn_adj_toggle = tk.Button(
             adj_frame, text="Excluir del conteo",
@@ -428,7 +433,7 @@ class PDFoverseerApp:
         self.btn_adj_toggle.pack(side=tk.LEFT, padx=2)
 
         self.lbl_adj_hint = tk.Label(
-            adj_frame, text="←→ navegar  |  ↑↓ incluir/excluir",
+            adj_frame, text="←→ navegar  |  Espacio incluir/excluir  |  +/− zoom  |  0 reset",
             fg=DIM, bg=BG_PANEL, font=("Segoe UI", 8),
         )
         self.lbl_adj_hint.pack(side=tk.RIGHT, padx=8)
@@ -529,7 +534,7 @@ class PDFoverseerApp:
         self._unbind_detail_keys()
 
     def _unbind_detail_keys(self):
-        for key in ("<Left>", "<Right>", "<Up>", "<Down>"):
+        for key in ("<Left>", "<Right>", "<space>", "<plus>", "<minus>", "<KP_Add>", "<KP_Subtract>", "<Key-0>"):
             self.root.unbind(key)
 
     def _show_detail(self):
@@ -539,8 +544,12 @@ class PDFoverseerApp:
         # Bind keyboard navigation
         self.root.bind("<Left>", self._key_prev_issue)
         self.root.bind("<Right>", self._key_next_issue)
-        self.root.bind("<Up>", self._key_toggle_adj)
-        self.root.bind("<Down>", self._key_toggle_adj)
+        self.root.bind("<space>", self._key_toggle_adj)
+        self.root.bind("<plus>", self._key_zoom_in)
+        self.root.bind("<minus>", self._key_zoom_out)
+        self.root.bind("<KP_Add>", self._key_zoom_in)
+        self.root.bind("<KP_Subtract>", self._key_zoom_out)
+        self.root.bind("<Key-0>", self._key_zoom_reset)
 
     def _show_history(self):
         self._hide_all_frames()
@@ -762,19 +771,56 @@ class PDFoverseerApp:
 
     def _refresh_issues_list(self):
         self.issues_listbox.delete(0, tk.END)
+        self._row_to_issue.clear()
+        excluded_count = len(self._adjustments)
+        included_count = len(self.issues) - excluded_count
         self.lbl_issues_count.config(
-            text=f"{len(self.issues)} problemas encontrados",
+            text=f"{len(self.issues)} problemas  |  {included_count} incluidas  |  {excluded_count} excluidas",
             fg=ORANGE if self.issues else DIM,
         )
-        current_file = None
-        for i, issue in enumerate(self.issues):
-            if issue.pdf_path != current_file:
-                current_file = issue.pdf_path
-                self.issues_listbox.insert(tk.END, f"📁 {issue.pdf_path.name}")
-                self.issues_listbox.itemconfig(tk.END, fg=ACCENT)
-            self._append_issue_to_listbox(i, issue)
+
+        # Separate included vs excluded
+        included = [(i, iss) for i, iss in enumerate(self.issues) if i not in self._adjustments]
+        excluded = [(i, iss) for i, iss in enumerate(self.issues) if i in self._adjustments]
+
+        # ── Included section ──
+        if included:
+            self.issues_listbox.insert(tk.END, f"── ✅ INCLUIDAS ({len(included)}) ──")
+            self.issues_listbox.itemconfig(tk.END, fg=GREEN)
+            current_file = None
+            for i, issue in included:
+                if issue.pdf_path != current_file:
+                    current_file = issue.pdf_path
+                    self.issues_listbox.insert(tk.END, f"  📁 {issue.pdf_path.name}")
+                    self.issues_listbox.itemconfig(self.issues_listbox.size() - 1, fg=ACCENT)
+                self._append_issue_entry(i, issue)
+
+        # ── Excluded section ──
+        if excluded:
+            self.issues_listbox.insert(tk.END, f"── ❌ EXCLUIDAS ({len(excluded)}) ──")
+            self.issues_listbox.itemconfig(tk.END, fg=RED)
+            current_file = None
+            for i, issue in excluded:
+                if issue.pdf_path != current_file:
+                    current_file = issue.pdf_path
+                    self.issues_listbox.insert(tk.END, f"  📁 {issue.pdf_path.name}")
+                    self.issues_listbox.itemconfig(self.issues_listbox.size() - 1, fg=ACCENT)
+                self._append_issue_entry(i, issue)
+
+
+    def _append_issue_entry(self, idx: int, issue: PageIssue):
+        """Agrega una entrada de issue al listbox (sin header de archivo)."""
+        adj = self._adjustments.get(idx, 0)
+        icon = self._adj_icon(idx, issue)
+        suffix = self._adj_suffix(adj)
+        line = f"    {icon}  Pág {issue.pdf_page} — {issue.issue_type}{suffix}"
+        self.issues_listbox.insert(tk.END, line)
+        last = self.issues_listbox.size() - 1
+        self.issues_listbox.itemconfig(last, fg=self._adj_color(idx, issue))
+        self._row_to_issue[last] = idx
 
     def _append_issue_to_listbox(self, idx: int, issue: PageIssue):
+        """Agrega issue al listbox durante el streaming (con header de archivo si es nuevo)."""
         if idx == 0 or self.issues[idx - 1].pdf_path != issue.pdf_path:
             if self.detail_frame.winfo_ismapped():
                 self.issues_listbox.insert(tk.END, f"📁 {issue.pdf_path.name}")
@@ -793,32 +839,39 @@ class PDFoverseerApp:
             text=f"{len(self.issues)} problemas encontrados", fg=ORANGE,
         )
 
+    def _is_header_row(self, text: str) -> bool:
+        """True si la fila es un header (sección o archivo)."""
+        return text.strip().startswith(("📁", "──"))
+
     def _on_issue_select(self, event):
         sel = self.issues_listbox.curselection()
         if not sel:
             return
-        text = self.issues_listbox.get(sel[0])
-        if text.startswith("📁"):
-            return
-
-        issue_idx = 0
-        for i in range(sel[0]):
-            t = self.issues_listbox.get(i)
-            if not t.startswith("📁"):
-                issue_idx += 1
-
-        if issue_idx >= len(self.issues):
-            return
-
+        row = sel[0]
+        issue_idx = self._row_to_issue.get(row)
+        if issue_idx is None:
+            return  # clicked a header row
         self._select_issue_by_idx(issue_idx)
 
-    def _display_preview(self, pil_img: Image.Image):
+    def _display_preview(self, pil_img: Image.Image, keep_zoom: bool = False):
+        if not keep_zoom:
+            self._zoom_level = 1.0
+        self._current_preview_pil = pil_img
+        self._render_preview()
+
+    def _render_preview(self):
+        """Renderiza la imagen actual con el zoom actual."""
+        pil_img = self._current_preview_pil
+        if pil_img is None:
+            return
+
         canvas_w = self.preview_canvas.winfo_width()
         if canvas_w < 100:
             canvas_w = 600
 
         img_w, img_h = pil_img.size
-        scale = min(canvas_w / img_w, 1.5)
+        base_scale = min(canvas_w / img_w, 1.5)
+        scale = base_scale * self._zoom_level
         new_w = int(img_w * scale)
         new_h = int(img_h * scale)
 
@@ -832,19 +885,10 @@ class PDFoverseerApp:
         self.preview_canvas.config(scrollregion=(0, 0, new_w, new_h))
 
     def _open_issue_location(self):
-        sel = self.issues_listbox.curselection()
-        if not sel:
-            return
-        issue_idx = 0
-        for i in range(sel[0]):
-            t = self.issues_listbox.get(i)
-            if not t.startswith("📁"):
-                issue_idx += 1
-        text = self.issues_listbox.get(sel[0])
-        if text.startswith("📁"):
-            return
-        if issue_idx < len(self.issues):
-            _open_in_explorer(self.issues[issue_idx].pdf_path)
+        """Abre la ubicación del issue seleccionado."""
+        idx = self._selected_issue_idx
+        if 0 <= idx < len(self.issues):
+            _open_in_explorer(self.issues[idx].pdf_path)
 
     # ── Adjustment helpers ────────────────────────────────────────────────
 
@@ -864,23 +908,31 @@ class PDFoverseerApp:
         self._update_summary()
 
     def _update_adj_ui(self):
-        """Actualiza badge y botón según el estado del issue seleccionado."""
+        """Actualiza badge, fondo del panel derecho, y botón."""
         idx = self._selected_issue_idx
         excluded = idx in self._adjustments
 
+        # Subtle tint colors for background
+        BG_INCLUDED = "#1a3a2a"   # dark green tint
+        BG_EXCLUDED = "#3a1a1a"   # dark red tint
+
         if excluded:
-            self.lbl_adj_badge.config(text="❌ EXCLUIDA", fg=RED, bg=SURFACE)
+            self.lbl_adj_badge.config(text="❌ EXCLUIDA", fg="#11111b", bg=RED)
             self.btn_adj_toggle.config(
                 text="Incluir en el conteo", fg=GREEN,
                 activeforeground=GREEN, state=tk.NORMAL,
             )
+            self.preview_outer.config(bg=BG_EXCLUDED)
+            self.preview_canvas.config(bg=BG_EXCLUDED)
         else:
-            self.lbl_adj_badge.config(text="✅ INCLUIDA", fg=GREEN, bg=SURFACE)
+            self.lbl_adj_badge.config(text="✅ INCLUIDA", fg="#11111b", bg=GREEN)
             self.btn_adj_toggle.config(
                 text="Excluir del conteo", fg=RED,
                 activeforeground=RED,
                 state=tk.NORMAL if idx >= 0 else tk.DISABLED,
             )
+            self.preview_outer.config(bg=BG_LOG)
+            self.preview_canvas.config(bg=BG_LOG)
 
     def _adj_icon(self, idx: int, issue: PageIssue) -> str:
         if idx in self._adjustments:
@@ -918,8 +970,23 @@ class PDFoverseerApp:
         self._select_issue_by_idx(new_idx)
 
     def _key_toggle_adj(self, event=None):
-        """Tecla ↑/↓ : alternar incluir/excluir."""
+        """Tecla Espacio: alternar incluir/excluir."""
         self._toggle_adjustment()
+
+    def _key_zoom_in(self, event=None):
+        """Tecla + : acercar."""
+        self._zoom_level = min(self._zoom_level * 1.25, 5.0)
+        self._render_preview()
+
+    def _key_zoom_out(self, event=None):
+        """Tecla - : alejar."""
+        self._zoom_level = max(self._zoom_level / 1.25, 0.2)
+        self._render_preview()
+
+    def _key_zoom_reset(self, event=None):
+        """Tecla 0 : restablecer zoom a 100%."""
+        self._zoom_level = 1.0
+        self._render_preview()
 
     def _select_issue_by_idx(self, issue_idx: int):
         """Selecciona un issue programáticamente y actualiza la UI."""
@@ -929,17 +996,12 @@ class PDFoverseerApp:
         self._selected_issue_idx = issue_idx
         issue = self.issues[issue_idx]
 
-        # Find the corresponding listbox row (skip file headers)
-        count = 0
+        # Find the corresponding listbox row via reverse map
         target_row = -1
-        for row in range(self.issues_listbox.size()):
-            text = self.issues_listbox.get(row)
-            if text.startswith("📁"):
-                continue
-            if count == issue_idx:
+        for row, idx in self._row_to_issue.items():
+            if idx == issue_idx:
                 target_row = row
                 break
-            count += 1
 
         if target_row >= 0:
             self.issues_listbox.selection_clear(0, tk.END)
