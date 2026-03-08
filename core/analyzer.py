@@ -192,6 +192,7 @@ def analyze_pdf(
     on_progress: callable,
     on_log:      callable,
     pause_event: threading.Event | None = None,
+    on_issue:    callable | None = None,
 ) -> list[Document]:
     """
     Regla de inferencia cuando OCR falla completamente:
@@ -205,6 +206,8 @@ def analyze_pdf(
 
     pause_event: si se proporciona, se espera a que esté set() antes de
                  procesar cada página (permite pausar externamente).
+    on_issue:    callback(pdf_page, issue_type, detail, pil_image) llamado
+                 cuando se detecta un problema en una página.
     """
     on_log("Leyendo metadatos...", "info")
     try:
@@ -226,6 +229,10 @@ def analyze_pdf(
     current:      Optional[Document] = None
     orphans:      list[int] = []
     method_tally: dict[str, int] = {}
+
+    def _issue(page: int, kind: str, detail: str, pil_img: Image.Image):
+        if on_issue is not None:
+            on_issue(page, kind, detail, pil_img)
 
     for i, img in enumerate(images):
         # ── Pause support ────────────────────────────────────────────────
@@ -257,6 +264,8 @@ def analyze_pdf(
             if current is None:
                 orphans.append(pdf_page)
                 on_log(f"  → huérfana: curr={curr} sin doc activo", "warn")
+                _issue(pdf_page, "huérfana",
+                       f"curr={curr} sin doc activo", img)
             else:
                 expected = current.found_total + 1
                 if curr == expected and tot == current.declared_total:
@@ -264,23 +273,22 @@ def analyze_pdf(
                 else:
                     current.sequence_ok = False
                     current.pages.append(pdf_page)
-                    on_log(
-                        f"  → secuencia rota en doc {current.index}: "
-                        f"esperaba {expected}/{current.declared_total}, llegó {curr}/{tot}",
-                        "warn",
-                    )
+                    detail = (f"secuencia rota en doc {current.index}: "
+                              f"esperaba {expected}/{current.declared_total}, "
+                              f"llegó {curr}/{tot}")
+                    on_log(f"  → {detail}", "warn")
+                    _issue(pdf_page, "secuencia rota", detail, img)
 
         else:
             # OCR falló
             if current is not None and current.found_total < current.declared_total:
                 # Continuación de un doc en curso: la página falta en mitad del doc
                 current.inferred_pages.append(pdf_page)
-                on_log(
-                    f"  → pág {pdf_page} inferida como "
-                    f"{current.found_total + 1}/{current.declared_total} "
-                    f"en doc {current.index}",
-                    "warn",
-                )
+                detail = (f"inferida como "
+                          f"{current.found_total + 1}/{current.declared_total} "
+                          f"en doc {current.index}")
+                on_log(f"  → pág {pdf_page} {detail}", "warn")
+                _issue(pdf_page, "inferida", detail, img)
             else:
                 # Doc activo completo (o sin doc activo):
                 # probablemente es la pág 1/N de un doc nuevo cuyo encabezado
@@ -295,11 +303,10 @@ def analyze_pdf(
                     inferred_pages = [pdf_page],
                     sequence_ok    = False,  # inicio incierto → siempre marcado
                 )
-                on_log(
-                    f"  → pág {pdf_page} inferida como inicio del doc {current.index} "
-                    f"(OCR falló en pág 1, declared_total estimado=2)",
-                    "warn",
-                )
+                detail = (f"inferida como inicio del doc {current.index} "
+                          f"(OCR falló en pág 1, declared_total estimado=2)")
+                on_log(f"  → pág {pdf_page} {detail}", "warn")
+                _issue(pdf_page, "inferida", detail, img)
 
         on_progress(pdf_page, total_pages)
 
