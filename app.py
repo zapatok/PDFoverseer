@@ -121,6 +121,8 @@ class PDFoverseerApp:
         # Issues store
         self.issues: list[PageIssue] = []
         self._current_preview_tk: Optional[ImageTk.PhotoImage] = None
+        self._adjustments: dict[int, int] = {}   # issue_idx → -1, 0, +1
+        self._selected_issue_idx: int = -1
 
         # Build all views
         self._build_shared_top()
@@ -200,6 +202,12 @@ class PDFoverseerApp:
         self.lbl_inc.pack(side=tk.LEFT)
         self.lbl_inf = tk.Label(summary, text="Inferidas: –", fg=ORANGE, **lbl_kw)
         self.lbl_inf.pack(side=tk.LEFT)
+
+        # Separator + adjusted total
+        tk.Frame(summary, bg=SURFACE, width=2).pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=4)
+        self.lbl_adjusted = tk.Label(summary, text="Ajustado: –", fg=ACCENT, **lbl_kw)
+        self.lbl_adjusted.pack(side=tk.LEFT)
+
         self.lbl_pdfs_count = tk.Label(summary, text="PDFs: –", fg=DIM, **lbl_kw)
         self.lbl_pdfs_count.pack(side=tk.RIGHT)
 
@@ -366,7 +374,7 @@ class PDFoverseerApp:
         )
         self.btn_open_loc.pack(side=tk.LEFT)
 
-        # RIGHT: Image preview
+        # RIGHT: Image preview + adjustment buttons
         right = tk.Frame(paned, bg=BG_PANEL, highlightbackground=SURFACE,
                           highlightthickness=1)
         paned.add(right, minsize=400)
@@ -398,6 +406,50 @@ class PDFoverseerApp:
         self.preview_canvas.pack(fill=tk.BOTH, expand=True)
 
         self.preview_image_id = None
+
+        # ── Adjustment buttons ────────────────────────────────────────────
+        adj_frame = tk.Frame(right, bg=BG_PANEL)
+        adj_frame.pack(fill=tk.X, padx=8, pady=(4, 8))
+
+        tk.Label(adj_frame, text="Ajuste de conteo:", fg=DIM, bg=BG_PANEL,
+                 font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(0, 8))
+
+        btn_kw = dict(
+            font=("Segoe UI", 9, "bold"), padx=12, pady=3,
+            relief=tk.FLAT, cursor="hand2", state=tk.DISABLED,
+        )
+        self.btn_adj_keep = tk.Button(
+            adj_frame, text="Mantener",
+            command=lambda: self._set_adjustment(0),
+            bg=ACCENT, fg="#11111b",
+            activebackground=ACCENT_DARK, activeforeground="#11111b",
+            **btn_kw,
+        )
+        self.btn_adj_keep.pack(side=tk.LEFT, padx=2)
+
+        self.btn_adj_sub = tk.Button(
+            adj_frame, text="−1  Restar",
+            command=lambda: self._set_adjustment(-1),
+            bg=SURFACE, fg=RED,
+            activebackground="#45475a", activeforeground=RED,
+            **btn_kw,
+        )
+        self.btn_adj_sub.pack(side=tk.LEFT, padx=2)
+
+        self.btn_adj_add = tk.Button(
+            adj_frame, text="+1  Sumar",
+            command=lambda: self._set_adjustment(1),
+            bg=SURFACE, fg=GREEN,
+            activebackground="#45475a", activeforeground=GREEN,
+            **btn_kw,
+        )
+        self.btn_adj_add.pack(side=tk.LEFT, padx=2)
+
+        self.lbl_adj_status = tk.Label(
+            adj_frame, text="", fg=DIM, bg=BG_PANEL,
+            font=("Segoe UI", 9),
+        )
+        self.lbl_adj_status.pack(side=tk.LEFT, padx=10)
 
     # ══════════════════════════════════════════════════════════════════════════
     # ── History view (Treeview with expandable rows) ──────────────────────────
@@ -559,8 +611,10 @@ class PDFoverseerApp:
         # Reset per-PDF results
         self._pdf_results.clear()
 
-        # Reset issues
+        # Reset issues and adjustments
         self.issues.clear()
+        self._adjustments.clear()
+        self._selected_issue_idx = -1
         self._update_issues_button()
 
         self.lbl_pdfs_count.config(text=f"PDFs: 0 / {len(self.pdf_list)}")
@@ -734,13 +788,13 @@ class PDFoverseerApp:
                 last = self.issues_listbox.size() - 1
                 self.issues_listbox.itemconfig(last, fg=ACCENT)
 
-        icon = "🔮" if issue.issue_type == "inferida" else "⚠"
-        line = f"  {icon}  Pág {issue.pdf_page} — {issue.issue_type}"
+        adj = self._adjustments.get(idx, 0)
+        icon = self._adj_icon(idx, issue)
+        suffix = self._adj_suffix(adj)
+        line = f"  {icon}  Pág {issue.pdf_page} — {issue.issue_type}{suffix}"
         self.issues_listbox.insert(tk.END, line)
         last = self.issues_listbox.size() - 1
-        self.issues_listbox.itemconfig(
-            last, fg=YELLOW if issue.issue_type == "inferida" else ORANGE,
-        )
+        self.issues_listbox.itemconfig(last, fg=self._adj_color(idx, issue))
         self.issues_listbox.see(last)
         self.lbl_issues_count.config(
             text=f"{len(self.issues)} problemas encontrados", fg=ORANGE,
@@ -763,6 +817,7 @@ class PDFoverseerApp:
         if issue_idx >= len(self.issues):
             return
 
+        self._selected_issue_idx = issue_idx
         issue = self.issues[issue_idx]
         self.lbl_preview_title.config(
             text=f"Pág {issue.pdf_page}  —  {issue.issue_type}  —  {issue.pdf_path.name}",
@@ -770,6 +825,8 @@ class PDFoverseerApp:
         )
         self.btn_open_loc.config(state=tk.NORMAL)
         self._display_preview(issue.pil_image)
+        self._enable_adj_buttons()
+        self._update_adj_highlight()
 
     def _display_preview(self, pil_img: Image.Image):
         canvas_w = self.preview_canvas.winfo_width()
@@ -804,6 +861,77 @@ class PDFoverseerApp:
             return
         if issue_idx < len(self.issues):
             _open_in_explorer(self.issues[issue_idx].pdf_path)
+
+    # ── Adjustment helpers ────────────────────────────────────────────────────
+
+    def _set_adjustment(self, value: int):
+        """Establece el ajuste para el issue seleccionado."""
+        idx = self._selected_issue_idx
+        if idx < 0 or idx >= len(self.issues):
+            return
+
+        if value == 0:
+            self._adjustments.pop(idx, None)
+        else:
+            self._adjustments[idx] = value
+
+        self._update_adj_highlight()
+        self._refresh_issues_list()
+        self._update_summary()
+
+    def _enable_adj_buttons(self):
+        """Habilita los botones de ajuste."""
+        self.btn_adj_keep.config(state=tk.NORMAL)
+        self.btn_adj_sub.config(state=tk.NORMAL)
+        self.btn_adj_add.config(state=tk.NORMAL)
+
+    def _update_adj_highlight(self):
+        """Resalta visualmente el botón activo según el ajuste actual."""
+        idx = self._selected_issue_idx
+        adj = self._adjustments.get(idx, 0)
+
+        # Reset all to default
+        self.btn_adj_keep.config(bg=SURFACE, fg=FG)
+        self.btn_adj_sub.config(bg=SURFACE, fg=RED)
+        self.btn_adj_add.config(bg=SURFACE, fg=GREEN)
+
+        # Highlight active
+        if adj == 0:
+            self.btn_adj_keep.config(bg=ACCENT, fg="#11111b")
+            self.lbl_adj_status.config(text="Sin ajuste", fg=DIM)
+        elif adj == -1:
+            self.btn_adj_sub.config(bg=RED, fg="#11111b")
+            self.lbl_adj_status.config(text="−1 al conteo", fg=RED)
+        elif adj == 1:
+            self.btn_adj_add.config(bg=GREEN, fg="#11111b")
+            self.lbl_adj_status.config(text="+1 al conteo", fg=GREEN)
+
+    def _adj_icon(self, idx: int, issue: PageIssue) -> str:
+        adj = self._adjustments.get(idx, 0)
+        if adj == -1:
+            return "➖"
+        elif adj == 1:
+            return "➕"
+        return "🔮" if issue.issue_type == "inferida" else "⚠"
+
+    def _adj_suffix(self, adj: int) -> str:
+        if adj == -1:
+            return "  [−1]"
+        elif adj == 1:
+            return "  [+1]"
+        return ""
+
+    def _adj_color(self, idx: int, issue: PageIssue) -> str:
+        adj = self._adjustments.get(idx, 0)
+        if adj == -1:
+            return RED
+        elif adj == 1:
+            return GREEN
+        return YELLOW if issue.issue_type == "inferida" else ORANGE
+
+    def _get_adjusted_total(self) -> int:
+        """Calcula el total de documentos con los ajustes del usuario."""
+        return self.total_docs + sum(self._adjustments.values())
 
     # ── History management ────────────────────────────────────────────────────
 
@@ -906,6 +1034,7 @@ class PDFoverseerApp:
         self.lbl_gprog.config(text=f"Global: PDF {done} / {total}")
 
     def _update_summary(self):
+        adj_total = self._get_adjusted_total()
         self.lbl_total.config(text=f"Documentos: {self.total_docs}")
         self.lbl_ok.config(text=f"Completos: {self.total_complete}")
         self.lbl_inc.config(
@@ -913,6 +1042,13 @@ class PDFoverseerApp:
             fg=RED if self.total_incomplete > 0 else GREEN,
         )
         self.lbl_inf.config(text=f"Inferidas: {self.total_inferred}")
+        delta = adj_total - self.total_docs
+        if delta == 0:
+            self.lbl_adjusted.config(text=f"Ajustado: {adj_total}", fg=ACCENT)
+        elif delta > 0:
+            self.lbl_adjusted.config(text=f"Ajustado: {adj_total} (+{delta})", fg=GREEN)
+        else:
+            self.lbl_adjusted.config(text=f"Ajustado: {adj_total} ({delta})", fg=RED)
 
     def _show_file_summary(self, docs: list[Document], filename: str):
         complete = [d for d in docs if d.is_complete]
