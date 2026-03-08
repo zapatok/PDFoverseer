@@ -256,7 +256,17 @@ def analyze_pdf(
         return []
 
     on_log(f"Total páginas: {total_pages}", "info")
-    on_log("Procesando páginas...", "info")
+    on_log("Convirtiendo páginas...", "info")
+    try:
+        all_images = convert_from_path(
+            pdf_path, dpi=DPI,
+            thread_count=POPPLER_THREADS,
+        )
+    except Exception as e:
+        on_log(f"Error convirtiendo PDF: {e}", "error")
+        return []
+
+    on_log(f"Procesando {len(all_images)} páginas...", "info")
 
     documents:    list[Document] = []
     current:      Optional[Document] = None
@@ -268,23 +278,10 @@ def analyze_pdf(
         if on_issue is not None:
             on_issue(page, kind, detail, pil_img)
 
-    for pdf_page in range(1, total_pages + 1):
+    for pdf_page, img in enumerate(all_images, start=1):
         # ── Pause support ────────────────────────────────────────────────
         if pause_event is not None:
             pause_event.wait()
-
-        # ── Conversión página por página ─────────────────────────────────
-        try:
-            pages = convert_from_path(
-                pdf_path, dpi=DPI,
-                first_page=pdf_page, last_page=pdf_page,
-                thread_count=POPPLER_THREADS,
-            )
-            img = pages[0]
-        except Exception as e:
-            on_log(f"  Pág {pdf_page:>4}: error renderizando — {e}", "error")
-            on_progress(pdf_page, total_pages)
-            continue
 
         curr, tot, method = extract_page_number(img, hint_method=last_method)
         method_tally[method] = method_tally.get(method, 0) + 1
