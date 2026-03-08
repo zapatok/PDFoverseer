@@ -3,8 +3,8 @@ PDFoverseer  —  Supervisor de PDFs en carpeta
 ==============================================
 Selecciona una carpeta (o un PDF individual) y analiza todos los PDFs
 encontrados en orden, usando la lógica core de pdfcount.py (OCR + state
-machine).  Permite pausar / reanudar el proceso y visualizar las páginas
-problemáticas en una vista de detalle.
+machine).  Permite pausar / reanudar el proceso, visualizar las páginas
+problemáticas y consultar un historial de ejecuciones anteriores.
 """
 
 from __future__ import annotations
@@ -14,13 +14,15 @@ import subprocess
 import threading
 import tkinter as tk
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import Optional
 
 from PIL import Image, ImageTk
 
 from core.analyzer import Document, analyze_pdf
+from history import HistoryEntry, PDFResult, add_entry, clear_history, load_history
 
 # ── Colores y estilos ─────────────────────────────────────────────────────────
 
@@ -63,7 +65,7 @@ _STATUS = {
 class PageIssue:
     pdf_path:   Path
     pdf_page:   int
-    issue_type: str       # "inferida", "huérfana", "secuencia rota"
+    issue_type: str
     detail:     str
     pil_image:  Image.Image
 
@@ -71,7 +73,6 @@ class PageIssue:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _find_pdfs(folder: str) -> list[Path]:
-    """Busca PDFs recursivamente y los devuelve ordenados por nombre."""
     result = []
     for root, _dirs, files in os.walk(folder):
         for f in sorted(files):
@@ -81,7 +82,6 @@ def _find_pdfs(folder: str) -> list[Path]:
 
 
 def _open_in_explorer(path: Path):
-    """Abre el explorador de archivos con el archivo seleccionado."""
     try:
         subprocess.Popen(f'explorer /select,"{path}"')
     except Exception:
@@ -104,22 +104,30 @@ class PDFoverseerApp:
         self.pause_event = threading.Event()
         self.pause_event.set()
 
+        # Source tracking (for history)
+        self._current_source: str = ""
+        self._current_source_name: str = ""
+        self._current_is_folder: bool = False
+
         # Global accumulators
         self.total_docs = 0
         self.total_complete = 0
         self.total_incomplete = 0
         self.total_inferred = 0
 
+        # Per-PDF results (for history)
+        self._pdf_results: list[PDFResult] = []
+
         # Issues store
         self.issues: list[PageIssue] = []
         self._current_preview_tk: Optional[ImageTk.PhotoImage] = None
 
-        # Build both views
+        # Build all views
         self._build_shared_top()
         self._build_main_view()
         self._build_detail_view()
+        self._build_history_view()
 
-        # Start on main
         self._show_main()
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -127,7 +135,6 @@ class PDFoverseerApp:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _build_shared_top(self):
-        # ── Buttons ───────────────────────────────────────────────────────────
         top = tk.Frame(self.root, bg=BG)
         top.pack(fill=tk.X, padx=14, pady=(12, 4))
 
@@ -164,6 +171,14 @@ class PDFoverseerApp:
             state=tk.DISABLED,
         )
         self.btn_issues.pack(side=tk.LEFT)
+
+        self.btn_history = tk.Button(
+            top, text="📊  Historial", command=self._show_history,
+            bg=SURFACE, fg=FG, font=("Segoe UI", 10, "bold"),
+            activebackground="#45475a", activeforeground=FG,
+            padx=14, pady=5, relief=tk.FLAT, cursor="hand2",
+        )
+        self.btn_history.pack(side=tk.LEFT, padx=(6, 0))
 
         self.lbl_folder = tk.Label(
             top, text="Ningún origen seleccionado",
@@ -293,7 +308,6 @@ class PDFoverseerApp:
     def _build_detail_view(self):
         self.detail_frame = tk.Frame(self.root, bg=BG)
 
-        # Top bar with back button
         dtop = tk.Frame(self.detail_frame, bg=BG)
         dtop.pack(fill=tk.X, padx=14, pady=(4, 2))
 
@@ -311,7 +325,6 @@ class PDFoverseerApp:
         )
         self.lbl_issues_count.pack(side=tk.LEFT, padx=12)
 
-        # Paned: issues list + preview
         paned = tk.PanedWindow(self.detail_frame, orient=tk.HORIZONTAL, bg=BG,
                                 sashwidth=6, sashrelief=tk.FLAT)
         paned.pack(fill=tk.BOTH, expand=True, padx=14, pady=(2, 12))
@@ -341,7 +354,6 @@ class PDFoverseerApp:
         sb_il.config(command=self.issues_listbox.yview)
         self.issues_listbox.bind("<<ListboxSelect>>", self._on_issue_select)
 
-        # Button bar under issues list
         ib = tk.Frame(left, bg=BG_PANEL)
         ib.pack(fill=tk.X, padx=6, pady=6)
 
@@ -366,13 +378,10 @@ class PDFoverseerApp:
         )
         self.lbl_preview_title.pack(fill=tk.X)
 
-        # Scrollable canvas for the image
         preview_outer = tk.Frame(right, bg=BG_LOG)
         preview_outer.pack(fill=tk.BOTH, expand=True)
 
-        self.preview_canvas = tk.Canvas(
-            preview_outer, bg=BG_LOG, highlightthickness=0,
-        )
+        self.preview_canvas = tk.Canvas(preview_outer, bg=BG_LOG, highlightthickness=0)
 
         sb_pv = tk.Scrollbar(preview_outer, orient=tk.VERTICAL,
                               command=self.preview_canvas.yview,
@@ -390,19 +399,109 @@ class PDFoverseerApp:
 
         self.preview_image_id = None
 
-    # ── Frame switching ───────────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # ── History view (Treeview with expandable rows) ──────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
 
-    def _show_main(self):
-        self.detail_frame.pack_forget()
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
-        self.btn_issues.config(
-            text=f"⚠  Ver Problemas ({len(self.issues)})",
+    def _build_history_view(self):
+        self.history_frame = tk.Frame(self.root, bg=BG)
+
+        htop = tk.Frame(self.history_frame, bg=BG)
+        htop.pack(fill=tk.X, padx=14, pady=(4, 2))
+
+        self.btn_hist_back = tk.Button(
+            htop, text="←  Volver al inicio", command=self._show_main,
+            bg=ACCENT, fg="#11111b", font=("Segoe UI", 10, "bold"),
+            activebackground=ACCENT_DARK, activeforeground="#11111b",
+            padx=14, pady=4, relief=tk.FLAT, cursor="hand2",
+        )
+        self.btn_hist_back.pack(side=tk.LEFT)
+
+        tk.Label(htop, text="Historial de análisis", fg=ACCENT, bg=BG,
+                 font=("Segoe UI", 11, "bold")).pack(side=tk.LEFT, padx=12)
+
+        self.btn_hist_clear = tk.Button(
+            htop, text="🗑  Limpiar historial", command=self._clear_history,
+            bg=SURFACE, fg=RED, font=("Segoe UI", 9),
+            activebackground="#45475a", activeforeground=RED,
+            padx=10, pady=3, relief=tk.FLAT, cursor="hand2",
+        )
+        self.btn_hist_clear.pack(side=tk.RIGHT)
+
+        self.btn_hist_open = tk.Button(
+            htop, text="📂  Abrir ubicación", command=self._open_history_location,
+            bg=SURFACE, fg=FG, font=("Segoe UI", 9),
+            activebackground="#45475a", activeforeground=FG,
+            padx=10, pady=3, relief=tk.FLAT, cursor="hand2",
+        )
+        self.btn_hist_open.pack(side=tk.RIGHT, padx=(0, 6))
+
+        # Treeview
+        tree_frame = tk.Frame(self.history_frame, bg=BG_PANEL,
+                               highlightbackground=SURFACE, highlightthickness=1)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=14, pady=(2, 12))
+
+        cols = ("fecha", "documentos", "completos", "incompletos", "inferidas")
+        self.history_tree = ttk.Treeview(
+            tree_frame, columns=cols, show="tree headings",
+            selectmode="browse",
         )
 
-    def _show_detail(self):
+        # Style the treeview
+        style = ttk.Style()
+        style.configure("Treeview",
+                         background=BG_LOG, foreground=FG,
+                         fieldbackground=BG_LOG,
+                         font=("Consolas", 9),
+                         rowheight=26)
+        style.configure("Treeview.Heading",
+                         background=SURFACE, foreground=FG,
+                         font=("Segoe UI", 9, "bold"))
+        style.map("Treeview",
+                   background=[("selected", ACCENT)],
+                   foreground=[("selected", "#11111b")])
+
+        self.history_tree.heading("#0", text="Origen", anchor="w")
+        self.history_tree.heading("fecha", text="Fecha", anchor="w")
+        self.history_tree.heading("documentos", text="Docs", anchor="center")
+        self.history_tree.heading("completos", text="✓", anchor="center")
+        self.history_tree.heading("incompletos", text="⚠", anchor="center")
+        self.history_tree.heading("inferidas", text="Inf.", anchor="center")
+
+        self.history_tree.column("#0", width=350, minwidth=200)
+        self.history_tree.column("fecha", width=140, minwidth=120)
+        self.history_tree.column("documentos", width=60, minwidth=50, anchor="center")
+        self.history_tree.column("completos", width=60, minwidth=50, anchor="center")
+        self.history_tree.column("incompletos", width=60, minwidth=50, anchor="center")
+        self.history_tree.column("inferidas", width=60, minwidth=50, anchor="center")
+
+        sb_tree = tk.Scrollbar(tree_frame, command=self.history_tree.yview,
+                                bg=SURFACE, troughcolor=BG_PANEL)
+        self.history_tree.configure(yscrollcommand=sb_tree.set)
+        sb_tree.pack(side=tk.RIGHT, fill=tk.Y)
+        self.history_tree.pack(fill=tk.BOTH, expand=True)
+
+    # ── Frame switching ───────────────────────────────────────────────────────
+
+    def _hide_all_frames(self):
         self.main_frame.pack_forget()
+        self.detail_frame.pack_forget()
+        self.history_frame.pack_forget()
+
+    def _show_main(self):
+        self._hide_all_frames()
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        self.btn_issues.config(text=f"⚠  Ver Problemas ({len(self.issues)})")
+
+    def _show_detail(self):
+        self._hide_all_frames()
         self.detail_frame.pack(fill=tk.BOTH, expand=True)
         self._refresh_issues_list()
+
+    def _show_history(self):
+        self._hide_all_frames()
+        self.history_frame.pack(fill=tk.BOTH, expand=True)
+        self._refresh_history_tree()
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -418,6 +517,9 @@ class PDFoverseerApp:
 
         display = Path(folder).name
         self.lbl_folder.config(text=f"📁 {display}  ({len(self.pdf_list)} PDFs)", fg=FG)
+        self._current_source = folder
+        self._current_source_name = display
+        self._current_is_folder = True
         self._start_processing(folder)
 
     def _pick_file(self):
@@ -430,13 +532,14 @@ class PDFoverseerApp:
 
         self.pdf_list = [Path(path)]
         self.lbl_folder.config(text=f"📄 {Path(path).name}", fg=FG)
+        self._current_source = path
+        self._current_source_name = Path(path).name
+        self._current_is_folder = False
         self._start_processing(None)
 
     def _start_processing(self, base_folder: str | None):
-        # Ensure we're on main view
         self._show_main()
 
-        # Populate listbox
         self.pdf_listbox.delete(0, tk.END)
         for p in self.pdf_list:
             if base_folder and p.is_relative_to(base_folder):
@@ -453,16 +556,17 @@ class PDFoverseerApp:
         self.total_inferred = 0
         self._update_summary()
 
+        # Reset per-PDF results
+        self._pdf_results.clear()
+
         # Reset issues
         self.issues.clear()
         self._update_issues_button()
 
         self.lbl_pdfs_count.config(text=f"PDFs: 0 / {len(self.pdf_list)}")
 
-        # Clear log
         self._clear_log()
 
-        # Start processing
         self.btn_folder.config(state=tk.DISABLED)
         self.btn_file.config(state=tk.DISABLED)
         self.btn_pause.config(state=tk.NORMAL)
@@ -512,16 +616,12 @@ class PDFoverseerApp:
             def on_log(msg, level="info"):
                 self.root.after(0, self._log_msg, msg, level)
 
-            # Capture current pdf_path for the closure
             _current_path = pdf_path
 
             def on_issue(page, kind, detail, pil_img, _path=_current_path):
                 issue = PageIssue(
-                    pdf_path=_path,
-                    pdf_page=page,
-                    issue_type=kind,
-                    detail=detail,
-                    pil_image=pil_img,
+                    pdf_path=_path, pdf_page=page,
+                    issue_type=kind, detail=detail, pil_image=pil_img,
                 )
                 self.root.after(0, self._add_issue, issue)
 
@@ -537,6 +637,16 @@ class PDFoverseerApp:
                 self.total_complete += len(complete)
                 self.total_incomplete += len(incomplete)
                 self.total_inferred += inferred
+
+                # Store per-PDF result
+                self._pdf_results.append(PDFResult(
+                    name=rel_name,
+                    path=str(pdf_path),
+                    total_docs=len(docs),
+                    complete=len(complete),
+                    incomplete=len(incomplete),
+                    inferred=inferred,
+                ))
 
                 self.root.after(0, self._update_summary)
                 self.root.after(0, self._show_file_summary, docs, rel_name)
@@ -565,14 +675,33 @@ class PDFoverseerApp:
         self.root.after(0, lambda: self.btn_file.config(state=tk.NORMAL))
         self.root.after(0, lambda: self.btn_pause.config(state=tk.DISABLED))
 
+        # Save to history
+        self.root.after(0, self._save_to_history)
+
+    def _save_to_history(self):
+        """Guarda los resultados del run actual en el historial."""
+        entry = HistoryEntry(
+            date=datetime.now().strftime("%Y-%m-%d %H:%M"),
+            source=self._current_source,
+            source_name=self._current_source_name,
+            is_folder=self._current_is_folder,
+            total_docs=self.total_docs,
+            total_complete=self.total_complete,
+            total_incomplete=self.total_incomplete,
+            total_inferred=self.total_inferred,
+            pdfs=list(self._pdf_results),
+        )
+        try:
+            add_entry(entry)
+            self._log_msg("💾  Resultados guardados en historial", "info")
+        except Exception as e:
+            self._log_msg(f"Error guardando historial: {e}", "error")
+
     # ── Issues management ─────────────────────────────────────────────────────
 
     def _add_issue(self, issue: PageIssue):
-        """Agrega un issue y actualiza el botón / lista si está visible."""
         self.issues.append(issue)
         self._update_issues_button()
-
-        # If detail view is visible, update list live
         if self.detail_frame.winfo_ismapped():
             self._append_issue_to_listbox(len(self.issues) - 1, issue)
 
@@ -585,25 +714,20 @@ class PDFoverseerApp:
         )
 
     def _refresh_issues_list(self):
-        """Reconstruye la lista completa de issues."""
         self.issues_listbox.delete(0, tk.END)
         self.lbl_issues_count.config(
             text=f"{len(self.issues)} problemas encontrados",
             fg=ORANGE if self.issues else DIM,
         )
-
         current_file = None
         for i, issue in enumerate(self.issues):
             if issue.pdf_path != current_file:
                 current_file = issue.pdf_path
-                # File header
                 self.issues_listbox.insert(tk.END, f"📁 {issue.pdf_path.name}")
                 self.issues_listbox.itemconfig(tk.END, fg=ACCENT)
             self._append_issue_to_listbox(i, issue)
 
     def _append_issue_to_listbox(self, idx: int, issue: PageIssue):
-        """Agrega un solo issue al listbox."""
-        # Check if we need a file header
         if idx == 0 or self.issues[idx - 1].pdf_path != issue.pdf_path:
             if self.detail_frame.winfo_ismapped():
                 self.issues_listbox.insert(tk.END, f"📁 {issue.pdf_path.name}")
@@ -617,25 +741,19 @@ class PDFoverseerApp:
         self.issues_listbox.itemconfig(
             last, fg=YELLOW if issue.issue_type == "inferida" else ORANGE,
         )
-        # Store index mapping for selection
         self.issues_listbox.see(last)
-
         self.lbl_issues_count.config(
             text=f"{len(self.issues)} problemas encontrados", fg=ORANGE,
         )
 
     def _on_issue_select(self, event):
-        """Al seleccionar un issue, mostrar la imagen de la página."""
         sel = self.issues_listbox.curselection()
         if not sel:
             return
-
         text = self.issues_listbox.get(sel[0])
-        # Skip file headers
         if text.startswith("📁"):
             return
 
-        # Find the actual issue — count non-header items up to sel[0]
         issue_idx = 0
         for i in range(sel[0]):
             t = self.issues_listbox.get(i)
@@ -646,28 +764,20 @@ class PDFoverseerApp:
             return
 
         issue = self.issues[issue_idx]
-
-        # Update title
         self.lbl_preview_title.config(
             text=f"Pág {issue.pdf_page}  —  {issue.issue_type}  —  {issue.pdf_path.name}",
             fg=ORANGE,
         )
-
-        # Enable open location button
         self.btn_open_loc.config(state=tk.NORMAL)
-
-        # Show image
         self._display_preview(issue.pil_image)
 
     def _display_preview(self, pil_img: Image.Image):
-        """Muestra la imagen en el canvas con scroll."""
-        # Fit to canvas width if possible
         canvas_w = self.preview_canvas.winfo_width()
         if canvas_w < 100:
-            canvas_w = 600  # fallback
+            canvas_w = 600
 
         img_w, img_h = pil_img.size
-        scale = min(canvas_w / img_w, 1.5)  # don't upscale too much
+        scale = min(canvas_w / img_w, 1.5)
         new_w = int(img_w * scale)
         new_h = int(img_h * scale)
 
@@ -681,24 +791,102 @@ class PDFoverseerApp:
         self.preview_canvas.config(scrollregion=(0, 0, new_w, new_h))
 
     def _open_issue_location(self):
-        """Abre el explorador en la ubicación del PDF del issue seleccionado."""
         sel = self.issues_listbox.curselection()
         if not sel:
             return
-
-        # Find actual issue
         issue_idx = 0
         for i in range(sel[0]):
             t = self.issues_listbox.get(i)
             if not t.startswith("📁"):
                 issue_idx += 1
-
         text = self.issues_listbox.get(sel[0])
         if text.startswith("📁"):
             return
-
         if issue_idx < len(self.issues):
             _open_in_explorer(self.issues[issue_idx].pdf_path)
+
+    # ── History management ────────────────────────────────────────────────────
+
+    def _refresh_history_tree(self):
+        """Carga el historial desde disco y rellena el Treeview."""
+        for item in self.history_tree.get_children():
+            self.history_tree.delete(item)
+
+        entries = load_history()
+        if not entries:
+            self.history_tree.insert("", tk.END, text="  (sin historial)",
+                                      values=("", "", "", "", ""))
+            return
+
+        for entry in entries:
+            icon = "📁" if entry.is_folder else "📄"
+            parent = self.history_tree.insert(
+                "", tk.END,
+                text=f"  {icon}  {entry.source_name}",
+                values=(
+                    entry.date,
+                    entry.total_docs,
+                    entry.total_complete,
+                    entry.total_incomplete,
+                    entry.total_inferred,
+                ),
+                open=False,
+                tags=("folder" if entry.is_folder else "file",),
+            )
+
+            # Insert child rows for each PDF
+            for pdf in entry.pdfs:
+                self.history_tree.insert(
+                    parent, tk.END,
+                    text=f"      📄  {pdf.name}",
+                    values=(
+                        "",
+                        pdf.total_docs,
+                        pdf.complete,
+                        pdf.incomplete,
+                        pdf.inferred,
+                    ),
+                    tags=("pdf_child",),
+                )
+
+        # Tag colors
+        self.history_tree.tag_configure("folder", foreground=FG)
+        self.history_tree.tag_configure("file", foreground=FG)
+        self.history_tree.tag_configure("pdf_child", foreground=DIM)
+
+    def _clear_history(self):
+        """Borra todo el historial después de confirmación."""
+        if messagebox.askyesno("Limpiar historial",
+                                "¿Estás seguro de que quieres borrar todo el historial?",
+                                parent=self.root):
+            clear_history()
+            self._refresh_history_tree()
+
+    def _open_history_location(self):
+        """Abre la ubicación del item seleccionado en el historial."""
+        sel = self.history_tree.selection()
+        if not sel:
+            return
+
+        item = sel[0]
+        # Try to get the source path from the item's text
+        # For parent items, find the entry; for children, find the PDF path
+        parent = self.history_tree.parent(item)
+
+        entries = load_history()
+        if parent:
+            # It's a child (PDF) — find its entry
+            parent_idx = self.history_tree.index(parent)
+            if parent_idx < len(entries):
+                child_idx = self.history_tree.index(item)
+                entry = entries[parent_idx]
+                if child_idx < len(entry.pdfs):
+                    _open_in_explorer(Path(entry.pdfs[child_idx].path))
+        else:
+            # It's a parent (folder/file)
+            idx = self.history_tree.index(item)
+            if idx < len(entries):
+                _open_in_explorer(Path(entries[idx].source))
 
     # ── Main view UI helpers ──────────────────────────────────────────────────
 

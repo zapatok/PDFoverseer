@@ -24,3 +24,6 @@ Thumbs.db
 
 # Tesseract / temp
 *.tmp
+
+# User data
+history.json
