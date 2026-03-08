@@ -54,7 +54,7 @@ TESS_CONFIG  = "--psm 6 --oem 1"
 # - punto extra          →  \.?
 # - Z aislado → 2        →  pre-sustitución con _Z2
 _PAGE_RE = re.compile(
-    r"P.{0,2}[gq](?:ina?)?\\.?\\s*(\\d{1,3})\\s*\\.?\\s*de\\s*(\\d{1,3})",
+    r"P.{0,2}[gq](?:ina?)?\.?\s*(\d{1,3})\s*\.?\s*de\s*(\d{1,3})",
     re.IGNORECASE,
 )
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
