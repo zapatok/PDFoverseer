@@ -1,5 +1,5 @@
 """
-analyzer.py  —  Core logic from pdfcount.py (unchanged)
+analyzer.py  —  Core logic from pdfcount.py (optimized)
 ========================================================
 Contador de documentos en PDFs de charlas (CRS).
 
@@ -30,7 +30,7 @@ from __future__ import annotations
 import re
 import threading
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Callable, Optional
 
 import cv2
 import numpy as np
@@ -42,10 +42,14 @@ from PIL import Image
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-DPI          = 150
-CROP_X_START = 0.38   # ignorar 38% izquierdo
-CROP_Y_END   = 0.22   # solo 22% superior
-TESS_CONFIG  = "--psm 6 --oem 1"
+DPI            = 150
+CROP_X_START   = 0.38   # ignorar 38% izquierdo
+CROP_Y_END     = 0.22   # solo 22% superior
+POPPLER_THREADS = 4     # hilos paralelos para renderizar páginas
+
+# Whitelist: solo caracteres relevantes para "Página X de N"
+_TESS_WHITELIST = "PpÁáAaéEgGqQiInN0123456789 de.,"
+TESS_CONFIG  = f"--psm 6 --oem 1 -c tessedit_char_whitelist={_TESS_WHITELIST}"
 
 # Regex: maneja variaciones del OCR en "Página X de N"
 # - á/a/é/4 en "Página"  →  .{0,2}
@@ -126,61 +130,96 @@ def _ink_mask(arr: np.ndarray) -> np.ndarray:
     return (blue | red | green) & not_text & not_bg
 
 
+# ── Métodos de extracción individuales (para cache adaptativo) ────────────────
+
+def _try_baseline(arr, gray):
+    c, t = _ocr(_bin(_up(gray)))
+    return (c, t, "baseline") if c else None
+
+def _try_color_removal(arr, gray):
+    mask = _ink_mask(arr)
+    if not mask.any():
+        return None
+    clean = arr.copy()
+    clean[mask] = [255, 255, 255]
+    c, t = _ocr(_bin(_up(cv2.cvtColor(clean, cv2.COLOR_RGB2GRAY))))
+    return (c, t, "color_removal") if c else None
+
+def _try_red_channel(arr, gray):
+    c, t = _ocr(_bin(_up(arr[:, :, 0])))
+    return (c, t, "red_channel") if c else None
+
+def _try_inpaint(arr, gray):
+    mask = _ink_mask(arr)
+    if not mask.any():
+        return None
+    mask_dil = cv2.dilate(mask.astype(np.uint8) * 255, _KERNEL, iterations=2)
+    inp = cv2.inpaint(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR),
+                      mask_dil, 5, cv2.INPAINT_TELEA)
+    gray3 = cv2.cvtColor(inp, cv2.COLOR_BGR2GRAY)
+    c, t = _ocr(_bin(_up(gray3, factor=3)))
+    return (c, t, "inpaint") if c else None
+
+def _try_wide_crop(arr, gray, pil_img=None):
+    if pil_img is None:
+        return None
+    w, h = pil_img.size
+    arr_wide = np.array(pil_img.crop((int(w * 0.20), 0, w, int(h * 0.30))))
+    c, t = _ocr(_bin(_up(cv2.cvtColor(arr_wide, cv2.COLOR_RGB2GRAY))))
+    return (c, t, "wide_crop") if c else None
+
+def _try_full_width(arr, gray, pil_img=None):
+    if pil_img is None:
+        return None
+    w, h = pil_img.size
+    arr_full = np.array(pil_img.crop((0, 0, w, int(h * 0.28))))
+    c, t = _ocr(_bin(_up(cv2.cvtColor(arr_full, cv2.COLOR_RGB2GRAY))))
+    return (c, t, "full_width") if c else None
+
+# Orden canónico de la cascade
+_METHOD_ORDER = [
+    ("baseline",      _try_baseline),
+    ("color_removal", _try_color_removal),
+    ("red_channel",   _try_red_channel),
+    ("inpaint",       _try_inpaint),
+    ("wide_crop",     _try_wide_crop),
+    ("full_width",    _try_full_width),
+]
+
+_NEEDS_PIL = {"wide_crop", "full_width"}
+
+
 def extract_page_number(
     pil_img: Image.Image,
+    hint_method: str | None = None,
 ) -> tuple[Optional[int], Optional[int], str]:
     """
     Cascade de preprocessings. Retorna (curr, tot, metodo).
-    Se detiene al primer match válido.
+    Si hint_method es proporcionado, intenta ese método primero
+    antes de caer al cascade completo (cache adaptativo).
     """
     w, h = pil_img.size
-
-    def crop_arr(x0: float = CROP_X_START, y1: float = CROP_Y_END) -> np.ndarray:
-        return np.array(pil_img.crop((int(w * x0), 0, w, int(h * y1))))
-
-    arr = crop_arr()
-
-    # 1. Baseline
+    arr = np.array(pil_img.crop((int(w * CROP_X_START), 0, w, int(h * CROP_Y_END))))
     gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-    c, t = _ocr(_bin(_up(gray)))
-    if c:
-        return c, t, "baseline"
 
-    # 2. Eliminación de tinta coloreada
-    mask = _ink_mask(arr)
-    if mask.any():
-        clean = arr.copy()
-        clean[mask] = [255, 255, 255]
-        c, t = _ocr(_bin(_up(cv2.cvtColor(clean, cv2.COLOR_RGB2GRAY))))
-        if c:
-            return c, t, "color_removal"
+    # ── Intento rápido: usar el hint del método anterior ──────────────
+    if hint_method:
+        for name, fn in _METHOD_ORDER:
+            if name == hint_method:
+                kwargs = {"pil_img": pil_img} if name in _NEEDS_PIL else {}
+                result = fn(arr, gray, **kwargs)
+                if result:
+                    return result
+                break  # hint falló, caer al cascade completo
 
-    # 3. Canal rojo (la tinta azul, la más común, aparece clara en este canal)
-    c, t = _ocr(_bin(_up(arr[:, :, 0])))
-    if c:
-        return c, t, "red_channel"
-
-    # 4. Inpainting sobre zona coloreada
-    if mask.any():
-        mask_dil = cv2.dilate(mask.astype(np.uint8) * 255, _KERNEL, iterations=2)
-        inp = cv2.inpaint(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR),
-                          mask_dil, 5, cv2.INPAINT_TELEA)
-        gray3 = cv2.cvtColor(inp, cv2.COLOR_BGR2GRAY)
-        c, t = _ocr(_bin(_up(gray3, factor=3)))
-        if c:
-            return c, t, "inpaint"
-
-    # 5. Crop más amplio (header no estándar, más a la izquierda o más abajo)
-    arr_wide = crop_arr(x0=0.20, y1=0.30)
-    c, t = _ocr(_bin(_up(cv2.cvtColor(arr_wide, cv2.COLOR_RGB2GRAY))))
-    if c:
-        return c, t, "wide_crop"
-
-    # 6. Ancho completo
-    arr_full = crop_arr(x0=0.0, y1=0.28)
-    c, t = _ocr(_bin(_up(cv2.cvtColor(arr_full, cv2.COLOR_RGB2GRAY))))
-    if c:
-        return c, t, "full_width"
+    # ── Cascade completo ──────────────────────────────────────────────
+    for name, fn in _METHOD_ORDER:
+        if name == hint_method:
+            continue  # ya lo intentamos arriba
+        kwargs = {"pil_img": pil_img} if name in _NEEDS_PIL else {}
+        result = fn(arr, gray, **kwargs)
+        if result:
+            return result
 
     return None, None, "failed"
 
@@ -217,31 +256,40 @@ def analyze_pdf(
         return []
 
     on_log(f"Total páginas: {total_pages}", "info")
-    on_log("Convirtiendo a imágenes (puede tardar)...", "info")
-
-    try:
-        images = convert_from_path(pdf_path, dpi=DPI)
-    except Exception as e:
-        on_log(f"Error convirtiendo PDF: {e}", "error")
-        return []
+    on_log("Procesando páginas...", "info")
 
     documents:    list[Document] = []
     current:      Optional[Document] = None
     orphans:      list[int] = []
     method_tally: dict[str, int] = {}
+    last_method:  str | None = None   # cache adaptativo
 
     def _issue(page: int, kind: str, detail: str, pil_img: Image.Image):
         if on_issue is not None:
             on_issue(page, kind, detail, pil_img)
 
-    for i, img in enumerate(images):
+    for pdf_page in range(1, total_pages + 1):
         # ── Pause support ────────────────────────────────────────────────
         if pause_event is not None:
             pause_event.wait()
 
-        pdf_page = i + 1
-        curr, tot, method = extract_page_number(img)
+        # ── Conversión página por página ─────────────────────────────────
+        try:
+            pages = convert_from_path(
+                pdf_path, dpi=DPI,
+                first_page=pdf_page, last_page=pdf_page,
+                thread_count=POPPLER_THREADS,
+            )
+            img = pages[0]
+        except Exception as e:
+            on_log(f"  Pág {pdf_page:>4}: error renderizando — {e}", "error")
+            on_progress(pdf_page, total_pages)
+            continue
+
+        curr, tot, method = extract_page_number(img, hint_method=last_method)
         method_tally[method] = method_tally.get(method, 0) + 1
+        if method != "failed":
+            last_method = method  # actualizar cache
 
         # Log
         if curr is not None:
