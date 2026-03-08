@@ -407,49 +407,31 @@ class PDFoverseerApp:
 
         self.preview_image_id = None
 
-        # ── Adjustment buttons ────────────────────────────────────────────
+        # ── Toggle bar + status indicator ───────────────────────────────────
         adj_frame = tk.Frame(right, bg=BG_PANEL)
         adj_frame.pack(fill=tk.X, padx=8, pady=(4, 8))
 
-        tk.Label(adj_frame, text="Ajuste de conteo:", fg=DIM, bg=BG_PANEL,
-                 font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(0, 8))
-
-        btn_kw = dict(
-            font=("Segoe UI", 9, "bold"), padx=12, pady=3,
-            relief=tk.FLAT, cursor="hand2", state=tk.DISABLED,
+        self.lbl_adj_badge = tk.Label(
+            adj_frame, text="✅ INCLUIDA", fg=GREEN, bg=SURFACE,
+            font=("Segoe UI", 10, "bold"), padx=10, pady=3,
         )
-        self.btn_adj_keep = tk.Button(
-            adj_frame, text="Mantener",
-            command=lambda: self._set_adjustment(0),
-            bg=ACCENT, fg="#11111b",
-            activebackground=ACCENT_DARK, activeforeground="#11111b",
-            **btn_kw,
-        )
-        self.btn_adj_keep.pack(side=tk.LEFT, padx=2)
+        self.lbl_adj_badge.pack(side=tk.LEFT, padx=(0, 8))
 
-        self.btn_adj_sub = tk.Button(
-            adj_frame, text="−1  Restar",
-            command=lambda: self._set_adjustment(-1),
-            bg=SURFACE, fg=RED,
+        self.btn_adj_toggle = tk.Button(
+            adj_frame, text="Excluir del conteo",
+            command=self._toggle_adjustment,
+            bg=SURFACE, fg=RED, font=("Segoe UI", 9, "bold"),
             activebackground="#45475a", activeforeground=RED,
-            **btn_kw,
+            padx=12, pady=3, relief=tk.FLAT, cursor="hand2",
+            state=tk.DISABLED,
         )
-        self.btn_adj_sub.pack(side=tk.LEFT, padx=2)
+        self.btn_adj_toggle.pack(side=tk.LEFT, padx=2)
 
-        self.btn_adj_add = tk.Button(
-            adj_frame, text="+1  Sumar",
-            command=lambda: self._set_adjustment(1),
-            bg=SURFACE, fg=GREEN,
-            activebackground="#45475a", activeforeground=GREEN,
-            **btn_kw,
+        self.lbl_adj_hint = tk.Label(
+            adj_frame, text="←→ navegar  |  ↑↓ incluir/excluir",
+            fg=DIM, bg=BG_PANEL, font=("Segoe UI", 8),
         )
-        self.btn_adj_add.pack(side=tk.LEFT, padx=2)
-
-        self.lbl_adj_status = tk.Label(
-            adj_frame, text="", fg=DIM, bg=BG_PANEL,
-            font=("Segoe UI", 9),
-        )
-        self.lbl_adj_status.pack(side=tk.LEFT, padx=10)
+        self.lbl_adj_hint.pack(side=tk.RIGHT, padx=8)
 
     # ══════════════════════════════════════════════════════════════════════════
     # ── History view (Treeview with expandable rows) ──────────────────────────
@@ -544,16 +526,27 @@ class PDFoverseerApp:
         self._hide_all_frames()
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         self.btn_issues.config(text=f"⚠  Ver Problemas ({len(self.issues)})")
+        self._unbind_detail_keys()
+
+    def _unbind_detail_keys(self):
+        for key in ("<Left>", "<Right>", "<Up>", "<Down>"):
+            self.root.unbind(key)
 
     def _show_detail(self):
         self._hide_all_frames()
         self.detail_frame.pack(fill=tk.BOTH, expand=True)
         self._refresh_issues_list()
+        # Bind keyboard navigation
+        self.root.bind("<Left>", self._key_prev_issue)
+        self.root.bind("<Right>", self._key_next_issue)
+        self.root.bind("<Up>", self._key_toggle_adj)
+        self.root.bind("<Down>", self._key_toggle_adj)
 
     def _show_history(self):
         self._hide_all_frames()
         self.history_frame.pack(fill=tk.BOTH, expand=True)
         self._refresh_history_tree()
+        self._unbind_detail_keys()
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -817,16 +810,7 @@ class PDFoverseerApp:
         if issue_idx >= len(self.issues):
             return
 
-        self._selected_issue_idx = issue_idx
-        issue = self.issues[issue_idx]
-        self.lbl_preview_title.config(
-            text=f"Pág {issue.pdf_page}  —  {issue.issue_type}  —  {issue.pdf_path.name}",
-            fg=ORANGE,
-        )
-        self.btn_open_loc.config(state=tk.NORMAL)
-        self._display_preview(issue.pil_image)
-        self._enable_adj_buttons()
-        self._update_adj_highlight()
+        self._select_issue_by_idx(issue_idx)
 
     def _display_preview(self, pil_img: Image.Image):
         canvas_w = self.preview_canvas.winfo_width()
@@ -862,76 +846,114 @@ class PDFoverseerApp:
         if issue_idx < len(self.issues):
             _open_in_explorer(self.issues[issue_idx].pdf_path)
 
-    # ── Adjustment helpers ────────────────────────────────────────────────────
+    # ── Adjustment helpers ────────────────────────────────────────────────
 
-    def _set_adjustment(self, value: int):
-        """Establece el ajuste para el issue seleccionado."""
+    def _toggle_adjustment(self):
+        """Alterna incluir/excluir la página del conteo."""
         idx = self._selected_issue_idx
         if idx < 0 or idx >= len(self.issues):
             return
 
-        if value == 0:
-            self._adjustments.pop(idx, None)
-        else:
-            self._adjustments[idx] = value
+        if idx in self._adjustments:  # currently excluded → re-include
+            self._adjustments.pop(idx)
+        else:                         # currently included → exclude
+            self._adjustments[idx] = -1
 
-        self._update_adj_highlight()
+        self._update_adj_ui()
         self._refresh_issues_list()
         self._update_summary()
 
-    def _enable_adj_buttons(self):
-        """Habilita los botones de ajuste."""
-        self.btn_adj_keep.config(state=tk.NORMAL)
-        self.btn_adj_sub.config(state=tk.NORMAL)
-        self.btn_adj_add.config(state=tk.NORMAL)
-
-    def _update_adj_highlight(self):
-        """Resalta visualmente el botón activo según el ajuste actual."""
+    def _update_adj_ui(self):
+        """Actualiza badge y botón según el estado del issue seleccionado."""
         idx = self._selected_issue_idx
-        adj = self._adjustments.get(idx, 0)
+        excluded = idx in self._adjustments
 
-        # Reset all to default
-        self.btn_adj_keep.config(bg=SURFACE, fg=FG)
-        self.btn_adj_sub.config(bg=SURFACE, fg=RED)
-        self.btn_adj_add.config(bg=SURFACE, fg=GREEN)
-
-        # Highlight active
-        if adj == 0:
-            self.btn_adj_keep.config(bg=ACCENT, fg="#11111b")
-            self.lbl_adj_status.config(text="Sin ajuste", fg=DIM)
-        elif adj == -1:
-            self.btn_adj_sub.config(bg=RED, fg="#11111b")
-            self.lbl_adj_status.config(text="−1 al conteo", fg=RED)
-        elif adj == 1:
-            self.btn_adj_add.config(bg=GREEN, fg="#11111b")
-            self.lbl_adj_status.config(text="+1 al conteo", fg=GREEN)
+        if excluded:
+            self.lbl_adj_badge.config(text="❌ EXCLUIDA", fg=RED, bg=SURFACE)
+            self.btn_adj_toggle.config(
+                text="Incluir en el conteo", fg=GREEN,
+                activeforeground=GREEN, state=tk.NORMAL,
+            )
+        else:
+            self.lbl_adj_badge.config(text="✅ INCLUIDA", fg=GREEN, bg=SURFACE)
+            self.btn_adj_toggle.config(
+                text="Excluir del conteo", fg=RED,
+                activeforeground=RED,
+                state=tk.NORMAL if idx >= 0 else tk.DISABLED,
+            )
 
     def _adj_icon(self, idx: int, issue: PageIssue) -> str:
-        adj = self._adjustments.get(idx, 0)
-        if adj == -1:
-            return "➖"
-        elif adj == 1:
-            return "➕"
+        if idx in self._adjustments:
+            return "❌"
         return "🔮" if issue.issue_type == "inferida" else "⚠"
 
     def _adj_suffix(self, adj: int) -> str:
         if adj == -1:
-            return "  [−1]"
-        elif adj == 1:
-            return "  [+1]"
+            return "  [excluida]"
         return ""
 
     def _adj_color(self, idx: int, issue: PageIssue) -> str:
-        adj = self._adjustments.get(idx, 0)
-        if adj == -1:
-            return RED
-        elif adj == 1:
-            return GREEN
+        if idx in self._adjustments:
+            return DIM  # grayed out when excluded
         return YELLOW if issue.issue_type == "inferida" else ORANGE
 
     def _get_adjusted_total(self) -> int:
         """Calcula el total de documentos con los ajustes del usuario."""
         return self.total_docs + sum(self._adjustments.values())
+
+    # ── Keyboard navigation ─────────────────────────────────────────────
+
+    def _key_prev_issue(self, event=None):
+        """Tecla ← : ir al issue anterior."""
+        if not self.issues:
+            return
+        new_idx = max(0, self._selected_issue_idx - 1)
+        self._select_issue_by_idx(new_idx)
+
+    def _key_next_issue(self, event=None):
+        """Tecla → : ir al issue siguiente."""
+        if not self.issues:
+            return
+        new_idx = min(len(self.issues) - 1, self._selected_issue_idx + 1)
+        self._select_issue_by_idx(new_idx)
+
+    def _key_toggle_adj(self, event=None):
+        """Tecla ↑/↓ : alternar incluir/excluir."""
+        self._toggle_adjustment()
+
+    def _select_issue_by_idx(self, issue_idx: int):
+        """Selecciona un issue programáticamente y actualiza la UI."""
+        if issue_idx < 0 or issue_idx >= len(self.issues):
+            return
+
+        self._selected_issue_idx = issue_idx
+        issue = self.issues[issue_idx]
+
+        # Find the corresponding listbox row (skip file headers)
+        count = 0
+        target_row = -1
+        for row in range(self.issues_listbox.size()):
+            text = self.issues_listbox.get(row)
+            if text.startswith("📁"):
+                continue
+            if count == issue_idx:
+                target_row = row
+                break
+            count += 1
+
+        if target_row >= 0:
+            self.issues_listbox.selection_clear(0, tk.END)
+            self.issues_listbox.selection_set(target_row)
+            self.issues_listbox.see(target_row)
+
+        self.lbl_preview_title.config(
+            text=f"Pág {issue.pdf_page}  —  {issue.issue_type}  —  {issue.pdf_path.name}"
+                 f"  ({issue_idx + 1}/{len(self.issues)})",
+            fg=ORANGE,
+        )
+        self.btn_open_loc.config(state=tk.NORMAL)
+        self._display_preview(issue.pil_image)
+        self._update_adj_ui()
 
     # ── History management ────────────────────────────────────────────────────
 
