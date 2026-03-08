@@ -104,6 +104,14 @@ class PDFoverseerApp:
         )
         self.btn_folder.pack(side=tk.LEFT)
 
+        self.btn_file = tk.Button(
+            top, text="📄  Seleccionar PDF", command=self._pick_file,
+            bg=SURFACE, fg=FG, font=("Segoe UI", 10, "bold"),
+            activebackground="#45475a", activeforeground=FG,
+            padx=14, pady=5, relief=tk.FLAT, cursor="hand2",
+        )
+        self.btn_file.pack(side=tk.LEFT, padx=(6, 0))
+
         self.btn_pause = tk.Button(
             top, text="⏸  Pausar", command=self._toggle_pause,
             bg=SURFACE, fg=FG, font=("Segoe UI", 10, "bold"),
@@ -114,7 +122,7 @@ class PDFoverseerApp:
         self.btn_pause.pack(side=tk.LEFT, padx=10)
 
         self.lbl_folder = tk.Label(
-            top, text="Ninguna carpeta seleccionada",
+            top, text="Ningún origen seleccionado",
             fg=DIM, bg=BG, font=("Segoe UI", 9),
         )
         self.lbl_folder.pack(side=tk.LEFT, padx=12)
@@ -244,12 +252,29 @@ class PDFoverseerApp:
             return
 
         display = Path(folder).name
-        self.lbl_folder.config(text=f"{display}  ({len(self.pdf_list)} PDFs)", fg=FG)
+        self.lbl_folder.config(text=f"📁 {display}  ({len(self.pdf_list)} PDFs)", fg=FG)
+        self._start_processing(folder)
 
+    def _pick_file(self):
+        path = filedialog.askopenfilename(
+            title="Seleccionar archivo PDF",
+            filetypes=[("PDF", "*.pdf")],
+        )
+        if not path:
+            return
+
+        self.pdf_list = [Path(path)]
+        self.lbl_folder.config(text=f"📄 {Path(path).name}", fg=FG)
+        self._start_processing(None)
+
+    def _start_processing(self, base_folder: str | None):
         # Populate listbox
         self.pdf_listbox.delete(0, tk.END)
         for p in self.pdf_list:
-            rel = p.relative_to(folder) if p.is_relative_to(folder) else p.name
+            if base_folder and p.is_relative_to(base_folder):
+                rel = p.relative_to(base_folder)
+            else:
+                rel = p.name
             self.pdf_listbox.insert(tk.END, f"  ⏳  {rel}")
         self.pdf_listbox.config(fg=DIM)
 
@@ -267,6 +292,7 @@ class PDFoverseerApp:
 
         # Start processing
         self.btn_folder.config(state=tk.DISABLED)
+        self.btn_file.config(state=tk.DISABLED)
         self.btn_pause.config(state=tk.NORMAL)
         self.running = True
         self.pause_event.set()
@@ -360,6 +386,7 @@ class PDFoverseerApp:
         self.root.after(0, self._log_msg,
                         f"{'═' * 60}", "section")
         self.root.after(0, lambda: self.btn_folder.config(state=tk.NORMAL))
+        self.root.after(0, lambda: self.btn_file.config(state=tk.NORMAL))
         self.root.after(0, lambda: self.btn_pause.config(state=tk.DISABLED))
 
     # ── UI helpers ────────────────────────────────────────────────────────────
