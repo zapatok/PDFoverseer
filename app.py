@@ -756,8 +756,9 @@ class PDFoverseerApp:
     # ── Issues management ─────────────────────────────────────────────────────
 
     def _add_issue(self, issue: PageIssue):
-        if issue.issue_type == "inferida":
-            return  # solo mostrar incompletas genuinas
+        if issue.issue_type == "inferida" and "inicio" not in issue.detail:
+            # Hide mid-document inferences, only show inferred document starts
+            return
         self.issues.append(issue)
         self._update_issues_button()
         if self.detail_frame.winfo_ismapped():
