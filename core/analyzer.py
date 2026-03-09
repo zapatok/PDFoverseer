@@ -217,7 +217,7 @@ def analyze_pdf(
     on_log("Convirtiendo a imágenes (puede tardar)...", "info")
 
     try:
-        images = convert_from_path(pdf_path, dpi=DPI)
+        images = convert_from_path(pdf_path, dpi=DPI, thread_count=6)
     except Exception as e:
         on_log(f"Error convirtiendo PDF: {e}", "error")
         return []

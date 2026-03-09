@@ -126,6 +126,7 @@ class PDFoverseerApp:
         self._selected_issue_idx: int = -1
         self._zoom_level: float = 1.0  # 1.0 = fit to canvas
         self._row_to_issue: dict[int, int] = {}  # listbox_row → issue_idx
+        self._show_seq_issues: bool = False  # hide "secuencia rota" by default
 
         # Build all views
         self._build_shared_top()
@@ -345,9 +346,18 @@ class PDFoverseerApp:
                          highlightthickness=1)
         paned.add(left, width=380, minsize=280)
 
-        tk.Label(left, text="Páginas con problemas", fg=ORANGE, bg=BG_PANEL,
+        lbl_hdr_frame = tk.Frame(left, bg=BG_PANEL)
+        lbl_hdr_frame.pack(fill=tk.X)
+        tk.Label(lbl_hdr_frame, text="Páginas con problemas", fg=ORANGE, bg=BG_PANEL,
                  font=("Segoe UI", 10, "bold"), anchor="w",
-                 padx=8, pady=6).pack(fill=tk.X)
+                 padx=8, pady=6).pack(side=tk.LEFT)
+        self.btn_toggle_seq = tk.Button(
+            lbl_hdr_frame, text="＋ Errores de secuencia",
+            command=self._toggle_seq_visibility,
+            bg=BG_PANEL, fg=DIM, font=("Segoe UI", 8),
+            relief=tk.FLAT, cursor="hand2", padx=6,
+        )
+        self.btn_toggle_seq.pack(side=tk.RIGHT, padx=6)
 
         il_frame = tk.Frame(left, bg=BG_PANEL)
         il_frame.pack(fill=tk.BOTH, expand=True)
@@ -775,16 +785,39 @@ class PDFoverseerApp:
     def _refresh_issues_list(self):
         self.issues_listbox.delete(0, tk.END)
         self._row_to_issue.clear()
-        excluded_count = len(self._adjustments)
-        included_count = len(self.issues) - excluded_count
+
+        # Filter: hide secuencia rota unless toggled on
+        visible = [(i, iss) for i, iss in enumerate(self.issues)
+                   if self._show_seq_issues or iss.issue_type != "secuencia rota"]
+
+        # Count only actionable (non-sequence) issues for the label
+        actionable = [iss for _, iss in visible if iss.issue_type != "secuencia rota"]
+        excluded_count = sum(1 for i, _ in visible if i in self._adjustments)
+        included_count = len(visible) - excluded_count
+        seq_total = sum(1 for iss in self.issues if iss.issue_type == "secuencia rota")
+
+        label_parts = [f"{len(actionable)} a verificar"]
+        if excluded_count > 0:
+            label_parts.append(f"{excluded_count} excluidas")
+        if seq_total > 0:
+            label_parts.append(f"{seq_total} sec. rota")
         self.lbl_issues_count.config(
-            text=f"{len(self.issues)} problemas  |  {included_count} incluidas  |  {excluded_count} excluidas",
-            fg=ORANGE if self.issues else DIM,
+            text="  |  ".join(label_parts),
+            fg=ORANGE if actionable else DIM,
         )
 
+        # Update toggle button text
+        if seq_total > 0:
+            self.btn_toggle_seq.config(
+                text=f"{'－' if self._show_seq_issues else '＋'} Errores de secuencia ({seq_total})",
+                fg=ORANGE if self._show_seq_issues else DIM,
+            )
+        else:
+            self.btn_toggle_seq.config(text="Sin errores de secuencia", fg=DIM, state=tk.DISABLED)
+
         # Separate included vs excluded
-        included = [(i, iss) for i, iss in enumerate(self.issues) if i not in self._adjustments]
-        excluded = [(i, iss) for i, iss in enumerate(self.issues) if i in self._adjustments]
+        included = [(i, iss) for i, iss in visible if i not in self._adjustments]
+        excluded = [(i, iss) for i, iss in visible if i in self._adjustments]
 
         # ── Included section ──
         if included:
@@ -809,6 +842,11 @@ class PDFoverseerApp:
                     self.issues_listbox.insert(tk.END, f"  📁 {issue.pdf_path.name}")
                     self.issues_listbox.itemconfig(self.issues_listbox.size() - 1, fg=ACCENT)
                 self._append_issue_entry(i, issue)
+
+    def _toggle_seq_visibility(self):
+        """Toggle visibility of 'secuencia rota' issues."""
+        self._show_seq_issues = not self._show_seq_issues
+        self._refresh_issues_list()
 
 
     def _append_issue_entry(self, idx: int, issue: PageIssue):
