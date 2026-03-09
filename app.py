@@ -56,6 +56,7 @@ _STATUS = {
     "done":       ("✅", GREEN),
     "error":      ("❌", RED),
     "paused":     ("⏸", YELLOW),
+    "skipped":    ("⏭", YELLOW),
 }
 
 
@@ -108,6 +109,11 @@ class PDFoverseerApp:
         self._current_source: str = ""
         self._current_source_name: str = ""
         self._current_is_folder: bool = False
+
+        # Session state
+        self._session_sources: list[str] = []
+        self._session_pdf_count: int = 0
+        self._skip_current: bool = False
 
         # Global accumulators
         self.total_docs = 0
@@ -185,6 +191,40 @@ class PDFoverseerApp:
             padx=14, pady=5, relief=tk.FLAT, cursor="hand2",
         )
         self.btn_history.pack(side=tk.LEFT, padx=(6, 0))
+
+        self.btn_skip = tk.Button(
+            top, text="⏭  Saltar", command=self._skip_file,
+            bg=SURFACE, fg=ORANGE, font=("Segoe UI", 10, "bold"),
+            activebackground="#45475a", activeforeground=ORANGE,
+            padx=14, pady=5, relief=tk.FLAT, cursor="hand2",
+            state=tk.DISABLED,
+        )
+        self.btn_skip.pack(side=tk.LEFT, padx=(6, 0))
+
+        # ---- Right side buttons ----
+        self.btn_save_session = tk.Button(
+            top, text="💾  Guardar", command=self._save_session,
+            bg=SURFACE, fg=GREEN, font=("Segoe UI", 10, "bold"),
+            activebackground="#45475a", activeforeground=GREEN,
+            padx=10, pady=5, relief=tk.FLAT, cursor="hand2",
+        )
+        self.btn_save_session.pack(side=tk.RIGHT, padx=(4, 0))
+
+        self.btn_load_session = tk.Button(
+            top, text="📂  Cargar", command=self._load_session,
+            bg=SURFACE, fg=FG, font=("Segoe UI", 10, "bold"),
+            activebackground="#45475a", activeforeground=FG,
+            padx=10, pady=5, relief=tk.FLAT, cursor="hand2",
+        )
+        self.btn_load_session.pack(side=tk.RIGHT, padx=(4, 0))
+
+        self.btn_new_session = tk.Button(
+            top, text="🔄  Nueva Sesión", command=self._new_session,
+            bg=SURFACE, fg=RED, font=("Segoe UI", 10, "bold"),
+            activebackground="#45475a", activeforeground=RED,
+            padx=10, pady=5, relief=tk.FLAT, cursor="hand2",
+        )
+        self.btn_new_session.pack(side=tk.RIGHT)
 
         self.lbl_folder = tk.Label(
             top, text="Ningún origen seleccionado",
@@ -604,6 +644,11 @@ class PDFoverseerApp:
     def _start_processing(self, base_folder: str | None):
         self._show_main()
 
+        # Track session source
+        src_name = self._current_source_name
+        if src_name and src_name not in self._session_sources:
+            self._session_sources.append(src_name)
+
         self.pdf_listbox.delete(0, tk.END)
         for p in self.pdf_list:
             if base_folder and p.is_relative_to(base_folder):
@@ -613,29 +658,21 @@ class PDFoverseerApp:
             self.pdf_listbox.insert(tk.END, f"  ⏳  {rel}")
         self.pdf_listbox.config(fg=DIM)
 
-        # Reset accumulators
-        self.total_docs = 0
-        self.total_complete = 0
-        self.total_incomplete = 0
-        self.total_inferred = 0
+        # NOTE: accumulators are NOT reset — session accumulates
         self._update_summary()
 
-        # Reset per-PDF results
-        self._pdf_results.clear()
-
-        # Reset issues and adjustments
-        self.issues.clear()
-        self._adjustments.clear()
-        self._selected_issue_idx = -1
-        self._update_issues_button()
-
-        self.lbl_pdfs_count.config(text=f"PDFs: 0 / {len(self.pdf_list)}")
-
-        self._clear_log()
+        self.lbl_pdfs_count.config(
+            text=f"Sesión: {self._session_pdf_count + len(self.pdf_list)} PDFs"
+        )
+        self._update_session_label()
 
         self.btn_folder.config(state=tk.DISABLED)
         self.btn_file.config(state=tk.DISABLED)
         self.btn_pause.config(state=tk.NORMAL)
+        self.btn_skip.config(state=tk.NORMAL)
+        self.btn_new_session.config(state=tk.DISABLED)
+        self.btn_load_session.config(state=tk.DISABLED)
+        self._skip_current = False
         self.running = True
         self.pause_event.set()
         threading.Thread(target=self._process_all, daemon=True).start()
@@ -656,6 +693,14 @@ class PDFoverseerApp:
         total_pdfs = len(self.pdf_list)
 
         for idx, pdf_path in enumerate(self.pdf_list):
+            # Check skip flag
+            if self._skip_current:
+                self._skip_current = False
+                self.root.after(0, self._set_list_status, idx, "skipped")
+                self.root.after(0, self._log_msg,
+                                f"⏭  Saltado: {pdf_path.name}", "warn")
+                continue
+
             self.root.after(0, self._set_list_status, idx, "processing")
 
             rel_name = pdf_path.name
@@ -695,6 +740,15 @@ class PDFoverseerApp:
                 docs = analyze_pdf(str(pdf_path), on_progress, on_log,
                                    pause_event=self.pause_event,
                                    on_issue=on_issue)
+
+                # Check if file was skipped mid-processing
+                if self._skip_current:
+                    self._skip_current = False
+                    self.root.after(0, self._set_list_status, idx, "skipped")
+                    self.root.after(0, self._log_msg,
+                                    f"⏭  Saltado: {rel_name}", "warn")
+                    continue
+
                 complete = [d for d in docs if d.is_complete]
                 incomplete = [d for d in docs if not d.is_complete]
                 inferred = sum(len(d.inferred_pages) for d in docs)
@@ -714,6 +768,8 @@ class PDFoverseerApp:
                     inferred=inferred,
                 ))
 
+                self._session_pdf_count += 1
+
                 self.root.after(0, self._update_summary)
                 self.root.after(0, self._show_file_summary, docs, rel_name)
                 self.root.after(0, self._set_list_status, idx, "done")
@@ -726,8 +782,8 @@ class PDFoverseerApp:
                 self.root.after(0, self._set_list_status, idx, "error")
 
             self.root.after(0, self._update_global_progress, idx + 1, total_pdfs)
-            self.root.after(0, lambda i=idx + 1, t=total_pdfs:
-                            self.lbl_pdfs_count.config(text=f"PDFs: {i} / {t}"))
+            self.root.after(0, lambda c=self._session_pdf_count:
+                            self.lbl_pdfs_count.config(text=f"Sesión: {c} PDFs"))
 
         # Done
         self.running = False
@@ -740,12 +796,12 @@ class PDFoverseerApp:
         self.root.after(0, lambda: self.btn_folder.config(state=tk.NORMAL))
         self.root.after(0, lambda: self.btn_file.config(state=tk.NORMAL))
         self.root.after(0, lambda: self.btn_pause.config(state=tk.DISABLED))
-
-        # Save to history
-        self.root.after(0, self._save_to_history)
+        self.root.after(0, lambda: self.btn_skip.config(state=tk.DISABLED))
+        self.root.after(0, lambda: self.btn_new_session.config(state=tk.NORMAL))
+        self.root.after(0, lambda: self.btn_load_session.config(state=tk.NORMAL))
 
     def _save_to_history(self):
-        """Guarda los resultados del run actual en el historial."""
+        """Guarda los resultados del run actual en el historial (automático)."""
         entry = HistoryEntry(
             date=datetime.now().strftime("%Y-%m-%d %H:%M"),
             source=self._current_source,
@@ -759,9 +815,169 @@ class PDFoverseerApp:
         )
         try:
             add_entry(entry)
-            self._log_msg("💾  Resultados guardados en historial", "info")
+        except Exception:
+            pass  # silent for auto-save
+
+    # ── Session management ────────────────────────────────────────────────────
+
+    def _new_session(self):
+        """Resetea todo para empezar una sesión nueva."""
+        if self.running:
+            return
+        if self.total_docs > 0:
+            if not messagebox.askyesno(
+                "Nueva Sesión",
+                f"Hay {self.total_docs} documentos contados en la sesión actual.\n"
+                "¿Descartar y empezar de cero?",
+            ):
+                return
+
+        self.total_docs = 0
+        self.total_complete = 0
+        self.total_incomplete = 0
+        self.total_inferred = 0
+        self._pdf_results.clear()
+        self.issues.clear()
+        self._adjustments.clear()
+        self._selected_issue_idx = -1
+        self._session_sources.clear()
+        self._session_pdf_count = 0
+
+        self._update_summary()
+        self._update_issues_button()
+        self._clear_log()
+        self.pdf_listbox.delete(0, tk.END)
+        self.lbl_pdfs_count.config(text="PDFs: –")
+        self.lbl_folder.config(text="Sesión nueva", fg=GREEN)
+        self._show_main()
+        self._log_msg("🔄  Nueva sesión iniciada", "info")
+
+    def _save_session(self):
+        """Guarda la sesión actual al historial con nombre genérico."""
+        if self.total_docs == 0:
+            messagebox.showinfo("Guardar Sesión", "No hay datos para guardar.")
+            return
+
+        name = f"Sesión {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        sources = ", ".join(self._session_sources) if self._session_sources else self._current_source
+        entry = HistoryEntry(
+            date=datetime.now().strftime("%Y-%m-%d %H:%M"),
+            source=sources,
+            source_name=name,
+            is_folder=True,
+            total_docs=self._get_adjusted_total(),
+            total_complete=self.total_complete,
+            total_incomplete=self.total_incomplete,
+            total_inferred=self.total_inferred,
+            pdfs=list(self._pdf_results),
+            is_session=True,
+        )
+        try:
+            add_entry(entry)
+            self._log_msg(f"💾  Sesión guardada como: {name}", "ok")
+            messagebox.showinfo("Sesión Guardada", f"Guardada como:\n{name}")
         except Exception as e:
-            self._log_msg(f"Error guardando historial: {e}", "error")
+            self._log_msg(f"Error guardando sesión: {e}", "error")
+
+    def _load_session(self):
+        """Muestra un diálogo para cargar una sesión anterior."""
+        if self.running:
+            return
+
+        history = load_history()
+        if not history:
+            messagebox.showinfo("Cargar Sesión", "No hay historial disponible.")
+            return
+
+        # Build a selection dialog
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Cargar sesión anterior")
+        dlg.geometry("520x400")
+        dlg.config(bg=BG)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        tk.Label(dlg, text="Seleccionar sesión para cargar:",
+                 fg=FG, bg=BG, font=("Segoe UI", 11, "bold")).pack(pady=10)
+
+        lb_frame = tk.Frame(dlg, bg=BG)
+        lb_frame.pack(fill=tk.BOTH, expand=True, padx=14, pady=4)
+        sb = tk.Scrollbar(lb_frame, bg=SURFACE)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        lb = tk.Listbox(lb_frame, bg=BG_LOG, fg=FG, font=("Consolas", 10),
+                        selectbackground=ACCENT, selectforeground="#11111b",
+                        yscrollcommand=sb.set)
+        lb.pack(fill=tk.BOTH, expand=True)
+        sb.config(command=lb.yview)
+
+        for i, e in enumerate(history):
+            icon = "📊" if e.is_session else "📄"
+            lb.insert(tk.END, f"  {icon}  {e.date}  |  {e.source_name}  |  {e.total_docs} docs")
+
+        def do_load():
+            sel = lb.curselection()
+            if not sel:
+                return
+            entry = history[sel[0]]
+            # Load totals
+            self.total_docs = entry.total_docs
+            self.total_complete = entry.total_complete
+            self.total_incomplete = entry.total_incomplete
+            self.total_inferred = entry.total_inferred
+            self._pdf_results = list(entry.pdfs)
+            self._session_sources = [entry.source_name]
+            self._session_pdf_count = len(entry.pdfs)
+            self.issues.clear()
+            self._adjustments.clear()
+            self._selected_issue_idx = -1
+            self._update_summary()
+            self._update_issues_button()
+            self._update_session_label()
+            self.lbl_pdfs_count.config(
+                text=f"Sesión: {self._session_pdf_count} PDFs"
+            )
+            self.pdf_listbox.delete(0, tk.END)
+            for pr in entry.pdfs:
+                self.pdf_listbox.insert(tk.END, f"  ✅  {pr.name}  ({pr.total_docs} docs)")
+            self._clear_log()
+            self._log_msg(f"📂  Sesión cargada: {entry.source_name}", "ok")
+            self._log_msg(f"    Documentos: {entry.total_docs}  |  Completos: {entry.total_complete}  |  Incompletos: {entry.total_incomplete}", "info")
+            dlg.destroy()
+
+        btn_frame = tk.Frame(dlg, bg=BG)
+        btn_frame.pack(fill=tk.X, padx=14, pady=10)
+        tk.Button(btn_frame, text="Cargar", command=do_load,
+                  bg=ACCENT, fg="#11111b", font=("Segoe UI", 10, "bold"),
+                  padx=20, pady=4, relief=tk.FLAT, cursor="hand2",
+                  ).pack(side=tk.LEFT)
+        tk.Button(btn_frame, text="Cancelar", command=dlg.destroy,
+                  bg=SURFACE, fg=FG, font=("Segoe UI", 10),
+                  padx=20, pady=4, relief=tk.FLAT, cursor="hand2",
+                  ).pack(side=tk.RIGHT)
+
+    def _skip_file(self):
+        """Salta el archivo que se está procesando actualmente."""
+        if not self.running:
+            return
+        self._skip_current = True
+        # If paused, unpause so the skip takes effect
+        if not self.pause_event.is_set():
+            self.pause_event.set()
+            self.btn_pause.config(text="⏸  Pausar", bg=SURFACE, fg=FG)
+        self._log_msg("⏭  Saltando archivo actual...", "warn")
+
+    def _update_session_label(self):
+        """Actualiza el label de origen con contexto de sesión."""
+        n = len(self._session_sources)
+        if n == 0:
+            self.lbl_folder.config(text="Ningún origen seleccionado", fg=DIM)
+        elif n == 1:
+            self.lbl_folder.config(text=f"📊 {self._session_sources[0]}", fg=FG)
+        else:
+            self.lbl_folder.config(
+                text=f"📊 Sesión: {n} orígenes, {self._session_pdf_count} PDFs",
+                fg=FG,
+            )
 
     # ── Issues management ─────────────────────────────────────────────────────
 

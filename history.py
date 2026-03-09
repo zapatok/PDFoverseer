@@ -37,6 +37,7 @@ class HistoryEntry:
     total_incomplete: int
     total_inferred:   int
     pdfs:             list[PDFResult] = field(default_factory=list)
+    is_session:       bool = False
 
 
 def load_history() -> list[HistoryEntry]:
