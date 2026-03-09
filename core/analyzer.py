@@ -27,6 +27,7 @@ Por cada página del PDF:
 
 from __future__ import annotations
 
+import queue
 import re
 import threading
 from dataclasses import dataclass, field
@@ -42,7 +43,9 @@ from PIL import Image
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-DPI          = 150
+DPI          = 120
+DPI_FALLBACK = 150
+CHUNK_SIZE   = 20
 CROP_X_START = 0.38   # ignorar 38% izquierdo
 CROP_Y_END   = 0.22   # solo 22% superior
 TESS_CONFIG  = "--psm 6 --oem 1"
@@ -187,6 +190,40 @@ def extract_page_number(
 
 # ── Máquina de estados ────────────────────────────────────────────────────────
 
+def _convert_chunk(pdf_path: str, first: int, last: int, dpi: int) -> list[Image.Image]:
+    """Convierte un rango de páginas del PDF a imágenes."""
+    return convert_from_path(
+        pdf_path, dpi=dpi, thread_count=6,
+        first_page=first, last_page=last,
+    )
+
+
+def _convert_single_page(pdf_path: str, page: int, dpi: int) -> Image.Image:
+    """Convierte una sola página del PDF a imagen."""
+    imgs = convert_from_path(
+        pdf_path, dpi=dpi, thread_count=1,
+        first_page=page, last_page=page,
+    )
+    return imgs[0]
+
+
+def _producer(pdf_path: str, total_pages: int, img_queue: queue.Queue,
+              on_log: callable):
+    """Hilo productor: convierte páginas en lotes y las pone en la cola."""
+    for start in range(1, total_pages + 1, CHUNK_SIZE):
+        end = min(start + CHUNK_SIZE - 1, total_pages)
+        try:
+            chunk_imgs = _convert_chunk(pdf_path, start, end, DPI)
+            for offset, img in enumerate(chunk_imgs):
+                img_queue.put((start + offset, img))  # (page_number, image)
+        except Exception as e:
+            on_log(f"Error convirtiendo págs {start}-{end}: {e}", "error")
+            # Push None markers for failed pages so consumer doesn't hang
+            for p in range(start, end + 1):
+                img_queue.put((p, None))
+    img_queue.put(None)  # Sentinel: production done
+
+
 def analyze_pdf(
     pdf_path: str,
     on_progress: callable,
@@ -195,16 +232,14 @@ def analyze_pdf(
     on_issue:    callable | None = None,
 ) -> list[Document]:
     """
-    Regla de inferencia cuando OCR falla completamente:
-    - Si el doc actual aún no alcanzó su total declarado:
-        → la página se asigna como siguiente de la secuencia (inferred_pages).
-    - Si el doc actual ya está completo o no hay doc activo:
-        → la página se marca como huérfana.
+    Procesa un PDF con pipeline productor-consumidor:
+      - Productor: convierte páginas en lotes de CHUNK_SIZE a DPI base.
+      - Consumidor: análisis OCR + máquina de estados.
+      - Si OCR falla en todos los métodos a DPI base, re-renderiza la
+        página a DPI_FALLBACK y reintenta.
 
-    pause_event: si se proporciona, se espera a que esté set() antes de
-                 procesar cada página (permite pausar externamente).
-    on_issue:    callback(pdf_page, issue_type, detail, pil_image) llamado
-                 cuando se detecta un problema en una página.
+    pause_event: espera a que esté set() antes de cada página.
+    on_issue:    callback cuando se detecta un problema.
     """
     on_log("Leyendo metadatos...", "info")
     try:
@@ -214,31 +249,57 @@ def analyze_pdf(
         return []
 
     on_log(f"Total páginas: {total_pages}", "info")
-    on_log("Convirtiendo a imágenes (puede tardar)...", "info")
+    on_log(f"Procesando a {DPI} DPI en lotes de {CHUNK_SIZE}...", "info")
 
-    try:
-        images = convert_from_path(pdf_path, dpi=DPI, thread_count=6)
-    except Exception as e:
-        on_log(f"Error convirtiendo PDF: {e}", "error")
-        return []
+    # ── Producer-consumer pipeline ────────────────────────────────────────
+    img_queue: queue.Queue = queue.Queue(maxsize=CHUNK_SIZE * 2)
+    producer_thread = threading.Thread(
+        target=_producer, args=(pdf_path, total_pages, img_queue, on_log),
+        daemon=True,
+    )
+    producer_thread.start()
 
     documents:    list[Document] = []
     current:      Optional[Document] = None
     orphans:      list[int] = []
     method_tally: dict[str, int] = {}
+    fallback_used = 0
 
     def _issue(page: int, kind: str, detail: str, pil_img: Image.Image):
         if on_issue is not None:
             on_issue(page, kind, detail, pil_img)
 
-    for i, img in enumerate(images):
-        pdf_page = i + 1
+    while True:
+        item = img_queue.get()
+        if item is None:
+            break  # Sentinel: all pages processed
+
+        pdf_page, img = item
+
+        # Conversion error for this page
+        if img is None:
+            on_log(f"  Pág {pdf_page:>4}: ⚠ error de conversión", "error")
+            on_progress(pdf_page, total_pages)
+            continue
 
         # ── Pause support ────────────────────────────────────────────────
         if pause_event is not None:
             pause_event.wait()
 
         curr, tot, method = extract_page_number(img)
+
+        # ── DPI fallback: retry failed pages at higher resolution ────────
+        if method == "failed":
+            try:
+                img_hi = _convert_single_page(pdf_path, pdf_page, DPI_FALLBACK)
+                curr, tot, method = extract_page_number(img_hi)
+                if method != "failed":
+                    method = f"{method}@{DPI_FALLBACK}"
+                    img = img_hi  # use the higher-res image for issue preview
+                    fallback_used += 1
+            except Exception:
+                pass  # fallback failed, stick with original result
+
         method_tally[method] = method_tally.get(method, 0) + 1
 
         # Log
@@ -247,7 +308,7 @@ def analyze_pdf(
         else:
             on_log(f"  Pág {pdf_page:>4}: ???  [{method}]", "page_warn")
 
-        # ── Transiciones ─────────────────────────────────────────────────────
+        # ── Transiciones ─────────────────────────────────────────────────
         if curr == 1:
             if current is not None:
                 documents.append(current)
@@ -278,7 +339,7 @@ def analyze_pdf(
                     _issue(pdf_page, "secuencia rota", detail, img)
 
         else:
-            # OCR falló
+            # OCR falló (incluso con fallback)
             if current is not None and current.found_total < current.declared_total:
                 current.inferred_pages.append(pdf_page)
                 detail = (f"inferida como "
@@ -310,5 +371,7 @@ def analyze_pdf(
     if orphans:
         on_log(f"Páginas huérfanas: {orphans}", "warn")
     on_log(f"Métodos OCR usados: {method_tally}", "info")
+    if fallback_used > 0:
+        on_log(f"Páginas recuperadas con DPI fallback ({DPI_FALLBACK}): {fallback_used}", "ok")
 
     return documents
