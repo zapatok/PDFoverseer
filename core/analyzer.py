@@ -43,8 +43,8 @@ from PIL import Image
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-DPI          = 120
-DPI_FALLBACK = 150
+DPI          = 150
+DPI_FALLBACK = 200
 CHUNK_SIZE   = 20
 CROP_X_START = 0.38   # ignorar 38% izquierdo
 CROP_Y_END   = 0.22   # solo 22% superior
