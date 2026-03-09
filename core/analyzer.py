@@ -62,7 +62,11 @@ _PAGE_RE = re.compile(
 )
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
 
+# ART Mode Keyword Regex (handles generic OCR errors like Superv1sor, Supervlsor)
+_ART_SUPERVISOR_RE = re.compile(r"Superv[il1|]sor", re.IGNORECASE)
+
 _KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+_CLAHE = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
 
 
 # ── Modelo de datos ───────────────────────────────────────────────────────────
@@ -131,6 +135,7 @@ def _ink_mask(arr: np.ndarray) -> np.ndarray:
 
 def extract_page_number(
     pil_img: Image.Image,
+    doc_mode: str = "charla",
 ) -> tuple[Optional[int], Optional[int], str]:
     """
     Cascade de preprocessings. Retorna (curr, tot, metodo).
@@ -138,14 +143,25 @@ def extract_page_number(
     """
     w, h = pil_img.size
 
-    def crop_arr(x0: float = CROP_X_START, y1: float = CROP_Y_END) -> np.ndarray:
+    # En modo ART escaneamos todo el ancho, solo el 20% superior.
+    # En modo charla ignoramos el 38% izquierdo.
+    base_x0 = 0.0 if doc_mode == "art" else CROP_X_START
+    base_y1 = 0.20 if doc_mode == "art" else CROP_Y_END
+
+    def crop_arr(x0: float = base_x0, y1: float = base_y1) -> np.ndarray:
         return np.array(pil_img.crop((int(w * x0), 0, w, int(h * y1))))
 
     arr = crop_arr()
 
+    def _ocr_and_validate(img_bin: np.ndarray) -> tuple[Optional[int], Optional[int]]:
+        text = pytesseract.image_to_string(img_bin, lang="eng", config=TESS_CONFIG)
+        if doc_mode == "art" and not _ART_SUPERVISOR_RE.search(text):
+            return None, None # Falta palabra ancla
+        return _parse(text)
+
     # 1. Baseline
     gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-    c, t = _ocr(_bin(_up(gray)))
+    c, t = _ocr_and_validate(_bin(_up(gray)))
     if c:
         return c, t, "baseline"
 
@@ -154,12 +170,12 @@ def extract_page_number(
     if mask.any():
         clean = arr.copy()
         clean[mask] = [255, 255, 255]
-        c, t = _ocr(_bin(_up(cv2.cvtColor(clean, cv2.COLOR_RGB2GRAY))))
+        c, t = _ocr_and_validate(_bin(_up(cv2.cvtColor(clean, cv2.COLOR_RGB2GRAY))))
         if c:
             return c, t, "color_removal"
 
     # 3. Canal rojo (la tinta azul, la más común, aparece clara en este canal)
-    c, t = _ocr(_bin(_up(arr[:, :, 0])))
+    c, t = _ocr_and_validate(_bin(_up(arr[:, :, 0])))
     if c:
         return c, t, "red_channel"
 
@@ -169,21 +185,30 @@ def extract_page_number(
         inp = cv2.inpaint(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR),
                           mask_dil, 5, cv2.INPAINT_TELEA)
         gray3 = cv2.cvtColor(inp, cv2.COLOR_BGR2GRAY)
-        c, t = _ocr(_bin(_up(gray3, factor=3)))
+        c, t = _ocr_and_validate(_bin(_up(gray3, factor=3)))
         if c:
             return c, t, "inpaint"
 
     # 5. Crop más amplio (header no estándar, más a la izquierda o más abajo)
-    arr_wide = crop_arr(x0=0.20, y1=0.30)
-    c, t = _ocr(_bin(_up(cv2.cvtColor(arr_wide, cv2.COLOR_RGB2GRAY))))
+    arr_wide = crop_arr(x0=0.20 if doc_mode == "charla" else 0.0, y1=0.30)
+    c, t = _ocr_and_validate(_bin(_up(cv2.cvtColor(arr_wide, cv2.COLOR_RGB2GRAY))))
     if c:
         return c, t, "wide_crop"
 
     # 6. Ancho completo
     arr_full = crop_arr(x0=0.0, y1=0.28)
-    c, t = _ocr(_bin(_up(cv2.cvtColor(arr_full, cv2.COLOR_RGB2GRAY))))
+    c, t = _ocr_and_validate(_bin(_up(cv2.cvtColor(arr_full, cv2.COLOR_RGB2GRAY))))
     if c:
         return c, t, "full_width"
+
+    # 7. Aggressive Fallback (CLAHE + Dilation) para escaneos muy malos
+    # Aumenta el contraste localmente y "engorda" la tinta
+    gray_clahe = _CLAHE.apply(gray)
+    b_clahe = _bin(_up(gray_clahe))
+    b_dilated = cv2.erode(b_clahe, _KERNEL, iterations=1) # Erode en blanco y negro engorda el texto (que es negro)
+    c, t = _ocr_and_validate(b_dilated)
+    if c:
+        return c, t, "aggressive_clahe"
 
     return None, None, "failed"
 
@@ -230,6 +255,7 @@ def analyze_pdf(
     on_log:      callable,
     pause_event: threading.Event | None = None,
     on_issue:    callable | None = None,
+    doc_mode:    str = "charla",
 ) -> list[Document]:
     """
     Procesa un PDF con pipeline productor-consumidor:
@@ -286,13 +312,13 @@ def analyze_pdf(
         if pause_event is not None:
             pause_event.wait()
 
-        curr, tot, method = extract_page_number(img)
+        curr, tot, method = extract_page_number(img, doc_mode)
 
         # ── DPI fallback: retry failed pages at higher resolution ────────
         if method == "failed":
             try:
                 img_hi = _convert_single_page(pdf_path, pdf_page, DPI_FALLBACK)
-                curr, tot, method = extract_page_number(img_hi)
+                curr, tot, method = extract_page_number(img_hi, doc_mode)
                 if method != "failed":
                     method = f"{method}@{DPI_FALLBACK}"
                     img = img_hi  # use the higher-res image for issue preview

@@ -134,6 +134,8 @@ class PDFoverseerApp:
         self._row_to_issue: dict[int, int] = {}  # listbox_row → issue_idx
         self._show_seq_issues: bool = False  # hide "secuencia rota" by default
 
+        self.doc_mode_value = tk.StringVar(value="charla")
+
         # Build all views
         self._build_shared_top()
         self._build_main_view()
@@ -165,6 +167,22 @@ class PDFoverseerApp:
             padx=14, pady=5, relief=tk.FLAT, cursor="hand2",
         )
         self.btn_file.pack(side=tk.LEFT, padx=(6, 0))
+
+        # Mode selector
+        mode_frame = tk.Frame(top, bg=SURFACE, padx=8, pady=0)
+        mode_frame.pack(side=tk.LEFT, padx=(16, 0), fill=tk.Y)
+
+        tk.Label(mode_frame, text="Modo:", bg=SURFACE, fg=DIM, font=("Segoe UI", 9)).pack(side=tk.LEFT)
+
+        self.cbo_mode = ttk.Combobox(
+            mode_frame, textvariable=self.doc_mode_value, state="readonly",
+            values=["charla", "art"], width=8, font=("Segoe UI", 10, "bold")
+        )
+        self.cbo_mode.pack(side=tk.LEFT, padx=(4, 0), pady=4)
+        # Style the combobox a bit to match the dark theme
+        self.root.option_add('*TCombobox*Listbox.background', SURFACE)
+        self.root.option_add('*TCombobox*Listbox.foreground', FG)
+        self.root.option_add('*TCombobox*Listbox.font', ("Segoe UI", 10))
 
         self.btn_pause = tk.Button(
             top, text="⏸  Pausar", command=self._toggle_pause,
@@ -538,6 +556,7 @@ class PDFoverseerApp:
 
         # Style the treeview
         style = ttk.Style()
+        style.theme_use("clam")
         style.configure("Treeview",
                          background=BG_LOG, foreground=FG,
                          fieldbackground=BG_LOG,
@@ -668,6 +687,7 @@ class PDFoverseerApp:
 
         self.btn_folder.config(state=tk.DISABLED)
         self.btn_file.config(state=tk.DISABLED)
+        self.cbo_mode.config(state=tk.DISABLED)
         self.btn_pause.config(state=tk.NORMAL)
         self.btn_skip.config(state=tk.NORMAL)
         self.btn_new_session.config(state=tk.DISABLED)
@@ -737,9 +757,11 @@ class PDFoverseerApp:
                 self.root.after(0, self._add_issue, issue)
 
             try:
+                current_mode = self.doc_mode_value.get()
                 docs = analyze_pdf(str(pdf_path), on_progress, on_log,
                                    pause_event=self.pause_event,
-                                   on_issue=on_issue)
+                                   on_issue=on_issue,
+                                   doc_mode=current_mode)
 
                 # Check if file was skipped mid-processing
                 if self._skip_current:
