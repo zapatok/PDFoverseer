@@ -62,8 +62,12 @@ _PAGE_RE = re.compile(
 )
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
 
-# ART Mode Keyword Regex (handles generic OCR errors like Superv1sor, Supervlsor)
-_ART_SUPERVISOR_RE = re.compile(r"Superv[il1|]sor", re.IGNORECASE)
+# ART Mode Keyword Regex (handles generic OCR errors like Superv1sor, Supervlsor, Superisor)
+_ART_SUPERVISOR_RE = re.compile(r"(?:Superv[il1|]*sor|Super[vi|]*sor|\(ART\))", re.IGNORECASE)
+
+# Fast reject hint: If the first pass doesn't even contain these substrings, 
+# it's likely a blank or non-header page. We skip the expensive cascade.
+_HEADER_HINT_RE = re.compile(r"(pag|p[aá]g|art|super|charla|obra|relator)", re.IGNORECASE)
 
 _KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
 _CLAHE = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
@@ -152,30 +156,41 @@ def extract_page_number(
         return np.array(pil_img.crop((int(w * x0), 0, w, int(h * y1))))
 
     arr = crop_arr()
+    # Force RGB to avoid shape mismatch issues with RGBA/L masks later
+    if len(arr.shape) == 2:
+        arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
+    elif arr.shape[2] == 4:
+        arr = cv2.cvtColor(arr, cv2.COLOR_RGBA2RGB)
 
-    def _ocr_and_validate(img_bin: np.ndarray) -> tuple[Optional[int], Optional[int]]:
+    def _ocr_and_validate(img_bin: np.ndarray) -> tuple[Optional[int], Optional[int], str]:
         text = pytesseract.image_to_string(img_bin, lang="eng", config=TESS_CONFIG)
         if doc_mode == "art" and not _ART_SUPERVISOR_RE.search(text):
-            return None, None # Falta palabra ancla
-        return _parse(text)
+            return None, None, text # Falta palabra ancla
+        c, t = _parse(text)
+        return c, t, text
 
     # 1. Baseline
     gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-    c, t = _ocr_and_validate(_bin(_up(gray)))
+    c, t, text_base = _ocr_and_validate(_bin(_up(gray)))
     if c:
         return c, t, "baseline"
+        
+    # EARLY EXIT: If baseline text doesn't even contain a single hint word,
+    # skip the other 6 OCR passes (massive speedup for ~2000 page docs)
+    if not _HEADER_HINT_RE.search(text_base):
+        return None, None, "failed_early"
 
     # 2. Eliminación de tinta coloreada
     mask = _ink_mask(arr)
     if mask.any():
         clean = arr.copy()
         clean[mask] = [255, 255, 255]
-        c, t = _ocr_and_validate(_bin(_up(cv2.cvtColor(clean, cv2.COLOR_RGB2GRAY))))
+        c, t, _ = _ocr_and_validate(_bin(_up(cv2.cvtColor(clean, cv2.COLOR_RGB2GRAY))))
         if c:
             return c, t, "color_removal"
 
     # 3. Canal rojo (la tinta azul, la más común, aparece clara en este canal)
-    c, t = _ocr_and_validate(_bin(_up(arr[:, :, 0])))
+    c, t, _ = _ocr_and_validate(_bin(_up(arr[:, :, 0])))
     if c:
         return c, t, "red_channel"
 
@@ -185,19 +200,19 @@ def extract_page_number(
         inp = cv2.inpaint(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR),
                           mask_dil, 5, cv2.INPAINT_TELEA)
         gray3 = cv2.cvtColor(inp, cv2.COLOR_BGR2GRAY)
-        c, t = _ocr_and_validate(_bin(_up(gray3, factor=3)))
+        c, t, _ = _ocr_and_validate(_bin(_up(gray3, factor=3)))
         if c:
             return c, t, "inpaint"
 
     # 5. Crop más amplio (header no estándar, más a la izquierda o más abajo)
     arr_wide = crop_arr(x0=0.20 if doc_mode == "charla" else 0.0, y1=0.30)
-    c, t = _ocr_and_validate(_bin(_up(cv2.cvtColor(arr_wide, cv2.COLOR_RGB2GRAY))))
+    c, t, _ = _ocr_and_validate(_bin(_up(cv2.cvtColor(arr_wide, cv2.COLOR_RGB2GRAY))))
     if c:
         return c, t, "wide_crop"
 
     # 6. Ancho completo
     arr_full = crop_arr(x0=0.0, y1=0.28)
-    c, t = _ocr_and_validate(_bin(_up(cv2.cvtColor(arr_full, cv2.COLOR_RGB2GRAY))))
+    c, t, _ = _ocr_and_validate(_bin(_up(cv2.cvtColor(arr_full, cv2.COLOR_RGB2GRAY))))
     if c:
         return c, t, "full_width"
 
@@ -206,7 +221,7 @@ def extract_page_number(
     gray_clahe = _CLAHE.apply(gray)
     b_clahe = _bin(_up(gray_clahe))
     b_dilated = cv2.erode(b_clahe, _KERNEL, iterations=1) # Erode en blanco y negro engorda el texto (que es negro)
-    c, t = _ocr_and_validate(b_dilated)
+    c, t, _ = _ocr_and_validate(b_dilated)
     if c:
         return c, t, "aggressive_clahe"
 
@@ -315,7 +330,7 @@ def analyze_pdf(
         curr, tot, method = extract_page_number(img, doc_mode)
 
         # ── DPI fallback: retry failed pages at higher resolution ────────
-        if method == "failed":
+        if method in ("failed", "failed_early"):
             try:
                 img_hi = _convert_single_page(pdf_path, pdf_page, DPI_FALLBACK)
                 curr, tot, method = extract_page_number(img_hi, doc_mode)
