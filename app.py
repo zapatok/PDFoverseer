@@ -901,6 +901,10 @@ class PDFoverseerApp:
         if idx < 0 or idx >= len(self.issues):
             return
 
+        # No permitir ajustar "secuencia rota", no afectan el conteo total de documentos
+        if self.issues[idx].issue_type == "secuencia rota":
+            return
+
         if idx in self._adjustments:  # currently excluded → re-include
             self._adjustments.pop(idx)
         else:                         # currently included → exclude
@@ -913,6 +917,24 @@ class PDFoverseerApp:
     def _update_adj_ui(self):
         """Actualiza badge, fondo del panel derecho, y botón."""
         idx = self._selected_issue_idx
+        if idx < 0:
+            return
+
+        issue = self.issues[idx]
+
+        if issue.issue_type == "secuencia rota":
+            # Estos problemas no suman +1, así que no se pueden excluir/incluir
+            self.lbl_adj_badge.config(
+                text="ℹ NO AFECTA EL CONTEO (Es error de secuencia)",
+                fg="gray", bg=BG_LOG,
+            )
+            self.btn_adj_toggle.config(
+                text="No aplicable", fg="gray", state=tk.DISABLED
+            )
+            self.preview_outer.config(bg=BG_LOG)
+            self.preview_canvas.config(bg=BG_LOG)
+            return
+
         excluded = idx in self._adjustments
 
         # Subtle tint colors for background
