@@ -413,7 +413,7 @@ function App() {
 
         <div className="flex items-center px-4 py-2">
           {/* Main Controls Pill Container */}
-          <div className="flex items-center space-x-1 bg-black/30 backdrop-blur rounded-full border border-white/5 p-1.5 shadow-inner">
+          <div className="flex items-center justify-center space-x-2 bg-black/50 backdrop-blur-xl rounded-full border border-white/10 px-2 py-1 shadow-inner">
             
             {/* Play / Pause Toggle Button */}
             {(!status || status === 'idle' || globalProg.paused) ? (
@@ -441,7 +441,7 @@ function App() {
                               const firstPending = pdfs.findIndex(p => p.status === 'pending' || p.status === 'error' || p.status === 'skipped');
                               handleStart(Math.max(0, firstPending));
                             },
-                            className: 'px-4 py-2 rounded-lg bg-[#a6e3a1]/20 hover:bg-[#a6e3a1]/30 text-[#a6e3a1] font-bold transition-all text-sm border border-[#a6e3a1]/30'
+                            className: 'px-4 py-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 font-bold transition-all text-sm border border-green-500/30'
                           }
                         ]
                       });
@@ -451,44 +451,44 @@ function App() {
                   }
                 }}
                 disabled={(status === 'running' && !globalProg.paused) || pdfs.length === 0}
-                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-[#a6e3a1] hover:bg-[#a6e3a1]/10 transition-all disabled:opacity-30 disabled:pointer-events-none"
+                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-green-400 hover:bg-green-400/20 transition-all disabled:opacity-50 disabled:grayscale disabled:pointer-events-none"
                 title={globalProg.paused ? "Reanudar" : "Iniciar Lote"}
               >
-                <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                <svg className="w-6 h-6 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
               </button>
             ) : (
               <button
                 onClick={handlePause}
                 disabled={status !== 'running'}
-                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-[#fab387] hover:bg-[#fab387]/10 transition-all disabled:opacity-30 disabled:pointer-events-none"
+                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-orange-400 hover:bg-orange-400/20 transition-all disabled:opacity-50 disabled:pointer-events-none"
                 title="Pausar"
               >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
               </button>
             )}
 
-            <div className="w-px h-5 bg-white/10 mx-1"></div>
+            <div className="w-[1px] h-6 bg-white/20"></div>
             
             {/* Stop Button */}
             <button
               onClick={handleStop}
               disabled={status !== 'running' && !globalProg.paused}
-              className="group flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-[#f38ba8]/80 hover:bg-[#f38ba8]/10 hover:text-[#f38ba8] transition-all disabled:opacity-40 disabled:pointer-events-none"
+              className="group flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-red-400 hover:bg-red-400/20 hover:text-red-300 transition-all disabled:opacity-50 disabled:pointer-events-none"
               title="Detener"
             >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z" /></svg>
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z" /></svg>
             </button>
   
-            <div className="w-px h-5 bg-white/10 mx-1"></div>
+            <div className="w-[1px] h-6 bg-white/20"></div>
   
             {/* Skip Button */}
             <button
               onClick={handleSkip}
               disabled={status !== 'running' && !globalProg.paused}
-              className="group flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-[#bac2de]/80 hover:bg-[#bac2de]/10 hover:text-[#bac2de] transition-all disabled:opacity-40 disabled:pointer-events-none"
+              className="group flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-blue-300 hover:bg-blue-300/20 hover:text-blue-200 transition-all disabled:opacity-50 disabled:pointer-events-none"
               title="Saltar Actual"
             >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" /></svg>
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" /></svg>
             </button>
             
           </div>
@@ -669,12 +669,12 @@ function App() {
                     <div className="relative flex items-center h-full">
                       <button 
                         onClick={() => setTerminalMenuOpen(!terminalMenuOpen)}
-                        className="group flex flex-col justify-center items-center gap-[4px] w-6 h-6 focus:outline-none bg-transparent cursor-pointer"
+                        className="group flex flex-col justify-center items-center gap-1.5 w-8 h-8 focus:outline-none bg-transparent hover:bg-white/5 rounded transition-colors cursor-pointer"
                         title="Opciones de Terminal"
                       >
-                        <span className="w-4 h-[2px] bg-red-600 group-hover:bg-red-400 transition-colors shadow-[0_0_2px_rgba(220,38,38,0.5)]"></span>
-                        <span className="w-4 h-[2px] bg-red-600 group-hover:bg-red-400 transition-colors shadow-[0_0_2px_rgba(220,38,38,0.5)]"></span>
-                        <span className="w-4 h-[2px] bg-red-600 group-hover:bg-red-400 transition-colors shadow-[0_0_2px_rgba(220,38,38,0.5)]"></span>
+                        <span className="w-5 h-[2px] bg-red-500 group-hover:bg-red-400 transition-colors shadow"></span>
+                        <span className="w-5 h-[2px] bg-red-500 group-hover:bg-red-400 transition-colors shadow"></span>
+                        <span className="w-5 h-[2px] bg-red-500 group-hover:bg-red-400 transition-colors shadow"></span>
                       </button>
 
                       {terminalMenuOpen && (
