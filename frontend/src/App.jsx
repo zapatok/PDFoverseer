@@ -1,0 +1,900 @@
+import { useState, useEffect, useRef } from 'react'
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
+
+function App() {
+  const [pdfs, setPdfs] = useState([])
+  const [issues, setIssues] = useState([])
+  const [metrics, setMetrics] = useState({ docs: 0, complete: 0, incomplete: 0, inferred: 0 })
+  const [globalProg, setGlobalProg] = useState({ done: 0, total: 0, elapsed: 0, eta: 0 })
+  const [fileProg, setFileProg] = useState({ done: 0, total: 0, filename: '' })
+  const [logs, setLogs] = useState([])
+
+  const [status, setStatus] = useState('idle') // idle, running, stopped
+  const [selectedIssue, setSelectedIssue] = useState(null)
+
+  // Correction State
+  const [correctCurr, setCorrectCurr] = useState('')
+  const [correctTot, setCorrectTot] = useState('')
+
+  const [selectedPdfFilter, setSelectedPdfFilter] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
+  const [historySessions, setHistorySessions] = useState([])
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isAlert: false });
+  const [showTerminal, setShowTerminal] = useState(true)
+  const [terminalMenuOpen, setTerminalMenuOpen] = useState(false)
+
+  const handleCopyLogs = () => {
+    const text = logs.map(l => l.msg).join('\n');
+    navigator.clipboard.writeText(text);
+    setTerminalMenuOpen(false);
+  };
+
+  const handleExportLogs = () => {
+    const text = logs.map(l => l.msg).join('\n');
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `logs_${new Date().getTime()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setTerminalMenuOpen(false);
+  };
+
+  // F5 Survival: Reload state from backend on mount
+  useEffect(() => {
+    fetch('http://localhost:8000/api/state')
+      .then(res => res.json())
+      .then(data => {
+        if (data.running || (data.pdf_list && data.pdf_list.length > 0)) {
+          setPdfs(data.pdf_list)
+          setIssues(data.issues || [])
+          setMetrics(data.metrics || { docs: 0, complete: 0, incomplete: 0, inferred: 0 })
+          setGlobalProg(data.globalProg || { done: 0, total: 0, elapsed: 0, eta: 0 })
+          if (data.running) setStatus('running')
+        }
+      })
+      .catch(e => console.error("Could not recover state", e))
+  }, [])
+
+  // Connection Ref
+  const ws = useRef(null)
+
+  useEffect(() => {
+    // Setup WebSocket
+    ws.current = new WebSocket('ws://localhost:8000/ws')
+
+    ws.current.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      const { type, payload } = data
+
+      if (type === 'log') {
+        setLogs(prev => [...prev.slice(-99), payload])
+      } else if (type === 'status_update') {
+        setPdfs(prev => {
+          const arr = [...prev]
+          if (arr[payload.idx]) arr[payload.idx].status = payload.status
+          return arr
+        })
+      } else if (type === 'global_progress') {
+        setGlobalProg(prev => ({ ...prev, ...payload }))
+      } else if (type === 'file_progress') {
+        setFileProg(payload)
+      } else if (type === 'new_issue') {
+        setIssues(prev => [...prev, payload])
+      } else if (type === 'issues_refresh') {
+        // CASCADING RESET: El backend manda { pdf_path, issues }
+        setIssues(prev => {
+          if (!payload.pdf_path) return prev; // fallback
+          const targetPdf = payload.pdf_path;
+          return [...prev.filter(i => i.pdf_path !== targetPdf), ...(payload.issues || [])];
+        });
+      } else if (type === 'metrics') {
+        setMetrics(payload)
+      } else if (type === 'process_finished') {
+        setStatus('idle')
+      }
+    }
+
+    return () => {
+      if (ws.current) ws.current.close()
+    }
+  }, [])
+
+  const logsEndRef = useRef(null)
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [logs])
+
+  const handleAddFolder = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/add_folder')
+      const data = await res.json()
+      if (data.success && data.pdfs) {
+        setPdfs(data.pdfs)
+        setStatus('idle')
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleAddFiles = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/add_files')
+      const data = await res.json()
+      if (data.success && data.pdfs) {
+        setPdfs(data.pdfs)
+        setStatus('idle')
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleNewSession = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Nueva Sesión',
+      message: '¿Seguro que deseas iniciar una nueva sesión? Se borrará el progreso actual no guardado.',
+      isAlert: false,
+      onConfirm: async () => {
+        await fetch('http://localhost:8000/api/reset', { method: 'POST' })
+        setPdfs([])
+        setIssues([])
+        setLogs([])
+        setMetrics({ docs: 0, complete: 0, incomplete: 0, inferred: 0 })
+        setGlobalProg({ done: 0, total: 0 })
+        setStatus('idle')
+        setSelectedPdfFilter('')
+        setSelectedIssue(null)
+      }
+    });
+  }
+
+  const handleSaveSession = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/save_session', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        setConfirmModal({
+          isOpen: true,
+          title: 'Sesión Guardada',
+          message: 'Sesión guardada en el historial permanentemente.',
+          isAlert: true,
+          onConfirm: null
+        });
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleViewHistory = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/sessions')
+      const data = await res.json()
+      setHistorySessions(data.sessions || [])
+      setShowHistory(true)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleDeleteSession = (timestamp) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Sesión',
+      message: '¿Seguro que deseas eliminar el registro de esta sesión del historial permanentemente?',
+      isAlert: false,
+      onConfirm: async () => {
+        try {
+          const res = await fetch('http://localhost:8000/api/delete_session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timestamp })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setHistorySessions(prev => prev.filter(s => s.timestamp !== timestamp));
+          } else {
+            console.error('Error al eliminar: ' + (data.error || 'Desconocido'));
+          }
+        } catch (e) {
+          console.error('Error de conexión al eliminar.', e);
+        }
+      }
+    });
+  }
+
+  const handleOpenNativePdf = async () => {
+    if (!selectedIssue) return;
+    try {
+      await fetch(`http://localhost:8000/api/open_pdf?pdf_path=${encodeURIComponent(selectedIssue.pdf_path)}&page=${selectedIssue.page}`);
+    } catch (e) {
+      console.error("No se pudo abrir el PDF nativo", e);
+    }
+  }
+
+  const handleOpenAnyPdf = async (path) => {
+    try {
+      await fetch(`http://localhost:8000/api/open_pdf?pdf_path=${encodeURIComponent(path)}&page=1`);
+    } catch (e) {
+      console.error("No se pudo abrir el PDF nativo", e);
+    }
+  }
+
+  const handleStart = async (startIndex = 0) => {
+    setLogs([])
+    setStatus('running')
+    setGlobalProg(prev => ({ ...prev, paused: false }))
+    await fetch('http://localhost:8000/api/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start_index: startIndex })
+    })
+  }
+
+  const handlePause = async () => {
+    setGlobalProg(prev => ({ ...prev, paused: true }))
+    await fetch('http://localhost:8000/api/pause', { method: 'POST' })
+  }
+
+  const handleResume = async () => {
+    setGlobalProg(prev => ({ ...prev, paused: false }))
+    await fetch('http://localhost:8000/api/resume', { method: 'POST' })
+  }
+
+  const handleStop = async () => {
+    await fetch('http://localhost:8000/api/stop', { method: 'POST' })
+    setStatus('idle')
+  }
+
+  const handleSkip = async () => {
+    await fetch('http://localhost:8000/api/skip', { method: 'POST' })
+  }
+
+  const formatTime = (seconds) => {
+    if (!seconds || isNaN(seconds)) return "00:00";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const _getNextIssue = (direction) => {
+    if (!selectedIssue || issues.length === 0) return null;
+    const currentIndex = issues.findIndex(i => i.id === selectedIssue.id);
+    let nextIndex = currentIndex + direction;
+
+    if (nextIndex >= issues.length) nextIndex = 0;
+    if (nextIndex < 0) nextIndex = issues.length - 1;
+    if (issues.length === 1 || nextIndex === currentIndex) return null;
+
+    return issues[nextIndex];
+  };
+
+  const handleCorrect = async () => {
+    if (!selectedIssue) return;
+    const currentId = selectedIssue.id;
+    const nextIssue = _getNextIssue(1);
+
+    let finalCurr = correctCurr;
+    let finalTot = correctTot;
+
+    if (!finalCurr || !finalTot) {
+      const match = selectedIssue.detail.match(/(\d+)\s*[/de]+\s*(\d+)/i);
+      if (match) {
+        if (!finalCurr) finalCurr = match[1];
+        if (!finalTot) finalTot = match[2];
+      } else {
+        alert("No se pudo extraer el valor inferido 'X/Y' automáticamente. Escribe los números.");
+        return;
+      }
+    }
+
+    try {
+      await fetch('http://localhost:8000/api/correct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pdf_path: selectedIssue.pdf_path,
+          page: selectedIssue.page,
+          correct_curr: parseInt(finalCurr),
+          correct_tot: parseInt(finalTot)
+        })
+      });
+      // Removemos optimismamente para UI rapida
+      setIssues(prev => prev.filter(i => i.id !== currentId));
+
+      setSelectedIssue(nextIssue);
+      setCorrectCurr('');
+      setCorrectTot('');
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  const navigateIssue = (direction) => {
+    if (!selectedIssue || issues.length === 0) return;
+    const currentIndex = issues.findIndex(i => i.id === selectedIssue.id);
+    let nextIndex = currentIndex + direction;
+    if (nextIndex < 0) nextIndex = issues.length - 1;
+    if (nextIndex >= issues.length) nextIndex = 0;
+    setSelectedIssue(issues[nextIndex]);
+    setCorrectCurr('');
+    setCorrectTot('');
+  };
+
+  const handleExclude = async () => {
+    if (!selectedIssue) return;
+    const currentId = selectedIssue.id;
+
+    const currentIndex = issues.findIndex(i => i.id === currentId);
+    let nextIssue = null;
+    if (issues.length > 1) {
+      nextIssue = issues[currentIndex + 1] || issues[currentIndex - 1];
+    }
+
+    try {
+      await fetch('http://localhost:8000/api/exclude', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pdf_path: selectedIssue.pdf_path,
+          page: selectedIssue.page,
+        })
+      });
+      // Fluid auto-advance and removal
+      setIssues(prev => {
+        const locallyDeletedIds = prev.selectedDeletedIds || new Set();
+        locallyDeletedIds.add(currentId);
+        const filtered = prev.filter(i => i.id !== currentId);
+        filtered.selectedDeletedIds = locallyDeletedIds;
+        return filtered;
+      });
+      setSelectedIssue(nextIssue);
+      setCorrectCurr('');
+      setCorrectTot('');
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  // Keyboard Navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!selectedIssue) return;
+      if (document.activeElement.tagName === 'INPUT') return; // Don't trigger if typing
+
+      if (e.key === 'ArrowRight') {
+        navigateIssue(1);
+      } else if (e.key === 'ArrowLeft') {
+        navigateIssue(-1);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIssue, issues]);
+
+  return (
+    <div className="h-screen w-screen bg-base text-gray-200 flex flex-col font-sans overflow-hidden relative">
+      {/* Dynamic Vivid Background */}
+      <div className="absolute inset-0 opacity-20 pointer-events-none" style={{
+        background: 'radial-gradient(circle at 15% 50%, rgba(137, 180, 250, 0.4), transparent 30%), radial-gradient(circle at 85% 30%, rgba(243, 139, 168, 0.3), transparent 30%)'
+      }}></div>
+
+      {/* Top Header Control Bar */}
+      <div className="h-16 bg-surface/80 backdrop-blur-xl border-b border-white/5 px-6 flex items-center justify-between shadow-lg z-20">
+        <div className="flex items-center space-x-3">
+          <button onClick={handleAddFolder} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+            <span className="mr-2">📁</span> Abrir Carpeta
+          </button>
+
+          <button onClick={handleAddFiles} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+            <span className="mr-2">📄</span> Abrir Archivos
+          </button>
+
+          <div className="w-px h-6 bg-gray-700 mx-1"></div>
+
+          <button onClick={handleNewSession} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+            Nueva Sesión
+          </button>
+
+          <button onClick={handleSaveSession} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+            Guardar
+          </button>
+
+          <button onClick={handleViewHistory} className="bg-panel/40 border-accent/30 hover:bg-accent/20 hover:border-accent text-accent font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border">
+            Ver Historial
+          </button>
+        </div>
+
+        <div className="flex items-center space-x-2 bg-panel px-3 py-1.5 rounded-xl border border-[#313244]">
+          <button
+            onClick={() => {
+              const hasProgress = pdfs.some(p => p.status === 'done' || p.status === 'error' || p.status === 'skipped');
+              if (hasProgress && status !== 'running') {
+                setConfirmModal({
+                  isOpen: true,
+                  title: 'Opciones de Inicio',
+                  message: 'Existen documentos procesados o con progreso. ¿Deseas reanudar desde el primer documento pendiente o empezar todo desde cero?',
+                  isAlert: false,
+                  buttons: [
+                    {
+                      label: 'Empezar de Cero',
+                      onClick: () => handleStart(0),
+                      className: 'px-4 py-2 rounded-lg bg-surface hover:bg-white/5 text-gray-300 transition-colors text-sm font-medium border border-white/5'
+                    },
+                    {
+                      label: 'Reanudar Lote',
+                      onClick: () => {
+                        const firstPending = pdfs.findIndex(p => p.status === 'pending' || p.status === 'error' || p.status === 'skipped');
+                        handleStart(Math.max(0, firstPending));
+                      },
+                      className: 'px-4 py-2 rounded-lg bg-accent text-base hover:opacity-90 font-bold transition-shadow shadow-[0_0_15px_rgba(137,180,250,0.3)] text-sm'
+                    }
+                  ]
+                });
+              } else {
+                handleStart(0);
+              }
+            }}
+            disabled={status === 'running' || pdfs.length === 0}
+            className="text-success hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all px-3 py-1 rounded text-xl"
+            title="Iniciar Lote"
+          >
+            ▶
+          </button>
+
+          <button
+            onClick={globalProg.paused ? handleResume : handlePause}
+            disabled={status !== 'running'}
+            className="text-warning hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all px-2 py-1 rounded text-xl flex items-center justify-center w-10"
+            title={globalProg.paused ? "Reanudar" : "Pausar"}
+            style={{ paddingBottom: globalProg.paused ? '4px' : '0' }}
+          >
+            {globalProg.paused ? '▶' : '⏸'}
+          </button>
+
+          <button
+            onClick={handleStop}
+            disabled={status !== 'running'}
+            className="text-error hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all px-3 py-1 rounded text-xl"
+            title="Detener"
+          >
+            ⏹
+          </button>
+
+          <button
+            onClick={handleSkip}
+            disabled={status !== 'running'}
+            className="text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all px-3 py-1 rounded text-xl"
+            title="Saltar Actual"
+          >
+            ⏭
+          </button>
+        </div>
+      </div>
+
+      {/* Metrics Summary Bar */}
+      <div className="h-10 bg-panel/60 backdrop-blur-md px-6 flex items-center shadow-lg space-x-8 text-sm border-b border-white/5 z-10 relative">
+        <div className="font-bold text-white tracking-wide">RESUMEN GLOBAL:</div>
+        <div className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-accent mr-2 shadow-[0_0_10px_rgba(137,180,250,0.8)]"></span>Documentos: <span className="ml-1 font-mono font-bold">{metrics.docs}</span></div>
+        <div className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-success mr-2 shadow-[0_0_10px_rgba(166,227,161,0.8)]"></span>Completos: <span className="ml-1 font-mono font-bold">{metrics.complete}</span></div>
+        <div className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-error mr-2 shadow-[0_0_10px_rgba(243,139,168,0.8)]"></span>Incompletos: <span className="ml-1 font-mono font-bold">{metrics.incomplete}</span></div>
+        <div className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-warning mr-2 shadow-[0_0_10px_rgba(250,179,135,0.8)]"></span>Pág. Inferidas: <span className="ml-1 font-mono font-bold">{metrics.inferred}</span></div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-row overflow-hidden z-10">
+
+        {/* Left Sidebar - Files List */}
+        <div className="w-80 bg-surface/40 backdrop-blur-lg border-r border-white/5 flex flex-col shadow-2xl shrink-0">
+          <div className="px-5 py-4 font-bold text-gray-300 uppercase tracking-widest text-xs border-b border-white/5 bg-black/20">
+            PDFs Cargados ({pdfs.length})
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {pdfs.map((p, i) => {
+              let pct = 0;
+              if (status === 'running' && p.name === fileProg.filename && fileProg.total > 0) {
+                pct = (fileProg.done / fileProg.total) * 100;
+              } else if (p.status === 'done') {
+                pct = 100;
+              }
+
+              let confColor = 'transparent';
+              if (metrics.confidences && metrics.confidences[p.path] !== undefined) {
+                const conf = metrics.confidences[p.path];
+                if (conf > 0.95) confColor = '#a6e3a1'; // Green fluor
+                else if (conf >= 0.90) confColor = '#fab387'; // Orange
+                else confColor = '#f38ba8'; // Red
+              }
+
+              return (
+                <div key={i} title={p.path}
+                  onClick={() => setSelectedPdfFilter(selectedPdfFilter === p.name ? '' : p.name)}
+                  onDoubleClick={() => handleOpenAnyPdf(p.path)}
+                  className={`group px-3 py-2 rounded-md text-sm cursor-pointer transition-all border flex items-center justify-between relative overflow-hidden
+                  ${selectedPdfFilter === p.name ? 'border-accent shadow-[0_0_10px_rgba(137,180,250,0.5)]' : 'border-transparent hover:bg-white/5'}
+                  ${status === 'running' && p.name === fileProg.filename && selectedPdfFilter !== p.name ? 'text-accent font-medium' : ''}
+                  ${p.status === 'done' && selectedPdfFilter !== p.name && selectedPdfFilter !== p.name ? 'text-gray-300' : ''}
+                  ${p.status === 'error' && selectedPdfFilter !== p.name ? 'text-error line-through' : ''}
+                  ${p.status === 'skipped' && selectedPdfFilter !== p.name ? 'text-warning italic' : ''}
+                  ${p.status === 'pending' && (!status || status === 'idle') && selectedPdfFilter !== p.name ? 'text-gray-500' : ''}
+                `}
+                  style={{
+                    background: pct > 0 ? `linear-gradient(to right, rgba(166,227,161,0.15) ${pct}%, transparent ${pct}%)` : (selectedPdfFilter === p.name ? 'rgba(137,180,250,0.2)' : 'transparent')
+                  }}>
+                  <div className="truncate z-10 flex-1">{p.name}</div>
+
+                  <div className="flex items-center space-x-2 z-10">
+                    {/* Play Button to Start From Here */}
+                    {(status === 'idle' || !status) && (p.status === 'pending' || p.status === 'error' || p.status === 'skipped') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleStart(i); }}
+                        className="opacity-0 group-hover:opacity-100 text-success hover:scale-125 transition-all text-xs"
+                        title="Iniciar desde aquí"
+                      >
+                        ▶
+                      </button>
+                    )}
+
+                    {/* Confidence Column */}
+                    {confColor !== 'transparent' && (
+                      <div className="flex items-center ml-2">
+                        <span className="text-[10px] font-mono mr-1.5" style={{ color: confColor }}>
+                          {Math.round(metrics.confidences[p.path] * 100)}%
+                        </span>
+                        <div className="w-1.5 h-4 rounded-full" style={{ backgroundColor: confColor, boxShadow: `0 0 5px ${confColor}` }} title={`Confianza: ${Math.round(metrics.confidences[p.path] * 100)}%`}></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Split Right Side (Progress Bar + Layout) */}
+        <div className="flex-1 flex flex-col min-w-0">
+
+          {/* Progress Bar (Always Visible, Full Width across center and right panels) */}
+          <div className="w-full bg-surface/80 backdrop-blur-md border-b border-white/5 shadow-md flex flex-col shrink-0 z-20">
+            <div className="flex justify-between text-xs px-8 py-2.5 text-gray-300 font-medium">
+              <div>
+                Progreso Actual:
+                {status === 'running' ? (
+                  <><span className="text-accent ml-2 font-bold">{fileProg.filename}</span> <span className="ml-1 text-[#a6adc8]">({fileProg.done}/{fileProg.total} páginas)</span></>
+                ) : (
+                  <span className="text-gray-500 ml-2 italic">En espera...</span>
+                )}
+              </div>
+              <div className="flex items-center space-x-4">
+                {status === 'running' && (
+                  <div className="flex items-center space-x-3 text-[11px] font-mono bg-black/30 border border-white/5 px-3 py-1 rounded shadow-inner">
+                    <span className="text-gray-300">⏱ {formatTime(globalProg.elapsed)}</span>
+                    <span className="text-gray-600">|</span>
+                    <span className="text-accent">ETA {formatTime(globalProg.eta)}</span>
+                  </div>
+                )}
+                <div className="flex items-center space-x-2">
+                  <span className="uppercase text-[10px] tracking-widest text-gray-500">Lote Global</span>
+                  <span className="font-mono bg-black/40 px-2 py-0.5 rounded text-accent">{globalProg.done} / {globalProg.total}</span>
+                </div>
+              </div>
+            </div>
+            <div className="h-2 w-full bg-black/40 overflow-hidden">
+              <div className={`h-2 bg-accent rounded-r-full shadow-[0_0_12px_rgba(137,180,250,1)] transition-all duration-500 ease-out ${status === 'running' ? 'animate-pulse' : ''}`}
+                style={{ width: `${globalProg.total > 0 ? (globalProg.done / globalProg.total) * 100 : 0}%` }}></div>
+            </div>
+          </div>
+
+          {/* Inner Layout Container */}
+          <div className="flex-1 flex flex-row overflow-hidden relative">
+
+            {/* Center Workspace (Inbox + Terminal) */}
+            <div className="flex-1 flex flex-col bg-transparent overflow-hidden relative min-w-0">
+
+              {/* Issue Inbox */}
+              <div className="flex-1 overflow-y-auto px-12 py-8 custom-scroll">
+                <div className="flex items-center justify-between mb-5 border-b border-white/10 pb-5">
+                  <h1 className="text-4xl font-extrabold text-white tracking-tight drop-shadow-md">Bandeja de Problemas</h1>
+
+                  {/* Individual File Metrics Dashboard */}
+                  {(selectedPdfFilter || (status === 'running' && fileProg.filename)) && metrics.individual && (
+                    <div className="flex space-x-4 bg-black/40 px-4 py-2 text-xs rounded-xl border border-white/5 shadow-inner">
+                      {(() => {
+                        const targetName = selectedPdfFilter || fileProg.filename;
+                        const targetPdf = pdfs.find(p => p.name === targetName);
+                        if (!targetPdf || !metrics.individual[targetPdf.path]) return null;
+                        const ind = metrics.individual[targetPdf.path];
+                        return (
+                          <>
+                            <div className="flex flex-col items-center justify-center"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">DOC</span> <span className="text-accent font-mono font-bold">{ind.docs}</span></div>
+                            <div className="w-px h-6 bg-white/5 self-center"></div>
+                            <div className="flex flex-col items-center justify-center"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">COM</span> <span className="text-success font-mono font-bold">{ind.complete}</span></div>
+                            <div className="w-px h-6 bg-white/5 self-center"></div>
+                            <div className="flex flex-col items-center justify-center"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">INC</span> <span className="text-error font-mono font-bold">{ind.incomplete}</span></div>
+                            <div className="w-px h-6 bg-white/5 self-center"></div>
+                            <div className="flex flex-col items-center justify-center"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">INF</span> <span className="text-warning font-mono font-bold">{ind.inferred}</span></div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+                {issues.length === 0 && (
+                  <div className="flex items-center justify-center h-48 border-2 border-dashed border-[#313244] rounded-2xl text-gray-500">
+                    Aún no hay problemas por revisar
+                  </div>
+                )}
+
+                <div className="grid gap-3">
+                  {(selectedPdfFilter ? issues.filter(i => i.filename === selectedPdfFilter) : issues).map(iss => (
+                    <div key={iss.id}
+                      onClick={() => setSelectedIssue(iss)}
+                      className={`bg-surface rounded-xl p-4 border flex items-center shadow-sm transition-all cursor-pointer group
+                     ${selectedIssue?.id === iss.id ? 'border-accent ring-1 ring-accent scale-[1.01]' : 'border-[#313244] hover:border-warning/50'}`}>
+                      <div className="bg-warning/10 text-warning px-3 py-1.5 rounded-lg font-mono text-xl w-16 text-center shadow-inner">
+                        {iss.page}
+                      </div>
+                      <div className="ml-4 flex-1">
+                        <h3 className="font-semibold text-gray-100 truncate">{iss.filename}</h3>
+                        <p className="text-gray-400 text-sm mt-0.5">{iss.type} — {iss.detail}</p>
+                      </div>
+                      <div className={`transition-opacity ${selectedIssue?.id === iss.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                        <button className="bg-accent/20 text-accent hover:bg-accent hover:text-base px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer text-sm">
+                          Revisar ➔
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Log Console Terminal (Bottom half of center workspace) */}
+              {showTerminal ? (
+                <div className="h-56 bg-black/80 backdrop-blur-xl border-t border-white/10 overflow-y-auto font-mono text-xs flex flex-col shadow-inner relative custom-scroll">
+                  <div className="sticky top-0 w-full bg-black/90 border-b border-white/5 px-4 py-2 flex justify-between items-center z-20 shadow-sm relative">
+                    <span className="text-gray-500 uppercase font-bold tracking-widest text-[10px]">Terminal de Procesos</span>
+                    
+                    <div className="relative">
+                      <button 
+                        onClick={() => setTerminalMenuOpen(!terminalMenuOpen)}
+                        className="text-gray-400 hover:text-white p-1 rounded hover:bg-white/10 transition-colors focus:outline-none"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                      </button>
+
+                      {terminalMenuOpen && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setTerminalMenuOpen(false)}></div>
+                          <div className="absolute right-0 mt-1 w-36 bg-[#1e1e2e] border border-[#313244] rounded-lg shadow-xl py-1 z-20 flex flex-col text-sm">
+                            <button onClick={handleCopyLogs} className="text-left px-4 py-2 hover:bg-white/5 text-gray-300 w-full">Copiar Logs</button>
+                            <button onClick={handleExportLogs} className="text-left px-4 py-2 hover:bg-white/5 text-gray-300 w-full">Exportar a TXT</button>
+                            <div className="h-px bg-[#313244] my-1"></div>
+                            <button onClick={() => { setShowTerminal(false); setTerminalMenuOpen(false); }} className="text-left px-4 py-2 hover:bg-white/5 text-gray-300 w-full flex items-center justify-between">
+                              Ocultar <span>↓</span>
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-1">
+                    {logs.map((log, i) => (
+                      <div key={i} className={`whitespace-pre-wrap ${log.level === 'warn' ? 'text-warning' : log.level === 'error' ? 'text-error font-bold' : log.level === 'ok' || log.level === 'success' ? 'text-success' : log.level === 'file_hdr' ? 'text-accent font-bold mt-4 text-sm bg-accent/10 px-2 py-1 inline-block rounded' : log.level === 'section' ? 'text-gray-400 mt-2 italic' : 'text-gray-400'}`}>
+                        {log.msg}
+                      </div>
+                    ))}
+                    <div ref={logsEndRef} />
+                  </div>
+                </div>
+              ) : (
+                <div className="absolute bottom-4 right-4 z-30">
+                  <button 
+                    onClick={() => setShowTerminal(true)}
+                    className="bg-panel/90 backdrop-blur border border-white/10 text-gray-300 hover:text-white font-medium py-2 px-4 rounded-full shadow-lg flex items-center transition-all hover:bg-surface"
+                  >
+                    ↑ Mostrar Terminal
+                  </button>
+                </div>
+              )}
+
+            </div> {/* <-- Cierra Center Workspace (Progress + Inbox + Terminal) */}
+
+            {/* Right Panel - Preview & Correction */}
+            {selectedIssue && (
+              <div className="w-[45%] bg-panel/90 backdrop-blur-2xl border-l border-white/10 flex flex-col shadow-2xl z-40 shrink-0 transition-all duration-300">
+                <div className="p-4 border-b border-[#313244] flex items-center justify-between bg-surface/50">
+                  <div>
+                    <h2 className="text-lg font-bold">Corrección Manual</h2>
+                    <p className="text-xs text-gray-400 truncate max-w-xs">{selectedIssue.filename} - Pág {selectedIssue.page}</p>
+                  </div>
+                  <div className="flex space-x-2 items-center">
+                    <button onClick={handleOpenNativePdf} className="bg-accent/10 hover:bg-accent/20 text-accent hover:text-white border border-accent/30 px-3 py-1.5 rounded-md text-xs transition-all flex items-center mr-2 shadow-sm font-semibold h-8 box-border whitespace-nowrap">
+                      <span className="mr-1">↗</span> Ver Original
+                    </button>
+                    <button onClick={() => _getNextIssue && setSelectedIssue(_getNextIssue(-1) || selectedIssue)} className="bg-panel hover:bg-surface hover:text-white border border-[#313244] w-8 h-8 flex items-center justify-center rounded transition-colors" title="Problema Anterior">
+                      <svg className="w-4 h-4" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                    </button>
+                    <button onClick={() => _getNextIssue && setSelectedIssue(_getNextIssue(1) || selectedIssue)} className="bg-panel hover:bg-surface hover:text-white border border-[#313244] w-8 h-8 flex items-center justify-center rounded transition-colors" title="Problema Siguiente">
+                      <svg className="w-4 h-4" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                    </button>
+                    <div className="w-px h-6 bg-[#313244] mx-1"></div>
+                    <button onClick={() => setSelectedIssue(null)} className="text-gray-400 hover:text-white px-2 py-1 text-2xl leading-none">&times;</button>
+                  </div>
+                </div>
+
+                <div className="flex-1 bg-black/60 p-4 relative overflow-hidden flex items-center justify-center">
+                  <TransformWrapper initialScale={1} minScale={0.5} maxScale={4} centerOnInit>
+                    <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%", display: "flex", justifyContent: "center", alignItems: "center" }}>
+                      <img
+                        src={`http://localhost:8000/api/preview?pdf_path=${encodeURIComponent(selectedIssue.pdf_path)}&page=${selectedIssue.page}`}
+                        alt="Preview"
+                        className="max-w-full max-h-full object-contain shadow-2xl rounded"
+                        draggable="false"
+                      />
+                    </TransformComponent>
+                  </TransformWrapper>
+                </div>
+
+                <div className="p-6 bg-surface border-t border-[#313244]">
+                  <p className="text-sm text-gray-300 mb-4 whitespace-pre-wrap font-mono bg-base p-3 border border-gray-700 rounded-lg">
+                    Error: {selectedIssue.detail}
+                  </p>
+
+                  <div className="flex space-x-4 mb-6">
+                    <div className="flex-1">
+                      <label className="block text-xs uppercase tracking-wider text-gray-400 mb-1">Página Actual</label>
+                      <input
+                        type="number"
+                        value={correctCurr}
+                        onChange={(e) => setCorrectCurr(e.target.value)}
+                        placeholder="Inferido"
+                        className="w-full bg-base border border-[#313244] text-white p-3 rounded-lg focus:outline-none focus:border-accent font-mono text-center text-xl placeholder:text-gray-600"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="flex items-end justify-center pb-3 text-2xl text-gray-500 font-light">/</div>
+                    <div className="flex-1">
+                      <label className="block text-xs uppercase tracking-wider text-gray-400 mb-1">Total del Doc.</label>
+                      <input
+                        type="number"
+                        value={correctTot}
+                        onChange={(e) => setCorrectTot(e.target.value)}
+                        placeholder="Inferido"
+                        className="w-full bg-base border border-[#313244] text-white p-3 rounded-lg focus:outline-none focus:border-accent font-mono text-center text-xl placeholder:text-gray-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={handleExclude}
+                      className="flex-none bg-surface border border-error/50 text-error hover:bg-error hover:text-[#11111b] px-4 py-3 rounded-xl font-bold text-sm transition-all focus:ring-2 focus:ring-error outline-none"
+                      title="Excluir página del conteo"
+                    >
+                      🗑 Excluir
+                    </button>
+                    <button
+                      onClick={handleCorrect}
+                      className="flex-1 bg-accent text-base py-3 rounded-xl font-bold text-lg hover:shadow-[0_0_15px_rgba(137,180,250,0.4)] hover:opacity-90 transition-all flex items-center justify-center focus:ring-2 focus:ring-accent outline-none"
+                    >
+                      ✓ Validar e Inferir
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div> {/* <-- Cierra Inner Layout Container */}
+        </div> {/* <-- Cierra Split Right Side */}
+      </div> {/* <-- Cierra Main Workspace flex-row */}
+
+      {/* History Modal Overlay */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center">
+          <div className="bg-surface border border-white/10 rounded-2xl shadow-2xl w-[800px] h-[600px] flex flex-col">
+            <div className="p-6 border-b border-white/10 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-white">Historial de Sesiones Guardadas</h2>
+              <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {historySessions.length === 0 ? (
+                <div className="text-gray-500 text-center mt-20">No hay sesiones guardadas aún.</div>
+              ) : (
+                historySessions.map((s, idx) => (
+                  <div key={idx} className="bg-black/40 border border-[#313244] rounded-xl p-5 flex justify-between items-center hover:border-accent/50 transition-colors relative group">
+                    <button
+                      onClick={() => handleDeleteSession(s.timestamp)}
+                      className="absolute top-2 right-2 text-gray-500 hover:text-error hover:bg-error/10 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all font-bold"
+                      title="Eliminar sesión"
+                    >
+                      &times;
+                    </button>
+                    <div>
+                      <div className="text-gray-200 font-bold text-lg mb-1 pr-6">
+                        Sesión: {s.timestamp.substring(0, 4)}-{s.timestamp.substring(4, 6)}-{s.timestamp.substring(6, 8)} {s.timestamp.substring(9, 11)}:{s.timestamp.substring(11, 13)}
+                      </div>
+                      <div className="text-gray-400 text-sm">Archivos Procesados: <span className="text-white">{s.files_processed}</span></div>
+                      <div className="text-gray-400 text-sm">Problemas Totales: <span className="text-warning font-bold">{s.issues_count}</span></div>
+                      {s.metrics.total_time !== undefined && (
+                        <div className="text-gray-400 text-sm mt-1">Tiempo de proceso: <span className="text-accent font-mono">{formatTime(s.metrics.total_time)}</span></div>
+                      )}
+                    </div>
+                    <div className="flex space-x-6 text-sm bg-panel/50 p-3 rounded-lg border border-white/5">
+                      <div className="flex flex-col items-center"><span className="text-gray-400">Documentos</span><span className="font-bold text-white text-lg">{s.metrics.docs}</span></div>
+                      <div className="flex flex-col items-center"><span className="text-gray-400">Completos</span><span className="font-bold text-success text-lg">{s.metrics.complete}</span></div>
+                      <div className="flex flex-col items-center"><span className="text-gray-400">Incompletos</span><span className="font-bold text-error text-lg">{s.metrics.incomplete}</span></div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm/Alert Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#1e1e2e] border border-[#313244] rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent to-success"></div>
+            <h3 className="text-xl font-bold text-gray-200 mb-3">{confirmModal.title}</h3>
+            <p className="text-gray-400 text-sm mb-6 leading-relaxed">{confirmModal.message}</p>
+            <div className="flex justify-end space-x-3">
+              {confirmModal.buttons ? (
+                <>
+                  <button
+                    onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                    className="px-4 py-2 rounded-lg bg-surface hover:bg-white/5 text-gray-300 transition-colors text-sm font-medium border border-white/5"
+                  >
+                    Cancelar
+                  </button>
+                  {confirmModal.buttons.map((btn, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        if (btn.onClick) btn.onClick();
+                        setConfirmModal({ ...confirmModal, isOpen: false });
+                      }}
+                      className={btn.className}
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {!confirmModal.isAlert && (
+                    <button
+                      onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                      className="px-4 py-2 rounded-lg bg-surface hover:bg-white/5 text-gray-300 transition-colors text-sm font-medium border border-white/5"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (confirmModal.onConfirm) confirmModal.onConfirm();
+                      setConfirmModal({ ...confirmModal, isOpen: false });
+                    }}
+                    className="px-4 py-2 rounded-lg bg-accent text-base hover:opacity-90 font-bold transition-shadow shadow-[0_0_15px_rgba(137,180,250,0.3)] text-sm"
+                  >
+                    {confirmModal.isAlert ? 'Aceptar' : 'Confirmar'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
+
+export default App

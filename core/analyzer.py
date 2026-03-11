@@ -1,76 +1,70 @@
 """
-analyzer.py  —  Core logic from pdfcount.py (original engine)
-=============================================================
+analyzer.py  —  V2 Pipeline Engine
+====================================
 Contador de documentos en PDFs de charlas (CRS).
 
 Dependencias:
-    pip install pdf2image pytesseract pillow opencv-python
+    pip install pytesseract opencv-contrib-python PyMuPDF
     + Tesseract OCR instalado en el sistema (tesseract.exe en Windows)
+    + FSRCNN_x4.pb model in models/ folder
 
-Algoritmo
----------
+Pipeline V2
+-----------
 Por cada página del PDF:
-  1. Recortar encabezado superior-derecho (donde vive "Página X de N").
-  2. Cascade de preprocessings hasta que uno produzca un match:
-       a. Baseline: grayscale + Otsu x2
-       b. Eliminación de tinta coloreada (azul, rojo, verde) + Otsu x2
-       c. Canal rojo (tinta azul se vuelve fondo claro) + Otsu x2
-       d. Inpainting sobre zona coloreada + Otsu x3
-       e. Crop más amplio (header en posición no estándar)
-       f. Ancho completo (último recurso)
-  3. Regex robusto que maneja errores típicos del OCR en estos formularios.
-  4. Máquina de estados:
-       - curr == 1 → nuevo documento
-       - OCR falla y doc actual no completó su total → inferir como continuación
-       - OCR falla y doc actual ya completó → marcar página huérfana
+  1. PyMuPDF clip rendering (solo la esquina superior-derecha, no la página completa)
+  2. Tier 1: Tesseract directo con Otsu threshold
+  3. Tier 2: FSRCNN x4 + Tesseract (si Tier 1 falla)
+Post-scan:
+  4. Constraint Propagation + Bayesian inference para páginas fallidas
+  5. Reportar páginas inferidas con confianza < 0.90 como issues
 """
 
 from __future__ import annotations
 
-import queue
 import re
 import threading
+import time
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy as np
 import pytesseract
-from pdf2image import convert_from_path, pdfinfo_from_path
-from PIL import Image
+import fitz  # PyMuPDF
 
 # ── Configuración ─────────────────────────────────────────────────────────────
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
+MODELS_DIR   = Path(__file__).parent.parent / "models"
+FSRCNN_PATH  = str(MODELS_DIR / "FSRCNN_x4.pb")
+EDSR_PATH    = str(MODELS_DIR / "EDSR_x4.pb")
+
 DPI          = 150
-DPI_FALLBACK = 200
-CHUNK_SIZE   = 20
-CROP_X_START = 0.38   # ignorar 38% izquierdo
-CROP_Y_END   = 0.22   # solo 22% superior
+CROP_X_START = 0.70   # rightmost 30%
+CROP_Y_END   = 0.22   # top 22%
 TESS_CONFIG  = "--psm 6 --oem 1"
 
 # Regex: maneja variaciones del OCR en "Página X de N"
-# - á/a/é/4 en "Página"  →  .{0,2}
-# - g/q (OCR frecuente)  →  [gq]
-# - "ina" puede faltar   →  (?:ina?)?
-# - punto extra          →  \.?
-# - Z aislado → 2        →  pre-sustitución con _Z2
 _PAGE_RE = re.compile(
     r"P.{0,2}[gq](?:ina?)?\.?\s*(\d{1,3})\s*\.?\s*de\s*(\d{1,3})",
     re.IGNORECASE,
 )
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
 
-# ART Mode Keyword Regex (handles generic OCR errors like Superv1sor, Supervlsor, Superisor)
-_ART_SUPERVISOR_RE = re.compile(r"(?:Superv[il1|]*sor|Super[vi|]*sor|\(ART\))", re.IGNORECASE)
 
-# Fast reject hint: If the first pass doesn't even contain these substrings, 
-# it's likely a blank or non-header page. We skip the expensive cascade.
-_HEADER_HINT_RE = re.compile(r"(pag|p[aá]g|art|super|charla|obra|relator)", re.IGNORECASE)
+# ── Super Resolution Model ───────────────────────────────────────────────────
 
-_KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-_CLAHE = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+_sr_model = None
+
+
+def _load_sr():
+    """Load the FSRCNN super resolution model (1MB, fast on CPU)."""
+    global _sr_model
+    _sr_model = cv2.dnn_superres.DnnSuperResImpl_create()
+    _sr_model.readModel(FSRCNN_PATH)
+    _sr_model.setModel("fsrcnn", 4)
 
 
 # ── Modelo de datos ───────────────────────────────────────────────────────────
@@ -93,7 +87,19 @@ class Document:
         return self.sequence_ok and self.found_total == self.declared_total
 
 
-# ── Preprocessing + OCR ───────────────────────────────────────────────────────
+# ── Inference result for each page ────────────────────────────────────────────
+
+@dataclass
+class _PageRead:
+    """Internal per-page OCR result used for inference."""
+    pdf_page: int
+    curr: int | None
+    total: int | None
+    method: str
+    confidence: float
+
+
+# ── OCR helpers ───────────────────────────────────────────────────────────────
 
 def _parse(text: str) -> tuple[Optional[int], Optional[int]]:
     t = _Z2.sub("2", text)
@@ -105,251 +111,284 @@ def _parse(text: str) -> tuple[Optional[int], Optional[int]]:
     return None, None
 
 
-def _ocr(img_bin: np.ndarray) -> tuple[Optional[int], Optional[int]]:
-    text = pytesseract.image_to_string(img_bin, lang="eng", config=TESS_CONFIG)
-    return _parse(text)
+def _tess_ocr(gray: np.ndarray) -> str:
+    _, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return pytesseract.image_to_string(th, lang="eng", config=TESS_CONFIG)
 
 
-def _up(gray: np.ndarray, factor: int = 2) -> np.ndarray:
-    return cv2.resize(gray, None, fx=factor, fy=factor,
-                      interpolation=cv2.INTER_CUBIC)
+# ── PyMuPDF clip rendering ───────────────────────────────────────────────────
 
-
-def _bin(gray: np.ndarray) -> np.ndarray:
-    _, b = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    return b
-
-
-def _ink_mask(arr: np.ndarray) -> np.ndarray:
-    """
-    Detecta tinta coloreada (azul, rojo, verde) excluyendo texto negro y fondo blanco.
-    Estrategia: un canal domina sobre los otros dos en al menos 15 puntos,
-    el píxel no es casi-negro (<100 en todos) ni casi-blanco (>200 en todos).
-    """
-    r = arr[:, :, 0].astype(int)
-    g = arr[:, :, 1].astype(int)
-    b = arr[:, :, 2].astype(int)
-    not_text = ~((r < 100) & (g < 100) & (b < 100))
-    not_bg   = ~((r > 200) & (g > 200) & (b > 200))
-    blue  = (b - r > 15) & (b - g > 7)
-    red   = (r - b > 15) & (r - g > 7)
-    green = (g - r > 15) & (g - b > 7)
-    return (blue | red | green) & not_text & not_bg
-
-
-def extract_page_number(
-    pil_img: Image.Image,
-    doc_mode: str = "charla",
-) -> tuple[Optional[int], Optional[int], str]:
-    """
-    Cascade de preprocessings. Retorna (curr, tot, metodo).
-    Se detiene al primer match válido.
-    """
-    w, h = pil_img.size
-
-    # En modo ART escaneamos todo el ancho, solo el 20% superior.
-    # En modo charla ignoramos el 38% izquierdo.
-    base_x0 = 0.0 if doc_mode == "art" else CROP_X_START
-    base_y1 = 0.20 if doc_mode == "art" else CROP_Y_END
-
-    def crop_arr(x0: float = base_x0, y1: float = base_y1) -> np.ndarray:
-        return np.array(pil_img.crop((int(w * x0), 0, w, int(h * y1))))
-
-    arr = crop_arr()
-    # Force RGB to avoid shape mismatch issues with RGBA/L masks later
-    if len(arr.shape) == 2:
-        arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
-    elif arr.shape[2] == 4:
-        arr = cv2.cvtColor(arr, cv2.COLOR_RGBA2RGB)
-
-    def _ocr_and_validate(img_bin: np.ndarray) -> tuple[Optional[int], Optional[int], str]:
-        text = pytesseract.image_to_string(img_bin, lang="eng", config=TESS_CONFIG)
-        if doc_mode == "art" and not _ART_SUPERVISOR_RE.search(text):
-            return None, None, text # Falta palabra ancla
-        c, t = _parse(text)
-        return c, t, text
-
-    # 1. Baseline
-    gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-    c, t, text_base = _ocr_and_validate(_bin(_up(gray)))
-    if c:
-        return c, t, "baseline"
-        
-    # EARLY EXIT: If baseline text doesn't even contain a single hint word,
-    # skip the other 6 OCR passes (massive speedup for ~2000 page docs)
-    if not _HEADER_HINT_RE.search(text_base):
-        return None, None, "failed_early"
-
-    # 2. Eliminación de tinta coloreada
-    mask = _ink_mask(arr)
-    if mask.any():
-        clean = arr.copy()
-        clean[mask] = [255, 255, 255]
-        c, t, _ = _ocr_and_validate(_bin(_up(cv2.cvtColor(clean, cv2.COLOR_RGB2GRAY))))
-        if c:
-            return c, t, "color_removal"
-
-    # 3. Canal rojo (la tinta azul, la más común, aparece clara en este canal)
-    c, t, _ = _ocr_and_validate(_bin(_up(arr[:, :, 0])))
-    if c:
-        return c, t, "red_channel"
-
-    # 4. Inpainting sobre zona coloreada
-    if mask.any():
-        mask_dil = cv2.dilate(mask.astype(np.uint8) * 255, _KERNEL, iterations=2)
-        inp = cv2.inpaint(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR),
-                          mask_dil, 5, cv2.INPAINT_TELEA)
-        gray3 = cv2.cvtColor(inp, cv2.COLOR_BGR2GRAY)
-        c, t, _ = _ocr_and_validate(_bin(_up(gray3, factor=3)))
-        if c:
-            return c, t, "inpaint"
-
-    # 5. Crop más amplio (header no estándar, más a la izquierda o más abajo)
-    arr_wide = crop_arr(x0=0.20 if doc_mode == "charla" else 0.0, y1=0.30)
-    c, t, _ = _ocr_and_validate(_bin(_up(cv2.cvtColor(arr_wide, cv2.COLOR_RGB2GRAY))))
-    if c:
-        return c, t, "wide_crop"
-
-    # 6. Ancho completo
-    arr_full = crop_arr(x0=0.0, y1=0.28)
-    c, t, _ = _ocr_and_validate(_bin(_up(cv2.cvtColor(arr_full, cv2.COLOR_RGB2GRAY))))
-    if c:
-        return c, t, "full_width"
-
-    # 7. Aggressive Fallback (CLAHE + Dilation) para escaneos muy malos
-    # Aumenta el contraste localmente y "engorda" la tinta
-    gray_clahe = _CLAHE.apply(gray)
-    b_clahe = _bin(_up(gray_clahe))
-    b_dilated = cv2.erode(b_clahe, _KERNEL, iterations=1) # Erode en blanco y negro engorda el texto (que es negro)
-    c, t, _ = _ocr_and_validate(b_dilated)
-    if c:
-        return c, t, "aggressive_clahe"
-
-    return None, None, "failed"
-
-
-# ── Máquina de estados ────────────────────────────────────────────────────────
-
-def _convert_chunk(pdf_path: str, first: int, last: int, dpi: int) -> list[Image.Image]:
-    """Convierte un rango de páginas del PDF a imágenes."""
-    return convert_from_path(
-        pdf_path, dpi=dpi, thread_count=6,
-        first_page=first, last_page=last,
+def _render_clip(page: fitz.Page) -> np.ndarray:
+    """Render only the top-right corner of a PDF page. Returns BGR numpy array."""
+    rect = page.rect
+    clip = fitz.Rect(
+        rect.width * CROP_X_START,
+        0,
+        rect.width,
+        rect.height * CROP_Y_END,
     )
+    pix = page.get_pixmap(dpi=DPI, clip=clip)
+    img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
+    if pix.n == 4:
+        img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
+    elif pix.n == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    else:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    return img
 
 
-def _convert_single_page(pdf_path: str, page: int, dpi: int) -> Image.Image:
-    """Convierte una sola página del PDF a imagen."""
-    imgs = convert_from_path(
-        pdf_path, dpi=dpi, thread_count=1,
-        first_page=page, last_page=page,
-    )
-    return imgs[0]
+# ── 2-Tier OCR Pipeline ──────────────────────────────────────────────────────
+
+def _extract_page_number(page: fitz.Page, page_idx: int) -> _PageRead:
+    """Tier 1: Tesseract direct. Tier 2: FSRCNN x4 + Tesseract."""
+    bgr = _render_clip(page)
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+    # Tier 1: Direct Tesseract
+    text = _tess_ocr(gray)
+    c, t = _parse(text)
+    if c:
+        return _PageRead(page_idx, c, t, "direct", 1.0)
+
+    # Tier 2: FSRCNN x4 + Tesseract
+    bgr_sr = _sr_model.upsample(bgr)
+    gray_sr = cv2.cvtColor(bgr_sr, cv2.COLOR_BGR2GRAY)
+    text_sr = _tess_ocr(gray_sr)
+    c, t = _parse(text_sr)
+    if c:
+        return _PageRead(page_idx, c, t, "SR", 1.0)
+
+    return _PageRead(page_idx, None, None, "failed", 0.0)
 
 
-def _producer(pdf_path: str, total_pages: int, img_queue: queue.Queue,
-              on_log: callable):
-    """Hilo productor: convierte páginas en lotes y las pone en la cola."""
-    for start in range(1, total_pages + 1, CHUNK_SIZE):
-        end = min(start + CHUNK_SIZE - 1, total_pages)
-        try:
-            chunk_imgs = _convert_chunk(pdf_path, start, end, DPI)
-            for offset, img in enumerate(chunk_imgs):
-                img_queue.put((start + offset, img))  # (page_number, image)
-        except Exception as e:
-            on_log(f"Error convirtiendo págs {start}-{end}: {e}", "error")
-            # Push None markers for failed pages so consumer doesn't hang
-            for p in range(start, end + 1):
-                img_queue.put((p, None))
-    img_queue.put(None)  # Sentinel: production done
+# ── Tier 4: Inference Engine ─────────────────────────────────────────────────
 
+def _infer_missing(reads: list[_PageRead]) -> list[_PageRead]:
+    """
+    Constraint Propagation + Bayesian inference for pages where OCR failed.
+    Runs AFTER all pages are scanned.
+    """
+    n = len(reads)
+    if n == 0:
+        return reads
+
+    # Phase 0: Build prior P(total=N) from successful reads
+    totals = [r.total for r in reads if r.total is not None]
+    total_counts: dict[int, int] = {}
+    for t in totals:
+        if t is not None:
+            total_counts[t] = total_counts.get(t, 0) + 1
+    total_sum = sum(total_counts.values()) or 1
+    prior: dict[int, float] = {k: v / total_sum for k, v in total_counts.items()}
+    if not prior:
+        prior = {2: 0.85, 3: 0.10, 1: 0.05}
+
+    # Phase 1: Forward propagation
+    for i in range(n):
+        r = reads[i]
+        if r.method != "failed":
+            continue
+        if i > 0:
+            prev = reads[i - 1]
+            if prev.curr is not None and prev.total is not None:
+                if prev.curr < prev.total:
+                    r.curr = prev.curr + 1
+                    r.total = prev.total
+                    r.method = "inferred"
+                    r.confidence = 0.95
+                elif prev.curr == prev.total:
+                    best_total = max(prior, key=lambda k: prior[k]) if prior else 2
+                    r.curr = 1
+                    r.total = best_total
+                    r.method = "inferred"
+                    r.confidence = 0.70
+
+    # Phase 2: Backward propagation
+    for i in range(n - 2, -1, -1):
+        r = reads[i]
+        if r.method != "failed":
+            continue
+        if i < n - 1:
+            nxt = reads[i + 1]
+            if nxt.curr is not None and nxt.total is not None:
+                if nxt.curr > 1:
+                    r.curr = nxt.curr - 1
+                    r.total = nxt.total
+                    r.method = "inferred"
+                    r.confidence = 0.90
+                elif nxt.curr == 1 and i > 0:
+                    prev = reads[i - 1]
+                    if prev.curr is not None and prev.total is not None:
+                        r.curr = prev.curr + 1
+                        r.total = prev.total
+                        r.method = "inferred"
+                        r.confidence = 0.90
+
+    # Phase 3: Cross-validation
+    for i in range(n):
+        r = reads[i]
+        if r.method != "inferred":
+            continue
+        consistent = True
+        if i > 0:
+            prev = reads[i - 1]
+            if prev.curr is not None and prev.total is not None:
+                if not ((prev.total == r.total and prev.curr == r.curr - 1) or
+                        (prev.curr == prev.total and r.curr == 1)):
+                    consistent = False
+        if i < n - 1:
+            nxt = reads[i + 1]
+            if nxt.curr is not None and nxt.total is not None:
+                if not ((nxt.total == r.total and nxt.curr == r.curr + 1) or
+                        (r.curr == r.total and nxt.curr == 1)):
+                    consistent = False
+        if not consistent:
+            r.confidence = min(r.confidence, 0.50)
+
+    # Phase 4: Handle remaining failures
+    for i in range(n):
+        r = reads[i]
+        if r.method == "failed":
+            best_total = max(prior, key=lambda k: prior[k]) if prior else 2
+            r.curr = 1
+            r.total = best_total
+            r.method = "inferred"
+            r.confidence = 0.40
+
+    return reads
+
+
+# ── Main analysis function ────────────────────────────────────────────────────
 
 def analyze_pdf(
     pdf_path: str,
     on_progress: callable,
     on_log:      callable,
     pause_event: threading.Event | None = None,
+    cancel_event: threading.Event | None = None,
     on_issue:    callable | None = None,
     doc_mode:    str = "charla",
-) -> list[Document]:
+) -> tuple[list[Document], list[_PageRead]]:
     """
-    Procesa un PDF con pipeline productor-consumidor:
-      - Productor: convierte páginas en lotes de CHUNK_SIZE a DPI base.
-      - Consumidor: análisis OCR + máquina de estados.
-      - Si OCR falla en todos los métodos a DPI base, re-renderiza la
-        página a DPI_FALLBACK y reintenta.
+    Procesa un PDF con pipeline V2:
+      1. PyMuPDF clip rendering (solo esquina superior-derecha)
+      2. Tesseract directo → FSRCNN+Tesseract como fallback
+      3. Inference engine post-scan para páginas fallidas
+      4. Máquina de estados para construir documentos
 
     pause_event: espera a que esté set() antes de cada página.
     on_issue:    callback cuando se detecta un problema.
     """
+    # Load SR model on first call
+    global _sr_model
+    if _sr_model is None:
+        on_log("Cargando FSRCNN x4...", "info")
+        _load_sr()
+
+    # Open PDF with PyMuPDF
     on_log("Leyendo metadatos...", "info")
     try:
-        total_pages = int(pdfinfo_from_path(pdf_path)["Pages"])
+        doc = fitz.open(pdf_path)
+        total_pages = len(doc)
     except Exception as e:
         on_log(f"Error leyendo PDF: {e}", "error")
-        return []
+        return [], []
 
     on_log(f"Total páginas: {total_pages}", "info")
-    on_log(f"Procesando a {DPI} DPI en lotes de {CHUNK_SIZE}...", "info")
+    on_log(f"Pipeline V2: Tesseract → FSRCNN → Inferencia", "info")
 
-    # ── Producer-consumer pipeline ────────────────────────────────────────
-    img_queue: queue.Queue = queue.Queue(maxsize=CHUNK_SIZE * 2)
-    producer_thread = threading.Thread(
-        target=_producer, args=(pdf_path, total_pages, img_queue, on_log),
-        daemon=True,
-    )
-    producer_thread.start()
-
-    documents:    list[Document] = []
-    current:      Optional[Document] = None
-    orphans:      list[int] = []
-    method_tally: dict[str, int] = {}
-    fallback_used = 0
-
-    def _issue(page: int, kind: str, detail: str, pil_img: Image.Image):
+    def _issue(page: int, kind: str, detail: str):
         if on_issue is not None:
-            on_issue(page, kind, detail, pil_img)
+            on_issue(page, kind, detail, None)
 
-    while True:
-        item = img_queue.get()
-        if item is None:
-            break  # Sentinel: all pages processed
+    # ── Phase 1-2: OCR all pages ──────────────────────────────────────────
+    reads: list[_PageRead] = []
+    method_tally: dict[str, int] = {}
+    t0 = time.time()
 
-        pdf_page, img = item
+    for i in range(total_pages):
+        # Cancel support
+        if cancel_event is not None and cancel_event.is_set():
+            on_log(f"Análisis abortado a petición del usuario.", "warn")
+            return [], []
 
-        # Conversion error for this page
-        if img is None:
-            on_log(f"  Pág {pdf_page:>4}: ⚠ error de conversión", "error")
-            on_progress(pdf_page, total_pages)
-            continue
-
-        # ── Pause support ────────────────────────────────────────────────
+        # Pause support
         if pause_event is not None:
             pause_event.wait()
 
-        curr, tot, method = extract_page_number(img, doc_mode)
+        page = doc[i]
+        pdf_page = i + 1
 
-        # ── DPI fallback: retry failed pages at higher resolution ────────
-        if method in ("failed", "failed_early"):
-            try:
-                img_hi = _convert_single_page(pdf_path, pdf_page, DPI_FALLBACK)
-                curr, tot, method = extract_page_number(img_hi, doc_mode)
-                if method != "failed":
-                    method = f"{method}@{DPI_FALLBACK}"
-                    img = img_hi  # use the higher-res image for issue preview
-                    fallback_used += 1
-            except Exception:
-                pass  # fallback failed, stick with original result
+        try:
+            r = _extract_page_number(page, pdf_page)
+        except Exception as e:
+            on_log(f"  Pág {pdf_page:>4}: ⚠ error de procesamiento: {e}", "error")
+            r = _PageRead(pdf_page, None, None, "failed", 0.0)
 
-        method_tally[method] = method_tally.get(method, 0) + 1
+        reads.append(r)
+        method_tally[r.method] = method_tally.get(r.method, 0) + 1
 
-        # Log
-        if curr is not None:
-            on_log(f"  Pág {pdf_page:>4}: {curr}/{tot}  [{method}]", "page_ok")
+        # Log per page
+        if r.curr is not None:
+            on_log(f"  Pág {pdf_page:>4}: {r.curr}/{r.total}  [{r.method}]", "page_ok")
         else:
-            on_log(f"  Pág {pdf_page:>4}: ???  [{method}]", "page_warn")
+            on_log(f"  Pág {pdf_page:>4}: ???  [{r.method}]", "page_warn")
 
-        # ── Transiciones ─────────────────────────────────────────────────
+        if on_progress:
+            try:
+                # Support the new 3-argument callback for live metrics
+                on_progress(pdf_page, total_pages, reads)
+            except TypeError:
+                # Fallback for old callers
+                on_progress(pdf_page, total_pages)
+
+    doc.close()
+
+    # ── Phase 3: Inference ────────────────────────────────────────────────
+    failed_count = sum(1 for r in reads if r.method == "failed")
+    if failed_count > 0:
+        on_log(f"Inferencia: procesando {failed_count} páginas fallidas...", "info")
+        reads = _infer_missing(reads)
+        inferred = sum(1 for r in reads if r.method == "inferred")
+        on_log(f"Inferencia: {inferred} páginas recuperadas", "ok")
+
+    # Report inferred pages with low/medium confidence as issues
+    for r in reads:
+        if r.method == "inferred" and r.confidence <= 0.60:
+            conf_label = "MEDIA" if r.confidence >= 0.50 else "BAJA"
+            detail = (f"Pág {r.pdf_page}: inferida como {r.curr}/{r.total} "
+                      f"(confianza {conf_label}: {r.confidence:.0%})")
+            on_log(f"  → {detail}", "warn")
+            _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail)
+
+    # ── Phase 4: Build documents from reads ───────────────────────────────
+    documents = _build_documents(reads, on_log, _issue)
+
+    # ── Summary ───────────────────────────────────────────────────────────
+    elapsed = time.time() - t0
+    # The 'orphans' list is now internal to _build_documents, so this check is removed.
+    # if orphans:
+    #     on_log(f"Páginas huérfanas: {orphans}", "warn")
+    on_log(f"Métodos OCR: {method_tally}", "info")
+    on_log(f"Tiempo: {elapsed:.1f}s ({total_pages} páginas, "
+           f"{elapsed / total_pages * 1000:.0f}ms/pág)", "info")
+
+    return documents, reads
+
+
+def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callable) -> list[Document]:
+    documents:    list[Document] = []
+    current:      Optional[Document] = None
+    orphans:      list[int] = [] # This 'orphans' list is local to _build_documents
+
+    for r in reads:
+        if r.method == "excluded":
+            continue
+            
+        curr, tot, pdf_page = r.curr, r.total, r.pdf_page
+        is_inferred = r.method == "inferred"
+
         if curr == 1:
             if current is not None:
                 documents.append(current)
@@ -357,62 +396,86 @@ def analyze_pdf(
                 index          = len(documents) + 1,
                 start_pdf_page = pdf_page,
                 declared_total = tot,
-                pages          = [pdf_page],
+                pages          = [] if is_inferred else [pdf_page],
+                inferred_pages = [pdf_page] if is_inferred else [],
             )
 
         elif curr is not None:
             if current is None:
                 orphans.append(pdf_page)
                 on_log(f"  → huérfana: curr={curr} sin doc activo", "warn")
-                _issue(pdf_page, "huérfana",
-                       f"curr={curr} sin doc activo", img)
+                on_issue(pdf_page, "huérfana", f"curr={curr} sin doc activo")
             else:
                 expected = current.found_total + 1
-                if curr == expected and tot == current.declared_total:
+                if is_inferred:
+                    current.inferred_pages.append(pdf_page)
+                elif curr == expected and tot == current.declared_total:
                     current.pages.append(pdf_page)
                 else:
                     current.sequence_ok = False
                     current.pages.append(pdf_page)
-                    detail = (f"secuencia rota en doc {current.index}: "
-                              f"esperaba {expected}/{current.declared_total}, "
-                              f"llegó {curr}/{tot}")
-                    on_log(f"  → {detail}", "warn")
-                    _issue(pdf_page, "secuencia rota", detail, img)
-
-        else:
-            # OCR falló (incluso con fallback)
-            if current is not None and current.found_total < current.declared_total:
-                current.inferred_pages.append(pdf_page)
-                detail = (f"inferida como "
-                          f"{current.found_total + 1}/{current.declared_total} "
-                          f"en doc {current.index}")
-                on_log(f"  → pág {pdf_page} {detail}", "warn")
-                _issue(pdf_page, "inferida", detail, img)
-            else:
-                if current is not None:
-                    documents.append(current)
-                current = Document(
-                    index          = len(documents) + 1,
-                    start_pdf_page = pdf_page,
-                    declared_total = 2,
-                    pages          = [],
-                    inferred_pages = [pdf_page],
-                    sequence_ok    = False,
-                )
-                detail = (f"inferida como inicio del doc {current.index} "
-                          f"(OCR falló en pág 1, declared_total estimado=2)")
-                on_log(f"  → pág {pdf_page} {detail}", "warn")
-                _issue(pdf_page, "inferida", detail, img)
-
-        on_progress(pdf_page, total_pages)
+                    detail = f"secuencia rota: curr={curr}, expected={expected}"
+                    on_log(f"  → {detail}", "error")
+                    on_issue(pdf_page, "secuencia rota", detail)
 
     if current is not None:
         documents.append(current)
 
     if orphans:
         on_log(f"Páginas huérfanas: {orphans}", "warn")
-    on_log(f"Métodos OCR usados: {method_tally}", "info")
-    if fallback_used > 0:
-        on_log(f"Páginas recuperadas con DPI fallback ({DPI_FALLBACK}): {fallback_used}", "ok")
-
     return documents
+
+def re_infer_documents(
+    reads: list[_PageRead],
+    corrections: dict[int, tuple[int, int]],
+    on_log: callable,
+    on_issue: callable | None = None,
+    exclusions: list[int] = None
+) -> tuple[list[Document], list[_PageRead]]:
+    """
+    Applies manual user corrections and exclusions, resets other inferred pages,
+    and runs the inference algorithm again to cascade probabilities.
+    """
+    def _issue(page: int, kind: str, detail: str):
+        if on_issue is not None:
+            on_issue(page, kind, detail, None)
+
+    if exclusions is None:
+        exclusions = []
+        
+    # 1. Apply corrections/exclusions and reset inferred pages to failed
+    for r in reads:
+        if r.pdf_page in exclusions:
+            r.method = "excluded"
+            r.curr = None
+            r.total = None
+            r.confidence = 1.0
+        elif r.pdf_page in corrections:
+            curr, tot = corrections[r.pdf_page]
+            r.curr = curr
+            r.total = tot
+            r.method = "manual"
+            r.confidence = 1.0
+        elif r.method == "inferred":
+             # Revoke inference to allow it to be re-evaluated
+             r.method = "failed"
+             r.curr = None
+             r.total = None
+             r.confidence = 0.0
+
+    # 2. Re-run inference cascade
+    reads = _infer_missing(reads)
+
+    # 3. Report remaining issues (<= 0.60)
+    for r in reads:
+        if r.method == "inferred" and r.confidence <= 0.60:
+            conf_label = "MEDIA" if r.confidence >= 0.50 else "BAJA"
+            detail = (f"Pág {r.pdf_page}: inferida como {r.curr}/{r.total} "
+                      f"(confianza {conf_label}: {r.confidence:.0%})")
+            on_log(f"  → {detail}", "warn")
+            _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail)
+
+    # 4. Rebuild document logic
+    documents = _build_documents(reads, on_log, _issue)
+
+    return documents, reads

@@ -1,4 +1,4 @@
-pdf2image
+PyMuPDF
 pytesseract
 pillow
-opencv-python
+opencv-contrib-python

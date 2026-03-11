@@ -17,11 +17,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Optional
+from typing import Optional, Any
 
 from PIL import Image, ImageTk
 
-from core.analyzer import Document, analyze_pdf
+from core.analyzer import Document, analyze_pdf, re_infer_documents
 from history import HistoryEntry, PDFResult, add_entry, clear_history, load_history
 
 # ── Colores y estilos ─────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ class PageIssue:
     pdf_page:   int
     issue_type: str
     detail:     str
-    pil_image:  Image.Image
+    pil_image:  Image.Image | None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -94,17 +94,25 @@ def _open_in_explorer(path: Path):
 class PDFoverseerApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("PDFoverseer")
+        self.root.title("PDFoverseer V2")
         self.root.geometry("1060x720")
         self.root.minsize(820, 580)
         self.root.configure(bg=BG)
 
         # State
         self.pdf_list: list[Path] = []
+        self.issues: list[PageIssue] = []
+        self._selected_issue_idx = -1
+
         self.running = False
         self.pause_event = threading.Event()
-        self.pause_event.set()
-
+        self.pause_event.set()  # Initial state is unpaused
+        self.cancel_event = threading.Event()
+        self._skip_current = False
+        self._stop_requested = False
+        
+        self._pdf_reads: dict[str, list[Any]] = {} 
+        self._user_corrections: dict[str, dict[int, tuple[int, int]]] = {}
         # Source tracking (for history)
         self._current_source: str = ""
         self._current_source_name: str = ""
@@ -113,8 +121,6 @@ class PDFoverseerApp:
         # Session state
         self._session_sources: list[str] = []
         self._session_pdf_count: int = 0
-        self._skip_current: bool = False
-
         # Global accumulators
         self.total_docs = 0
         self.total_complete = 0
@@ -125,16 +131,13 @@ class PDFoverseerApp:
         self._pdf_results: list[PDFResult] = []
 
         # Issues store
-        self.issues: list[PageIssue] = []
         self._current_preview_tk: Optional[ImageTk.PhotoImage] = None
         self._current_preview_pil: Optional[Image.Image] = None
         self._adjustments: dict[int, int] = {}   # issue_idx → -1
-        self._selected_issue_idx: int = -1
         self._zoom_level: float = 1.0  # 1.0 = fit to canvas
         self._row_to_issue: dict[int, int] = {}  # listbox_row → issue_idx
         self._show_seq_issues: bool = False  # hide "secuencia rota" by default
 
-        self.doc_mode_value = tk.StringVar(value="charla")
 
         # Build all views
         self._build_shared_top()
@@ -168,30 +171,28 @@ class PDFoverseerApp:
         )
         self.btn_file.pack(side=tk.LEFT, padx=(6, 0))
 
-        # Mode selector
-        mode_frame = tk.Frame(top, bg=SURFACE, padx=8, pady=0)
-        mode_frame.pack(side=tk.LEFT, padx=(16, 0), fill=tk.Y)
+        # Remove Mode combobox, Pause button. Keep Stop and Skip buttons.
+        # We will build a new compact control bar.
+        control_frame = tk.Frame(top, bg=SURFACE, padx=8, pady=4, highlightbackground="#45475a", highlightthickness=1)
+        control_frame.pack(side=tk.LEFT, padx=(16, 0))
 
-        tk.Label(mode_frame, text="Modo:", bg=SURFACE, fg=DIM, font=("Segoe UI", 9)).pack(side=tk.LEFT)
-
-        self.cbo_mode = ttk.Combobox(
-            mode_frame, textvariable=self.doc_mode_value, state="readonly",
-            values=["charla", "art"], width=8, font=("Segoe UI", 10, "bold")
-        )
-        self.cbo_mode.pack(side=tk.LEFT, padx=(4, 0), pady=4)
-        # Style the combobox a bit to match the dark theme
-        self.root.option_add('*TCombobox*Listbox.background', SURFACE)
-        self.root.option_add('*TCombobox*Listbox.foreground', FG)
-        self.root.option_add('*TCombobox*Listbox.font', ("Segoe UI", 10))
-
-        self.btn_pause = tk.Button(
-            top, text="⏸  Pausar", command=self._toggle_pause,
-            bg=SURFACE, fg=FG, font=("Segoe UI", 10, "bold"),
-            activebackground="#45475a", activeforeground=FG,
-            padx=14, pady=5, relief=tk.FLAT, cursor="hand2",
+        self.btn_stop = tk.Button(
+            control_frame, text="⏹  Detener", command=self._stop_processing,
+            bg=SURFACE, fg=RED, font=("Segoe UI", 10, "bold"),
+            activebackground="#45475a", activeforeground=RED,
+            padx=10, pady=2, relief=tk.FLAT, cursor="hand2",
             state=tk.DISABLED,
         )
-        self.btn_pause.pack(side=tk.LEFT, padx=10)
+        self.btn_stop.pack(side=tk.LEFT, padx=(0, 4))
+
+        self.btn_skip = tk.Button(
+            control_frame, text="⏭  Saltar PDF", command=self._skip_file,
+            bg=SURFACE, fg=ORANGE, font=("Segoe UI", 10, "bold"),
+            activebackground="#45475a", activeforeground=ORANGE,
+            padx=10, pady=2, relief=tk.FLAT, cursor="hand2",
+            state=tk.DISABLED,
+        )
+        self.btn_skip.pack(side=tk.LEFT)
 
         self.btn_issues = tk.Button(
             top, text="⚠  Ver Problemas (0)", command=self._show_detail,
@@ -200,24 +201,7 @@ class PDFoverseerApp:
             padx=14, pady=5, relief=tk.FLAT, cursor="hand2",
             state=tk.DISABLED,
         )
-        self.btn_issues.pack(side=tk.LEFT)
-
-        self.btn_history = tk.Button(
-            top, text="📊  Historial", command=self._show_history,
-            bg=SURFACE, fg=FG, font=("Segoe UI", 10, "bold"),
-            activebackground="#45475a", activeforeground=FG,
-            padx=14, pady=5, relief=tk.FLAT, cursor="hand2",
-        )
-        self.btn_history.pack(side=tk.LEFT, padx=(6, 0))
-
-        self.btn_skip = tk.Button(
-            top, text="⏭  Saltar", command=self._skip_file,
-            bg=SURFACE, fg=ORANGE, font=("Segoe UI", 10, "bold"),
-            activebackground="#45475a", activeforeground=ORANGE,
-            padx=14, pady=5, relief=tk.FLAT, cursor="hand2",
-            state=tk.DISABLED,
-        )
-        self.btn_skip.pack(side=tk.LEFT, padx=(6, 0))
+        self.btn_issues.pack(side=tk.LEFT, padx=(16, 0))
 
         # ---- Right side buttons ----
         self.btn_save_session = tk.Button(
@@ -445,6 +429,15 @@ class PDFoverseerApp:
         )
         self.btn_open_loc.pack(side=tk.LEFT)
 
+        self.btn_load_preview = tk.Button(
+            ib, text="👁️ Cargar vista", command=self._load_preview_image,
+            bg=SURFACE, fg=ACCENT, font=("Segoe UI", 9, "bold"),
+            activebackground="#45475a", activeforeground=ACCENT,
+            padx=10, pady=3, relief=tk.FLAT, cursor="hand2",
+            state=tk.DISABLED,
+        )
+        self.btn_load_preview.pack(side=tk.LEFT, padx=(6, 0))
+
         # RIGHT: Image preview + adjustment
         self.preview_right = tk.Frame(paned, bg=BG_PANEL, highlightbackground=SURFACE,
                                       highlightthickness=1)
@@ -488,23 +481,46 @@ class PDFoverseerApp:
 
         # ── Bottom bar: toggle button + hints ─────────────────────────
         adj_frame = tk.Frame(self.preview_right, bg=BG_PANEL)
-        adj_frame.pack(fill=tk.X, padx=8, pady=(4, 8))
+        adj_frame.pack(fill=tk.X, padx=8, pady=(4, 2))
 
         self.btn_adj_toggle = tk.Button(
             adj_frame, text="Excluir del conteo",
             command=self._toggle_adjustment,
-            bg=SURFACE, fg=RED, font=("Segoe UI", 9, "bold"),
-            activebackground="#45475a", activeforeground=RED,
-            padx=12, pady=3, relief=tk.FLAT, cursor="hand2",
+            bg=SURFACE, fg=FG, font=("Segoe UI", 9),
+            activebackground="#45475a", activeforeground=FG,
+            padx=10, pady=4, relief=tk.FLAT, cursor="hand2",
             state=tk.DISABLED,
         )
-        self.btn_adj_toggle.pack(side=tk.LEFT, padx=2)
+        self.btn_adj_toggle.pack(side=tk.LEFT)
 
         self.lbl_adj_hint = tk.Label(
-            adj_frame, text="←→ navegar  |  Espacio incluir/excluir  |  +/− zoom  |  0 reset",
-            fg=DIM, bg=BG_PANEL, font=("Segoe UI", 8),
+            adj_frame, text="Útil si el analizador cortó mal el documento",
+            fg=DIM, bg=BG_PANEL, font=("Segoe UI", 8, "italic")
         )
-        self.lbl_adj_hint.pack(side=tk.RIGHT, padx=8)
+        self.lbl_adj_hint.pack(side=tk.LEFT, padx=10)
+
+        # ── Manual correction bar ─────────────────────────────────
+        corr_frame = tk.Frame(self.preview_right, bg=SURFACE, padx=8, pady=8)
+        corr_frame.pack(fill=tk.X, padx=8, pady=(0, 6))
+
+        tk.Label(corr_frame, text="Corrección manual:", bg=SURFACE, fg=FG, font=("Segoe UI", 9)).pack(side=tk.LEFT)
+        
+        self.txt_curr = tk.Entry(corr_frame, width=3, bg=BG_LOG, fg=FG, insertbackground=FG, borderwidth=1, relief=tk.FLAT, font=("Consolas", 10))
+        self.txt_curr.pack(side=tk.LEFT, padx=(6, 2))
+        
+        tk.Label(corr_frame, text="de", bg=SURFACE, fg=DIM, font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=2)
+        
+        self.txt_total = tk.Entry(corr_frame, width=3, bg=BG_LOG, fg=FG, insertbackground=FG, borderwidth=1, relief=tk.FLAT, font=("Consolas", 10))
+        self.txt_total.pack(side=tk.LEFT, padx=(2, 8))
+        
+        self.btn_correct = tk.Button(
+            corr_frame, text="✅ Validar e Inferir", command=self._apply_correction,
+            bg=GREEN, fg="#11111b", font=("Segoe UI", 9, "bold"),
+            activebackground="#82d17d", activeforeground="#11111b",
+            padx=10, pady=2, relief=tk.FLAT, cursor="hand2",
+            state=tk.DISABLED,
+        )
+        self.btn_correct.pack(side=tk.LEFT)
 
     # ══════════════════════════════════════════════════════════════════════════
     # ── History view (Treeview with expandable rows) ──────────────────────────
@@ -687,8 +703,7 @@ class PDFoverseerApp:
 
         self.btn_folder.config(state=tk.DISABLED)
         self.btn_file.config(state=tk.DISABLED)
-        self.cbo_mode.config(state=tk.DISABLED)
-        self.btn_pause.config(state=tk.NORMAL)
+        self.btn_stop.config(state=tk.NORMAL)
         self.btn_skip.config(state=tk.NORMAL)
         self.btn_new_session.config(state=tk.DISABLED)
         self.btn_load_session.config(state=tk.DISABLED)
@@ -697,15 +712,14 @@ class PDFoverseerApp:
         self.pause_event.set()
         threading.Thread(target=self._process_all, daemon=True).start()
 
-    def _toggle_pause(self):
-        if self.pause_event.is_set():
-            self.pause_event.clear()
-            self.btn_pause.config(text="▶  Reanudar", bg=YELLOW, fg="#11111b")
-            self._log_msg("⏸  Proceso en pausa", "warn")
-        else:
-            self.pause_event.set()
-            self.btn_pause.config(text="⏸  Pausar", bg=SURFACE, fg=FG)
-            self._log_msg("▶  Proceso reanudado", "info")
+    def _stop_processing(self):
+        """Detiene todo el proceso de análisis de la cola actual."""
+        if not self.running:
+            return
+        self._stop_requested = True
+        self.cancel_event.set()
+        self.btn_stop.config(state=tk.DISABLED)
+        self._log_msg("🛑  Deteniendo proceso (abortando OCR actual)...", "error")
 
     # ── Processing ────────────────────────────────────────────────────────────
 
@@ -720,6 +734,10 @@ class PDFoverseerApp:
                 self.root.after(0, self._log_msg,
                                 f"⏭  Saltado: {pdf_path.name}", "warn")
                 continue
+
+            if self._stop_requested:
+                self.root.after(0, self._log_msg, "🛑  Proceso detenido por el usuario.", "error")
+                break
 
             self.root.after(0, self._set_list_status, idx, "processing")
 
@@ -756,12 +774,21 @@ class PDFoverseerApp:
                 )
                 self.root.after(0, self._add_issue, issue)
 
+            self.cancel_event.clear()
+
             try:
-                current_mode = self.doc_mode_value.get()
-                docs = analyze_pdf(str(pdf_path), on_progress, on_log,
+                # Mode is fixed to charla for now as per user request to declutter
+                current_mode = "charla" 
+                docs, reads = analyze_pdf(str(pdf_path), on_progress, on_log,
                                    pause_event=self.pause_event,
+                                   cancel_event=self.cancel_event,
                                    on_issue=on_issue,
                                    doc_mode=current_mode)
+                self._pdf_reads[str(pdf_path)] = reads
+
+                if self._stop_requested:
+                    self.root.after(0, self._set_list_status, idx, "error")
+                    break
 
                 # Check if file was skipped mid-processing
                 if self._skip_current:
@@ -817,7 +844,7 @@ class PDFoverseerApp:
                         f"{'═' * 60}", "section")
         self.root.after(0, lambda: self.btn_folder.config(state=tk.NORMAL))
         self.root.after(0, lambda: self.btn_file.config(state=tk.NORMAL))
-        self.root.after(0, lambda: self.btn_pause.config(state=tk.DISABLED))
+        self.root.after(0, lambda: self.btn_stop.config(state=tk.DISABLED))
         self.root.after(0, lambda: self.btn_skip.config(state=tk.DISABLED))
         self.root.after(0, lambda: self.btn_new_session.config(state=tk.NORMAL))
         self.root.after(0, lambda: self.btn_load_session.config(state=tk.NORMAL))
@@ -982,11 +1009,8 @@ class PDFoverseerApp:
         if not self.running:
             return
         self._skip_current = True
-        # If paused, unpause so the skip takes effect
-        if not self.pause_event.is_set():
-            self.pause_event.set()
-            self.btn_pause.config(text="⏸  Pausar", bg=SURFACE, fg=FG)
-        self._log_msg("⏭  Saltando archivo actual...", "warn")
+        self.cancel_event.set()
+        self._log_msg("⏭  Interrumpiendo PDF actual y saltando al siguiente...", "warn")
 
     def _update_session_label(self):
         """Actualiza el label de origen con contexto de sesión."""
@@ -1004,13 +1028,33 @@ class PDFoverseerApp:
     # ── Issues management ─────────────────────────────────────────────────────
 
     def _add_issue(self, issue: PageIssue):
-        if issue.issue_type == "inferida" and "inicio" not in issue.detail:
-            # Hide mid-document inferences, only show inferred document starts
-            return
         self.issues.append(issue)
         self._update_issues_button()
         if self.detail_frame.winfo_ismapped():
             self._append_issue_to_listbox(len(self.issues) - 1, issue)
+
+    def _refresh_issue_listbox(self):
+        """Reconstruye el listbox de problemas usando la lista actual internal (respeta _show_seq_issues)."""
+        self.issues_listbox.delete(0, tk.END)
+        self._row_to_issue.clear()
+        
+        row = 0
+        for idx, iss in enumerate(self.issues):
+            if iss.issue_type == "secuencia rota" and not self._show_seq_issues:
+                continue
+                
+            badge = "⚠" if iss.issue_type == "incompleto" else "❌"
+            self.issues_listbox.insert(tk.END, f"{badge} {iss.pdf_path.name} - {iss.detail}")
+            
+            if iss.issue_type == "incompleto":
+                self.issues_listbox.itemconfig(row, {'fg': ORANGE})
+            elif "inferida" in iss.issue_type:
+                self.issues_listbox.itemconfig(row, {'fg': YELLOW})
+            else:
+                self.issues_listbox.itemconfig(row, {'fg': RED})
+                
+            self._row_to_issue[row] = idx
+            row += 1
 
     def _update_issues_button(self):
         count = len(self.issues)
@@ -1132,16 +1176,136 @@ class PDFoverseerApp:
             return  # clicked a header row
         self._select_issue_by_idx(issue_idx)
 
-    def _display_preview(self, pil_img: Image.Image, keep_zoom: bool = False):
+    def _display_preview(self, pil_img: Image.Image | None, keep_zoom: bool = False):
         if not keep_zoom:
             self._zoom_level = 1.0
         self._current_preview_pil = pil_img
         self._render_preview()
 
+    def _load_preview_image(self):
+        idx = self._selected_issue_idx
+        if idx < 0: return
+        issue = self.issues[idx]
+
+        import fitz
+        from PIL import Image
+
+        try:
+            self._log_msg(f"Cargando vista previa para {issue.pdf_path.name} (Pág {issue.pdf_page})...", "info")
+            doc = fitz.open(str(issue.pdf_path))
+            page = doc[issue.pdf_page - 1]
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            
+            issue.pil_image = img  # cache it
+            self._display_preview(img)
+            self.btn_load_preview.config(state=tk.DISABLED)
+            doc.close()
+            self._log_msg("Vista previa cargada.", "ok")
+        except Exception as e:
+            self._log_msg(f"Error cargando preview: {e}", "error")
+
+    def _apply_correction(self):
+        idx = self._selected_issue_idx
+        if idx < 0: return
+        issue = self.issues[idx]
+
+        try:
+            curr = int(self.txt_curr.get())
+            total = int(self.txt_total.get())
+        except ValueError:
+            return
+
+        pdf_str = str(issue.pdf_path)
+        reads = self._pdf_reads.get(pdf_str)
+        if not reads:
+            self._log_msg(f"No se pudieron cargar las lecturas anteriores de {pdf_str}.", "error")
+            return
+
+        # Store correction
+        pdf_corrections = self._user_corrections.setdefault(pdf_str, {})
+        pdf_corrections[issue.pdf_page] = (curr, total)
+
+        # Clear existing issues for this PDF to let re-infer recreate them
+        self.issues = [i for i in self.issues if str(i.pdf_path) != pdf_str]
+
+        def on_issue(page, kind, detail, pil_img, _path=issue.pdf_path):
+            new_issue = PageIssue(
+                pdf_path=_path, pdf_page=page,
+                issue_type=kind, detail=detail, pil_image=pil_img,
+            )
+            self.issues.append(new_issue)
+
+        self._log_msg(f"Recalculando inferencia para {issue.pdf_path.name}...", "info")
+        docs, new_reads = re_infer_documents(
+            reads=reads,
+            corrections=pdf_corrections,
+            on_log=self._log_msg,
+            on_issue=on_issue
+        )
+        self._pdf_reads[pdf_str] = new_reads
+
+        # Update metrics globally so they are correct in history and summary
+        old_res = next((r for r in self._pdf_results if r.path == pdf_str), None)
+        if old_res:
+            self.total_docs -= old_res.total_docs
+            self.total_complete -= old_res.complete
+            self.total_incomplete -= old_res.incomplete
+            self.total_inferred -= old_res.inferred
+            
+            complete = [d for d in docs if d.is_complete]
+            incomplete = [d for d in docs if not d.is_complete]
+            inferred = sum(len(d.inferred_pages) for d in docs)
+            
+            old_res.total_docs = len(docs)
+            old_res.complete = len(complete)
+            old_res.incomplete = len(incomplete)
+            old_res.inferred = inferred
+            
+            self.total_docs += len(docs)
+            self.total_complete += len(complete)
+            self.total_incomplete += len(incomplete)
+            self.total_inferred += inferred
+            
+            for doc in incomplete:
+                missing = doc.missing_pages
+                if not missing: continue
+                page_ref = doc.pages[-1] if doc.pages else doc.start_pdf_page
+                detail = f"Doc {doc.index} incompleto. Detectadas {doc.found_total}/{doc.declared_total}. Faltan: {missing}"
+                self.issues.append(PageIssue(
+                    pdf_path=issue.pdf_path,
+                    pdf_page=page_ref,
+                    issue_type="incompleto",
+                    detail=detail,
+                    pil_image=None
+                ))
+            
+            self._update_summary()
+
+        # Refresh UI
+        self._refresh_issue_listbox()
+        self._update_issues_button()
+        self.lbl_issues_count.config(text=f"{len(self.issues)} problemas encontrados")
+        
+        # Deselect logic
+        self.issues_listbox.selection_clear(0, tk.END)
+        self._selected_issue_idx = -1
+        self._display_preview(None)
+        self.txt_curr.delete(0, tk.END)
+        self.txt_total.delete(0, tk.END)
+        self.btn_correct.config(state=tk.DISABLED)
+        self.btn_load_preview.config(state=tk.DISABLED)
+        self.lbl_preview_title.config(text="Selecciona un problema para ver la página", fg=DIM)
+
     def _render_preview(self):
         """Renderiza la imagen actual con el zoom actual."""
         pil_img = self._current_preview_pil
+        self.preview_canvas.delete("all")
         if pil_img is None:
+            self.preview_canvas.create_text(
+                10, 10, anchor=tk.NW, text="Sin vista previa disponible para predicciones/errores v2.",
+                fill=DIM, font=("Segoe UI", 10)
+            )
             return
 
         canvas_w = self.preview_canvas.winfo_width()
@@ -1157,7 +1321,6 @@ class PDFoverseerApp:
         resized = pil_img.resize((new_w, new_h), Image.LANCZOS)
         self._current_preview_tk = ImageTk.PhotoImage(resized)
 
-        self.preview_canvas.delete("all")
         self.preview_image_id = self.preview_canvas.create_image(
             0, 0, anchor=tk.NW, image=self._current_preview_tk,
         )
@@ -1315,6 +1478,29 @@ class PDFoverseerApp:
             fg=ORANGE,
         )
         self.btn_open_loc.config(state=tk.NORMAL)
+        self.btn_load_preview.config(state=tk.NORMAL if issue.pil_image is None else tk.DISABLED)
+        
+        # Enforce correction button state based on issue type
+        if "inferida" in issue.issue_type or "rota" in issue.issue_type or "huérfana" in issue.issue_type:
+            self.btn_correct.config(state=tk.NORMAL)
+            # Pre-fill inputs where logical
+            self.txt_curr.delete(0, tk.END)
+            self.txt_total.delete(0, tk.END)
+            
+            import re
+            match = re.search(r"curr=(\d+), expected=\d+", issue.detail)
+            if match:
+                 self.txt_curr.insert(0, match.group(1))
+
+            match_inf = re.search(r"inferida como (\d+)/(\d+)", issue.detail)
+            if match_inf:
+                 self.txt_curr.insert(0, match_inf.group(1))
+                 self.txt_total.insert(0, match_inf.group(2))
+        else:
+            self.btn_correct.config(state=tk.DISABLED)
+            self.txt_curr.delete(0, tk.END)
+            self.txt_total.delete(0, tk.END)
+            
         self._display_preview(issue.pil_image)
         self._update_adj_ui()
 

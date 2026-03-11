@@ -1,0 +1,12 @@
+{
+  "timestamp": "20260311_100759",
+  "metrics": {
+    "docs": 30,
+    "complete": 29,
+    "incomplete": 1,
+    "inferred": 12,
+    "total_time": 552.20769739151
+  },
+  "issues_count": 0,
+  "files_processed": 1
+}
