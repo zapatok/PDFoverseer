@@ -451,7 +451,7 @@ function App() {
                   }
                 }}
                 disabled={(status === 'running' && !globalProg.paused) || pdfs.length === 0}
-                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full text-[#a6e3a1] hover:bg-[#a6e3a1]/10 transition-all disabled:opacity-30 disabled:pointer-events-none"
+                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-[#a6e3a1] hover:bg-[#a6e3a1]/10 transition-all disabled:opacity-30 disabled:pointer-events-none"
                 title={globalProg.paused ? "Reanudar" : "Iniciar Lote"}
               >
                 <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
@@ -460,7 +460,7 @@ function App() {
               <button
                 onClick={handlePause}
                 disabled={status !== 'running'}
-                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full text-[#fab387] hover:bg-[#fab387]/10 transition-all disabled:opacity-30 disabled:pointer-events-none"
+                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-[#fab387] hover:bg-[#fab387]/10 transition-all disabled:opacity-30 disabled:pointer-events-none"
                 title="Pausar"
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
@@ -473,7 +473,7 @@ function App() {
             <button
               onClick={handleStop}
               disabled={status !== 'running' && !globalProg.paused}
-              className="group flex items-center justify-center w-10 h-10 rounded-full text-[#f38ba8]/80 hover:bg-[#f38ba8]/10 hover:text-[#f38ba8] transition-all disabled:opacity-30 disabled:pointer-events-none"
+              className="group flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-[#f38ba8]/80 hover:bg-[#f38ba8]/10 hover:text-[#f38ba8] transition-all disabled:opacity-40 disabled:pointer-events-none"
               title="Detener"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z" /></svg>
@@ -485,7 +485,7 @@ function App() {
             <button
               onClick={handleSkip}
               disabled={status !== 'running' && !globalProg.paused}
-              className="group flex items-center justify-center w-10 h-10 rounded-full text-[#bac2de]/80 hover:bg-[#bac2de]/10 hover:text-[#bac2de] transition-all disabled:opacity-30 disabled:pointer-events-none"
+              className="group flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-[#bac2de]/80 hover:bg-[#bac2de]/10 hover:text-[#bac2de] transition-all disabled:opacity-40 disabled:pointer-events-none"
               title="Saltar Actual"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" /></svg>
@@ -672,9 +672,9 @@ function App() {
                         className="group flex flex-col justify-center items-center gap-[4px] w-6 h-6 focus:outline-none bg-transparent cursor-pointer"
                         title="Opciones de Terminal"
                       >
-                        <span className="w-4 h-[2px] bg-red-900 group-hover:bg-red-500 transition-colors"></span>
-                        <span className="w-4 h-[2px] bg-red-900 group-hover:bg-red-500 transition-colors"></span>
-                        <span className="w-4 h-[2px] bg-red-900 group-hover:bg-red-500 transition-colors"></span>
+                        <span className="w-4 h-[2px] bg-red-600 group-hover:bg-red-400 transition-colors shadow-[0_0_2px_rgba(220,38,38,0.5)]"></span>
+                        <span className="w-4 h-[2px] bg-red-600 group-hover:bg-red-400 transition-colors shadow-[0_0_2px_rgba(220,38,38,0.5)]"></span>
+                        <span className="w-4 h-[2px] bg-red-600 group-hover:bg-red-400 transition-colors shadow-[0_0_2px_rgba(220,38,38,0.5)]"></span>
                       </button>
 
                       {terminalMenuOpen && (
