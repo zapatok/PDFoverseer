@@ -1,20 +1,26 @@
 import os
+import re
+import sys
+import json
 import time
 import asyncio
+import subprocess
 import threading
 from pathlib import Path
+from datetime import datetime
+from contextlib import asynccontextmanager
 from tkinter import filedialog
 import tkinter as tk
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import fitz  # For quick page counting
 
 # Core logic
 from core.analyzer import analyze_pdf, re_infer_documents
-from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -27,9 +33,14 @@ app = FastAPI(title="PDFoverseer V3 API", lifespan=lifespan)
 # Allow CORS for local Vite dev server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -42,7 +53,6 @@ if frontend_path.exists():
 else:
     print(f"Warning: UI directory {frontend_path} not found. Build the frontend first.")
 
-from fastapi.responses import RedirectResponse
 @app.get("/")
 def read_root():
     return RedirectResponse(url="/ui/")
@@ -205,12 +215,11 @@ def api_remove_pdf(filename: str):
         
     return {"success": True, "pdfs": pdf_list_state}
 
-import json
-from datetime import datetime
-
 @app.get("/api/debug_add")
 def api_debug_add(path: str):
     p = Path(path)
+    if p.suffix.lower() != ".pdf":
+        return {"success": False, "msg": "Not a PDF file"}
     if p not in state.pdf_list:
         state.pdf_list.append(p)
     return {"success": True, "pdfs": [{"name": p.name, "path": str(p), "status": "pending"} for p in state.pdf_list]}
@@ -302,15 +311,17 @@ def api_list_sessions():
         try:
             with open(f, "r", encoding="utf-8") as jf:
                 sessions.append(json.load(jf))
-        except:
+        except (json.JSONDecodeError, OSError):
             pass
-            
+
     sessions.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
     return {"sessions": sessions}
 
 @app.post("/api/delete_session")
 def api_delete_session(req: DeleteSessionRequest):
     """Deletes a saved session from the local history."""
+    if not re.match(r'^\d{8}_\d{6}$', req.timestamp):
+        return {"success": False, "error": "Invalid timestamp format"}
     sessions_dir = Path(__file__).parent / "data" / "sessions"
     filepath = sessions_dir / f"session_{req.timestamp}.json"
     
@@ -559,8 +570,6 @@ def _process_pdfs(start_index: int = 0):
     _emit("log", {"msg": f"\n🏁 Proceso completado en {elapsed_total:.1f}s", "level": "ok"})
 
 # --- Human-in-the-Loop ---
-from fastapi.responses import Response
-
 class CorrectRequest(BaseModel):
     pdf_path: str
     page: int
@@ -617,24 +626,26 @@ class ExcludeRequest(BaseModel):
     pdf_path: str
     page: int
 
-import subprocess
-import os
-import sys
-
 @app.get("/api/open_pdf")
 def api_open_pdf(pdf_path: str, page: int = 1):
     """Opens the PDF file in the user's default native OS viewer."""
     try:
+        allowed_paths = {str(p) for p in state.pdf_list}
+        if pdf_path not in allowed_paths:
+            return {"success": False, "error": "PDF not in list"}
+
         path = Path(pdf_path)
         if not path.exists():
             return {"success": False, "error": "File not found"}
-            
+        if path.suffix.lower() != ".pdf":
+            return {"success": False, "error": "Not a PDF file"}
+
         if os.name == 'nt': # Windows
             os.startfile(str(path))
         else: # macOS / Linux
             opener = "open" if sys.platform == "darwin" else "xdg-open"
             subprocess.call([opener, str(path)])
-            
+
         return {"success": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -753,21 +764,29 @@ def _recalculate_metrics():
 
 @app.get("/api/preview")
 def api_preview(pdf_path: str, page: int):
-    import fitz
+    allowed_paths = {str(p) for p in state.pdf_list}
+    if pdf_path not in allowed_paths:
+        return {"success": False, "msg": "PDF not in list"}
+
+    doc = None
     try:
         doc = fitz.open(pdf_path)
+        if not (1 <= page <= len(doc)):
+            return {"success": False, "msg": "Page out of range"}
+
         pdf_page = doc[page - 1]
-        
-        # Render top 20%
+
+        # Render top 25%
         rect = pdf_page.rect
         crop = fitz.Rect(0, 0, rect.width, rect.height * 0.25)
         pix = pdf_page.get_pixmap(matrix=fitz.Matrix(3.0, 3.0), clip=crop)
-        
-        doc.close()
-        # Return as image/png
+
         return Response(content=pix.tobytes("png"), media_type="image/png")
     except Exception as e:
         return {"success": False, "msg": str(e)}
+    finally:
+        if doc is not None:
+            doc.close()
 
 # --- WebSocket ---
 @app.websocket("/ws")
