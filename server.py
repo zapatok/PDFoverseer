@@ -22,6 +22,13 @@ import fitz  # For quick page counting
 # Core logic
 from core.analyzer import analyze_pdf, re_infer_documents
 
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("pdfoverserver")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Capture the main asyncio loop so background threads can broadcast
@@ -51,7 +58,7 @@ if frontend_path.exists():
     if assets_path.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
 else:
-    print(f"Warning: UI directory {frontend_path} not found. Build the frontend first.")
+    logger.warning("UI directory %s not found. Build the frontend first.", frontend_path)
 
 @app.get("/")
 def read_root():
@@ -519,6 +526,8 @@ def _process_pdfs(start_index: int = 0):
                     "detail": detail,
                 }
                 state.issues.append(issue)
+                if len(state.issues) > 10_000:
+                    state.issues = state.issues[-10_000:]
             _emit("new_issue", issue)
 
         state.cancel_event.clear()
@@ -554,6 +563,7 @@ def _process_pdfs(start_index: int = 0):
             _emit("status_update", {"idx": idx, "status": "done"})
             
         except Exception as e:
+            logger.exception("Error procesando %s", pdf_path.name)
             _emit("log", {"msg": f"Error procesando {pdf_path.name}: {e}", "level": "error"})
             _emit("status_update", {"idx": idx, "status": "error"})
             
