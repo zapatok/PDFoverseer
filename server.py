@@ -14,8 +14,15 @@ import fitz  # For quick page counting
 
 # Core logic
 from core.analyzer import analyze_pdf, re_infer_documents
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="PDFoverseer V3 API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Capture the main asyncio loop so background threads can broadcast
+    state.loop = asyncio.get_running_loop()
+    yield
+
+app = FastAPI(title="PDFoverseer V3 API", lifespan=lifespan)
 
 # Allow CORS for local Vite dev server
 app.add_middleware(
@@ -53,6 +60,7 @@ class ServerState:
         self.running: bool = False
         self.stop_requested: bool = False
         self.skip_current: bool = False
+        self.skipped_pdfs: set[str] = set()
         self.pause_event = threading.Event()
         self.pause_event.set()
         self.cancel_event = threading.Event()
@@ -74,10 +82,7 @@ class ServerState:
 
 state = ServerState()
 
-@app.on_event("startup")
-def startup_event():
-    # Capture the main asyncio loop so background threads can broadcast
-    state.loop = asyncio.get_running_loop()
+
 
 # --- WebSocket Manager ---
 class ConnectionManager:
@@ -197,6 +202,7 @@ def api_get_state():
 def api_reset():
     """Hard wipe of the backend state to start a new session."""
     state.pdf_list = []
+    state.skipped_pdfs.clear()
     state.pdf_reads = {}
     state.issues = []
     state.total_docs = 0
@@ -287,6 +293,7 @@ async def api_start(req: StartProcessRequest):
         state.total_incomplete = 0
         state.total_inferred = 0
         state.issues = []
+        state.skipped_pdfs.clear()
         state.pdf_reads = {}
     else:
         # Retain history of previously parsed files
@@ -376,6 +383,7 @@ def _process_pdfs(start_index: int = 0):
         pdf_path = state.pdf_list[idx]
         if state.skip_current:
             state.skip_current = False
+            state.skipped_pdfs.add(str(pdf_path))
             _emit("status_update", {"idx": idx, "status": "skipped"})
             continue
             
@@ -615,7 +623,7 @@ def _recalculate_metrics():
     total_incomplete = 0
     total_inferred = 0
     
-    skipped_paths = {p["path"] for p in state.pdf_list if p["status"] == "skipped"}
+    skipped_paths = state.skipped_pdfs
     
     from core.analyzer import _build_documents
     for path, reads in state.pdf_reads.items():
@@ -702,3 +710,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # Handle incoming WS messages if necessary (ping/pong)
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
