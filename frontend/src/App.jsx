@@ -134,6 +134,21 @@ function App() {
     }
   }
 
+  const handleRemovePdf = async () => {
+    if (!selectedPdfFilter) return;
+    try {
+      const res = await fetch(`http://localhost:8000/api/remove_pdf?filename=${encodeURIComponent(selectedPdfFilter)}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setPdfs(data.pdfs);
+        if (selectedPdfFilter === fileProg.filename) setFileProg({done: 0, total: 0, filename: ''});
+        setSelectedPdfFilter('');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   const handleNewSession = () => {
     setConfirmModal({
       isOpen: true,
@@ -427,18 +442,18 @@ function App() {
                       setConfirmModal({
                         isOpen: true,
                         title: 'Opciones de Inicio',
-                        message: 'Existen documentos procesados o con progreso. ¿Deseas reanudar desde el primer documento pendiente o empezar todo desde cero?',
+                        message: 'Existen documentos consolidados en la lista. ¿Deseas reanudar desde el primer documento pendiente o reiniciar el recorrido desde cero?',
                         isAlert: false,
                         buttons: [
                           {
-                            label: 'Empezar de Cero',
+                            label: 'Reiniciar',
                             onClick: () => handleStart(0),
                             className: 'px-4 py-2 rounded-lg bg-surface hover:bg-white/5 text-gray-300 transition-colors text-sm font-medium border border-white/5'
                           },
                           {
-                            label: 'Reanudar Lote',
+                            label: 'Reanudar',
                             onClick: () => {
-                              const firstPending = pdfs.findIndex(p => p.status === 'pending' || p.status === 'error' || p.status === 'skipped');
+                              const firstPending = pdfs.findIndex(p => p.status === 'pending' || p.status === 'error');
                               handleStart(Math.max(0, firstPending));
                             },
                             className: 'px-4 py-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 font-bold transition-all text-sm border border-green-500/30'
@@ -450,8 +465,8 @@ function App() {
                     }
                   }
                 }}
-                disabled={(status === 'running' && !globalProg.paused) || pdfs.length === 0}
-                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-green-400 hover:bg-green-400/20 transition-all disabled:opacity-50 disabled:grayscale disabled:pointer-events-none"
+                disabled={(status === 'running' && !globalProg.paused) || pdfs.every(p => p.status === 'done')}
+                className="group flex-none flex items-center justify-center px-3 bg-transparent text-gray-500 hover:text-green-400 transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 title={globalProg.paused ? "Reanudar" : "Iniciar Lote"}
               >
                 <svg className="w-6 h-6 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
@@ -460,32 +475,32 @@ function App() {
               <button
                 onClick={handlePause}
                 disabled={status !== 'running'}
-                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-orange-400 hover:bg-orange-400/20 transition-all disabled:opacity-50 disabled:pointer-events-none"
+                className="group flex-none flex items-center justify-center px-3 bg-transparent text-gray-500 hover:text-orange-400 transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 title="Pausar"
               >
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
               </button>
             )}
 
-            <div className="w-[1px] h-6 bg-white/20"></div>
+            <div className="w-[1px] h-5 bg-white/20 mx-1"></div>
             
             {/* Stop Button */}
             <button
               onClick={handleStop}
               disabled={status !== 'running' && !globalProg.paused}
-              className="group flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-red-400 hover:bg-red-400/20 hover:text-red-300 transition-all disabled:opacity-50 disabled:pointer-events-none"
+              className="group flex-none flex items-center justify-center px-3 bg-transparent text-gray-500 hover:text-red-400 transition-colors disabled:opacity-50 disabled:pointer-events-none"
               title="Detener"
             >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z" /></svg>
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z" /></svg>
             </button>
   
-            <div className="w-[1px] h-6 bg-white/20"></div>
+            <div className="w-[1px] h-5 bg-white/20 mx-1"></div>
   
             {/* Skip Button */}
             <button
               onClick={handleSkip}
               disabled={status !== 'running' && !globalProg.paused}
-              className="group flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-blue-300 hover:bg-blue-300/20 hover:text-blue-200 transition-all disabled:opacity-50 disabled:pointer-events-none"
+              className="group flex-none flex items-center justify-center px-3 bg-transparent text-gray-500 hover:text-blue-400 transition-colors disabled:opacity-50 disabled:pointer-events-none"
               title="Saltar Actual"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" /></svg>
@@ -509,8 +524,16 @@ function App() {
 
         {/* Left Sidebar - Files List */}
         <div className="w-80 bg-surface/40 backdrop-blur-lg border-r border-white/5 flex flex-col shadow-2xl shrink-0">
-          <div className="px-5 py-4 font-bold text-gray-300 uppercase tracking-widest text-xs border-b border-white/5 bg-black/20">
-            PDFs Cargados ({pdfs.length})
+          <div className="px-5 py-4 font-bold text-gray-300 uppercase tracking-widest text-xs border-b border-white/5 bg-black/20 flex items-center justify-between">
+            <span>PDFs Cargados ({pdfs.length})</span>
+            <button 
+              onClick={handleRemovePdf}
+              disabled={!selectedPdfFilter}
+              className={`bg-transparent border-none transition-colors disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center outline-none ${selectedPdfFilter ? 'text-error hover:text-red-400' : 'text-gray-500 hover:text-error'}`}
+              title="Remover PDF seleccionado"
+            >
+              <svg className="w-4 h-4 text-inherit" fill="currentColor" viewBox="0 0 24 24"><path d="M5 11h14v2H5z" /></svg>
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {pdfs.map((p, i) => {
@@ -548,13 +571,19 @@ function App() {
 
                   <div className="flex items-center space-x-2 z-10">
                     {/* Confidence Column */}
-                    {confColor !== 'transparent' && (
-                      <div className="flex items-center ml-2">
-                        <span className="text-[10px] font-mono mr-1.5" style={{ color: confColor }}>
-                          {Math.round(metrics.confidences[p.path] * 100)}%
-                        </span>
-                        <div className="w-1.5 h-4 rounded-full" style={{ backgroundColor: confColor, boxShadow: `0 0 5px ${confColor}` }} title={`Confianza: ${Math.round(metrics.confidences[p.path] * 100)}%`}></div>
-                      </div>
+                    {p.status === 'skipped' ? (
+                      <span className="text-[10px] font-mono text-blue-400 italic">Skipped</span>
+                    ) : p.status === 'error' ? (
+                      <span className="text-[10px] font-mono text-red-500 font-bold">Aborted</span>
+                    ) : (
+                      confColor !== 'transparent' && (
+                        <div className="flex items-center ml-2">
+                          <span className="text-[10px] font-mono mr-1.5" style={{ color: confColor }}>
+                            {Math.round(metrics.confidences[p.path] * 100)}%
+                          </span>
+                          <div className="w-1.5 h-4 rounded-full" style={{ backgroundColor: confColor, boxShadow: `0 0 5px ${confColor}` }} title={`Confianza: ${Math.round(metrics.confidences[p.path] * 100)}%`}></div>
+                        </div>
+                      )
                     )}
                   </div>
                 </div>
@@ -568,27 +597,28 @@ function App() {
 
           {/* Progress Bar (Always Visible, Full Width across center and right panels) */}
           <div className="w-full bg-surface/80 backdrop-blur-md border-b border-white/5 shadow-md flex flex-col shrink-0 z-20">
-            <div className="flex justify-between text-xs px-8 py-2.5 text-gray-300 font-medium">
-              <div>
-                Progreso Actual:
-                {status === 'running' ? (
-                  <><span className="text-accent ml-2 font-bold">{fileProg.filename}</span> <span className="ml-1 text-[#a6adc8]">({fileProg.done}/{fileProg.total} páginas)</span></>
+            <div className="flex justify-between items-center text-xs px-8 py-2.5 text-gray-300 font-medium h-[42px]">
+              <div className="flex items-center space-x-2 w-1/3">
+                <span className="uppercase text-[10px] tracking-widest text-gray-500">Progreso Actual</span>
+                {status === 'running' || fileProg.total > 0 ? (
+                  <>
+                    <span className="text-accent font-bold truncate max-w-[200px]">{fileProg.filename}</span>
+                    <span className="font-mono bg-black/40 px-2 py-0.5 rounded text-accent flex-shrink-0">{fileProg.done} / {fileProg.total}</span>
+                  </>
                 ) : (
-                  <span className="text-gray-500 ml-2 italic">En espera...</span>
+                  <span className="text-gray-500 italic">En espera...</span>
                 )}
               </div>
-              <div className="flex items-center space-x-4">
-                {status === 'running' && (
-                  <div className="flex items-center space-x-3 text-[11px] font-mono bg-black/30 border border-white/5 px-3 py-1 rounded shadow-inner">
-                    <span className="text-gray-300">⏱ {formatTime(globalProg.elapsed)}</span>
-                    <span className="text-gray-600">|</span>
-                    <span className="text-accent">ETA {formatTime(globalProg.eta)}</span>
-                  </div>
-                )}
-                <div className="flex items-center space-x-2">
-                  <span className="uppercase text-[10px] tracking-widest text-gray-500">Lote Global</span>
-                  <span className="font-mono bg-black/40 px-2 py-0.5 rounded text-accent">{globalProg.done} / {globalProg.total}</span>
+              <div className="flex items-center justify-center space-x-4 w-1/3">
+                <div className="flex items-center justify-center space-x-3 text-[11px] font-mono bg-black/30 border border-white/5 px-3 py-1 rounded shadow-inner min-w-[150px]">
+                  <span className={status === 'running' && !globalProg.paused ? "text-gray-100" : "text-gray-500"}>⏱ {formatTime(globalProg.elapsed || 0)}</span>
+                  <span className="text-gray-600">|</span>
+                  <span className={status === 'running' && !globalProg.paused ? "text-accent" : "text-gray-500"}>ETA {formatTime(globalProg.eta || 0)}</span>
                 </div>
+              </div>
+              <div className="flex items-center justify-end space-x-2 w-1/3">
+                <span className="uppercase text-[10px] tracking-widest text-gray-500">Lote Global</span>
+                <span className="font-mono bg-black/40 px-2 py-0.5 rounded text-accent flex-shrink-0">{globalProg.done} / {globalProg.total}</span>
               </div>
             </div>
             <div className="h-2 w-full bg-black/40 overflow-hidden">
@@ -666,30 +696,17 @@ function App() {
                   <div className="sticky top-0 w-full bg-black/90 border-b border-white/5 px-4 py-2 flex justify-between items-center z-20 shadow-sm relative">
                     <span className="text-gray-500 uppercase font-bold tracking-widest text-[10px]">Terminal de Procesos</span>
                     
-                    <div className="relative flex items-center h-full">
-                      <button 
-                        onClick={() => setTerminalMenuOpen(!terminalMenuOpen)}
-                        className="group flex flex-col justify-center items-center gap-1.5 w-8 h-8 focus:outline-none bg-transparent hover:bg-white/5 rounded transition-colors cursor-pointer"
-                        title="Opciones de Terminal"
-                      >
-                        <span className="w-5 h-[2px] bg-red-500 group-hover:bg-red-400 transition-colors shadow"></span>
-                        <span className="w-5 h-[2px] bg-red-500 group-hover:bg-red-400 transition-colors shadow"></span>
-                        <span className="w-5 h-[2px] bg-red-500 group-hover:bg-red-400 transition-colors shadow"></span>
+                    <div className="flex items-center space-x-3 h-full">
+                      <button onClick={handleCopyLogs} className="bg-transparent border-none outline-none focus:outline-none text-[#842029] hover:text-[#dc3545] transition-colors" title="Copiar Logs">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                       </button>
-
-                      {terminalMenuOpen && (
-                        <>
-                          <div className="fixed inset-0 z-10" onClick={() => setTerminalMenuOpen(false)}></div>
-                          <div className="absolute right-0 mt-1 w-36 bg-[#1e1e2e] border border-[#313244] rounded-lg shadow-xl py-1 z-20 flex flex-col text-sm">
-                            <button onClick={handleCopyLogs} className="text-left px-4 py-2 hover:bg-white/5 text-gray-300 w-full">Copiar Logs</button>
-                            <button onClick={handleExportLogs} className="text-left px-4 py-2 hover:bg-white/5 text-gray-300 w-full">Exportar a TXT</button>
-                            <div className="h-px bg-[#313244] my-1"></div>
-                            <button onClick={() => { setShowTerminal(false); setTerminalMenuOpen(false); }} className="text-left px-4 py-2 hover:bg-white/5 text-gray-300 w-full flex items-center justify-between">
-                              Ocultar <span>↓</span>
-                            </button>
-                          </div>
-                        </>
-                      )}
+                      <button onClick={handleExportLogs} className="bg-transparent border-none outline-none focus:outline-none text-[#842029] hover:text-[#dc3545] transition-colors" title="Exportar a TXT">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                      </button>
+                      <div className="w-px h-4 bg-white/10"></div>
+                      <button onClick={() => setShowTerminal(false)} className="bg-transparent border-none outline-none focus:outline-none text-[#842029] hover:text-[#dc3545] transition-colors" title="Ocultar Terminal">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
                     </div>
                   </div>
                   <div className="p-4 space-y-1">
@@ -722,18 +739,20 @@ function App() {
                     <h2 className="text-lg font-bold">Corrección Manual</h2>
                     <p className="text-xs text-gray-400 truncate max-w-xs">{selectedIssue.filename} - Pág {selectedIssue.page}</p>
                   </div>
-                  <div className="flex space-x-2 items-center">
-                    <button onClick={handleOpenNativePdf} className="bg-accent/10 hover:bg-accent/20 text-accent hover:text-white border border-accent/30 px-3 py-1.5 rounded-md text-xs transition-all flex items-center mr-2 shadow-sm font-semibold h-8 box-border whitespace-nowrap">
-                      <span className="mr-1">↗</span> Ver Original
+                  <div className="flex space-x-1 items-center">
+                    <button onClick={handleOpenNativePdf} className="bg-transparent border-none outline-none focus:outline-none text-gray-400 hover:text-accent disabled:opacity-30 transition-colors flex items-center justify-center p-2 mr-2" title="Abrir en Visor Nativo">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                     </button>
-                    <button onClick={() => _getNextIssue && setSelectedIssue(_getNextIssue(-1) || selectedIssue)} className="bg-panel hover:bg-surface hover:text-white border border-[#313244] w-8 h-8 flex items-center justify-center rounded transition-colors" title="Problema Anterior">
-                      <svg className="w-4 h-4" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                    <button onClick={() => _getNextIssue && setSelectedIssue(_getNextIssue(-1) || selectedIssue)} className="bg-transparent border-none outline-none focus:outline-none text-gray-500 hover:text-white transition-colors flex items-center justify-center p-2" title="Problema Anterior">
+                      <svg className="w-5 h-5" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
                     </button>
-                    <button onClick={() => _getNextIssue && setSelectedIssue(_getNextIssue(1) || selectedIssue)} className="bg-panel hover:bg-surface hover:text-white border border-[#313244] w-8 h-8 flex items-center justify-center rounded transition-colors" title="Problema Siguiente">
-                      <svg className="w-4 h-4" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                    <button onClick={() => _getNextIssue && setSelectedIssue(_getNextIssue(1) || selectedIssue)} className="bg-transparent border-none outline-none focus:outline-none text-gray-500 hover:text-white transition-colors flex items-center justify-center p-2" title="Problema Siguiente">
+                      <svg className="w-5 h-5" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
                     </button>
-                    <div className="w-px h-6 bg-[#313244] mx-1"></div>
-                    <button onClick={() => setSelectedIssue(null)} className="text-gray-400 hover:text-white px-2 py-1 text-2xl leading-none">&times;</button>
+                    <div className="w-px h-5 bg-white/10 mx-1"></div>
+                    <button onClick={() => setSelectedIssue(null)} className="bg-transparent border-none outline-none focus:outline-none text-gray-500 hover:text-error transition-colors flex items-center justify-center p-2" title="Cerrar">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
                   </div>
                 </div>
 
@@ -808,21 +827,27 @@ function App() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center">
           <div className="bg-surface border border-white/10 rounded-2xl shadow-2xl w-[800px] h-[600px] flex flex-col">
             <div className="p-6 border-b border-white/10 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-white">Historial de Sesiones Guardadas</h2>
-              <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+              <h2 className="text-2xl font-bold text-gray-100">Historial de Sesiones Guardadas</h2>
+              <button 
+                onClick={() => setShowHistory(false)} 
+                className="bg-transparent border-none outline-none text-gray-500 hover:text-error transition-colors flex items-center justify-center p-2 rounded-lg"
+                title="Cerrar Historial"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {historySessions.length === 0 ? (
                 <div className="text-gray-500 text-center mt-20">No hay sesiones guardadas aún.</div>
               ) : (
                 historySessions.map((s, idx) => (
-                  <div key={idx} className="bg-black/40 border border-[#313244] rounded-xl p-5 flex justify-between items-center hover:border-accent/50 transition-colors relative group">
+                  <div key={idx} className="bg-white/5 border border-white/5 rounded-xl p-5 flex justify-between items-center hover:bg-black/60 transition-colors relative group">
                     <button
                       onClick={() => handleDeleteSession(s.timestamp)}
-                      className="absolute top-2 right-2 text-gray-500 hover:text-error hover:bg-error/10 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all font-bold"
+                      className="absolute top-3 right-3 text-[#dc3545] opacity-50 hover:opacity-100 hover:text-red-400 p-1 rounded flex items-center justify-center transition-all bg-transparent border-none outline-none"
                       title="Eliminar sesión"
                     >
-                      &times;
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                     <div>
                       <div className="text-gray-200 font-bold text-lg mb-1 pr-6">
@@ -834,7 +859,7 @@ function App() {
                         <div className="text-gray-400 text-sm mt-1">Tiempo de proceso: <span className="text-accent font-mono">{formatTime(s.metrics.total_time)}</span></div>
                       )}
                     </div>
-                    <div className="flex space-x-6 text-sm bg-panel/50 p-3 rounded-lg border border-white/5">
+                    <div className="flex space-x-6 text-sm bg-panel/30 group-hover:bg-panel/80 p-3 rounded-lg border border-white/5">
                       <div className="flex flex-col items-center"><span className="text-gray-400">Documentos</span><span className="font-bold text-white text-lg">{s.metrics.docs}</span></div>
                       <div className="flex flex-col items-center"><span className="text-gray-400">Completos</span><span className="font-bold text-success text-lg">{s.metrics.complete}</span></div>
                       <div className="flex flex-col items-center"><span className="text-gray-400">Incompletos</span><span className="font-bold text-error text-lg">{s.metrics.incomplete}</span></div>

@@ -78,6 +78,7 @@ class ServerState:
         self.start_time: float = 0.0
         self.pause_start_time: float = 0.0
         self.total_paused_time: float = 0.0
+        self.confidences: dict[str, float] = {}
         self.loop = None
 
 state = ServerState()
@@ -185,15 +186,22 @@ class DeleteSessionRequest(BaseModel):
 @app.get("/api/state")
 def api_get_state():
     """Returns the current backend state so React can survive an F5 refresh."""
+    pdf_list_state = []
+    for p in state.pdf_list:
+        p_str = str(p)
+        st = "done" if p_str in state.pdf_reads else ("skipped" if p_str in state.skipped_pdfs else "pending")
+        pdf_list_state.append({"name": p.name, "path": p_str, "status": st})
+
     return {
         "running": state.running,
-        "pdf_list": [{"name": p.name, "path": str(p), "status": "pending"} for p in state.pdf_list],
+        "pdf_list": pdf_list_state,
         "issues": state.issues,
         "metrics": {
             "docs": state.total_docs,
             "complete": state.total_complete,
             "incomplete": state.total_incomplete,
-            "inferred": state.total_inferred
+            "inferred": state.total_inferred,
+            "confidences": state.confidences
         },
         "globalProg": {"done": state.global_done_pages, "total": state.global_total_pages}
     }
@@ -295,11 +303,12 @@ async def api_start(req: StartProcessRequest):
         state.issues = []
         state.skipped_pdfs.clear()
         state.pdf_reads = {}
+        state.confidences = {}
     else:
-        # Retain history of previously parsed files
-        kept_pdfs = [str(p) for p in state.pdf_list[:req.start_index]]
-        state.issues = [i for i in state.issues if i["pdf_path"] in kept_pdfs]
-        state.pdf_reads = {k: v for k, v in state.pdf_reads.items() if k in kept_pdfs}
+        # Solo limpiar los PDF que fueron abortados a medias.
+        # Si un archivo NO está en _reads, falló o fue saltado, así que lo sobreescribiremos. 
+        # Los que ya están listos no se tocan.
+        pass
     
     state.global_total_pages = 0
     state.global_done_pages = 0
@@ -359,7 +368,12 @@ def _process_pdfs(start_index: int = 0):
         total_pages = 0
         done_pages = 0
         for i, pdf_path in enumerate(state.pdf_list):
-            doc = fitz.open(str(pdf_path))
+            p_str = str(pdf_path)
+            # Ignorar archivos 'done' de todo el pipeline 
+            if p_str in state.pdf_reads:
+                continue
+                
+            doc = fitz.open(p_str)
             num_pages = len(doc)
             total_pages += num_pages
             if i < start_index:
@@ -381,6 +395,12 @@ def _process_pdfs(start_index: int = 0):
 
     for idx in range(start_index, len(state.pdf_list)):
         pdf_path = state.pdf_list[idx]
+        
+        if str(pdf_path) in state.pdf_reads:
+            _emit("log", {"msg": f"\n⏭ Omitiendo {pdf_path.name} (Ya procesado al 100%).", "level": "warn"})
+            _emit("status_update", {"idx": idx, "status": "done"})
+            continue
+            
         if state.skip_current:
             state.skip_current = False
             state.skipped_pdfs.add(str(pdf_path))
@@ -673,12 +693,14 @@ def _recalculate_metrics():
             "inferred": inferred
         }
             
+    state.confidences = pdf_confidences
+    
     _emit("metrics", {
         "docs": state.total_docs,
         "complete": state.total_complete,
         "incomplete": state.total_incomplete,
         "inferred": state.total_inferred,
-        "confidences": pdf_confidences,
+        "confidences": state.confidences,
         "individual": pdf_metrics
     })
 
