@@ -27,3 +27,14 @@ Thumbs.db
 
 # User data
 history.json
+data/sessions/
+
+# Runtime logs
+*.log
+uvicorn.log
+
+# Frontend build output
+frontend/dist/
+
+# Large binary test data
+*.pdf

@@ -35,7 +35,10 @@ import fitz  # PyMuPDF
 
 # ── Configuración ─────────────────────────────────────────────────────────────
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+import os as _os
+pytesseract.pytesseract.tesseract_cmd = _os.getenv(
+    "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+)
 
 MODELS_DIR   = Path(__file__).parent.parent / "models"
 FSRCNN_PATH  = str(MODELS_DIR / "FSRCNN_x4.pb")
