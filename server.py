@@ -138,9 +138,15 @@ def api_add_folder():
     new_pdfs = [p for p in pdfs if p not in existing]
     state.pdf_list.extend(new_pdfs)
     
+    pdf_list_state = []
+    for p in state.pdf_list:
+        p_str = str(p)
+        st = "done" if p_str in state.pdf_reads else ("skipped" if p_str in state.skipped_pdfs else "pending")
+        pdf_list_state.append({"name": p.name, "path": p_str, "status": st})
+    
     return {
         "success": True, 
-        "pdfs": [{"name": p.name, "path": str(p), "status": "pending"} for p in state.pdf_list]
+        "pdfs": pdf_list_state
     }
 
 @app.get("/api/add_files")
@@ -162,10 +168,42 @@ def api_add_files():
     new_pdfs = [Path(p) for p in file_paths if Path(p) not in existing]
     state.pdf_list.extend(new_pdfs)
     
+    pdf_list_state = []
+    for p in state.pdf_list:
+        p_str = str(p)
+        st = "done" if p_str in state.pdf_reads else ("skipped" if p_str in state.skipped_pdfs else "pending")
+        pdf_list_state.append({"name": p.name, "path": p_str, "status": st})
+        
     return {
         "success": True, 
-        "pdfs": [{"name": p.name, "path": str(p), "status": "pending"} for p in state.pdf_list]
+        "pdfs": pdf_list_state
     }
+
+@app.post("/api/remove_pdf")
+def api_remove_pdf(filename: str):
+    new_list = []
+    removed_path = None
+    for p in state.pdf_list:
+        if p.name == filename:
+            removed_path = str(p)
+        else:
+            new_list.append(p)
+            
+    if removed_path:
+        state.pdf_list = new_list
+        state.skipped_pdfs.discard(removed_path)
+        state.pdf_reads.pop(removed_path, None)
+        state.confidences.pop(removed_path, None)
+        state.issues = [i for i in state.issues if i["pdf_path"] != removed_path]
+        _recalculate_metrics()
+        
+    pdf_list_state = []
+    for p in state.pdf_list:
+        p_str = str(p)
+        st = "done" if p_str in state.pdf_reads else ("skipped" if p_str in state.skipped_pdfs else "pending")
+        pdf_list_state.append({"name": p.name, "path": p_str, "status": st})
+        
+    return {"success": True, "pdfs": pdf_list_state}
 
 import json
 from datetime import datetime
@@ -304,6 +342,15 @@ async def api_start(req: StartProcessRequest):
         state.skipped_pdfs.clear()
         state.pdf_reads = {}
         state.confidences = {}
+        
+        # Broadcast visual reset to the UI instantly
+        _emit("metrics", {
+            "docs": 0, "complete": 0, "incomplete": 0, "inferred": 0,
+            "confidences": {}, "individual": {}
+        })
+        for i in range(len(state.pdf_list)):
+            _emit("status_update", {"idx": i, "status": "pending"})
+            
     else:
         # Solo limpiar los PDF que fueron abortados a medias.
         # Si un archivo NO está en _reads, falló o fue saltado, así que lo sobreescribiremos. 

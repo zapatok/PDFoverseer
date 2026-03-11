@@ -404,11 +404,11 @@ function App() {
       <div className="h-16 bg-surface/80 backdrop-blur-xl border-b border-white/5 px-6 flex items-center justify-between shadow-lg z-20">
         <div className="flex items-center space-x-3">
           <button onClick={handleAddFolder} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
-            <span className="mr-2">📁</span> Abrir Carpeta
+            Abrir Carpeta
           </button>
 
           <button onClick={handleAddFiles} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
-            <span className="mr-2">📄</span> Abrir Archivos
+            Abrir Archivos
           </button>
 
           <div className="w-px h-6 bg-gray-700 mx-1"></div>
@@ -422,7 +422,7 @@ function App() {
           </button>
 
           <button onClick={handleViewHistory} className="bg-panel/40 border-accent/30 hover:bg-accent/20 hover:border-accent text-accent font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border">
-            Ver Historial
+            Historial
           </button>
         </div>
 
@@ -598,28 +598,31 @@ function App() {
           {/* Progress Bar (Always Visible, Full Width across center and right panels) */}
           <div className="w-full bg-surface/80 backdrop-blur-md border-b border-white/5 shadow-md flex flex-col shrink-0 z-20">
             <div className="flex justify-between items-center text-xs px-8 py-2.5 text-gray-300 font-medium h-[42px]">
-              <div className="flex items-center space-x-2 w-1/3">
-                <span className="uppercase text-[10px] tracking-widest text-gray-500">Progreso Actual</span>
-                {status === 'running' || fileProg.total > 0 ? (
-                  <>
-                    <span className="text-accent font-bold truncate max-w-[200px]">{fileProg.filename}</span>
+              
+              <div className="flex items-center space-x-6 w-1/2">
+                <div className="flex items-center space-x-2">
+                  <span className="uppercase text-[10px] tracking-widest text-gray-500">Progreso Actual</span>
+                  {status === 'running' || fileProg.total > 0 ? (
                     <span className="font-mono bg-black/40 px-2 py-0.5 rounded text-accent flex-shrink-0">{fileProg.done} / {fileProg.total}</span>
-                  </>
-                ) : (
-                  <span className="text-gray-500 italic">En espera...</span>
-                )}
+                  ) : (
+                    <span className="text-gray-500 italic px-2">En espera...</span>
+                  )}
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <span className="uppercase text-[10px] tracking-widest text-gray-500">Lote Global</span>
+                  <span className="font-mono bg-black/40 px-2 py-0.5 rounded text-accent flex-shrink-0">{globalProg.done} / {globalProg.total}</span>
+                </div>
               </div>
-              <div className="flex items-center justify-center space-x-4 w-1/3">
-                <div className="flex items-center justify-center space-x-3 text-[11px] font-mono bg-black/30 border border-white/5 px-3 py-1 rounded shadow-inner min-w-[150px]">
+
+              <div className="flex items-center justify-end w-1/2">
+                <div className="flex items-center space-x-3 text-[11px] font-mono bg-black/30 border border-white/5 px-3 py-1 rounded shadow-inner">
                   <span className={status === 'running' && !globalProg.paused ? "text-gray-100" : "text-gray-500"}>⏱ {formatTime(globalProg.elapsed || 0)}</span>
                   <span className="text-gray-600">|</span>
                   <span className={status === 'running' && !globalProg.paused ? "text-accent" : "text-gray-500"}>ETA {formatTime(globalProg.eta || 0)}</span>
                 </div>
               </div>
-              <div className="flex items-center justify-end space-x-2 w-1/3">
-                <span className="uppercase text-[10px] tracking-widest text-gray-500">Lote Global</span>
-                <span className="font-mono bg-black/40 px-2 py-0.5 rounded text-accent flex-shrink-0">{globalProg.done} / {globalProg.total}</span>
-              </div>
+
             </div>
             <div className="h-2 w-full bg-black/40 overflow-hidden">
               <div className={`h-2 bg-accent rounded-r-full shadow-[0_0_12px_rgba(137,180,250,1)] transition-all duration-500 ease-out ${status === 'running' ? 'animate-pulse' : ''}`}
@@ -639,27 +642,29 @@ function App() {
                   <h1 className="text-4xl font-extrabold text-white tracking-tight drop-shadow-md">Bandeja de Problemas</h1>
 
                   {/* Individual File Metrics Dashboard */}
-                  {(selectedPdfFilter || (status === 'running' && fileProg.filename)) && metrics.individual && (
-                    <div className="flex space-x-4 bg-black/40 px-4 py-2 text-xs rounded-xl border border-white/5 shadow-inner">
-                      {(() => {
-                        const targetName = selectedPdfFilter || fileProg.filename;
+                  <div className="flex space-x-4 bg-black/40 px-4 py-2 text-xs rounded-xl border border-white/5 shadow-inner">
+                    {(() => {
+                      const targetName = selectedPdfFilter || fileProg.filename;
+                      let ind = { docs: 0, complete: 0, incomplete: 0, inferred: 0 };
+                      if (targetName && pdfs.length > 0 && metrics.individual) {
                         const targetPdf = pdfs.find(p => p.name === targetName);
-                        if (!targetPdf || !metrics.individual[targetPdf.path]) return null;
-                        const ind = metrics.individual[targetPdf.path];
-                        return (
-                          <>
-                            <div className="flex flex-col items-center justify-center"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">DOC</span> <span className="text-accent font-mono font-bold">{ind.docs}</span></div>
-                            <div className="w-px h-6 bg-white/5 self-center"></div>
-                            <div className="flex flex-col items-center justify-center"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">COM</span> <span className="text-success font-mono font-bold">{ind.complete}</span></div>
-                            <div className="w-px h-6 bg-white/5 self-center"></div>
-                            <div className="flex flex-col items-center justify-center"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">INC</span> <span className="text-error font-mono font-bold">{ind.incomplete}</span></div>
-                            <div className="w-px h-6 bg-white/5 self-center"></div>
-                            <div className="flex flex-col items-center justify-center"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">INF</span> <span className="text-warning font-mono font-bold">{ind.inferred}</span></div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  )}
+                        if (targetPdf && metrics.individual[targetPdf.path]) {
+                          ind = metrics.individual[targetPdf.path];
+                        }
+                      }
+                      return (
+                        <>
+                          <div className="flex flex-col items-center justify-center min-w-[30px]"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">DOC</span> <span className={`${ind.docs > 0 ? 'text-accent' : 'text-gray-600'} font-mono font-bold`}>{ind.docs}</span></div>
+                          <div className="w-px h-6 bg-white/5 self-center"></div>
+                          <div className="flex flex-col items-center justify-center min-w-[30px]"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">COM</span> <span className={`${ind.complete > 0 ? 'text-success' : 'text-gray-600'} font-mono font-bold`}>{ind.complete}</span></div>
+                          <div className="w-px h-6 bg-white/5 self-center"></div>
+                          <div className="flex flex-col items-center justify-center min-w-[30px]"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">INC</span> <span className={`${ind.incomplete > 0 ? 'text-error' : 'text-gray-600'} font-mono font-bold`}>{ind.incomplete}</span></div>
+                          <div className="w-px h-6 bg-white/5 self-center"></div>
+                          <div className="flex flex-col items-center justify-center min-w-[30px]"><span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">INF</span> <span className={`${ind.inferred > 0 ? 'text-warning' : 'text-gray-600'} font-mono font-bold`}>{ind.inferred}</span></div>
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
                 {issues.length === 0 && (
                   <div className="flex items-center justify-center h-48 border-2 border-dashed border-[#313244] rounded-2xl text-gray-500">
@@ -722,9 +727,11 @@ function App() {
                 <div className="absolute bottom-4 right-4 z-30">
                   <button 
                     onClick={() => setShowTerminal(true)}
-                    className="bg-panel/90 backdrop-blur border border-white/10 text-gray-300 hover:text-white font-medium py-2 px-4 rounded-full shadow-lg flex items-center transition-all hover:bg-surface"
+                    className="bg-black/90 backdrop-blur-xl border border-white/5 text-gray-400 hover:text-white font-mono uppercase text-[10px] tracking-widest font-bold px-4 py-2 flex items-center shadow-lg transition-all rounded"
+                    title="Mostrar Terminal"
                   >
-                    ↑ Mostrar Terminal
+                    TERMINAL
+                    <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
                   </button>
                 </div>
               )}
