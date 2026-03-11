@@ -67,6 +67,8 @@ class SummaryMetrics(BaseModel):
 
 class ServerState:
     def __init__(self):
+        self._lock = threading.Lock()  # Guards non-atomic read-modify-write ops
+
         self.running: bool = False
         self.stop_requested: bool = False
         self.skip_current: bool = False
@@ -74,10 +76,10 @@ class ServerState:
         self.pause_event = threading.Event()
         self.pause_event.set()
         self.cancel_event = threading.Event()
-        
+
         self.pdf_list: list[Path] = []
         self.pdf_reads: dict[str, list] = {}
-        
+
         self.global_total_pages: int = 0
         self.global_done_pages: int = 0
         self.total_docs: int = 0
@@ -204,7 +206,8 @@ def api_remove_pdf(filename: str):
         state.skipped_pdfs.discard(removed_path)
         state.pdf_reads.pop(removed_path, None)
         state.confidences.pop(removed_path, None)
-        state.issues = [i for i in state.issues if i["pdf_path"] != removed_path]
+        with state._lock:
+            state.issues = [i for i in state.issues if i["pdf_path"] != removed_path]
         _recalculate_metrics()
         
     pdf_list_state = []
@@ -473,7 +476,8 @@ def _process_pdfs(start_index: int = 0):
         _emit("log", {"msg": f"\n📄 [{idx+1}/{len(state.pdf_list)}] {pdf_path.name}", "level": "file_hdr"})
         
         def on_progress(done, total):
-            state.global_done_pages += 1
+            with state._lock:
+                state.global_done_pages += 1
             
             elapsed_raw = time.time() - state.start_time if state.start_time > 0 else 0
             active_pause = (time.time() - state.pause_start_time) if state.pause_start_time > 0 else 0
@@ -505,15 +509,16 @@ def _process_pdfs(start_index: int = 0):
             _emit("log", {"msg": msg, "level": level})
             
         def on_issue(page, kind, detail, pil_img):
-            issue = {
-                "id": len(state.issues),
-                "pdf_path": str(pdf_path),
-                "filename": pdf_path.name,
-                "page": page,
-                "type": kind,
-                "detail": detail,
-            }
-            state.issues.append(issue)
+            with state._lock:
+                issue = {
+                    "id": len(state.issues),
+                    "pdf_path": str(pdf_path),
+                    "filename": pdf_path.name,
+                    "page": page,
+                    "type": kind,
+                    "detail": detail,
+                }
+                state.issues.append(issue)
             _emit("new_issue", issue)
 
         state.cancel_event.clear()
@@ -586,21 +591,22 @@ def api_correct(req: CorrectRequest):
     corrections = {req.page: (req.correct_curr, req.correct_tot)}
     
     def on_issue(page, kind, detail, pil_img, _path=pdf_str):
-        issue = {
-            "id": len(state.issues),
-            "pdf_path": _path,
-            "filename": Path(_path).name,
-            "page": page,
-            "type": kind,
-            "detail": detail,
-        }
-        state.issues.append(issue)
+        with state._lock:
+            issue = {
+                "id": len(state.issues),
+                "pdf_path": _path,
+                "filename": Path(_path).name,
+                "page": page,
+                "type": kind,
+                "detail": detail,
+            }
+            state.issues.append(issue)
 
     _emit("log", {"msg": f"Recalculando inferencia para {Path(pdf_str).name}...", "level": "info"})
-    
-    # Remove old issues for this PDF from state
-    state.issues = [i for i in state.issues if i["pdf_path"] != pdf_str]
-    
+
+    with state._lock:
+        state.issues = [i for i in state.issues if i["pdf_path"] != pdf_str]
+
     # Re-infer
     docs, new_reads = re_infer_documents(
         reads=reads,
@@ -613,9 +619,9 @@ def api_correct(req: CorrectRequest):
     # Recalculate globals entirely
     _recalculate_metrics()
     _emit("log", {"msg": "Inferencia completada, actualizando lista de problemas...", "level": "ok"})
-    
-    # Send event to trigger issue refresh on frontend, scoped to this PDF
-    surviving = [i for i in state.issues if i["pdf_path"] == pdf_str]
+
+    with state._lock:
+        surviving = [i for i in state.issues if i["pdf_path"] == pdf_str]
     _emit("issues_refresh", {
         "pdf_path": pdf_str,
         "issues": surviving
@@ -660,21 +666,22 @@ def api_exclude(req: ExcludeRequest):
     exclusions = [req.page]
     
     def on_issue(page, kind, detail, pil_img, _path=pdf_str):
-        issue = {
-            "id": len(state.issues),
-            "pdf_path": _path,
-            "filename": Path(_path).name,
-            "page": page,
-            "type": kind,
-            "detail": detail,
-        }
-        state.issues.append(issue)
+        with state._lock:
+            issue = {
+                "id": len(state.issues),
+                "pdf_path": _path,
+                "filename": Path(_path).name,
+                "page": page,
+                "type": kind,
+                "detail": detail,
+            }
+            state.issues.append(issue)
 
     _emit("log", {"msg": f"Excluyendo página {req.page} y recalculando {Path(pdf_str).name}...", "level": "info"})
-    
-    # Remove old issues for this PDF from state
-    state.issues = [i for i in state.issues if i["pdf_path"] != pdf_str]
-    
+
+    with state._lock:
+        state.issues = [i for i in state.issues if i["pdf_path"] != pdf_str]
+
     # Re-infer
     docs, new_reads = re_infer_documents(
         reads=reads,
@@ -687,7 +694,8 @@ def api_exclude(req: ExcludeRequest):
 
     _recalculate_metrics()
     _emit("log", {"msg": "Página excluida, actualizando métricas...", "level": "ok"})
-    surviving = [i for i in state.issues if i["pdf_path"] == pdf_str]
+    with state._lock:
+        surviving = [i for i in state.issues if i["pdf_path"] == pdf_str]
     _emit("issues_refresh", {
         "pdf_path": pdf_str,
         "issues": surviving
