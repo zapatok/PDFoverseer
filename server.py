@@ -309,6 +309,7 @@ async def api_stop():
         return {"success": False}
     state.stop_requested = True
     state.cancel_event.set()
+    state.pause_event.set()
     _emit("log", {"msg": "🛑 Proceso detenido (abortando).", "level": "error"})
     return {"success": True}
 
@@ -318,6 +319,7 @@ async def api_skip():
         return {"success": False}
     state.skip_current = True
     state.cancel_event.set()
+    state.pause_event.set()
     _emit("log", {"msg": "⏭ Saltando archivo actual...", "level": "warn"})
     return {"success": True}
 
@@ -612,8 +614,14 @@ def _recalculate_metrics():
     total_complete = 0
     total_incomplete = 0
     total_inferred = 0
+    
+    skipped_paths = {p["path"] for p in state.pdf_list if p["status"] == "skipped"}
+    
     from core.analyzer import _build_documents
     for path, reads in state.pdf_reads.items():
+        if path in skipped_paths:
+            continue
+            
         # Rebuild docs purely to count them
         docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
         complete = [d for d in docs if d.is_complete]
@@ -634,6 +642,11 @@ def _recalculate_metrics():
     pdf_confidences = {}
     pdf_metrics = {}
     for path, reads in state.pdf_reads.items():
+        if path in skipped_paths:
+            pdf_confidences[path] = 0.0
+            pdf_metrics[path] = {"docs": 0, "complete": 0, "incomplete": 0, "inferred": 0}
+            continue
+            
         valid_reads = [r for r in reads if r.method != "excluded"]
         if not valid_reads:
             pdf_confidences[path] = 1.0

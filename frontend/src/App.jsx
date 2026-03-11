@@ -411,70 +411,87 @@ function App() {
           </button>
         </div>
 
-        <div className="flex items-center space-x-2 bg-panel px-3 py-1.5 rounded-xl border border-[#313244]">
-          <button
-            onClick={() => {
-              const hasProgress = pdfs.some(p => p.status === 'done' || p.status === 'error' || p.status === 'skipped');
-              if (hasProgress && status !== 'running') {
-                setConfirmModal({
-                  isOpen: true,
-                  title: 'Opciones de Inicio',
-                  message: 'Existen documentos procesados o con progreso. ¿Deseas reanudar desde el primer documento pendiente o empezar todo desde cero?',
-                  isAlert: false,
-                  buttons: [
-                    {
-                      label: 'Empezar de Cero',
-                      onClick: () => handleStart(0),
-                      className: 'px-4 py-2 rounded-lg bg-surface hover:bg-white/5 text-gray-300 transition-colors text-sm font-medium border border-white/5'
-                    },
-                    {
-                      label: 'Reanudar Lote',
-                      onClick: () => {
-                        const firstPending = pdfs.findIndex(p => p.status === 'pending' || p.status === 'error' || p.status === 'skipped');
-                        handleStart(Math.max(0, firstPending));
-                      },
-                      className: 'px-4 py-2 rounded-lg bg-accent text-base hover:opacity-90 font-bold transition-shadow shadow-[0_0_15px_rgba(137,180,250,0.3)] text-sm'
+        <div className="flex items-center px-4 py-2">
+          {/* Main Controls Pill Container */}
+          <div className="flex items-center space-x-1 bg-black/30 backdrop-blur rounded-full border border-white/5 p-1.5 shadow-inner">
+            
+            {/* Play / Pause Toggle Button */}
+            {(!status || status === 'idle' || globalProg.paused) ? (
+              <button
+                onClick={() => {
+                  if (globalProg.paused) {
+                    handleResume();
+                  } else {
+                    const hasProgress = pdfs.some(p => p.status === 'done' || p.status === 'error' || p.status === 'skipped');
+                    if (hasProgress && status !== 'running') {
+                      setConfirmModal({
+                        isOpen: true,
+                        title: 'Opciones de Inicio',
+                        message: 'Existen documentos procesados o con progreso. ¿Deseas reanudar desde el primer documento pendiente o empezar todo desde cero?',
+                        isAlert: false,
+                        buttons: [
+                          {
+                            label: 'Empezar de Cero',
+                            onClick: () => handleStart(0),
+                            className: 'px-4 py-2 rounded-lg bg-surface hover:bg-white/5 text-gray-300 transition-colors text-sm font-medium border border-white/5'
+                          },
+                          {
+                            label: 'Reanudar Lote',
+                            onClick: () => {
+                              const firstPending = pdfs.findIndex(p => p.status === 'pending' || p.status === 'error' || p.status === 'skipped');
+                              handleStart(Math.max(0, firstPending));
+                            },
+                            className: 'px-4 py-2 rounded-lg bg-[#a6e3a1]/20 hover:bg-[#a6e3a1]/30 text-[#a6e3a1] font-bold transition-all text-sm border border-[#a6e3a1]/30'
+                          }
+                        ]
+                      });
+                    } else {
+                      handleStart(0);
                     }
-                  ]
-                });
-              } else {
-                handleStart(0);
-              }
-            }}
-            disabled={status === 'running' || pdfs.length === 0}
-            className="text-success hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all px-3 py-1 rounded text-xl"
-            title="Iniciar Lote"
-          >
-            ▶
-          </button>
+                  }
+                }}
+                disabled={(status === 'running' && !globalProg.paused) || pdfs.length === 0}
+                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full text-[#a6e3a1] hover:bg-[#a6e3a1]/10 transition-all disabled:opacity-30 disabled:pointer-events-none"
+                title={globalProg.paused ? "Reanudar" : "Iniciar Lote"}
+              >
+                <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+              </button>
+            ) : (
+              <button
+                onClick={handlePause}
+                disabled={status !== 'running'}
+                className="group flex-none flex items-center justify-center w-10 h-10 rounded-full text-[#fab387] hover:bg-[#fab387]/10 transition-all disabled:opacity-30 disabled:pointer-events-none"
+                title="Pausar"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+              </button>
+            )}
 
-          <button
-            onClick={globalProg.paused ? handleResume : handlePause}
-            disabled={status !== 'running'}
-            className="text-warning hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all px-2 py-1 rounded text-xl flex items-center justify-center w-10"
-            title={globalProg.paused ? "Reanudar" : "Pausar"}
-            style={{ paddingBottom: globalProg.paused ? '4px' : '0' }}
-          >
-            {globalProg.paused ? '▶' : '⏸'}
-          </button>
-
-          <button
-            onClick={handleStop}
-            disabled={status !== 'running'}
-            className="text-error hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all px-3 py-1 rounded text-xl"
-            title="Detener"
-          >
-            ⏹
-          </button>
-
-          <button
-            onClick={handleSkip}
-            disabled={status !== 'running'}
-            className="text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all px-3 py-1 rounded text-xl"
-            title="Saltar Actual"
-          >
-            ⏭
-          </button>
+            <div className="w-px h-5 bg-white/10 mx-1"></div>
+            
+            {/* Stop Button */}
+            <button
+              onClick={handleStop}
+              disabled={status !== 'running' && !globalProg.paused}
+              className="group flex items-center justify-center w-10 h-10 rounded-full text-[#f38ba8]/80 hover:bg-[#f38ba8]/10 hover:text-[#f38ba8] transition-all disabled:opacity-30 disabled:pointer-events-none"
+              title="Detener"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z" /></svg>
+            </button>
+  
+            <div className="w-px h-5 bg-white/10 mx-1"></div>
+  
+            {/* Skip Button */}
+            <button
+              onClick={handleSkip}
+              disabled={status !== 'running' && !globalProg.paused}
+              className="group flex items-center justify-center w-10 h-10 rounded-full text-[#bac2de]/80 hover:bg-[#bac2de]/10 hover:text-[#bac2de] transition-all disabled:opacity-30 disabled:pointer-events-none"
+              title="Saltar Actual"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" /></svg>
+            </button>
+            
+          </div>
         </div>
       </div>
 
@@ -530,17 +547,6 @@ function App() {
                   <div className="truncate z-10 flex-1">{p.name}</div>
 
                   <div className="flex items-center space-x-2 z-10">
-                    {/* Play Button to Start From Here */}
-                    {(status === 'idle' || !status) && (p.status === 'pending' || p.status === 'error' || p.status === 'skipped') && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleStart(i); }}
-                        className="opacity-0 group-hover:opacity-100 text-success hover:scale-125 transition-all text-xs"
-                        title="Iniciar desde aquí"
-                      >
-                        ▶
-                      </button>
-                    )}
-
                     {/* Confidence Column */}
                     {confColor !== 'transparent' && (
                       <div className="flex items-center ml-2">
@@ -660,12 +666,15 @@ function App() {
                   <div className="sticky top-0 w-full bg-black/90 border-b border-white/5 px-4 py-2 flex justify-between items-center z-20 shadow-sm relative">
                     <span className="text-gray-500 uppercase font-bold tracking-widest text-[10px]">Terminal de Procesos</span>
                     
-                    <div className="relative">
+                    <div className="relative flex items-center h-full">
                       <button 
                         onClick={() => setTerminalMenuOpen(!terminalMenuOpen)}
-                        className="text-gray-400 hover:text-white p-1 rounded hover:bg-white/10 transition-colors focus:outline-none"
+                        className="group flex flex-col justify-center items-center gap-[4px] w-6 h-6 focus:outline-none bg-transparent cursor-pointer"
+                        title="Opciones de Terminal"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                        <span className="w-4 h-[2px] bg-red-900 group-hover:bg-red-500 transition-colors"></span>
+                        <span className="w-4 h-[2px] bg-red-900 group-hover:bg-red-500 transition-colors"></span>
+                        <span className="w-4 h-[2px] bg-red-900 group-hover:bg-red-500 transition-colors"></span>
                       </button>
 
                       {terminalMenuOpen && (
