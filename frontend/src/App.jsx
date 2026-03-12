@@ -5,7 +5,7 @@ function App() {
   const [pdfs, setPdfs] = useState([])
   const [issues, setIssues] = useState([])
   const [metrics, setMetrics] = useState({ docs: 0, complete: 0, incomplete: 0, inferred: 0 })
-  const [globalProg, setGlobalProg] = useState({ done: 0, total: 0, elapsed: 0, eta: 0 })
+  const [globalProg, setGlobalProg] = useState({ done: 0, total: 0, elapsed: 0, eta: 0, paused: false })
   const [fileProg, setFileProg] = useState({ done: 0, total: 0, filename: '' })
   const [logs, setLogs] = useState([])
 
@@ -141,20 +141,28 @@ function App() {
     }
   }
 
-  const handleRemovePdf = async () => {
+  const handleRemovePdf = () => {
     if (!selectedPdfPath) return;
-    try {
-      const res = await fetch(`http://localhost:8000/api/remove_pdf?pdf_path=${encodeURIComponent(selectedPdfPath)}`, { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        setPdfs(data.pdfs);
-        if (selectedPdfFilter === fileProg.filename) setFileProg({done: 0, total: 0, filename: ''});
-        setSelectedPdfFilter('');
-        setSelectedPdfPath('');
+    setConfirmModal({
+      isOpen: true,
+      title: 'Remover PDF',
+      message: `¿Seguro que deseas remover "${selectedPdfFilter}" de la lista?`,
+      isAlert: false,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`http://localhost:8000/api/remove_pdf?pdf_path=${encodeURIComponent(selectedPdfPath)}`, { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+            setPdfs(data.pdfs);
+            if (selectedPdfFilter === fileProg.filename) setFileProg({ done: 0, total: 0, filename: '' });
+            setSelectedPdfFilter('');
+            setSelectedPdfPath('');
+          }
+        } catch (e) {
+          console.error(e);
+        }
       }
-    } catch (e) {
-      console.error(e);
-    }
+    });
   }
 
   const handleNewSession = () => {
@@ -169,7 +177,8 @@ function App() {
         setIssues([])
         setLogs([])
         setMetrics({ docs: 0, complete: 0, incomplete: 0, inferred: 0 })
-        setGlobalProg({ done: 0, total: 0 })
+        setGlobalProg({ done: 0, total: 0, elapsed: 0, eta: 0, paused: false })
+        setFileProg({ done: 0, total: 0, filename: '' })
         setStatus('idle')
         setSelectedPdfFilter('')
         setSelectedPdfPath('')
@@ -318,6 +327,19 @@ function App() {
       }
     }
 
+    const curr = parseInt(finalCurr);
+    const tot = parseInt(finalTot);
+    if (isNaN(curr) || isNaN(tot) || curr < 1 || curr > 50 || tot < 1 || tot > 50 || curr > tot) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Valor Inválido',
+        message: 'Ingresa números entre 1 y 50, y la página actual debe ser menor o igual al total.',
+        isAlert: true,
+        onConfirm: null
+      });
+      return;
+    }
+
     try {
       await fetch('http://localhost:8000/api/correct', {
         method: 'POST',
@@ -325,8 +347,8 @@ function App() {
         body: JSON.stringify({
           pdf_path: selectedIssue.pdf_path,
           page: selectedIssue.page,
-          correct_curr: parseInt(finalCurr),
-          correct_tot: parseInt(finalTot)
+          correct_curr: curr,
+          correct_tot: tot
         })
       });
       // Removemos optimismamente para UI rapida
@@ -370,14 +392,7 @@ function App() {
           page: selectedIssue.page,
         })
       });
-      // Fluid auto-advance and removal
-      setIssues(prev => {
-        const locallyDeletedIds = prev.selectedDeletedIds || new Set();
-        locallyDeletedIds.add(currentId);
-        const filtered = prev.filter(i => i.id !== currentId);
-        filtered.selectedDeletedIds = locallyDeletedIds;
-        return filtered;
-      });
+      setIssues(prev => prev.filter(i => i.id !== currentId));
       setSelectedIssue(nextIssue);
       setCorrectCurr('');
       setCorrectTot('');
@@ -535,14 +550,15 @@ function App() {
         <div className="w-80 bg-surface/40 backdrop-blur-lg border-r border-white/5 flex flex-col shadow-2xl shrink-0">
           <div className="px-5 py-4 font-bold text-gray-300 uppercase tracking-widest text-xs border-b border-white/5 bg-black/20 flex items-center justify-between">
             <span>PDFs Cargados ({pdfs.length})</span>
-            <button 
-              onClick={handleRemovePdf}
-              disabled={!selectedPdfFilter}
-              className={`bg-transparent border-none transition-colors disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center outline-none ${selectedPdfFilter ? 'text-error hover:text-red-400' : 'text-gray-500 hover:text-error'}`}
-              title="Remover PDF seleccionado"
-            >
-              <svg className="w-4 h-4 text-inherit" fill="currentColor" viewBox="0 0 24 24"><path d="M5 11h14v2H5z" /></svg>
-            </button>
+            {selectedPdfFilter && (
+              <button
+                onClick={handleRemovePdf}
+                className="bg-transparent border-none p-1.5 rounded-md cursor-pointer flex items-center justify-center outline-none text-error hover:text-red-400 hover:bg-error/10 transition-colors"
+                title="Remover PDF seleccionado"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M5 11h14v2H5z" /></svg>
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {pdfs.map((p, i) => {
@@ -759,10 +775,10 @@ function App() {
                     <button onClick={handleOpenNativePdf} className="bg-transparent border-none outline-none focus:outline-none text-gray-400 hover:text-accent disabled:opacity-30 transition-colors flex items-center justify-center p-2 mr-2" title="Abrir en Visor Nativo">
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                     </button>
-                    <button onClick={() => _getNextIssue && setSelectedIssue(_getNextIssue(-1) || selectedIssue)} className="bg-transparent border-none outline-none focus:outline-none text-gray-500 hover:text-white transition-colors flex items-center justify-center p-2" title="Problema Anterior">
+                    <button onClick={() => { const n = _getNextIssue(-1); if (n) setSelectedIssue(n); }} className="bg-transparent border-none outline-none focus:outline-none text-gray-500 hover:text-white transition-colors flex items-center justify-center p-2" title="Problema Anterior">
                       <svg className="w-5 h-5" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
                     </button>
-                    <button onClick={() => _getNextIssue && setSelectedIssue(_getNextIssue(1) || selectedIssue)} className="bg-transparent border-none outline-none focus:outline-none text-gray-500 hover:text-white transition-colors flex items-center justify-center p-2" title="Problema Siguiente">
+                    <button onClick={() => { const n = _getNextIssue(1); if (n) setSelectedIssue(n); }} className="bg-transparent border-none outline-none focus:outline-none text-gray-500 hover:text-white transition-colors flex items-center justify-center p-2" title="Problema Siguiente">
                       <svg className="w-5 h-5" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
                     </button>
                     <div className="w-px h-5 bg-white/10 mx-1"></div>
