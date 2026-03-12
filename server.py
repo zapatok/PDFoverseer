@@ -29,8 +29,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger("pdfoverserver")
 
+_SERVER_BUILD = "2026-03-12.A"
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print(f"[SERVER] PDFoverseer iniciado — build {_SERVER_BUILD}")
     # Capture the main asyncio loop so background threads can broadcast
     state.loop = asyncio.get_running_loop()
     yield
@@ -610,6 +613,7 @@ def api_correct(req: CorrectRequest):
     _emit("log", {"msg": f"Recalculando inferencia para {Path(pdf_str).name}...", "level": "info"})
 
     with state._lock:
+        issues_before = len([i for i in state.issues if i["pdf_path"] == pdf_str])
         state.issues = [i for i in state.issues if i["pdf_path"] != pdf_str]
 
     # Re-infer
@@ -627,6 +631,8 @@ def api_correct(req: CorrectRequest):
 
     with state._lock:
         surviving = [i for i in state.issues if i["pdf_path"] == pdf_str]
+    print(f"[CORRECT] {Path(pdf_str).name}: issues {issues_before}→{len(surviving)} | "
+          f"docs={len(docs)} conf={state.confidences.get(pdf_str, 0):.0%}")
     _emit("issues_refresh", {
         "pdf_path": pdf_str,
         "issues": surviving
@@ -758,6 +764,10 @@ def _recalculate_metrics():
         state.total_inferred  = total_inferred
         state.confidences     = pdf_confidences
 
+    for path, conf in pdf_confidences.items():
+        m = pdf_metrics[path]
+        print(f"[METRICS] {Path(path).name}: conf={conf:.0%} "
+              f"docs={m['docs']} complete={m['complete']} incomplete={m['incomplete']} inferred={m['inferred']}")
     _emit("metrics", {
         "docs": total_docs, "complete": total_complete,
         "incomplete": total_incomplete, "inferred": total_inferred,
