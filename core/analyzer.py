@@ -314,6 +314,7 @@ def analyze_pdf(
         # Cancel support
         if cancel_event is not None and cancel_event.is_set():
             on_log(f"Análisis abortado a petición del usuario.", "warn")
+            doc.close()
             return [], []
 
         # Pause support
@@ -339,12 +340,7 @@ def analyze_pdf(
             on_log(f"  Pág {pdf_page:>4}: ???  [{r.method}]", "page_warn")
 
         if on_progress:
-            try:
-                # Support the new 3-argument callback for live metrics
-                on_progress(pdf_page, total_pages, reads)
-            except TypeError:
-                # Fallback for old callers
-                on_progress(pdf_page, total_pages)
+            on_progress(pdf_page, total_pages)
 
     doc.close()
 

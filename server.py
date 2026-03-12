@@ -20,7 +20,7 @@ from pydantic import BaseModel
 import fitz  # For quick page counting
 
 # Core logic
-from core.analyzer import analyze_pdf, re_infer_documents
+from core.analyzer import analyze_pdf, re_infer_documents, _build_documents
 
 import logging
 logging.basicConfig(
@@ -424,16 +424,20 @@ async def api_resume():
 
 # --- Background Worker ---
 def _process_pdfs(start_index: int = 0):
+    # Snapshot pdf_list so add/remove calls during processing don't corrupt iteration
+    with state._lock:
+        pdf_list_snapshot = list(state.pdf_list)
+
     _emit("log", {"msg": "Pre-calculando páginas del lote...", "level": "info"})
     try:
         total_pages = 0
         done_pages = 0
-        for i, pdf_path in enumerate(state.pdf_list):
+        for i, pdf_path in enumerate(pdf_list_snapshot):
             p_str = str(pdf_path)
-            # Ignorar archivos 'done' de todo el pipeline 
+            # Ignorar archivos 'done' de todo el pipeline
             if p_str in state.pdf_reads:
                 continue
-                
+
             doc = fitz.open(p_str)
             num_pages = len(doc)
             total_pages += num_pages
@@ -454,26 +458,26 @@ def _process_pdfs(start_index: int = 0):
     state.start_time = time.time()
     last_metrics_refresh = 0
 
-    for idx in range(start_index, len(state.pdf_list)):
-        pdf_path = state.pdf_list[idx]
-        
+    for idx in range(start_index, len(pdf_list_snapshot)):
+        pdf_path = pdf_list_snapshot[idx]
+
         if str(pdf_path) in state.pdf_reads:
             _emit("log", {"msg": f"\n⏭ Omitiendo {pdf_path.name} (Ya procesado al 100%).", "level": "warn"})
             _emit("status_update", {"idx": idx, "status": "done"})
             continue
-            
+
         if state.skip_current:
             state.skip_current = False
             state.skipped_pdfs.add(str(pdf_path))
             _emit("status_update", {"idx": idx, "status": "skipped"})
             continue
-            
+
         if state.stop_requested:
             _emit("status_update", {"idx": idx, "status": "error"})
             break
-            
+
         _emit("status_update", {"idx": idx, "status": "processing"})
-        _emit("log", {"msg": f"\n📄 [{idx+1}/{len(state.pdf_list)}] {pdf_path.name}", "level": "file_hdr"})
+        _emit("log", {"msg": f"\n📄 [{idx+1}/{len(pdf_list_snapshot)}] {pdf_path.name}", "level": "file_hdr"})
         
         def on_progress(done, total):
             with state._lock:
@@ -559,9 +563,7 @@ def _process_pdfs(start_index: int = 0):
             logger.exception("Error procesando %s", pdf_path.name)
             _emit("log", {"msg": f"Error procesando {pdf_path.name}: {e}", "level": "error"})
             _emit("status_update", {"idx": idx, "status": "error"})
-            
-        _emit("global_progress", {"done": idx + 1, "total": len(state.pdf_list), "elapsed": time.time() - state.start_time, "eta": 0})
-        
+
     state.running = False
     
     elapsed_total = time.time() - state.start_time if state.start_time > 0 else 0
@@ -706,74 +708,63 @@ def api_exclude(req: ExcludeRequest):
     return {"success": True}
 
 def _recalculate_metrics():
-    # Recalculate the global metrics across all processed PDFs
-    total_docs = 0
-    total_complete = 0
-    total_incomplete = 0
-    total_inferred = 0
+    """Recalculate global and per-PDF metrics from the current reads snapshot.
 
-    # Snapshot under lock to avoid RuntimeError if worker modifies dict during iteration
+    Single pass per PDF: one _build_documents call covers both global totals
+    and per-file stats. All state writes are flushed under the lock at the end.
+    """
+    # Snapshot under lock — avoids RuntimeError if worker modifies dict during iteration
     with state._lock:
         reads_snapshot = dict(state.pdf_reads)
     skipped_paths = state.skipped_pdfs
 
-    from core.analyzer import _build_documents
-    for path, reads in reads_snapshot.items():
-        if path in skipped_paths:
-            continue
-            
-        # Rebuild docs purely to count them
-        docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
-        complete = [d for d in docs if d.is_complete]
-        incomplete = [d for d in docs if not d.is_complete]
-        inferred = sum(len(d.inferred_pages) for d in docs)
-        
-        total_docs += len(docs)
-        total_complete += len(complete)
-        total_incomplete += len(incomplete)
-        total_inferred += inferred
-        
-    state.total_docs = total_docs
-    state.total_complete = total_complete
-    state.total_incomplete = total_incomplete
-    state.total_inferred = total_inferred
-    
-    # Calculate PDF confidences and individual metrics (use same snapshot)
-    pdf_confidences = {}
-    pdf_metrics = {}
+    total_docs = total_complete = total_incomplete = total_inferred = 0
+    pdf_confidences: dict[str, float] = {}
+    pdf_metrics: dict[str, dict] = {}
+
+    _noop_log   = lambda m, l: None
+    _noop_issue = lambda p, k, d: None
+
     for path, reads in reads_snapshot.items():
         if path in skipped_paths:
             pdf_confidences[path] = 0.0
             pdf_metrics[path] = {"docs": 0, "complete": 0, "incomplete": 0, "inferred": 0}
             continue
-            
-        valid_reads = [r for r in reads if r.method != "excluded"]
-        if not valid_reads:
-            pdf_confidences[path] = 1.0
-        else:
-            pdf_confidences[path] = sum(r.confidence for r in valid_reads) / len(valid_reads)
-            
-        # Also rebuild docs to calculate individual stats per file
-        docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
-        complete = [d for d in docs if d.is_complete]
+
+        # Single _build_documents call — covers global + individual stats
+        docs = _build_documents(reads, _noop_log, _noop_issue)
+        complete   = [d for d in docs if d.is_complete]
         incomplete = [d for d in docs if not d.is_complete]
-        inferred = sum(len(d.inferred_pages) for d in docs)
+        inferred   = sum(len(d.inferred_pages) for d in docs)
+
+        total_docs      += len(docs)
+        total_complete  += len(complete)
+        total_incomplete += len(incomplete)
+        total_inferred  += inferred
+
         pdf_metrics[path] = {
-            "docs": len(docs),
-            "complete": len(complete),
-            "incomplete": len(incomplete),
-            "inferred": inferred
+            "docs": len(docs), "complete": len(complete),
+            "incomplete": len(incomplete), "inferred": inferred,
         }
-            
-    state.confidences = pdf_confidences
-    
+
+        valid_reads = [r for r in reads if r.method != "excluded"]
+        pdf_confidences[path] = (
+            sum(r.confidence for r in valid_reads) / len(valid_reads)
+            if valid_reads else 1.0
+        )
+
+    # Write all state fields under lock so readers never see a partial update
+    with state._lock:
+        state.total_docs      = total_docs
+        state.total_complete  = total_complete
+        state.total_incomplete = total_incomplete
+        state.total_inferred  = total_inferred
+        state.confidences     = pdf_confidences
+
     _emit("metrics", {
-        "docs": state.total_docs,
-        "complete": state.total_complete,
-        "incomplete": state.total_incomplete,
-        "inferred": state.total_inferred,
-        "confidences": state.confidences,
-        "individual": pdf_metrics
+        "docs": total_docs, "complete": total_complete,
+        "incomplete": total_incomplete, "inferred": total_inferred,
+        "confidences": pdf_confidences, "individual": pdf_metrics,
     })
 
 @app.get("/api/preview")
