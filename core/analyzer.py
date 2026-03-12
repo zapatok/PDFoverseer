@@ -80,6 +80,7 @@ class Document:
     pages:          list[int] = field(default_factory=list)
     inferred_pages: list[int] = field(default_factory=list)
     sequence_ok:    bool      = True
+    has_manual:     bool      = False
 
     @property
     def found_total(self) -> int:
@@ -376,32 +377,40 @@ def analyze_pdf(
     return documents, reads
 
 
-def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callable, emit_incomplete: bool = True) -> list[Document]:
+def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callable) -> list[Document]:
     documents:    list[Document] = []
     current:      Optional[Document] = None
-    orphans:      list[int] = [] # This 'orphans' list is local to _build_documents
+    orphans:      list[int] = []
+
+    def _close_current():
+        """Close the current document: emit incompleto if needed, append to list."""
+        if current is None:
+            return
+        if (current.found_total < current.declared_total
+                and not current.has_manual):
+            detail = (f"Doc {current.index} (pág {current.start_pdf_page}): "
+                      f"incompleto — {current.found_total}/{current.declared_total} págs encontradas")
+            on_log(f"  → {detail}", "warn")
+            on_issue(current.start_pdf_page, "incompleto", detail)
+        documents.append(current)
 
     for r in reads:
         if r.method == "excluded":
             continue
-            
+
         curr, tot, pdf_page = r.curr, r.total, r.pdf_page
         is_inferred = r.method == "inferred"
+        is_manual = r.method == "manual"
 
         if curr == 1:
-            if current is not None:
-                if emit_incomplete and current.found_total < current.declared_total:
-                    detail = (f"Doc {current.index} (pág {current.start_pdf_page}): "
-                              f"incompleto — {current.found_total}/{current.declared_total} págs encontradas")
-                    on_log(f"  → {detail}", "warn")
-                    on_issue(current.start_pdf_page, "incompleto", detail)
-                documents.append(current)
+            _close_current()
             current = Document(
                 index          = len(documents) + 1,
                 start_pdf_page = pdf_page,
                 declared_total = tot,
                 pages          = [] if is_inferred else [pdf_page],
                 inferred_pages = [pdf_page] if is_inferred else [],
+                has_manual     = is_manual,
             )
 
         elif curr is not None:
@@ -410,6 +419,8 @@ def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callabl
                 on_log(f"  → huérfana: curr={curr} sin doc activo", "warn")
                 on_issue(pdf_page, "huérfana", f"curr={curr} sin doc activo")
             else:
+                if is_manual:
+                    current.has_manual = True
                 expected = current.found_total + 1
                 if is_inferred:
                     current.inferred_pages.append(pdf_page)
@@ -422,13 +433,7 @@ def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callabl
                     on_log(f"  → {detail}", "error")
                     on_issue(pdf_page, "secuencia rota", detail)
 
-    if current is not None:
-        if emit_incomplete and current.found_total < current.declared_total:
-            detail = (f"Doc {current.index} (pág {current.start_pdf_page}): "
-                      f"incompleto — {current.found_total}/{current.declared_total} págs encontradas")
-            on_log(f"  → {detail}", "warn")
-            on_issue(current.start_pdf_page, "incompleto", detail)
-        documents.append(current)
+    _close_current()
 
     if orphans:
         on_log(f"Páginas huérfanas: {orphans}", "warn")
@@ -484,7 +489,7 @@ def re_infer_documents(
             on_log(f"  → {detail}", "warn")
             _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail)
 
-    # 4. Rebuild document logic — don't re-emit incomplete issues on re-inference
-    documents = _build_documents(reads, on_log, _issue, emit_incomplete=False)
+    # 4. Rebuild document logic — incompleto suppressed for docs with manual pages
+    documents = _build_documents(reads, on_log, _issue)
 
     return documents, reads
