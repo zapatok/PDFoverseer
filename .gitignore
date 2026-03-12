@@ -38,3 +38,7 @@ frontend/dist/
 
 # Large binary test data
 *.pdf
+
+# Node
+node_modules/
+package-lock.json
