@@ -747,7 +747,8 @@ def _recalculate_metrics():
             "incomplete": len(incomplete), "inferred": inferred,
         }
 
-        pdf_confidences[path] = len(complete) / len(docs) if docs else 1.0
+        pages_ok = sum(1 for d in docs if d.found_total >= d.declared_total)
+        pdf_confidences[path] = pages_ok / len(docs) if docs else 1.0
 
     # Write all state fields under lock so readers never see a partial update
     with state._lock:

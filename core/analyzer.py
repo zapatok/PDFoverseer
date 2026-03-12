@@ -376,7 +376,7 @@ def analyze_pdf(
     return documents, reads
 
 
-def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callable) -> list[Document]:
+def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callable, emit_incomplete: bool = True) -> list[Document]:
     documents:    list[Document] = []
     current:      Optional[Document] = None
     orphans:      list[int] = [] # This 'orphans' list is local to _build_documents
@@ -390,7 +390,7 @@ def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callabl
 
         if curr == 1:
             if current is not None:
-                if current.found_total < current.declared_total:
+                if emit_incomplete and current.found_total < current.declared_total:
                     detail = (f"Doc {current.index} (pág {current.start_pdf_page}): "
                               f"incompleto — {current.found_total}/{current.declared_total} págs encontradas")
                     on_log(f"  → {detail}", "warn")
@@ -423,7 +423,7 @@ def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callabl
                     on_issue(pdf_page, "secuencia rota", detail)
 
     if current is not None:
-        if current.found_total < current.declared_total:
+        if emit_incomplete and current.found_total < current.declared_total:
             detail = (f"Doc {current.index} (pág {current.start_pdf_page}): "
                       f"incompleto — {current.found_total}/{current.declared_total} págs encontradas")
             on_log(f"  → {detail}", "warn")
@@ -484,7 +484,7 @@ def re_infer_documents(
             on_log(f"  → {detail}", "warn")
             _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail)
 
-    # 4. Rebuild document logic
-    documents = _build_documents(reads, on_log, _issue)
+    # 4. Rebuild document logic — don't re-emit incomplete issues on re-inference
+    documents = _build_documents(reads, on_log, _issue, emit_incomplete=False)
 
     return documents, reads
