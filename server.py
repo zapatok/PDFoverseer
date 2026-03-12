@@ -65,13 +65,6 @@ def read_root():
     return RedirectResponse(url="/ui/")
 
 # --- Global State ---
-class SummaryMetrics(BaseModel):
-    docs: int = 0
-    complete: int = 0
-    incomplete: int = 0
-    inferred: int = 0
-    total_time: float = 0.0
-
 class ServerState:
     def __init__(self):
         self._lock = threading.Lock()  # Guards non-atomic read-modify-write ops

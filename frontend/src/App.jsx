@@ -66,7 +66,13 @@ function App() {
     ws.current = new WebSocket('ws://localhost:8000/ws')
 
     ws.current.onmessage = (event) => {
-      const data = JSON.parse(event.data)
+      let data
+      try {
+        data = JSON.parse(event.data)
+      } catch (e) {
+        console.error('WebSocket: invalid JSON received', e)
+        return
+      }
       const { type, payload } = data
 
       if (type === 'log') {
