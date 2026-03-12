@@ -196,10 +196,12 @@ def _infer_missing(reads: list[_PageRead]) -> list[_PageRead]:
             prev = reads[i - 1]
             if prev.curr is not None and prev.total is not None:
                 if prev.curr < prev.total:
+                    # If the inherited total is rare in the prior it's likely a misread
+                    inherited_conf = 0.95 if (not prior or prior.get(prev.total, 0.0) >= 0.10) else 0.60
                     r.curr = prev.curr + 1
                     r.total = prev.total
                     r.method = "inferred"
-                    r.confidence = 0.95
+                    r.confidence = inherited_conf
                 elif prev.curr == prev.total:
                     best_total = max(prior, key=lambda k: prior[k]) if prior else 2
                     r.curr = 1
@@ -390,6 +392,11 @@ def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callabl
 
         if curr == 1:
             if current is not None:
+                if not current.is_complete:
+                    detail = (f"Doc {current.index} (pág {current.start_pdf_page}): "
+                              f"incompleto — {current.found_total}/{current.declared_total} págs encontradas")
+                    on_log(f"  → {detail}", "warn")
+                    on_issue(current.start_pdf_page, "incompleto", detail)
                 documents.append(current)
             current = Document(
                 index          = len(documents) + 1,
@@ -418,6 +425,11 @@ def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callabl
                     on_issue(pdf_page, "secuencia rota", detail)
 
     if current is not None:
+        if not current.is_complete:
+            detail = (f"Doc {current.index} (pág {current.start_pdf_page}): "
+                      f"incompleto — {current.found_total}/{current.declared_total} págs encontradas")
+            on_log(f"  → {detail}", "warn")
+            on_issue(current.start_pdf_page, "incompleto", detail)
         documents.append(current)
 
     if orphans:
