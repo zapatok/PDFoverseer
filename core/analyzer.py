@@ -390,7 +390,7 @@ def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callabl
 
         if curr == 1:
             if current is not None:
-                if current.found_total != current.declared_total:
+                if current.found_total < current.declared_total:
                     detail = (f"Doc {current.index} (pág {current.start_pdf_page}): "
                               f"incompleto — {current.found_total}/{current.declared_total} págs encontradas")
                     on_log(f"  → {detail}", "warn")
@@ -423,7 +423,7 @@ def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callabl
                     on_issue(pdf_page, "secuencia rota", detail)
 
     if current is not None:
-        if current.found_total != current.declared_total:
+        if current.found_total < current.declared_total:
             detail = (f"Doc {current.index} (pág {current.start_pdf_page}): "
                       f"incompleto — {current.found_total}/{current.declared_total} págs encontradas")
             on_log(f"  → {detail}", "warn")
