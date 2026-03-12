@@ -747,11 +747,7 @@ def _recalculate_metrics():
             "incomplete": len(incomplete), "inferred": inferred,
         }
 
-        valid_reads = [r for r in reads if r.method != "excluded"]
-        pdf_confidences[path] = (
-            sum(r.confidence for r in valid_reads) / len(valid_reads)
-            if valid_reads else 1.0
-        )
+        pdf_confidences[path] = len(complete) / len(docs) if docs else 1.0
 
     # Write all state fields under lock so readers never see a partial update
     with state._lock:
