@@ -199,11 +199,11 @@ def api_add_files():
     }
 
 @app.post("/api/remove_pdf")
-def api_remove_pdf(filename: str):
+def api_remove_pdf(pdf_path: str):
     new_list = []
     removed_path = None
     for p in state.pdf_list:
-        if p.name == filename:
+        if str(p) == pdf_path:
             removed_path = str(p)
         else:
             new_list.append(p)
@@ -718,11 +718,14 @@ def _recalculate_metrics():
     total_complete = 0
     total_incomplete = 0
     total_inferred = 0
-    
+
+    # Snapshot under lock to avoid RuntimeError if worker modifies dict during iteration
+    with state._lock:
+        reads_snapshot = dict(state.pdf_reads)
     skipped_paths = state.skipped_pdfs
-    
+
     from core.analyzer import _build_documents
-    for path, reads in state.pdf_reads.items():
+    for path, reads in reads_snapshot.items():
         if path in skipped_paths:
             continue
             
@@ -742,10 +745,10 @@ def _recalculate_metrics():
     state.total_incomplete = total_incomplete
     state.total_inferred = total_inferred
     
-    # Calculate PDF confidences and individual metrics
+    # Calculate PDF confidences and individual metrics (use same snapshot)
     pdf_confidences = {}
     pdf_metrics = {}
-    for path, reads in state.pdf_reads.items():
+    for path, reads in reads_snapshot.items():
         if path in skipped_paths:
             pdf_confidences[path] = 0.0
             pdf_metrics[path] = {"docs": 0, "complete": 0, "incomplete": 0, "inferred": 0}

@@ -17,6 +17,7 @@ function App() {
   const [correctTot, setCorrectTot] = useState('')
 
   const [selectedPdfFilter, setSelectedPdfFilter] = useState('')
+  const [selectedPdfPath, setSelectedPdfPath] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [historySessions, setHistorySessions] = useState([])
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isAlert: false });
@@ -135,14 +136,15 @@ function App() {
   }
 
   const handleRemovePdf = async () => {
-    if (!selectedPdfFilter) return;
+    if (!selectedPdfPath) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/remove_pdf?filename=${encodeURIComponent(selectedPdfFilter)}`, { method: 'POST' });
+      const res = await fetch(`http://localhost:8000/api/remove_pdf?pdf_path=${encodeURIComponent(selectedPdfPath)}`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         setPdfs(data.pdfs);
         if (selectedPdfFilter === fileProg.filename) setFileProg({done: 0, total: 0, filename: ''});
         setSelectedPdfFilter('');
+        setSelectedPdfPath('');
       }
     } catch (e) {
       console.error(e);
@@ -164,6 +166,7 @@ function App() {
         setGlobalProg({ done: 0, total: 0 })
         setStatus('idle')
         setSelectedPdfFilter('')
+        setSelectedPdfPath('')
         setSelectedIssue(null)
       }
     });
@@ -554,7 +557,7 @@ function App() {
 
               return (
                 <div key={i} title={p.path}
-                  onClick={() => setSelectedPdfFilter(selectedPdfFilter === p.name ? '' : p.name)}
+                  onClick={() => { const sel = selectedPdfFilter === p.name; setSelectedPdfFilter(sel ? '' : p.name); setSelectedPdfPath(sel ? '' : p.path); }}
                   onDoubleClick={() => handleOpenAnyPdf(p.path)}
                   className={`group px-3 py-2 rounded-md text-sm cursor-pointer transition-all border flex items-center justify-between relative overflow-hidden
                   ${selectedPdfFilter === p.name ? 'border-accent shadow-[0_0_10px_rgba(137,180,250,0.5)]' : 'border-transparent hover:bg-white/5'}
