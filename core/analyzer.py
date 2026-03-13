@@ -211,7 +211,7 @@ def _tess_ocr(gray: np.ndarray) -> str:
 
 # ── PyMuPDF clip rendering ───────────────────────────────────────────────────
 
-def _render_clip(page: fitz.Page) -> np.ndarray:
+def _render_clip(page: fitz.Page, dpi: int = DPI) -> np.ndarray:
     """Render only the top-right corner of a PDF page. Returns BGR numpy array."""
     rect = page.rect
     clip = fitz.Rect(
@@ -220,7 +220,7 @@ def _render_clip(page: fitz.Page) -> np.ndarray:
         rect.width,
         rect.height * CROP_Y_END,
     )
-    pix = page.get_pixmap(dpi=DPI, clip=clip)
+    pix = page.get_pixmap(dpi=dpi, clip=clip)
     img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
     if pix.n == 4:
         img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
@@ -231,15 +231,16 @@ def _render_clip(page: fitz.Page) -> np.ndarray:
     return img
 
 
-# ── 2-Tier OCR Pipeline ──────────────────────────────────────────────────────
+# ── Tesseract-only page processor (runs in thread pool) ─────────────────────
+
+EASYOCR_DPI = 300  # EasyOCR needs higher DPI for small text accuracy
+
 
 def _process_page(pdf_path: str, page_idx: int) -> _PageRead:
     """
-    Render one page clip and run 2-tier OCR.
-    Designed to run inside ThreadPoolExecutor — opens its own fitz.Document
-    (thread-safe: each thread has an independent handle).
-    pytesseract launches tesseract.exe as a subprocess → releases the GIL
-    → multiple threads run Tesseract concurrently.
+    Render one page clip and run Tesseract OCR (2 tiers).
+    Designed to run inside ThreadPoolExecutor — opens its own fitz.Document.
+    pytesseract launches tesseract.exe as subprocess → releases GIL → real parallelism.
     """
     pdf_page = page_idx + 1
     doc = fitz.open(pdf_path)
@@ -256,13 +257,6 @@ def _process_page(pdf_path: str, page_idx: int) -> _PageRead:
     if c:
         return _PageRead(pdf_page, c, t, "direct", 1.0)
 
-    # Tier 1.5: EasyOCR GPU (no subprocess overhead, better on degraded images)
-    if _easyocr_reader is not None:
-        text_easy = _easyocr_read(gray)
-        c, t = _parse(text_easy)
-        if c:
-            return _PageRead(pdf_page, c, t, "easyocr", 1.0)
-
     # Tier 2: 4x upscale (GPU bicubic ~1ms or FSRCNN CPU ~150ms) + Tesseract
     bgr_sr = _upsample_4x(bgr)
     gray_sr = cv2.cvtColor(bgr_sr, cv2.COLOR_BGR2GRAY)
@@ -272,6 +266,53 @@ def _process_page(pdf_path: str, page_idx: int) -> _PageRead:
         return _PageRead(pdf_page, c, t, "SR", 1.0)
 
     return _PageRead(pdf_page, None, None, "failed", 0.0)
+
+
+# ── EasyOCR GPU batch for failed pages ──────────────────────────────────────
+
+def _easyocr_batch_recover(
+    pdf_path: str,
+    failed_indices: list[int],
+    reads: list[_PageRead],
+    on_log: callable,
+) -> int:
+    """
+    Re-render failed pages at 300 DPI and batch-OCR them via EasyOCR GPU.
+    Mutates `reads` in-place. Returns number of recovered pages.
+    """
+    if _easyocr_reader is None or not failed_indices:
+        return 0
+
+    on_log(
+        f"EasyOCR GPU: procesando {len(failed_indices)} paginas fallidas"
+        f" a {EASYOCR_DPI} DPI...",
+        "info",
+    )
+
+    # Re-render at higher DPI for EasyOCR accuracy
+    doc = fitz.open(pdf_path)
+    clips = []
+    for idx in failed_indices:
+        bgr = _render_clip(doc[idx], dpi=EASYOCR_DPI)
+        clips.append(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY))
+    doc.close()
+
+    # Batch OCR on GPU
+    with _easyocr_lock:
+        batch_results = _easyocr_reader.readtext_batched(
+            clips, detail=0, paragraph=True
+        )
+
+    recovered = 0
+    for i, (idx, result_texts) in enumerate(zip(failed_indices, batch_results)):
+        text = " ".join(result_texts) if result_texts else ""
+        c, t = _parse(text)
+        if c:
+            reads[idx] = _PageRead(idx + 1, c, t, "easyocr", 1.0)
+            on_log(f"  Pag {idx + 1:>4}: {c}/{t}  [easyocr]", "page_ok")
+            recovered += 1
+
+    return recovered
 
 
 # ── Tier 4: Inference Engine ─────────────────────────────────────────────────
@@ -469,6 +510,15 @@ def analyze_pdf(
                         on_progress(pdf_page, total_pages, [x for x in reads[:pdf_page] if x])
                     except TypeError:
                         on_progress(pdf_page, total_pages)
+
+    # ── Phase 2.5: EasyOCR GPU batch for failed pages ────────────────────
+    failed_indices = [i for i, r in enumerate(reads) if r is not None and r.method == "failed"]
+    if failed_indices:
+        recovered = _easyocr_batch_recover(pdf_path, failed_indices, reads, on_log)
+        if recovered > 0:
+            # Update tallies
+            method_tally["easyocr"] = recovered
+            method_tally["failed"] = method_tally.get("failed", 0) - recovered
 
     # ── Phase 3: Inference ────────────────────────────────────────────────
     reads_clean: list[_PageRead] = [r for r in reads if r is not None]
