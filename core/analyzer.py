@@ -1,6 +1,6 @@
 """
-analyzer.py  —  V4 Pipeline Engine (parallel + EasyOCR GPU + SR)
-=================================================================
+analyzer.py  —  V4 Pipeline Engine (producer-consumer + EasyOCR GPU + SR)
+==========================================================================
 Contador de documentos en PDFs de charlas (CRS).
 
 Dependencias (venv-cuda):
@@ -8,22 +8,29 @@ Dependencias (venv-cuda):
     pip install PyMuPDF opencv-contrib-python fastapi uvicorn[standard] pydantic pytesseract easyocr
     + Tesseract OCR instalado en el sistema
 
-Pipeline V4
------------
-Por cada pagina del PDF (procesamiento paralelo, PARALLEL_WORKERS paginas simultaneas):
-  1. PyMuPDF clip rendering + Tesseract OCR — hasta PARALLEL_WORKERS threads en paralelo
-  2. Tier 1: Tesseract directo con Otsu threshold
-  3. Tier 1.5: EasyOCR GPU (si Tier 1 falla) — nativo PyTorch, sin subprocess overhead
-  4. Tier 2: SR x4 + Tesseract (si Tier 1.5 falla)
-Post-scan:
-  5. Constraint Propagation + Bayesian inference para paginas fallidas
-  6. Reportar paginas inferidas con confianza < 0.90 como issues
+Pipeline V4 — Phase 3 (producer-consumer)
+------------------------------------------
+  Producers (PARALLEL_WORKERS threads):
+    1. PyMuPDF clip rendering + Tesseract OCR en paralelo
+    2. Tier 1: Tesseract directo con Otsu threshold
+    3. Tier 2: SR x4 + Tesseract (si Tier 1 falla)
+    4. Si ambos tiers fallan → push page index a GPU queue
+
+  Consumer (1 dedicated GPU thread):
+    5. Recibe page indices en tiempo real via queue.Queue
+    6. Re-render a 300 DPI + EasyOCR GPU
+    7. Corre concurrentemente mientras Tesseract sigue procesando
+
+  Post-scan:
+    8. Constraint Propagation + Bayesian inference para paginas fallidas
+    9. Reportar paginas inferidas con confianza < 0.90 como issues
 
 Compatibilidad V2/V3: todas las firmas publicas son identicas.
 """
 
 from __future__ import annotations
 
+import queue
 import re
 import threading
 import time
@@ -53,8 +60,8 @@ DPI              = 150
 CROP_X_START     = 0.70   # rightmost 30%
 CROP_Y_END       = 0.22   # top 22%
 TESS_CONFIG      = "--psm 6 --oem 1"
-PARALLEL_WORKERS = 4      # concurrent Tesseract subprocesses
-BATCH_SIZE       = 8      # pages per batch (pause/cancel granularity)
+PARALLEL_WORKERS = 6      # concurrent Tesseract subprocesses
+BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
 # Regex: maneja variaciones del OCR en "Página X de N"
 _PAGE_RE = re.compile(
@@ -425,12 +432,10 @@ def analyze_pdf(
     doc_mode:    str = "charla",
 ) -> tuple[list[Document], list[_PageRead]]:
     """
-    Procesa un PDF con pipeline V3 (paralelo):
-      1. PARALLEL_WORKERS threads corren render+Tesseract simultáneamente
-         (Tesseract libera el GIL → paralelismo real, ~4x throughput)
-      2. FSRCNN+Tesseract como Tier 2 para páginas que fallan
-      3. Inference engine post-scan para páginas fallidas
-      4. Maquina de estados para construir documentos
+    Procesa un PDF con pipeline V4 (producer-consumer):
+      Producers: PARALLEL_WORKERS threads corren render+Tesseract simultáneamente
+      Consumer:  1 thread GPU dedicado recibe páginas fallidas via queue en tiempo real
+      Post-scan: Inference engine para páginas que ni Tesseract ni EasyOCR resolvieron
 
     Pause/cancel se verifican entre batches (cada BATCH_SIZE páginas).
     Firma identica a V2 — compatible con server.py sin cambios.
@@ -448,10 +453,11 @@ def analyze_pdf(
         on_log(f"Error leyendo PDF: {e}", "error")
         return [], []
 
-    ocr_label = "EasyOCR GPU" if _easyocr_reader is not None else "Tesseract"
+    has_gpu = _easyocr_reader is not None
     on_log(f"Total paginas: {total_pages}", "info")
     on_log(
-        f"Pipeline V4: {ocr_label} + Tesseract x{PARALLEL_WORKERS} threads"
+        f"Pipeline V4: Tesseract x{PARALLEL_WORKERS} producers"
+        f" + {'EasyOCR GPU consumer' if has_gpu else 'no GPU consumer'}"
         f" (batch={BATCH_SIZE})",
         "info",
     )
@@ -460,31 +466,65 @@ def analyze_pdf(
         if on_issue is not None:
             on_issue(page, kind, detail, None)
 
-    # ── Phase 1-2: Parallel render + OCR ──────────────────────────────────
-    reads: list[_PageRead] = [None] * total_pages  # pre-allocated, filled in order
+    # ── Setup producer-consumer pipeline ──────────────────────────────────
+    reads: list[_PageRead] = [None] * total_pages
     method_tally: dict[str, int] = {}
     t0 = time.time()
 
+    # GPU consumer queue + recovery counter
+    gpu_queue: queue.Queue[int | None] = queue.Queue()
+    gpu_recovered = [0]  # mutable int for thread access
+
+    def _gpu_consumer():
+        """Dedicated GPU thread: picks up failed page indices, re-renders
+        at 300 DPI, and runs EasyOCR. Runs concurrently with Tesseract producers."""
+        if not has_gpu:
+            while gpu_queue.get() is not None:
+                pass  # drain queue
+            return
+
+        doc = fitz.open(pdf_path)
+        try:
+            while True:
+                item = gpu_queue.get()
+                if item is None:  # sentinel → stop
+                    break
+                idx = item
+                bgr = _render_clip(doc[idx], dpi=EASYOCR_DPI)
+                gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+                with _easyocr_lock:
+                    results = _easyocr_reader.readtext(gray, detail=0, paragraph=True)
+                text = " ".join(results) if results else ""
+                c, t = _parse(text)
+                if c:
+                    reads[idx] = _PageRead(idx + 1, c, t, "easyocr", 1.0)
+                    on_log(f"  Pag {idx + 1:>4}: {c}/{t}  [easyocr-gpu]", "page_ok")
+                    gpu_recovered[0] += 1
+        finally:
+            doc.close()
+
+    gpu_thread = threading.Thread(target=_gpu_consumer, daemon=True, name="gpu-consumer")
+    gpu_thread.start()
+
+    # ── Producers: Parallel Tesseract OCR ─────────────────────────────────
     with ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as pool:
         for batch_start in range(0, total_pages, BATCH_SIZE):
-            # Cancel check between batches
             if cancel_event is not None and cancel_event.is_set():
                 on_log("Analisis abortado a peticion del usuario.", "warn")
+                gpu_queue.put(None)
+                gpu_thread.join(timeout=5)
                 return [], []
 
-            # Pause check between batches
             if pause_event is not None:
                 pause_event.wait()
 
             batch_end = min(batch_start + BATCH_SIZE, total_pages)
 
-            # Submit batch to thread pool
             future_to_idx = {
                 pool.submit(_process_page, pdf_path, i): i
                 for i in range(batch_start, batch_end)
             }
 
-            # Collect batch results in submission order (ordered by page index)
             batch_results: dict[int, _PageRead] = {}
             for future, i in future_to_idx.items():
                 try:
@@ -494,7 +534,6 @@ def analyze_pdf(
                     on_log(f"  Pag {pdf_page:>4}: error de procesamiento: {e}", "error")
                     batch_results[i] = _PageRead(pdf_page, None, None, "failed", 0.0)
 
-            # Report results in page order and call progress
             for i in range(batch_start, batch_end):
                 r = batch_results[i]
                 reads[i] = r
@@ -503,6 +542,9 @@ def analyze_pdf(
                 pdf_page = i + 1
                 if r.curr is not None:
                     on_log(f"  Pag {pdf_page:>4}: {r.curr}/{r.total}  [{r.method}]", "page_ok")
+                elif r.method == "failed":
+                    on_log(f"  Pag {pdf_page:>4}: ???  → GPU queue", "page_warn")
+                    gpu_queue.put(i)  # send to GPU consumer immediately
                 else:
                     on_log(f"  Pag {pdf_page:>4}: ???  [{r.method}]", "page_warn")
 
@@ -512,16 +554,16 @@ def analyze_pdf(
                     except TypeError:
                         on_progress(pdf_page, total_pages)
 
-    # ── Phase 2.5: EasyOCR GPU batch for failed pages ────────────────────
-    failed_indices = [i for i, r in enumerate(reads) if r is not None and r.method == "failed"]
-    if failed_indices:
-        recovered = _easyocr_batch_recover(pdf_path, failed_indices, reads, on_log)
-        if recovered > 0:
-            # Update tallies
-            method_tally["easyocr"] = recovered
-            method_tally["failed"] = method_tally.get("failed", 0) - recovered
+    # ── Signal GPU consumer to stop and wait ──────────────────────────────
+    gpu_queue.put(None)
+    gpu_thread.join()
 
-    # ── Phase 3: Inference ────────────────────────────────────────────────
+    if gpu_recovered[0] > 0:
+        method_tally["easyocr"] = gpu_recovered[0]
+        method_tally["failed"] = method_tally.get("failed", 0) - gpu_recovered[0]
+        on_log(f"EasyOCR GPU consumer: {gpu_recovered[0]} paginas recuperadas en paralelo", "ok")
+
+    # ── Inference for remaining failures ──────────────────────────────────
     reads_clean: list[_PageRead] = [r for r in reads if r is not None]
     failed_count = sum(1 for r in reads_clean if r.method == "failed")
     if failed_count > 0:
@@ -548,7 +590,7 @@ def analyze_pdf(
     on_log(
         f"Tiempo: {elapsed:.1f}s ({total_pages} paginas, "
         f"{elapsed / total_pages * 1000:.0f}ms/pag promedio, "
-        f"{PARALLEL_WORKERS} workers)",
+        f"{PARALLEL_WORKERS}+1gpu workers)",
         "info",
     )
 
