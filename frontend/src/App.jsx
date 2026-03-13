@@ -8,6 +8,7 @@ function App() {
   const [globalProg, setGlobalProg] = useState({ done: 0, total: 0, elapsed: 0, eta: 0, paused: false })
   const [fileProg, setFileProg] = useState({ done: 0, total: 0, filename: '' })
   const [logs, setLogs] = useState([])
+  const [aiLogs, setAiLogs] = useState([])
 
   const [status, setStatus] = useState('idle') // idle, running, stopped
   const [selectedIssue, setSelectedIssue] = useState(null)
@@ -26,14 +27,14 @@ function App() {
   const [aiLogMode, setAiLogMode] = useState(false)
 
   const handleCopyLogs = () => {
-    const filtered = aiLogMode ? logs.filter(l => l.level === 'ai') : logs;
+    const filtered = aiLogMode ? aiLogs : logs;
     const text = filtered.map(l => l.msg).join('\n');
     navigator.clipboard.writeText(text);
     setTerminalMenuOpen(false);
   };
 
   const handleExportLogs = () => {
-    const filtered = aiLogMode ? logs.filter(l => l.level === 'ai') : logs;
+    const filtered = aiLogMode ? aiLogs : logs;
     const text = filtered.map(l => l.msg).join('\n');
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -79,7 +80,10 @@ function App() {
       const { type, payload } = data
 
       if (type === 'log') {
-        setLogs(prev => [...prev.slice(-99), payload])
+        if (payload.level === 'ai') {
+          setAiLogs(prev => [...prev, payload])
+        }
+        setLogs(prev => [...prev.slice(-199), payload])
       } else if (type === 'status_update') {
         setPdfs(prev => {
           const arr = [...prev]
@@ -179,6 +183,7 @@ function App() {
         setPdfs([])
         setIssues([])
         setLogs([])
+        setAiLogs([])
         setMetrics({ docs: 0, complete: 0, incomplete: 0, inferred: 0 })
         setGlobalProg({ done: 0, total: 0, elapsed: 0, eta: 0, paused: false })
         setFileProg({ done: 0, total: 0, filename: '' })
@@ -264,6 +269,7 @@ function App() {
 
   const handleStart = async (startIndex = 0) => {
     setLogs([])
+    setAiLogs([])
     setStatus('running')
     setGlobalProg(prev => ({ ...prev, paused: false }))
     await fetch('http://localhost:8000/api/start', {
@@ -747,7 +753,7 @@ function App() {
                     </div>
                   </div>
                   <div className="p-4 space-y-1">
-                    {(aiLogMode ? logs.filter(l => l.level === 'ai') : logs).map((log, i) => (
+                    {(aiLogMode ? aiLogs : logs).map((log, i) => (
                       <div key={i} className={`whitespace-pre-wrap ${log.level === 'ai' ? 'text-purple-400 font-bold bg-purple-900/20 px-2 py-0.5 rounded' : log.level === 'warn' ? 'text-warning' : log.level === 'error' ? 'text-error font-bold' : log.level === 'ok' || log.level === 'success' ? 'text-success' : log.level === 'file_hdr' ? 'text-accent font-bold mt-4 text-sm bg-accent/10 px-2 py-1 inline-block rounded' : log.level === 'section' ? 'text-gray-400 mt-2 italic' : 'text-gray-400'}`}>
                         {log.msg}
                       </div>
