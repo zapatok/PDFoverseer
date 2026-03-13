@@ -297,18 +297,12 @@ def _easyocr_batch_recover(
         clips.append(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY))
     doc.close()
 
-    # Batch OCR on GPU (fall back to sequential if shapes differ)
+    # OCR on GPU — sequential (readtext_batched fails on inhomogeneous sizes)
     with _easyocr_lock:
-        try:
-            batch_results = _easyocr_reader.readtext_batched(
-                clips, detail=0, paragraph=True
-            )
-        except (ValueError, RuntimeError):
-            # Images have different sizes — process sequentially
-            batch_results = [
-                _easyocr_reader.readtext(clip, detail=0, paragraph=True)
-                for clip in clips
-            ]
+        batch_results = [
+            _easyocr_reader.readtext(clip, detail=0, paragraph=True)
+            for clip in clips
+        ]
 
     recovered = 0
     for idx, result_texts in zip(failed_indices, batch_results):
