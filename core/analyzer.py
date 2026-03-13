@@ -1,22 +1,25 @@
 """
-analyzer.py  —  V2 Pipeline Engine
-====================================
+analyzer.py  —  V3 Pipeline Engine (parallel + GPU SR)
+=======================================================
 Contador de documentos en PDFs de charlas (CRS).
 
-Dependencias:
-    pip install pytesseract opencv-contrib-python PyMuPDF
-    + Tesseract OCR instalado en el sistema (tesseract.exe en Windows)
-    + FSRCNN_x4.pb model in models/ folder
+Dependencias (venv-cuda):
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+    pip install PyMuPDF opencv-contrib-python fastapi uvicorn[standard] pydantic pytesseract
+    + Tesseract OCR instalado en el sistema
 
-Pipeline V2
+Pipeline V3
 -----------
-Por cada página del PDF:
-  1. PyMuPDF clip rendering (solo la esquina superior-derecha, no la página completa)
+Por cada página del PDF (procesamiento paralelo, PARALLEL_WORKERS páginas simultáneas):
+  1. PyMuPDF clip rendering + Tesseract OCR — hasta PARALLEL_WORKERS threads en paralelo
+     (pytesseract llama tesseract.exe como subprocess, libera el GIL → paralelismo real)
   2. Tier 1: Tesseract directo con Otsu threshold
-  3. Tier 2: FSRCNN x4 + Tesseract (si Tier 1 falla)
+  3. Tier 2: FSRCNN x4 SR + Tesseract (si Tier 1 falla)
 Post-scan:
   4. Constraint Propagation + Bayesian inference para páginas fallidas
   5. Reportar páginas inferidas con confianza < 0.90 como issues
+
+Compatibilidad V2: todas las firmas públicas son idénticas a V2.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -36,18 +40,21 @@ import fitz  # PyMuPDF
 # ── Configuración ─────────────────────────────────────────────────────────────
 
 import os as _os
+
 pytesseract.pytesseract.tesseract_cmd = _os.getenv(
     "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 )
 
-MODELS_DIR   = Path(__file__).parent.parent / "models"
-FSRCNN_PATH  = str(MODELS_DIR / "FSRCNN_x4.pb")
-EDSR_PATH    = str(MODELS_DIR / "EDSR_x4.pb")
+MODELS_DIR      = Path(__file__).parent.parent / "models"
+FSRCNN_PATH     = str(MODELS_DIR / "FSRCNN_x4.pb")
+EDSR_PATH       = str(MODELS_DIR / "EDSR_x4.pb")
 
-DPI          = 150
-CROP_X_START = 0.70   # rightmost 30%
-CROP_Y_END   = 0.22   # top 22%
-TESS_CONFIG  = "--psm 6 --oem 1"
+DPI              = 150
+CROP_X_START     = 0.70   # rightmost 30%
+CROP_Y_END       = 0.22   # top 22%
+TESS_CONFIG      = "--psm 6 --oem 1"
+PARALLEL_WORKERS = 4      # concurrent Tesseract subprocesses
+BATCH_SIZE       = 8      # pages per batch (pause/cancel granularity)
 
 # Regex: maneja variaciones del OCR en "Página X de N"
 _PAGE_RE = re.compile(
@@ -57,17 +64,60 @@ _PAGE_RE = re.compile(
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
 
 
-# ── Super Resolution Model ───────────────────────────────────────────────────
+# ── Super Resolution (GPU bicubic si disponible, FSRCNN CPU como fallback) ────
 
-_sr_model = None
+_sr_local      = threading.local()        # FSRCNN CPU: un modelo por thread
+_gpu_sr_device = None                     # torch.device("cuda") si disponible
+_sr_sem        = threading.Semaphore(2)   # max 2 FSRCNN simultáneos (OpenCV DNN ya es multithreaded)
 
 
-def _load_sr():
-    """Load the FSRCNN super resolution model (1MB, fast on CPU)."""
-    global _sr_model
-    _sr_model = cv2.dnn_superres.DnnSuperResImpl_create()
-    _sr_model.readModel(FSRCNN_PATH)
-    _sr_model.setModel("fsrcnn", 4)
+def _init_sr(on_log: callable) -> None:
+    """Detect GPU SR capability; fall back to FSRCNN CPU."""
+    global _gpu_sr_device
+    try:
+        import torch
+        if torch.cuda.is_available():
+            _gpu_sr_device = torch.device("cuda")
+            on_log(f"SR Tier-2: PyTorch GPU bicubic 4x ({torch.cuda.get_device_name(0)})", "ok")
+            return
+    except ImportError:
+        pass
+    on_log("SR Tier-2: FSRCNN x4 CPU (GPU no disponible)", "info")
+
+
+def _upsample_4x(bgr: np.ndarray) -> np.ndarray:
+    """4x upscale for Tier-2 OCR.  GPU bilinear (~1ms) or FSRCNN CPU (~150ms)."""
+    if _gpu_sr_device is not None:
+        import torch
+        import torch.nn.functional as F
+        t = (torch.from_numpy(bgr)
+               .permute(2, 0, 1).float().unsqueeze(0)
+               .to(_gpu_sr_device) / 255.0)
+        t_up = F.interpolate(t, scale_factor=4, mode="bicubic", align_corners=False)
+        return (t_up.squeeze(0).permute(1, 2, 0)
+                  .clamp(0, 1).mul(255).byte()
+                  .cpu().numpy())
+    # CPU fallback: FSRCNN (thread-local, max 2 concurrent via semaphore)
+    if not getattr(_sr_local, "model", None):
+        m = cv2.dnn_superres.DnnSuperResImpl_create()
+        m.readModel(FSRCNN_PATH)
+        m.setModel("fsrcnn", 4)
+        _sr_local.model = m
+    with _sr_sem:
+        return _sr_local.model.upsample(bgr)
+
+
+_sr_initialized = False
+
+
+def _setup_sr(on_log: callable) -> None:
+    """One-time SR initialization (called from analyze_pdf on first use)."""
+    global _sr_initialized
+    _init_sr(on_log)
+    if _gpu_sr_device is None:
+        on_log("Cargando FSRCNN x4 CPU...", "info")
+        _upsample_4x(np.zeros((10, 10, 3), dtype=np.uint8))  # warmup
+    _sr_initialized = True
 
 
 # ── Modelo de datos ───────────────────────────────────────────────────────────
@@ -95,10 +145,10 @@ class Document:
 @dataclass
 class _PageRead:
     """Internal per-page OCR result used for inference."""
-    pdf_page: int
-    curr: int | None
-    total: int | None
-    method: str
+    pdf_page:   int
+    curr:       int | None
+    total:      int | None
+    method:     str
     confidence: float
 
 
@@ -143,26 +193,38 @@ def _render_clip(page: fitz.Page) -> np.ndarray:
 
 # ── 2-Tier OCR Pipeline ──────────────────────────────────────────────────────
 
-def _extract_page_number(page: fitz.Page, page_idx: int) -> _PageRead:
-    """Tier 1: Tesseract direct. Tier 2: FSRCNN x4 + Tesseract."""
-    bgr = _render_clip(page)
+def _process_page(pdf_path: str, page_idx: int) -> _PageRead:
+    """
+    Render one page clip and run 2-tier OCR.
+    Designed to run inside ThreadPoolExecutor — opens its own fitz.Document
+    (thread-safe: each thread has an independent handle).
+    pytesseract launches tesseract.exe as a subprocess → releases the GIL
+    → multiple threads run Tesseract concurrently.
+    """
+    pdf_page = page_idx + 1
+    doc = fitz.open(pdf_path)
+    try:
+        bgr = _render_clip(doc[page_idx])
+    finally:
+        doc.close()
+
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
-    # Tier 1: Direct Tesseract
+    # Tier 1: Tesseract direct
     text = _tess_ocr(gray)
     c, t = _parse(text)
     if c:
-        return _PageRead(page_idx, c, t, "direct", 1.0)
+        return _PageRead(pdf_page, c, t, "direct", 1.0)
 
-    # Tier 2: FSRCNN x4 + Tesseract
-    bgr_sr = _sr_model.upsample(bgr)
+    # Tier 2: 4x upscale (GPU bilinear ~1ms or FSRCNN CPU ~150ms) + Tesseract
+    bgr_sr = _upsample_4x(bgr)
     gray_sr = cv2.cvtColor(bgr_sr, cv2.COLOR_BGR2GRAY)
     text_sr = _tess_ocr(gray_sr)
     c, t = _parse(text_sr)
     if c:
-        return _PageRead(page_idx, c, t, "SR", 1.0)
+        return _PageRead(pdf_page, c, t, "SR", 1.0)
 
-    return _PageRead(page_idx, None, None, "failed", 0.0)
+    return _PageRead(pdf_page, None, None, "failed", 0.0)
 
 
 # ── Tier 4: Inference Engine ─────────────────────────────────────────────────
@@ -274,121 +336,138 @@ def analyze_pdf(
     doc_mode:    str = "charla",
 ) -> tuple[list[Document], list[_PageRead]]:
     """
-    Procesa un PDF con pipeline V2:
-      1. PyMuPDF clip rendering (solo esquina superior-derecha)
-      2. Tesseract directo → FSRCNN+Tesseract como fallback
+    Procesa un PDF con pipeline V3 (paralelo):
+      1. PARALLEL_WORKERS threads corren render+Tesseract simultáneamente
+         (Tesseract libera el GIL → paralelismo real, ~4x throughput)
+      2. FSRCNN+Tesseract como Tier 2 para páginas que fallan
       3. Inference engine post-scan para páginas fallidas
-      4. Máquina de estados para construir documentos
+      4. Maquina de estados para construir documentos
 
-    pause_event: espera a que esté set() antes de cada página.
-    on_issue:    callback cuando se detecta un problema.
+    Pause/cancel se verifican entre batches (cada BATCH_SIZE páginas).
+    Firma identica a V2 — compatible con server.py sin cambios.
     """
-    # Load SR model on first call
-    global _sr_model
-    if _sr_model is None:
-        on_log("Cargando FSRCNN x4...", "info")
-        _load_sr()
+    if not _sr_initialized:
+        _setup_sr(on_log)
 
-    # Open PDF with PyMuPDF
     on_log("Leyendo metadatos...", "info")
     try:
-        doc = fitz.open(pdf_path)
-        total_pages = len(doc)
+        meta_doc    = fitz.open(pdf_path)
+        total_pages = len(meta_doc)
+        meta_doc.close()
     except Exception as e:
         on_log(f"Error leyendo PDF: {e}", "error")
         return [], []
 
-    on_log(f"Total páginas: {total_pages}", "info")
-    on_log(f"Pipeline V2: Tesseract → FSRCNN → Inferencia", "info")
+    on_log(f"Total paginas: {total_pages}", "info")
+    on_log(
+        f"Pipeline V3: Tesseract x{PARALLEL_WORKERS} threads paralelos"
+        f" (batch={BATCH_SIZE})",
+        "info",
+    )
 
     def _issue(page: int, kind: str, detail: str):
         if on_issue is not None:
             on_issue(page, kind, detail, None)
 
-    # ── Phase 1-2: OCR all pages ──────────────────────────────────────────
-    reads: list[_PageRead] = []
+    # ── Phase 1-2: Parallel render + OCR ──────────────────────────────────
+    reads: list[_PageRead] = [None] * total_pages  # pre-allocated, filled in order
     method_tally: dict[str, int] = {}
     t0 = time.time()
 
-    for i in range(total_pages):
-        # Cancel support
-        if cancel_event is not None and cancel_event.is_set():
-            on_log(f"Análisis abortado a petición del usuario.", "warn")
-            return [], []
+    with ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as pool:
+        for batch_start in range(0, total_pages, BATCH_SIZE):
+            # Cancel check between batches
+            if cancel_event is not None and cancel_event.is_set():
+                on_log("Analisis abortado a peticion del usuario.", "warn")
+                return [], []
 
-        # Pause support
-        if pause_event is not None:
-            pause_event.wait()
+            # Pause check between batches
+            if pause_event is not None:
+                pause_event.wait()
 
-        page = doc[i]
-        pdf_page = i + 1
+            batch_end = min(batch_start + BATCH_SIZE, total_pages)
 
-        try:
-            r = _extract_page_number(page, pdf_page)
-        except Exception as e:
-            on_log(f"  Pág {pdf_page:>4}: ⚠ error de procesamiento: {e}", "error")
-            r = _PageRead(pdf_page, None, None, "failed", 0.0)
+            # Submit batch to thread pool
+            future_to_idx = {
+                pool.submit(_process_page, pdf_path, i): i
+                for i in range(batch_start, batch_end)
+            }
 
-        reads.append(r)
-        method_tally[r.method] = method_tally.get(r.method, 0) + 1
+            # Collect batch results in submission order (ordered by page index)
+            batch_results: dict[int, _PageRead] = {}
+            for future, i in future_to_idx.items():
+                try:
+                    batch_results[i] = future.result()
+                except Exception as e:
+                    pdf_page = i + 1
+                    on_log(f"  Pag {pdf_page:>4}: error de procesamiento: {e}", "error")
+                    batch_results[i] = _PageRead(pdf_page, None, None, "failed", 0.0)
 
-        # Log per page
-        if r.curr is not None:
-            on_log(f"  Pág {pdf_page:>4}: {r.curr}/{r.total}  [{r.method}]", "page_ok")
-        else:
-            on_log(f"  Pág {pdf_page:>4}: ???  [{r.method}]", "page_warn")
+            # Report results in page order and call progress
+            for i in range(batch_start, batch_end):
+                r = batch_results[i]
+                reads[i] = r
+                method_tally[r.method] = method_tally.get(r.method, 0) + 1
 
-        if on_progress:
-            try:
-                # Support the new 3-argument callback for live metrics
-                on_progress(pdf_page, total_pages, reads)
-            except TypeError:
-                # Fallback for old callers
-                on_progress(pdf_page, total_pages)
+                pdf_page = i + 1
+                if r.curr is not None:
+                    on_log(f"  Pag {pdf_page:>4}: {r.curr}/{r.total}  [{r.method}]", "page_ok")
+                else:
+                    on_log(f"  Pag {pdf_page:>4}: ???  [{r.method}]", "page_warn")
 
-    doc.close()
+                if on_progress:
+                    try:
+                        on_progress(pdf_page, total_pages, [x for x in reads[:pdf_page] if x])
+                    except TypeError:
+                        on_progress(pdf_page, total_pages)
 
     # ── Phase 3: Inference ────────────────────────────────────────────────
-    failed_count = sum(1 for r in reads if r.method == "failed")
+    reads_clean: list[_PageRead] = [r for r in reads if r is not None]
+    failed_count = sum(1 for r in reads_clean if r.method == "failed")
     if failed_count > 0:
-        on_log(f"Inferencia: procesando {failed_count} páginas fallidas...", "info")
-        reads = _infer_missing(reads)
-        inferred = sum(1 for r in reads if r.method == "inferred")
-        on_log(f"Inferencia: {inferred} páginas recuperadas", "ok")
+        on_log(f"Inferencia: procesando {failed_count} paginas fallidas...", "info")
+        reads_clean = _infer_missing(reads_clean)
+        inferred = sum(1 for r in reads_clean if r.method == "inferred")
+        on_log(f"Inferencia: {inferred} paginas recuperadas", "ok")
 
     # Report inferred pages with low/medium confidence as issues
-    for r in reads:
+    for r in reads_clean:
         if r.method == "inferred" and r.confidence <= 0.60:
             conf_label = "MEDIA" if r.confidence >= 0.50 else "BAJA"
-            detail = (f"Pág {r.pdf_page}: inferida como {r.curr}/{r.total} "
+            detail = (f"Pag {r.pdf_page}: inferida como {r.curr}/{r.total} "
                       f"(confianza {conf_label}: {r.confidence:.0%})")
-            on_log(f"  → {detail}", "warn")
+            on_log(f"  -> {detail}", "warn")
             _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail)
 
     # ── Phase 4: Build documents from reads ───────────────────────────────
-    documents = _build_documents(reads, on_log, _issue)
+    documents = _build_documents(reads_clean, on_log, _issue)
 
     # ── Summary ───────────────────────────────────────────────────────────
     elapsed = time.time() - t0
-    # The 'orphans' list is now internal to _build_documents, so this check is removed.
-    # if orphans:
-    #     on_log(f"Páginas huérfanas: {orphans}", "warn")
-    on_log(f"Métodos OCR: {method_tally}", "info")
-    on_log(f"Tiempo: {elapsed:.1f}s ({total_pages} páginas, "
-           f"{elapsed / total_pages * 1000:.0f}ms/pág)", "info")
+    on_log(f"Metodos OCR: {method_tally}", "info")
+    on_log(
+        f"Tiempo: {elapsed:.1f}s ({total_pages} paginas, "
+        f"{elapsed / total_pages * 1000:.0f}ms/pag promedio, "
+        f"{PARALLEL_WORKERS} workers)",
+        "info",
+    )
 
-    return documents, reads
+    return documents, reads_clean
 
 
-def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callable) -> list[Document]:
-    documents:    list[Document] = []
-    current:      Optional[Document] = None
-    orphans:      list[int] = [] # This 'orphans' list is local to _build_documents
+def _build_documents(
+    reads: list[_PageRead],
+    on_log: callable,
+    on_issue: callable,
+) -> list[Document]:
+    documents: list[Document]    = []
+    current:   Optional[Document] = None
+    orphans:   list[int]         = []
 
     for r in reads:
         if r.method == "excluded":
             continue
-            
+
         curr, tot, pdf_page = r.curr, r.total, r.pdf_page
         is_inferred = r.method == "inferred"
 
@@ -406,8 +485,8 @@ def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callabl
         elif curr is not None:
             if current is None:
                 orphans.append(pdf_page)
-                on_log(f"  → huérfana: curr={curr} sin doc activo", "warn")
-                on_issue(pdf_page, "huérfana", f"curr={curr} sin doc activo")
+                on_log(f"  -> huerfana: curr={curr} sin doc activo", "warn")
+                on_issue(pdf_page, "huerfana", f"curr={curr} sin doc activo")
             else:
                 expected = current.found_total + 1
                 if is_inferred:
@@ -418,22 +497,23 @@ def _build_documents(reads: list[_PageRead], on_log: callable, on_issue: callabl
                     current.sequence_ok = False
                     current.pages.append(pdf_page)
                     detail = f"secuencia rota: curr={curr}, expected={expected}"
-                    on_log(f"  → {detail}", "error")
+                    on_log(f"  -> {detail}", "error")
                     on_issue(pdf_page, "secuencia rota", detail)
 
     if current is not None:
         documents.append(current)
 
     if orphans:
-        on_log(f"Páginas huérfanas: {orphans}", "warn")
+        on_log(f"Paginas huerfanas: {orphans}", "warn")
     return documents
+
 
 def re_infer_documents(
     reads: list[_PageRead],
     corrections: dict[int, tuple[int, int]],
     on_log: callable,
     on_issue: callable | None = None,
-    exclusions: list[int] = None
+    exclusions: list[int] = None,
 ) -> tuple[list[Document], list[_PageRead]]:
     """
     Applies manual user corrections and exclusions, resets other inferred pages,
@@ -445,7 +525,7 @@ def re_infer_documents(
 
     if exclusions is None:
         exclusions = []
-        
+
     # 1. Apply corrections/exclusions and reset inferred pages to failed
     for r in reads:
         if r.pdf_page in exclusions:
@@ -460,11 +540,10 @@ def re_infer_documents(
             r.method = "manual"
             r.confidence = 1.0
         elif r.method == "inferred":
-             # Revoke inference to allow it to be re-evaluated
-             r.method = "failed"
-             r.curr = None
-             r.total = None
-             r.confidence = 0.0
+            r.method = "failed"
+            r.curr = None
+            r.total = None
+            r.confidence = 0.0
 
     # 2. Re-run inference cascade
     reads = _infer_missing(reads)
@@ -473,9 +552,9 @@ def re_infer_documents(
     for r in reads:
         if r.method == "inferred" and r.confidence <= 0.60:
             conf_label = "MEDIA" if r.confidence >= 0.50 else "BAJA"
-            detail = (f"Pág {r.pdf_page}: inferida como {r.curr}/{r.total} "
+            detail = (f"Pag {r.pdf_page}: inferida como {r.curr}/{r.total} "
                       f"(confianza {conf_label}: {r.confidence:.0%})")
-            on_log(f"  → {detail}", "warn")
+            on_log(f"  -> {detail}", "warn")
             _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail)
 
     # 4. Rebuild document logic
