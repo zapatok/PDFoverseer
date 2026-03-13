@@ -549,10 +549,7 @@ def analyze_pdf(
                     on_log(f"  Pag {pdf_page:>4}: ???  [{r.method}]", "page_warn")
 
                 if on_progress:
-                    try:
-                        on_progress(pdf_page, total_pages, [x for x in reads[:pdf_page] if x])
-                    except TypeError:
-                        on_progress(pdf_page, total_pages)
+                    on_progress(pdf_page, total_pages)
 
     # ── Signal GPU consumer to stop and wait ──────────────────────────────
     gpu_queue.put(None)
