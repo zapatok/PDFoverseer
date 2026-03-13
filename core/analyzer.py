@@ -1,25 +1,25 @@
 """
-analyzer.py  —  V3 Pipeline Engine (parallel + GPU SR)
-=======================================================
+analyzer.py  —  V4 Pipeline Engine (parallel + EasyOCR GPU + SR)
+=================================================================
 Contador de documentos en PDFs de charlas (CRS).
 
 Dependencias (venv-cuda):
     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
-    pip install PyMuPDF opencv-contrib-python fastapi uvicorn[standard] pydantic pytesseract
+    pip install PyMuPDF opencv-contrib-python fastapi uvicorn[standard] pydantic pytesseract easyocr
     + Tesseract OCR instalado en el sistema
 
-Pipeline V3
+Pipeline V4
 -----------
-Por cada página del PDF (procesamiento paralelo, PARALLEL_WORKERS páginas simultáneas):
+Por cada pagina del PDF (procesamiento paralelo, PARALLEL_WORKERS paginas simultaneas):
   1. PyMuPDF clip rendering + Tesseract OCR — hasta PARALLEL_WORKERS threads en paralelo
-     (pytesseract llama tesseract.exe como subprocess, libera el GIL → paralelismo real)
   2. Tier 1: Tesseract directo con Otsu threshold
-  3. Tier 2: FSRCNN x4 SR + Tesseract (si Tier 1 falla)
+  3. Tier 1.5: EasyOCR GPU (si Tier 1 falla) — nativo PyTorch, sin subprocess overhead
+  4. Tier 2: SR x4 + Tesseract (si Tier 1.5 falla)
 Post-scan:
-  4. Constraint Propagation + Bayesian inference para páginas fallidas
-  5. Reportar páginas inferidas con confianza < 0.90 como issues
+  5. Constraint Propagation + Bayesian inference para paginas fallidas
+  6. Reportar paginas inferidas con confianza < 0.90 como issues
 
-Compatibilidad V2: todas las firmas públicas son idénticas a V2.
+Compatibilidad V2/V3: todas las firmas publicas son identicas.
 """
 
 from __future__ import annotations
@@ -62,6 +62,46 @@ _PAGE_RE = re.compile(
     re.IGNORECASE,
 )
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
+
+
+# ── EasyOCR GPU (Tier 1.5) ───────────────────────────────────────────────────
+
+_easyocr_reader = None        # singleton, lazy-loaded (not thread-safe — use via queue)
+_easyocr_lock   = threading.Lock()
+
+
+def _init_easyocr(on_log: callable) -> None:
+    """Lazy-init EasyOCR Reader with GPU support."""
+    global _easyocr_reader
+    if _easyocr_reader is not None:
+        return
+    with _easyocr_lock:
+        if _easyocr_reader is not None:
+            return  # double-check after lock
+        try:
+            import easyocr
+            gpu = False
+            try:
+                import torch
+                gpu = torch.cuda.is_available()
+            except ImportError:
+                pass
+            on_log(f"EasyOCR: inicializando ({'GPU' if gpu else 'CPU'})...", "info")
+            _easyocr_reader = easyocr.Reader(
+                ["es", "en"], gpu=gpu, verbose=False
+            )
+            on_log(f"EasyOCR: listo ({'GPU' if gpu else 'CPU'})", "ok")
+        except Exception as e:
+            on_log(f"EasyOCR: no disponible ({e})", "warn")
+
+
+def _easyocr_read(gray: np.ndarray) -> str:
+    """Run EasyOCR on a grayscale image. Returns concatenated text."""
+    if _easyocr_reader is None:
+        return ""
+    with _easyocr_lock:
+        results = _easyocr_reader.readtext(gray, detail=0, paragraph=True)
+    return " ".join(results) if results else ""
 
 
 # ── Super Resolution (GPU bicubic si disponible, FSRCNN CPU como fallback) ────
@@ -216,7 +256,14 @@ def _process_page(pdf_path: str, page_idx: int) -> _PageRead:
     if c:
         return _PageRead(pdf_page, c, t, "direct", 1.0)
 
-    # Tier 2: 4x upscale (GPU bilinear ~1ms or FSRCNN CPU ~150ms) + Tesseract
+    # Tier 1.5: EasyOCR GPU (no subprocess overhead, better on degraded images)
+    if _easyocr_reader is not None:
+        text_easy = _easyocr_read(gray)
+        c, t = _parse(text_easy)
+        if c:
+            return _PageRead(pdf_page, c, t, "easyocr", 1.0)
+
+    # Tier 2: 4x upscale (GPU bicubic ~1ms or FSRCNN CPU ~150ms) + Tesseract
     bgr_sr = _upsample_4x(bgr)
     gray_sr = cv2.cvtColor(bgr_sr, cv2.COLOR_BGR2GRAY)
     text_sr = _tess_ocr(gray_sr)
@@ -348,6 +395,7 @@ def analyze_pdf(
     """
     if not _sr_initialized:
         _setup_sr(on_log)
+    _init_easyocr(on_log)
 
     on_log("Leyendo metadatos...", "info")
     try:
@@ -358,9 +406,10 @@ def analyze_pdf(
         on_log(f"Error leyendo PDF: {e}", "error")
         return [], []
 
+    ocr_label = "EasyOCR GPU" if _easyocr_reader is not None else "Tesseract"
     on_log(f"Total paginas: {total_pages}", "info")
     on_log(
-        f"Pipeline V3: Tesseract x{PARALLEL_WORKERS} threads paralelos"
+        f"Pipeline V4: {ocr_label} + Tesseract x{PARALLEL_WORKERS} threads"
         f" (batch={BATCH_SIZE})",
         "info",
     )
