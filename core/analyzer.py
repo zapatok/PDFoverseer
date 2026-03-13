@@ -552,6 +552,21 @@ def analyze_pdf(
         "info",
     )
 
+    # AI-compact summary (one line, token-efficient)
+    fname = Path(pdf_path).name
+    docs_ok = sum(1 for d in documents if d.is_complete)
+    docs_bad = len(documents) - docs_ok
+    mstr = "|".join(f"{k}:{v}" for k, v in method_tally.items() if v)
+    issue_count = sum(
+        1 for r in reads_clean if r.method == "inferred" and r.confidence <= 0.60
+    )
+    on_log(
+        f"[AI]{fname}|{total_pages}p|{elapsed:.1f}s|"
+        f"{elapsed / total_pages * 1000:.0f}ms/p|{mstr}|"
+        f"docs:{docs_ok}ok+{docs_bad}bad|issues:{issue_count}",
+        "ai",
+    )
+
     return documents, reads_clean
 
 
