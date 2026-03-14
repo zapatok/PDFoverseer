@@ -35,10 +35,10 @@ import queue
 import re
 import threading
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 # Auto-hash: changes every time this file is modified
 _CORE_HASH = hashlib.md5(Path(__file__).read_bytes()).hexdigest()[:8]
@@ -56,9 +56,8 @@ pytesseract.pytesseract.tesseract_cmd = _os.getenv(
     "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 )
 
-MODELS_DIR      = Path(__file__).parent.parent / "models"
-FSRCNN_PATH     = str(MODELS_DIR / "FSRCNN_x4.pb")
-EDSR_PATH       = str(MODELS_DIR / "EDSR_x4.pb")
+MODELS_DIR  = Path(__file__).parent.parent / "models"
+FSRCNN_PATH = str(MODELS_DIR / "FSRCNN_x4.pb")
 
 DPI              = 150
 CROP_X_START     = 0.70   # rightmost 30%
@@ -104,15 +103,6 @@ def _init_easyocr(on_log: callable) -> None:
             on_log(f"EasyOCR: listo ({'GPU' if gpu else 'CPU'})", "ok")
         except Exception as e:
             on_log(f"EasyOCR: no disponible ({e})", "warn")
-
-
-def _easyocr_read(gray: np.ndarray) -> str:
-    """Run EasyOCR on a grayscale image. Returns concatenated text."""
-    if _easyocr_reader is None:
-        return ""
-    with _easyocr_lock:
-        results = _easyocr_reader.readtext(gray, detail=0, paragraph=True)
-    return " ".join(results) if results else ""
 
 
 # ── Super Resolution (GPU bicubic si disponible, FSRCNN CPU como fallback) ────
@@ -205,7 +195,7 @@ class _PageRead:
 
 # ── OCR helpers ───────────────────────────────────────────────────────────────
 
-def _parse(text: str) -> tuple[Optional[int], Optional[int]]:
+def _parse(text: str) -> tuple[int | None, int | None]:
     t = _Z2.sub("2", text)
     m = _PAGE_RE.search(t)
     if m:
@@ -275,54 +265,6 @@ def _process_page(doc: fitz.Document, page_idx: int) -> _PageRead:
     return _PageRead(pdf_page, None, None, "failed", 0.0)
 
 
-# ── EasyOCR GPU batch for failed pages ──────────────────────────────────────
-
-def _easyocr_batch_recover(
-    pdf_path: str,
-    failed_indices: list[int],
-    reads: list[_PageRead],
-    on_log: callable,
-) -> int:
-    """
-    Re-render failed pages at 300 DPI and batch-OCR them via EasyOCR GPU.
-    Mutates `reads` in-place. Returns number of recovered pages.
-    """
-    if _easyocr_reader is None or not failed_indices:
-        return 0
-
-    on_log(
-        f"EasyOCR GPU: procesando {len(failed_indices)} paginas fallidas"
-        f" a {EASYOCR_DPI} DPI...",
-        "info",
-    )
-
-    # Re-render at higher DPI for EasyOCR accuracy
-    doc = fitz.open(pdf_path)
-    clips = []
-    for idx in failed_indices:
-        bgr = _render_clip(doc[idx], dpi=EASYOCR_DPI)
-        clips.append(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY))
-    doc.close()
-
-    # OCR on GPU — sequential (readtext_batched fails on inhomogeneous sizes)
-    with _easyocr_lock:
-        batch_results = [
-            _easyocr_reader.readtext(clip, detail=0, paragraph=True)
-            for clip in clips
-        ]
-
-    recovered = 0
-    for idx, result_texts in zip(failed_indices, batch_results):
-        text = " ".join(result_texts) if result_texts else ""
-        c, t = _parse(text)
-        if c:
-            reads[idx] = _PageRead(idx + 1, c, t, "easyocr", 1.0)
-            on_log(f"  Pag {idx + 1:>4}: {c}/{t}  [easyocr]", "page_ok")
-            recovered += 1
-
-    return recovered
-
-
 # ── Tier 4: Inference Engine ─────────────────────────────────────────────────
 
 def _infer_missing(reads: list[_PageRead]) -> list[_PageRead]:
@@ -335,11 +277,7 @@ def _infer_missing(reads: list[_PageRead]) -> list[_PageRead]:
         return reads
 
     # Phase 0: Build prior P(total=N) from successful reads
-    totals = [r.total for r in reads if r.total is not None]
-    total_counts: dict[int, int] = {}
-    for t in totals:
-        if t is not None:
-            total_counts[t] = total_counts.get(t, 0) + 1
+    total_counts = Counter(r.total for r in reads if r.total is not None)
     total_sum = sum(total_counts.values()) or 1
     prior: dict[int, float] = {k: v / total_sum for k, v in total_counts.items()}
     if not prior:
@@ -359,7 +297,7 @@ def _infer_missing(reads: list[_PageRead]) -> list[_PageRead]:
                     r.method = "inferred"
                     r.confidence = 0.95
                 elif prev.curr == prev.total:
-                    best_total = max(prior, key=lambda k: prior[k]) if prior else 2
+                    best_total = max(prior, key=prior.get) if prior else 2
                     r.curr = 1
                     r.total = best_total
                     r.method = "inferred"
@@ -411,7 +349,7 @@ def _infer_missing(reads: list[_PageRead]) -> list[_PageRead]:
     for i in range(n):
         r = reads[i]
         if r.method == "failed":
-            best_total = max(prior, key=lambda k: prior[k]) if prior else 2
+            best_total = max(prior, key=prior.get) if prior else 2
             r.curr = 1
             r.total = best_total
             r.method = "inferred"
@@ -616,9 +554,6 @@ def analyze_pdf(
     mstr = ",".join(f"{k}:{v}" for k, v in method_tally.items() if v)
 
     # Per-document breakdown: D1[p1-5:5/5✓] D2[p6-12:7/7✗seq+inf2]
-    _mabbr = {"pdftext": "pdf", "tesseract": "tess", "sr_tesseract": "sr",
-               "easyocr": "gpu", "inferred": "inf", "failed": "fail",
-               "manual": "man", "excluded": "excl"}
     doc_parts = []
     for d in documents:
         all_pp = sorted(d.pages + d.inferred_pages)
@@ -661,9 +596,9 @@ def _build_documents(
     on_log: callable,
     on_issue: callable,
 ) -> list[Document]:
-    documents: list[Document]    = []
-    current:   Optional[Document] = None
-    orphans:   list[int]         = []
+    documents: list[Document]   = []
+    current:   Document | None  = None
+    orphans:   list[int]        = []
 
     for r in reads:
         if r.method == "excluded":
@@ -714,7 +649,7 @@ def re_infer_documents(
     corrections: dict[int, tuple[int, int]],
     on_log: callable,
     on_issue: callable | None = None,
-    exclusions: list[int] = None,
+    exclusions: list[int] | None = None,
 ) -> tuple[list[Document], list[_PageRead]]:
     """
     Applies manual user corrections and exclusions, resets other inferred pages,
