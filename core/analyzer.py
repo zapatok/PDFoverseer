@@ -22,8 +22,11 @@ Pipeline V4 — Phase 3 (producer-consumer)
     7. Corre concurrentemente mientras Tesseract sigue procesando
 
   Post-scan:
-    8. Constraint Propagation + Bayesian inference para paginas fallidas
-    9. Reportar paginas inferidas con confianza < 0.90 como issues
+    8. Period detection via autocorrelation (multi-method)
+    9. Dempster-Shafer evidence fusion for failed pages
+       (neighbors + period-aligned + prior)
+    10. Cross-validation and confidence calibration
+    11. Reportar paginas inferidas con confianza < 0.60 como issues
 
 Compatibilidad V2/V3: todas las firmas publicas son identicas.
 """
@@ -66,11 +69,13 @@ TESS_CONFIG      = "--psm 6 --oem 1"
 PARALLEL_WORKERS = 6      # concurrent Tesseract subprocesses
 BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
-# Regex: maneja variaciones del OCR en "Página X de N"
-_PAGE_RE = re.compile(
-    r"P.{0,2}[gq](?:ina?)?\.?\s*(\d{1,3})\s*\.?\s*de\s*(\d{1,3})",
-    re.IGNORECASE,
-)
+# Page number pattern — original V4 regex
+_PAGE_PATTERNS = [
+    re.compile(
+        r"P.{0,2}[gq](?:ina?)?\.?\s*(\d{1,3})\s*\.?\s*de\s*(\d{1,3})",
+        re.IGNORECASE,
+    ),
+]
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
 
 
@@ -197,11 +202,14 @@ class _PageRead:
 
 def _parse(text: str) -> tuple[int | None, int | None]:
     t = _Z2.sub("2", text)
-    m = _PAGE_RE.search(t)
-    if m:
-        c, tot = int(m.group(1)), int(m.group(2))
-        if 0 < c <= tot <= 99:
-            return c, tot
+
+    for pat in _PAGE_PATTERNS:
+        m = pat.search(t)
+        if m:
+            c, tot = int(m.group(1)), int(m.group(2))
+            if 0 < c <= tot <= 99:
+                return c, tot
+
     return None, None
 
 
@@ -265,25 +273,196 @@ def _process_page(doc: fitz.Document, page_idx: int) -> _PageRead:
     return _PageRead(pdf_page, None, None, "failed", 0.0)
 
 
-# ── Tier 4: Inference Engine ─────────────────────────────────────────────────
+# ── Period Detection ─────────────────────────────────────────────────────────
 
-def _infer_missing(reads: list[_PageRead]) -> list[_PageRead]:
+def _detect_period(reads: list[_PageRead]) -> dict:
     """
-    Constraint Propagation + Bayesian inference for pages where OCR failed.
-    Runs AFTER all pages are scanned.
+    Detect repeating period in page numbering via:
+      1. Spacing between curr=1 occurrences
+      2. Most common declared total
+      3. Autocorrelation of curr value sequence
+    Returns dict with 'period', 'confidence', 'expected_total'.
+    """
+    n = len(reads)
+    result: dict = {"period": None, "confidence": 0.0, "expected_total": None}
+    if n < 4:
+        return result
+
+    # Only use OCR-confirmed reads
+    confirmed = [
+        (i, r) for i, r in enumerate(reads)
+        if r.curr is not None and r.method not in ("failed", "excluded")
+    ]
+    if len(confirmed) < 3:
+        return result
+
+    # ── Method 1: Spacing between curr=1 ─────────────────────────────
+    starts = [i for i, r in confirmed if r.curr == 1]
+    gap_period, gap_conf = None, 0.0
+    if len(starts) >= 2:
+        gaps = [starts[j + 1] - starts[j] for j in range(len(starts) - 1)]
+        if gaps:
+            gc = Counter(gaps)
+            gap_period, freq = gc.most_common(1)[0]
+            gap_conf = freq / len(gaps)
+
+    # ── Method 2: Most common total ──────────────────────────────────
+    totals = [r.total for _, r in confirmed if r.total is not None]
+    mode_total, total_conf = None, 0.0
+    if totals:
+        tc = Counter(totals)
+        mode_total, freq = tc.most_common(1)[0]
+        total_conf = freq / len(totals)
+
+    # ── Method 3: Autocorrelation on curr sequence ───────────────────
+    acorr_period, acorr_conf = None, 0.0
+    curr_vals = np.array([
+        float(r.curr) if r.curr is not None and r.method not in ("failed",)
+        else np.nan for r in reads
+    ])
+    valid_mask = ~np.isnan(curr_vals)
+
+    if valid_mask.sum() >= 6:
+        valid_idx = np.where(valid_mask)[0]
+        filled = np.interp(np.arange(n), valid_idx, curr_vals[valid_mask])
+        centered = filled - filled.mean()
+        energy = np.sum(centered ** 2)
+
+        if energy > 0:
+            acorr = np.correlate(centered, centered, mode="full")[n - 1:]
+            acorr = acorr / energy
+            for lag in range(2, min(n // 2, 50)):
+                if lag + 1 < len(acorr):
+                    if (acorr[lag] > acorr[lag - 1]
+                            and acorr[lag] >= acorr[lag + 1]
+                            and acorr[lag] > 0.3):
+                        acorr_period = lag
+                        acorr_conf = float(acorr[lag])
+                        break
+
+    # ── Combine evidence ─────────────────────────────────────────────
+    candidates: dict[int, float] = {}
+    if gap_period is not None and gap_conf > 0.3:
+        candidates[gap_period] = candidates.get(gap_period, 0) + gap_conf * 0.45
+    if mode_total is not None and total_conf > 0.3:
+        candidates[mode_total] = candidates.get(mode_total, 0) + total_conf * 0.30
+    if acorr_period is not None and acorr_conf > 0.3:
+        candidates[acorr_period] = candidates.get(acorr_period, 0) + acorr_conf * 0.25
+
+    if not candidates:
+        result["expected_total"] = mode_total
+        return result
+
+    best = max(candidates, key=candidates.get)
+    return {
+        "period": best,
+        "confidence": min(candidates[best], 1.0),
+        "expected_total": mode_total or best,
+    }
+
+
+# ── Dempster-Shafer Evidence Fusion ──────────────────────────────────────────
+
+def _ds_combine(m1: dict, m2: dict) -> dict:
+    """Dempster-Shafer combination of two mass functions.
+
+    Keys are hypothesis tuples ``(curr, total)`` or the string ``'unknown'``
+    representing the full frame of discernment (Theta).
+    """
+    combined: dict = {}
+    conflict = 0.0
+
+    for h1, v1 in m1.items():
+        for h2, v2 in m2.items():
+            product = v1 * v2
+            if h1 == "unknown":
+                combined[h2] = combined.get(h2, 0) + product
+            elif h2 == "unknown":
+                combined[h1] = combined.get(h1, 0) + product
+            elif h1 == h2:
+                combined[h1] = combined.get(h1, 0) + product
+            else:
+                conflict += product
+
+    norm = 1.0 - conflict
+    if norm < 0.01:
+        return {"unknown": 1.0}
+    return {k: v / norm for k, v in combined.items()}
+
+
+def _period_evidence(
+    i: int, reads: list[_PageRead], period: int,
+) -> dict | None:
+    """Find pages at the same cycle position (±k*period) and return mass function."""
+    n = len(reads)
+    candidates: dict[tuple, float] = {}
+
+    for mult in range(1, 8):
+        for sign in (-1, 1):
+            pos = i + sign * mult * period
+            if 0 <= pos < n:
+                r = reads[pos]
+                if r.curr is not None and r.method not in ("failed", "excluded"):
+                    h = (r.curr, r.total)
+                    dist_w = 1.0 / mult
+                    method_w = (1.0 if r.method in ("direct", "SR", "easyocr", "manual")
+                                else 0.5)
+                    candidates[h] = candidates.get(h, 0) + dist_w * method_w
+
+    if not candidates:
+        return None
+    total_w = sum(candidates.values())
+    return {h: w / total_w for h, w in candidates.items()}
+
+
+# ── Tier 4: Inference Engine (D-S fusion) ────────────────────────────────────
+
+def _infer_missing(
+    reads: list[_PageRead],
+    period_info: dict | None = None,
+) -> list[_PageRead]:
+    """
+    Constraint propagation inference for pages where OCR failed.
+
+    Phase 1: Forward propagation  (prev → curr)
+    Phase 2: Backward propagation (next → curr)
+    Phase 3: Period-enhanced validation (boost/penalize via period alignment)
+    Phase 4: Cross-validation     (neighbor consistency check)
+    Phase 5: Fallback             (remaining failures → best prior)
     """
     n = len(reads)
     if n == 0:
         return reads
 
-    # Phase 0: Build prior P(total=N) from successful reads
+    # Prior P(total=N)
     total_counts = Counter(r.total for r in reads if r.total is not None)
     total_sum = sum(total_counts.values()) or 1
     prior: dict[int, float] = {k: v / total_sum for k, v in total_counts.items()}
     if not prior:
         prior = {2: 0.85, 3: 0.10, 1: 0.05}
+    best_total = max(prior, key=prior.get)
 
-    # Phase 1: Forward propagation
+    period = period_info.get("period") if period_info else None
+    period_conf = period_info.get("confidence", 0.0) if period_info else 0.0
+
+    def _local_total(idx: int, window: int = 5) -> tuple[int, float]:
+        """Return (most_common_total, homogeneity) from ±window confirmed reads.
+        Only overrides best_total when local region is highly homogeneous (≥85%).
+        Mixed regions fall back to best_total to avoid bias."""
+        lo, hi = max(0, idx - window), min(n, idx + window + 1)
+        local = [reads[j].total for j in range(lo, hi)
+                 if reads[j].total is not None
+                 and reads[j].method not in ("failed", "inferred")]
+        if not local:
+            return best_total, 0.0
+        tc = Counter(local)
+        mode_val, mode_freq = tc.most_common(1)[0]
+        homogeneity = mode_freq / len(local)
+        if homogeneity >= 0.85:
+            return mode_val, homogeneity
+        return best_total, homogeneity
+
+    # ── Phase 1: Forward propagation ────────────────────────────────
     for i in range(n):
         r = reads[i]
         if r.method != "failed":
@@ -297,13 +476,13 @@ def _infer_missing(reads: list[_PageRead]) -> list[_PageRead]:
                     r.method = "inferred"
                     r.confidence = 0.95
                 elif prev.curr == prev.total:
-                    best_total = max(prior, key=prior.get) if prior else 2
+                    lt, hom = _local_total(i)
                     r.curr = 1
-                    r.total = best_total
+                    r.total = lt
                     r.method = "inferred"
-                    r.confidence = 0.70
+                    r.confidence = 0.60 + hom * 0.30  # 0.60..0.90
 
-    # Phase 2: Backward propagation
+    # ── Phase 2: Backward propagation ───────────────────────────────
     for i in range(n - 2, -1, -1):
         r = reads[i]
         if r.method != "failed":
@@ -318,13 +497,14 @@ def _infer_missing(reads: list[_PageRead]) -> list[_PageRead]:
                     r.confidence = 0.90
                 elif nxt.curr == 1 and i > 0:
                     prev = reads[i - 1]
-                    if prev.curr is not None and prev.total is not None:
+                    if (prev.curr is not None and prev.total is not None
+                            and prev.curr < prev.total):
                         r.curr = prev.curr + 1
                         r.total = prev.total
                         r.method = "inferred"
                         r.confidence = 0.90
 
-    # Phase 3: Cross-validation
+    # ── Phase 3: Cross-validation ───────────────────────────────────
     for i in range(n):
         r = reads[i]
         if r.method != "inferred":
@@ -345,15 +525,55 @@ def _infer_missing(reads: list[_PageRead]) -> list[_PageRead]:
         if not consistent:
             r.confidence = min(r.confidence, 0.50)
 
-    # Phase 4: Handle remaining failures
-    for i in range(n):
-        r = reads[i]
+    # ── Phase 4: Fallback for remaining failures ────────────────────
+    for i, r in enumerate(reads):
         if r.method == "failed":
-            best_total = max(prior, key=prior.get) if prior else 2
+            lt, hom = _local_total(i)
             r.curr = 1
-            r.total = best_total
+            r.total = lt
             r.method = "inferred"
-            r.confidence = 0.40
+            r.confidence = 0.40 if hom < 0.85 else 0.30 + hom * 0.20
+
+    # ── Phase 5: D-S post-validation for uncertain pages (≤0.60) ──
+    # Does NOT change curr/total assignments — only boosts confidence
+    # when independent evidence (period + neighbors) confirms them.
+    if period is not None and period_conf > 0.3:
+        for i in range(n):
+            r = reads[i]
+            if r.method != "inferred" or r.confidence > 0.60:
+                continue  # only validate uncertain pages
+
+            h = (r.curr, r.total)
+            support = 0.0  # accumulated evidence support [0..1]
+
+            # Evidence 1: Period-aligned pages agree?
+            palign = _period_evidence(i, reads, period)
+            if palign and h in palign:
+                support += palign[h] * period_conf
+
+            # Evidence 2: Neighbor consistency (both sides)
+            neighbors_agree = 0
+            if i > 0:
+                prev = reads[i - 1]
+                if prev.curr is not None and prev.total is not None:
+                    if ((prev.total == r.total and prev.curr == r.curr - 1) or
+                            (prev.curr == prev.total and r.curr == 1)):
+                        neighbors_agree += 1
+            if i < n - 1:
+                nxt = reads[i + 1]
+                if nxt.curr is not None and nxt.total is not None:
+                    if ((nxt.total == r.total and nxt.curr == r.curr + 1) or
+                            (r.curr == r.total and nxt.curr == 1)):
+                        neighbors_agree += 1
+
+            # Evidence 3: Prior supports this total?
+            prior_support = prior.get(r.total, 0.0)
+
+            # Combine: period + neighbors + prior
+            if support > 0.2 or neighbors_agree == 2:
+                boost = min(support * 0.15 + neighbors_agree * 0.08
+                            + prior_support * 0.05, 0.25)
+                r.confidence = min(r.confidence + boost, 0.75)
 
     return reads
 
@@ -518,12 +738,22 @@ def analyze_pdf(
         method_tally["failed"] = method_tally.get("failed", 0) - gpu_recovered[0]
         on_log(f"EasyOCR GPU consumer: {gpu_recovered[0]} paginas recuperadas en paralelo", "ok")
 
-    # ── Inference for remaining failures ──────────────────────────────────
+    # ── Period detection ──────────────────────────────────────────────────
     reads_clean: list[_PageRead] = [r for r in reads if r is not None]
+    period_info = _detect_period(reads_clean)
+    if period_info["period"] is not None:
+        on_log(
+            f"Periodo detectado: {period_info['period']} pags/ciclo "
+            f"(confianza: {period_info['confidence']:.0%}, "
+            f"total esperado: {period_info['expected_total']})",
+            "info",
+        )
+
+    # ── Inference for remaining failures ──────────────────────────────────
     failed_count = sum(1 for r in reads_clean if r.method == "failed")
     if failed_count > 0:
-        on_log(f"Inferencia: procesando {failed_count} paginas fallidas...", "info")
-        reads_clean = _infer_missing(reads_clean)
+        on_log(f"Inferencia D-S: procesando {failed_count} paginas fallidas...", "info")
+        reads_clean = _infer_missing(reads_clean, period_info)
         inferred = sum(1 for r in reads_clean if r.method == "inferred")
         on_log(f"Inferencia: {inferred} paginas recuperadas", "ok")
 
@@ -544,6 +774,43 @@ def analyze_pdf(
 
     # ── Phase 4: Build documents from reads ───────────────────────────────
     documents = _build_documents(reads_clean, on_log, _issue)
+
+    # ── Phase 5: Undercount recovery ─────────────────────────────────────
+    # When a doc is incomplete (found < declared), check if the gap is
+    # caused by a wrong doc-start that should have been a continuation.
+    # E.g., doc A declares total=2 but has 1 page, and the next doc B
+    # starts with curr=1 inferred — B's first page should be A's page 2.
+    _uc_fixed = 0
+    for di in range(len(documents) - 1):
+        d = documents[di]
+        d_next = documents[di + 1]
+        missing = d.declared_total - d.found_total
+        if missing <= 0 or d.declared_total <= 1:
+            continue
+        # Check if next doc's start page is inferred and could be our missing page
+        if (d_next.found_total <= missing
+                and d_next.declared_total == d.declared_total):
+            # Find the reads for the next doc's pages and reassign
+            next_pages = d_next.pages + d_next.inferred_pages
+            for pp in next_pages:
+                rv = {r.pdf_page: r for r in reads_clean}
+                r = rv.get(pp)
+                if r and r.method == "inferred":
+                    r.curr = d.found_total + 1
+                    r.total = d.declared_total
+                    r.confidence = min(r.confidence + 0.10, 0.85)
+            # Merge: move pages into doc d, mark d_next for removal
+            d.inferred_pages.extend(next_pages)
+            d_next.pages.clear()
+            d_next.inferred_pages.clear()
+            d_next.declared_total = 0  # mark for removal
+            _uc_fixed += 1
+    if _uc_fixed:
+        documents = [d for d in documents if d.declared_total > 0]
+        # Re-index
+        for i, d in enumerate(documents):
+            d.index = i + 1
+        on_log(f"Recuperacion undercount: {_uc_fixed} docs completados", "ok")
 
     # ── Summary ───────────────────────────────────────────────────────────
     elapsed = time.time() - t0
@@ -594,6 +861,56 @@ def analyze_pdf(
         f"FAIL: {fail_str}",
         "ai",
     )
+
+    # AI inference telemetry — separate block for D-S + period analysis
+    _p = period_info
+    per_str = (f"P={_p['period']} conf={_p['confidence']:.0%} "
+               f"expect={_p['expected_total']}") if _p.get("period") else "none"
+    avg_inf_conf = (sum(r.confidence for r in inf_reads) / len(inf_reads)
+                    if inf_reads else 0.0)
+    n_consistent  = sum(1 for r in inf_reads if r.confidence >= 0.90)
+    n_conflicting = sum(1 for r in inf_reads if r.confidence < 0.45)
+
+    # Dense XVAL: full neighbor context, machine-optimized
+    # Method key: d=direct s=SR e=easyocr i=inferred f=failed
+    _M = {"direct": "d", "super_resolution": "s", "easyocr": "e",
+          "inferred": "i", "failed": "f"}
+    _rc = reads_clean
+    _rv = {r.pdf_page: r for r in _rc}  # lookup by page
+
+    def _nb(idx: int) -> str:
+        """Neighbor as curr/total+method_char."""
+        if idx < 0 or idx >= len(_rc):
+            return "-"
+        r = _rc[idx]
+        return f"{r.curr}/{r.total}{_M.get(r.method, '?')}"
+
+    xv_ok, xv_unk, xv_bad = [], [], []
+    for idx, r in enumerate(_rc):
+        if r.method != "inferred":
+            continue
+        c = int(r.confidence * 100)
+        # dense: page:prev>curr/total@conf>next
+        entry = f"{r.pdf_page}:{_nb(idx-1)}>{r.curr}/{r.total}@{c}>{_nb(idx+1)}"
+        if r.confidence >= 0.90:
+            xv_ok.append(entry)
+        elif r.confidence < 0.45:
+            xv_bad.append(entry)
+        else:
+            xv_unk.append(entry)
+
+    on_log(
+        f"[DS:{_CORE_HASH}] D:{len(documents)} P:{per_str}\n"
+        f"INF:{len(inf_reads)} x̄={avg_inf_conf:.0%} "
+        f"{n_consistent}✓{len(xv_unk)}~{n_conflicting}✗\n"
+        f"✓{','.join(xv_ok) or '-'}\n"
+        f"~{','.join(xv_unk) or '-'}\n"
+        f"✗{','.join(xv_bad) or '-'}",
+        "ai_inf",
+    )
+
+    # User-facing: inference engine version (visible in normal log)
+    on_log("Motor de inferencia: D-S v1 + deteccion de periodo", "section")
 
     return documents, reads_clean
 
@@ -699,8 +1016,9 @@ def re_infer_documents(
             r.total = None
             r.confidence = 0.0
 
-    # 2. Re-run inference cascade
-    reads = _infer_missing(reads)
+    # 2. Re-detect period from surviving OCR/manual reads, then re-infer
+    period_info = _detect_period(reads)
+    reads = _infer_missing(reads, period_info)
 
     # 3. Report remaining issues (<= 0.60)
     for r in reads:

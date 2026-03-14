@@ -88,7 +88,7 @@ function App() {
       const { type, payload } = data
 
       if (type === 'log') {
-        if (payload.level === 'ai') {
+        if (payload.level === 'ai' || payload.level === 'ai_inf') {
           setAiLogs(prev => [...prev, payload])
         } else if (payload.level === 'page_ok' || payload.level === 'page_warn') {
           setScanLine({ msg: payload.msg, level: payload.level })
@@ -769,7 +769,7 @@ function App() {
                   </div>
                   <div className="p-4 space-y-1">
                     {(aiLogMode ? aiLogs : logs).map((log, i) => (
-                      <div key={i} className={`whitespace-pre-wrap px-1 ${i % 2 === 1 && log.level === 'info' ? 'bg-white/[0.03]' : ''} ${log.level === 'ai' ? 'text-purple-400 font-bold bg-purple-900/20 px-2 py-0.5 rounded' : log.level === 'warn' ? 'text-warning' : log.level === 'error' ? 'text-error font-bold' : log.level === 'ok' || log.level === 'success' ? 'text-success' : log.level === 'file_hdr' ? 'text-accent font-bold mt-4 text-sm bg-accent/10 px-2 py-1 inline-block rounded' : log.level === 'section' ? 'text-gray-400 mt-2 italic' : 'text-gray-400'}`}>
+                      <div key={i} className={`whitespace-pre-wrap px-1 ${i % 2 === 1 && log.level === 'info' ? 'bg-white/[0.03]' : ''} ${log.level === 'ai_inf' ? 'text-violet-300 bg-violet-900/15 px-2 py-0.5 rounded' : log.level === 'ai' ? 'text-purple-400 font-bold bg-purple-900/20 px-2 py-0.5 rounded' : log.level === 'warn' ? 'text-warning' : log.level === 'error' ? 'text-error font-bold' : log.level === 'ok' || log.level === 'success' ? 'text-success' : log.level === 'file_hdr' ? 'text-accent font-bold mt-4 text-sm bg-accent/10 px-2 py-1 inline-block rounded' : log.level === 'section' ? 'text-gray-400 mt-2 italic' : 'text-gray-400'}`}>
                         {log.msg}
                       </div>
                     ))}
