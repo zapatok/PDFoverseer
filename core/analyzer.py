@@ -30,6 +30,7 @@ Compatibilidad V2/V3: todas las firmas publicas son identicas.
 
 from __future__ import annotations
 
+import hashlib
 import queue
 import re
 import threading
@@ -38,6 +39,9 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+# Auto-hash: changes every time this file is modified
+_CORE_HASH = hashlib.md5(Path(__file__).read_bytes()).hexdigest()[:8]
 
 import cv2
 import numpy as np
@@ -243,18 +247,14 @@ def _render_clip(page: fitz.Page, dpi: int = DPI) -> np.ndarray:
 EASYOCR_DPI = 300  # EasyOCR needs higher DPI for small text accuracy
 
 
-def _process_page(pdf_path: str, page_idx: int) -> _PageRead:
+def _process_page(doc: fitz.Document, page_idx: int) -> _PageRead:
     """
     Render one page clip and run Tesseract OCR (2 tiers).
-    Designed to run inside ThreadPoolExecutor — opens its own fitz.Document.
+    Receives a pre-opened fitz.Document from the caller's doc pool (one per thread).
     pytesseract launches tesseract.exe as subprocess → releases GIL → real parallelism.
     """
     pdf_page = page_idx + 1
-    doc = fitz.open(pdf_path)
-    try:
-        bgr = _render_clip(doc[page_idx])
-    finally:
-        doc.close()
+    bgr = _render_clip(doc[page_idx])
 
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
@@ -506,6 +506,20 @@ def analyze_pdf(
     gpu_thread = threading.Thread(target=_gpu_consumer, daemon=True, name="gpu-consumer")
     gpu_thread.start()
 
+    # ── Doc pool: one fitz.Document per worker thread ──────────────────────
+    # Opening the PDF once per thread (not once per page) avoids 2719 redundant
+    # fitz.open() calls for large files. Queue enforces exclusive per-thread access.
+    _doc_pool: queue.Queue[fitz.Document] = queue.Queue()
+    for _ in range(PARALLEL_WORKERS):
+        _doc_pool.put(fitz.open(pdf_path))
+
+    def _submit_page(page_idx: int) -> _PageRead:
+        doc = _doc_pool.get()
+        try:
+            return _process_page(doc, page_idx)
+        finally:
+            _doc_pool.put(doc)
+
     # ── Producers: Parallel Tesseract OCR ─────────────────────────────────
     with ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as pool:
         for batch_start in range(0, total_pages, BATCH_SIZE):
@@ -513,6 +527,8 @@ def analyze_pdf(
                 on_log("Analisis abortado a peticion del usuario.", "warn")
                 gpu_queue.put(None)
                 gpu_thread.join(timeout=5)
+                while not _doc_pool.empty():
+                    _doc_pool.get_nowait().close()
                 return [], []
 
             if pause_event is not None:
@@ -521,7 +537,7 @@ def analyze_pdf(
             batch_end = min(batch_start + BATCH_SIZE, total_pages)
 
             future_to_idx = {
-                pool.submit(_process_page, pdf_path, i): i
+                pool.submit(_submit_page, i): i
                 for i in range(batch_start, batch_end)
             }
 
@@ -550,6 +566,10 @@ def analyze_pdf(
 
                 if on_progress:
                     on_progress(pdf_page, total_pages)
+
+    # ── Close worker doc pool ─────────────────────────────────────────────
+    while not _doc_pool.empty():
+        _doc_pool.get_nowait().close()
 
     # ── Signal GPU consumer to stop and wait ──────────────────────────────
     gpu_queue.put(None)
@@ -591,18 +611,45 @@ def analyze_pdf(
         "info",
     )
 
-    # AI-compact summary (one line, token-efficient)
+    # AI-compact summary — dense diagnostic block for Claude analysis
     fname = Path(pdf_path).name
-    docs_ok = sum(1 for d in documents if d.is_complete)
-    docs_bad = len(documents) - docs_ok
-    mstr = "|".join(f"{k}:{v}" for k, v in method_tally.items() if v)
-    issue_count = sum(
-        1 for r in reads_clean if r.method == "inferred" and r.confidence <= 0.60
-    )
+    mstr = ",".join(f"{k}:{v}" for k, v in method_tally.items() if v)
+
+    # Per-document breakdown: D1[p1-5:5/5✓] D2[p6-12:7/7✗seq+inf2]
+    _mabbr = {"pdftext": "pdf", "tesseract": "tess", "sr_tesseract": "sr",
+               "easyocr": "gpu", "inferred": "inf", "failed": "fail",
+               "manual": "man", "excluded": "excl"}
+    doc_parts = []
+    for d in documents:
+        all_pp = sorted(d.pages + d.inferred_pages)
+        p_end = all_pp[-1] if all_pp else d.start_pdf_page
+        status = "✓" if d.is_complete else "✗"
+        flags = []
+        if not d.sequence_ok: flags.append("seq")
+        if d.inferred_pages: flags.append(f"inf{len(d.inferred_pages)}")
+        fsuffix = "+" + ",".join(flags) if flags else ""
+        doc_parts.append(f"D{d.index}[p{d.start_pdf_page}-{p_end}:{d.found_total}/{d.declared_total}{status}{fsuffix}]")
+    docs_str = " ".join(doc_parts) if doc_parts else "none"
+
+    # Inferred pages with confidence: p3=1/5(82%) p11=5/7(45%↓)
+    inf_parts = [
+        f"p{r.pdf_page}={r.curr}/{r.total}({r.confidence:.0%}{'↓' if r.confidence < 0.60 else ''})"
+        for r in reads_clean if r.method == "inferred"
+    ]
+    inf_str = " ".join(inf_parts) if inf_parts else "none"
+
+    # Failed pages (unreadable)
+    failed_pp = [r.pdf_page for r in reads_clean if r.method == "failed"]
+    fail_str = ",".join(map(str, failed_pp)) if failed_pp else "none"
+
+    # Low-confidence issue count
+    iss_count = sum(1 for r in reads_clean if r.method == "inferred" and r.confidence <= 0.60)
+
     on_log(
-        f"[AI]{fname}|{total_pages}p|{elapsed:.1f}s|"
-        f"{elapsed / total_pages * 1000:.0f}ms/p|{mstr}|"
-        f"docs:{docs_ok}ok+{docs_bad}bad|issues:{issue_count}",
+        f"[AI:{_CORE_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
+        f" | W{PARALLEL_WORKERS}+GPU | {mstr}\n"
+        f"DOCS: {docs_str}\n"
+        f"INF: {inf_str} | FAIL: {fail_str} | ISS: {iss_count}",
         "ai",
     )
 
