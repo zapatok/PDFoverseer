@@ -8,6 +8,15 @@ function App() {
   const [globalProg, setGlobalProg] = useState({ done: 0, total: 0, elapsed: 0, eta: 0, paused: false })
   const [fileProg, setFileProg] = useState({ done: 0, total: 0, filename: '' })
   const [logs, setLogs] = useState([])
+  const [aiLogs, setAiLogs] = useState([])
+  const [scanLine, setScanLine] = useState(null) // spinning page indicator
+  const [spinFrame, setSpinFrame] = useState(0)
+  const SPINNER = ['/', '-', '\\', '|']
+
+  useEffect(() => {
+    const id = setInterval(() => setSpinFrame(f => (f + 1) % 4), 80)
+    return () => clearInterval(id)
+  }, [])
 
   const [status, setStatus] = useState('idle') // idle, running, stopped
   const [selectedIssue, setSelectedIssue] = useState(null)
@@ -23,15 +32,18 @@ function App() {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isAlert: false });
   const [showTerminal, setShowTerminal] = useState(true)
   const [terminalMenuOpen, setTerminalMenuOpen] = useState(false)
+  const [aiLogMode, setAiLogMode] = useState(false)
 
   const handleCopyLogs = () => {
-    const text = logs.map(l => l.msg).join('\n');
+    const filtered = aiLogMode ? aiLogs : logs;
+    const text = filtered.map(l => l.msg).join('\n');
     navigator.clipboard.writeText(text);
     setTerminalMenuOpen(false);
   };
 
   const handleExportLogs = () => {
-    const text = logs.map(l => l.msg).join('\n');
+    const filtered = aiLogMode ? aiLogs : logs;
+    const text = filtered.map(l => l.msg).join('\n');
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -76,7 +88,14 @@ function App() {
       const { type, payload } = data
 
       if (type === 'log') {
-        setLogs(prev => [...prev.slice(-99), payload])
+        if (payload.level === 'ai') {
+          setAiLogs(prev => [...prev, payload])
+        } else if (payload.level === 'page_ok' || payload.level === 'page_warn') {
+          setScanLine({ msg: payload.msg, level: payload.level })
+        } else {
+          if (payload.level === 'file_hdr') setScanLine(null)
+          setLogs(prev => [...prev.slice(-199), payload])
+        }
       } else if (type === 'status_update') {
         setPdfs(prev => {
           const arr = [...prev]
@@ -100,6 +119,7 @@ function App() {
         setMetrics(payload)
       } else if (type === 'process_finished') {
         setStatus('idle')
+        setScanLine(null)
       }
     }
 
@@ -176,6 +196,8 @@ function App() {
         setPdfs([])
         setIssues([])
         setLogs([])
+        setAiLogs([])
+        setScanLine(null)
         setMetrics({ docs: 0, complete: 0, incomplete: 0, inferred: 0 })
         setGlobalProg({ done: 0, total: 0, elapsed: 0, eta: 0, paused: false })
         setFileProg({ done: 0, total: 0, filename: '' })
@@ -261,6 +283,8 @@ function App() {
 
   const handleStart = async (startIndex = 0) => {
     setLogs([])
+    setAiLogs([])
+    setScanLine(null)
     setStatus('running')
     setGlobalProg(prev => ({ ...prev, paused: false }))
     await fetch('http://localhost:8000/api/start', {
@@ -727,7 +751,11 @@ function App() {
                     <span className="text-gray-500 uppercase font-bold tracking-widest text-[10px]">Terminal de Procesos</span>
                     
                     <div className="flex items-center space-x-3 h-full">
-                      <button onClick={handleCopyLogs} className="bg-transparent border-none outline-none focus:outline-none text-[#842029] hover:text-[#dc3545] transition-colors" title="Copiar Logs">
+                      <button onClick={() => setAiLogMode(v => !v)} className={`border-none outline-none focus:outline-none font-bold text-[10px] tracking-wider px-2 py-0.5 rounded transition-all ${aiLogMode ? 'bg-purple-600 text-white' : 'bg-transparent text-purple-400 hover:text-purple-300'}`} title="Modo AI Log (compacto para Claude)">
+                        AI
+                      </button>
+                      <div className="w-px h-4 bg-white/10"></div>
+                      <button onClick={handleCopyLogs} className="bg-transparent border-none outline-none focus:outline-none text-[#842029] hover:text-[#dc3545] transition-colors" title={aiLogMode ? "Copiar AI Logs" : "Copiar Logs"}>
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                       </button>
                       <button onClick={handleExportLogs} className="bg-transparent border-none outline-none focus:outline-none text-[#842029] hover:text-[#dc3545] transition-colors" title="Exportar a TXT">
@@ -740,11 +768,16 @@ function App() {
                     </div>
                   </div>
                   <div className="p-4 space-y-1">
-                    {logs.map((log, i) => (
-                      <div key={i} className={`whitespace-pre-wrap ${log.level === 'warn' ? 'text-warning' : log.level === 'error' ? 'text-error font-bold' : log.level === 'ok' || log.level === 'success' ? 'text-success' : log.level === 'file_hdr' ? 'text-accent font-bold mt-4 text-sm bg-accent/10 px-2 py-1 inline-block rounded' : log.level === 'section' ? 'text-gray-400 mt-2 italic' : 'text-gray-400'}`}>
+                    {(aiLogMode ? aiLogs : logs).map((log, i) => (
+                      <div key={i} className={`whitespace-pre-wrap px-1 ${i % 2 === 1 && log.level === 'info' ? 'bg-white/[0.03]' : ''} ${log.level === 'ai' ? 'text-purple-400 font-bold bg-purple-900/20 px-2 py-0.5 rounded' : log.level === 'warn' ? 'text-warning' : log.level === 'error' ? 'text-error font-bold' : log.level === 'ok' || log.level === 'success' ? 'text-success' : log.level === 'file_hdr' ? 'text-accent font-bold mt-4 text-sm bg-accent/10 px-2 py-1 inline-block rounded' : log.level === 'section' ? 'text-gray-400 mt-2 italic' : 'text-gray-400'}`}>
                         {log.msg}
                       </div>
                     ))}
+                    {scanLine && (
+                      <div className={`whitespace-pre-wrap px-1 font-bold ${scanLine.level === 'page_warn' ? 'text-yellow-500/70' : 'text-gray-500'}`}>
+                        <span className="text-cyan-500 mr-2">{SPINNER[spinFrame]}</span>{scanLine.msg}
+                      </div>
+                    )}
                     <div ref={logsEndRef} />
                   </div>
                 </div>
