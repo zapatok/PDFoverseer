@@ -527,14 +527,20 @@ def analyze_pdf(
         inferred = sum(1 for r in reads_clean if r.method == "inferred")
         on_log(f"Inferencia: {inferred} paginas recuperadas", "ok")
 
-    # Report inferred pages with low/medium confidence as issues
+    # Report inferred pages with low/medium confidence as issues — grouped by pattern
+    from collections import defaultdict as _dd
+    inf_groups: dict = _dd(list)
     for r in reads_clean:
         if r.method == "inferred" and r.confidence <= 0.60:
             conf_label = "MEDIA" if r.confidence >= 0.50 else "BAJA"
+            key = (r.curr, r.total, conf_label, f"{r.confidence:.0%}")
+            inf_groups[key].append(r.pdf_page)
             detail = (f"Pag {r.pdf_page}: inferida como {r.curr}/{r.total} "
                       f"(confianza {conf_label}: {r.confidence:.0%})")
-            on_log(f"  -> {detail}", "warn")
             _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail)
+    for (curr, total, conf_label, conf_pct), pages in inf_groups.items():
+        pages_str = ", ".join(map(str, pages))
+        on_log(f"  -> inferida {curr}/{total} {conf_label}({conf_pct}): pags {pages_str}", "warn")
 
     # ── Phase 4: Build documents from reads ───────────────────────────────
     documents = _build_documents(reads_clean, on_log, _issue)
@@ -549,42 +555,43 @@ def analyze_pdf(
         "info",
     )
 
-    # AI-compact summary — dense diagnostic block for Claude analysis
+    # AI-compact summary — scales to any PDF size
     fname = Path(pdf_path).name
     mstr = ",".join(f"{k}:{v}" for k, v in method_tally.items() if v)
 
-    # Per-document breakdown: D1[p1-5:5/5✓] D2[p6-12:7/7✗seq+inf2]
-    doc_parts = []
-    for d in documents:
-        all_pp = sorted(d.pages + d.inferred_pages)
-        p_end = all_pp[-1] if all_pp else d.start_pdf_page
-        status = "✓" if d.is_complete else "✗"
-        flags = []
-        if not d.sequence_ok: flags.append("seq")
-        if d.inferred_pages: flags.append(f"inf{len(d.inferred_pages)}")
-        fsuffix = "+" + ",".join(flags) if flags else ""
-        doc_parts.append(f"D{d.index}[p{d.start_pdf_page}-{p_end}:{d.found_total}/{d.declared_total}{status}{fsuffix}]")
-    docs_str = " ".join(doc_parts) if doc_parts else "none"
+    # Document size distribution: {declared_total: count}
+    from collections import Counter
+    size_dist = Counter(d.declared_total for d in documents)
+    dist_str = " ".join(f"{s}p×{c}" for s, c in sorted(size_dist.items()))
 
-    # Inferred pages with confidence: p3=1/5(82%) p11=5/7(45%↓)
-    inf_parts = [
-        f"p{r.pdf_page}={r.curr}/{r.total}({r.confidence:.0%}{'↓' if r.confidence < 0.60 else ''})"
-        for r in reads_clean if r.method == "inferred"
-    ]
-    inf_str = " ".join(inf_parts) if inf_parts else "none"
+    # Bad doc breakdown: seq-broken vs under-count
+    docs_ok  = sum(1 for d in documents if d.is_complete)
+    docs_bad = len(documents) - docs_ok
+    seq_broken  = sum(1 for d in documents if not d.sequence_ok)
+    undercount  = sum(1 for d in documents if d.sequence_ok and not d.is_complete)
+    bad_str = f"{docs_bad}bad(seq:{seq_broken} under:{undercount})" if docs_bad else "0bad"
 
-    # Failed pages (unreadable)
+    # Inferred confidence buckets
+    inf_reads = [r for r in reads_clean if r.method == "inferred"]
+    inf_low  = [r for r in inf_reads if r.confidence < 0.50]
+    inf_mid  = [r for r in inf_reads if 0.50 <= r.confidence <= 0.60]
+    inf_high = [r for r in inf_reads if r.confidence > 0.60]
+    # Show first 8 low-conf pages explicitly, rest as count
+    low_pages = [f"p{r.pdf_page}={r.curr}/{r.total}({r.confidence:.0%})" for r in inf_low[:8]]
+    if len(inf_low) > 8:
+        low_pages.append(f"...+{len(inf_low)-8}more")
+    low_str = " ".join(low_pages) if low_pages else "none"
+
+    # Failed pages still unresolved
     failed_pp = [r.pdf_page for r in reads_clean if r.method == "failed"]
-    fail_str = ",".join(map(str, failed_pp)) if failed_pp else "none"
-
-    # Low-confidence issue count
-    iss_count = sum(1 for r in reads_clean if r.method == "inferred" and r.confidence <= 0.60)
+    fail_str = f"{len(failed_pp)}pp:{','.join(map(str,failed_pp[:10]))}{'...' if len(failed_pp)>10 else ''}" if failed_pp else "none"
 
     on_log(
-        f"[AI:{_CORE_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
-        f" | W{PARALLEL_WORKERS}+GPU | {mstr}\n"
-        f"DOCS: {docs_str}\n"
-        f"INF: {inf_str} | FAIL: {fail_str} | ISS: {iss_count}",
+        f"[AI:{_CORE_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p | W{PARALLEL_WORKERS}+GPU\n"
+        f"OCR: {mstr}\n"
+        f"DOCS: {len(documents)}total → {docs_ok}ok+{bad_str} | dist: {dist_str}\n"
+        f"INF: {len(inf_reads)}total(low:{len(inf_low)} mid:{len(inf_mid)} hi:{len(inf_high)}) | LOW: {low_str}\n"
+        f"FAIL: {fail_str}",
         "ai",
     )
 
@@ -596,9 +603,10 @@ def _build_documents(
     on_log: callable,
     on_issue: callable,
 ) -> list[Document]:
-    documents: list[Document]   = []
-    current:   Document | None  = None
-    orphans:   list[int]        = []
+    documents:  list[Document]        = []
+    current:    Document | None       = None
+    orphans:    list[int]             = []
+    seq_breaks: list[tuple[int,int,int]] = []  # (pdf_page, curr, expected)
 
     for r in reads:
         if r.method == "excluded":
@@ -621,7 +629,7 @@ def _build_documents(
         elif curr is not None:
             if current is None:
                 orphans.append(pdf_page)
-                on_log(f"  -> huerfana: curr={curr} sin doc activo", "warn")
+                on_log(f"  -> pag {pdf_page}: huerfana curr={curr} sin doc activo", "warn")
                 on_issue(pdf_page, "huerfana", f"curr={curr} sin doc activo")
             else:
                 expected = current.found_total + 1
@@ -632,12 +640,22 @@ def _build_documents(
                 else:
                     current.sequence_ok = False
                     current.pages.append(pdf_page)
-                    detail = f"secuencia rota: curr={curr}, expected={expected}"
-                    on_log(f"  -> {detail}", "error")
+                    detail = f"Pag {pdf_page}: secuencia rota curr={curr}/expected={expected}"
                     on_issue(pdf_page, "secuencia rota", detail)
+                    seq_breaks.append((pdf_page, curr, expected))
 
     if current is not None:
         documents.append(current)
+
+    # Emit sequence breaks grouped by (curr, expected)
+    if seq_breaks:
+        from collections import defaultdict as _dd
+        grp: dict = _dd(list)
+        for pp, c, e in seq_breaks:
+            grp[(c, e)].append(pp)
+        for (c, e), pages in grp.items():
+            pages_str = ", ".join(map(str, pages))
+            on_log(f"  -> secuencia rota curr={c}/expected={e}: pags {pages_str}", "error")
 
     if orphans:
         on_log(f"Paginas huerfanas: {orphans}", "warn")
