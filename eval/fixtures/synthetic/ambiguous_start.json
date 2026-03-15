@@ -1,0 +1,15 @@
+{
+  "name": "ambiguous_start",
+  "source": "synthetic",
+  "reads": [
+    {"pdf_page": 0, "curr": 1, "total": 2, "method": "H", "confidence": 0.95},
+    {"pdf_page": 1, "curr": 2, "total": 2, "method": "H", "confidence": 0.93},
+    {"pdf_page": 2, "curr": null, "total": null, "method": "failed", "confidence": 0.0},
+    {"pdf_page": 3, "curr": null, "total": null, "method": "failed", "confidence": 0.0},
+    {"pdf_page": 4, "curr": 3, "total": 3, "method": "H", "confidence": 0.92},
+    {"pdf_page": 5, "curr": 1, "total": 4, "method": "H", "confidence": 0.91},
+    {"pdf_page": 6, "curr": 2, "total": 4, "method": "H", "confidence": 0.90},
+    {"pdf_page": 7, "curr": 3, "total": 4, "method": "H", "confidence": 0.89},
+    {"pdf_page": 8, "curr": 4, "total": 4, "method": "H", "confidence": 0.88}
+  ]
+}

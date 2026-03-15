@@ -6,9 +6,9 @@
   "CH_74": {"doc_count": 0,   "complete_count": 0,   "inferred_count": 0},
   "HLL":   {"doc_count": 0,   "complete_count": 0,   "inferred_count": 0},
   "INS_31":{"doc_count": 4,   "complete_count": 3,   "inferred_count": 2},
-  "ins31_gap":       {"doc_count": 2, "complete_count": 1, "inferred_count": 1},
+  "ins31_gap":       {"doc_count": 2, "complete_count": 2, "inferred_count": 1},
   "undercount_chain":{"doc_count": 1, "complete_count": 1, "inferred_count": 1},
-  "ambiguous_start": {"doc_count": 3, "complete_count": 3, "inferred_count": 2},
+  "ambiguous_start": {"doc_count": 3, "complete_count": 2, "inferred_count": 2},
   "noisy_period":    {"doc_count": 1, "complete_count": 0, "inferred_count": 0},
   "seq_break":       {"doc_count": 1, "complete_count": 1, "inferred_count": 1},
   "ds_conflict":     {"doc_count": 1, "complete_count": 0, "inferred_count": 3}
