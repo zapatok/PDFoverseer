@@ -43,3 +43,9 @@ frontend/dist/
 # Node
 node_modules/
 package-lock.json
+
+# Git worktrees
+.worktrees/
+
+# Eval sweep results
+eval/results/
