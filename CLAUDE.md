@@ -1,0 +1,154 @@
+# PDFoverseer
+
+**PDF document analyzer** that counts internal documents in lecture PDFs (CRS) using an OCR + AI inference engine.
+
+## Quick Start
+
+```bash
+# Backend (inference + API)
+source .venv-cuda/Scripts/activate  # or: .\.venv-cuda\Scripts\activate (Windows)
+python server.py                     # FastAPI on http://localhost:8000
+
+# Frontend (React UI)
+cd frontend && npm run dev           # Vite on http://localhost:5173
+
+# Tests
+pytest
+```
+
+## Tech Stack
+
+- **Backend:** Python 3.10+ with CUDA GPU, FastAPI, PyMuPDF, Tesseract, EasyOCR
+- **Frontend:** React + Vite, react-zoom-pan-pinch
+- **OCR Pipeline:** V4 (producer-consumer) with GPU acceleration
+- **Inference:** 5-phase engine with Dempster-Shafer post-validation
+
+## Project Structure
+
+```
+├── core/
+│   ├── analyzer.py           # V4 Pipeline: Tesseract + SR + EasyOCR GPU
+│   └── __init__.py
+├── eval/                     # Evaluation harness (parameter sweep)
+│   ├── inference.py          # Parameterized copy of 5-phase pipeline
+│   ├── sweep.py              # LHS sample → fine grid → beam search
+│   ├── report.py             # Ranked results table
+│   ├── extract_fixtures.py   # One-time fixture extraction
+│   ├── fixtures/
+│   │   ├── real/             # 7 real PDFs (charlas CRS)
+│   │   └── synthetic/        # 6 synthetic test cases
+│   └── results/              # Sweep results (ignored)
+├── frontend/                 # React UI
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.js
+├── models/                   # FSRCNN_x4.pb (super-resolution)
+├── data/
+│   └── sessions/             # Session history (ignored)
+├── server.py                 # FastAPI backend
+├── app.py                    # GUI entry point
+├── history.py                # Session logging
+└── requirements.txt          # Python dependencies
+```
+
+## Architecture
+
+### V4 Pipeline (core/analyzer.py)
+
+**Producer-Consumer Pattern:**
+1. **Producers** (6 parallel workers): PyMuPDF rendering + Tesseract (Tier 1 + Tier 2 w/ SR)
+2. **GPU Consumer** (1 dedicated thread): EasyOCR on failed pages
+3. **Post-scan:**
+   - Period detection (autocorrelation)
+   - Dempster-Shafer evidence fusion
+   - Confidence calibration
+   - Report low-confidence inferred pages (<0.60)
+
+### Key Configurations
+
+```python
+DPI              = 150                    # Render DPI
+CROP_X_START     = 0.70                   # rightmost 30%
+CROP_Y_END       = 0.22                   # top 22%
+PARALLEL_WORKERS = 6                      # Tesseract concurrency
+BATCH_SIZE       = 12                     # Pages per pause checkpoint
+```
+
+### Page Number Pattern
+
+```regex
+P.{0,2}[gq](?:ina?)?\.?\s*(\d{1,3})\s*\.?\s*de\s*(\d{1,3})
+```
+Matches: "Página 1 de 10", "Pag 1 de 10", "page 1 of 10", etc. (Spanish-centric)
+
+## Development
+
+### Worktrees
+
+**Location:** `.worktrees/` (project-local, hidden)
+
+**Setup:** Use `superpowers:using-git-worktrees` skill to create isolated workspaces.
+
+### Running Evaluation Harness
+
+```bash
+# Extract fixtures (one-time)
+python eval/extract_fixtures.py
+
+# Run parameter sweep (3 passes: ~500k combos)
+python eval/sweep.py
+
+# Print ranked results
+python eval/report.py
+```
+
+### Key Commands
+
+| Command | Purpose |
+|---------|---------|
+| `python server.py` | Start FastAPI backend + WebSocket |
+| `cd frontend && npm run dev` | Start React dev server |
+| `python app.py` | Legacy GUI (Tkinter) |
+| `pytest` | Run test suite |
+
+## Important Notes
+
+### OCR Assumptions
+
+- **Spanish-centric regex** for "Página N de M" — adapt if needed for other languages
+- **Image preprocessing cascade:** Otsu → color removal → red channel → inpainting
+- **Tesseract config:** `--psm 6 --oem 1` (uniform block text)
+
+### GPU Pipeline
+
+- EasyOCR runs on GPU thread while Tesseract continues (concurrent)
+- Fallback only triggered if Tesseract tiers fail
+- GPU memory managed via single-threaded consumer
+
+### Inference Engine
+
+- **Phase 1–5:** OCR results → period detection → evidence fusion
+- **Confidence scores:** 0.0–1.0; <0.60 flagged as uncertain
+- **Period inference:** Autocorrelation + Dempster-Shafer + neighbor evidence
+
+## Conventions
+
+- **Commits:** English, format: `type(scope): message`
+  - Examples: `feat(ocr): add EasyOCR fallback`, `fix(inference): D-S calibration`
+- **Branches:** Feature branches from `master`
+  - Pattern: `feature/name` or `fix/issue-name`
+- **Tests:** Always pass before merge (no skipped/pending tests)
+- **DB mocking:** Avoid mocking in tests — use real fixtures where possible
+
+## Links
+
+- **Main branch:** `master`
+- **Active branch:** `feature/inference-engine`
+- **Eval spec:** `docs/superpowers/specs/2026-03-15-eval-harness-design.md`
+- **Eval plan:** `docs/superpowers/plans/2026-03-15-eval-harness.md`
+- **Memory:** `C:\Users\Daniel\.claude\projects\a--PROJECTS-PDFoverseer\memory\`
+
+## Pending Work
+
+- **INS_31:** Last-page inference gap + tray UX improvements to reduce human intervention
+- **Eval harness:** Complete parameter sweep implementation and tuning report
