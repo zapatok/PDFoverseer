@@ -100,12 +100,14 @@ PARAM_SPACE = {
     "xval_cap":         [0.40, 0.50, 0.60],            # cap applied when forward/backward disagree
 
     # Phase 4 — Fallback
-    "fallback_base":    [0.30, 0.40, 0.50],            # fallback base confidence
-    "fallback_hom_mul": [0.15, 0.20, 0.25],            # homogeneity multiplier for fallback
+    "fallback_base":     [0.30, 0.40, 0.50],            # low-hom fallback confidence
+    "fallback_hom_base": [0.20, 0.30, 0.40],            # high-hom formula intercept (was hardcoded 0.30)
+    "fallback_hom_mul":  [0.15, 0.20, 0.25],            # high-hom multiplier
 
     # Phase 5 — D-S post-validation
-    "ds_support_min":   [0.15, 0.20, 0.25],            # minimum D-S support to apply boost
-    "ds_boost_max":     [0.20, 0.25, 0.30],            # maximum boost from D-S evidence
+    # ds_support_min omitted: period evidence not ported into eval harness;
+    # support stays 0.0 — D-S fires only via neighbors_agree == 2.
+    "ds_boost_max":     [0.20, 0.25, 0.30],            # maximum boost from D-S neighbor evidence
 
     # Global
     "window":           [3, 5, 7],                      # local_total window size
