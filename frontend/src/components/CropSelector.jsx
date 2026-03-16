@@ -201,9 +201,9 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
         {/* Header */}
         <div className="flex justify-between items-center px-5 py-3 border-b border-[#313244]/60">
-          <span className="uppercase tracking-widest text-xs text-gray-300 font-bold">
+          <h2 className="text-2xl font-bold text-gray-100">
             Esc&aacute;ner
-          </span>
+          </h2>
           <button
             onClick={handleCancel}
             className="w-7 h-7 rounded-md flex items-center justify-center text-[#6c7086] hover:text-[#f38ba8] hover:bg-[#f38ba8]/10 transition-all duration-150"
@@ -218,7 +218,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
             ? 'bg-[#89b4fa]/8 border-[#89b4fa]/20'
             : 'bg-[#313244]/20 border-[#313244]/40'
         }`}>
-          <span className={`uppercase text-xs tracking-widest font-bold shrink-0 ${
+          <span className={`uppercase text-[10px] tracking-widest font-bold shrink-0 ${
             selectionMode ? 'text-[#89b4fa]' : 'text-gray-500'
           }`}>{modeLabel}:</span>
           <span className={`text-xs ${selectionMode ? 'text-[#89b4fa]/70' : 'text-[#6c7086]'}`}>{modeHint}</span>
@@ -326,7 +326,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
           <div className="flex-1" />
 
           {/* Right: MODO label + toggle | separator | Reset + Confirm */}
-          <span className="uppercase tracking-widest text-sm text-gray-500 font-bold shrink-0">Modo</span>
+          <span className="uppercase text-[10px] tracking-widest text-gray-500 font-bold shrink-0">Modo</span>
           <button
             onClick={() => setSelectionMode(!selectionMode)}
             className={`${btn} w-28 ${
