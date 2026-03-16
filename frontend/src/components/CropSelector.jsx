@@ -68,19 +68,13 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   };
 
   const handleZoomIn = () => {
-    if (transformRef.current) {
-      const newZoom = Math.min(200, zoomLevel + 25);
-      setZoomLevel(newZoom);
-      transformRef.current.setInstance({ scale: newZoom / 100 });
-    }
+    const newZoom = Math.min(200, zoomLevel + 25);
+    setZoomLevel(newZoom);
   };
 
   const handleZoomOut = () => {
-    if (transformRef.current) {
-      const newZoom = Math.max(50, zoomLevel - 25);
-      setZoomLevel(newZoom);
-      transformRef.current.setInstance({ scale: newZoom / 100 });
-    }
+    const newZoom = Math.max(50, zoomLevel - 25);
+    setZoomLevel(newZoom);
   };
 
   const handleReset = () => {
