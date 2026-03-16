@@ -64,7 +64,7 @@ function App() {
   const handleCropConfirm = (coords) => {
     setCropParams(coords);
     console.log('Crop parameters confirmed:', coords);
-    setShowCropSelector(false);
+    // Modal stays open - user can adjust or press Cancelar to close
   };
 
   const handleCropCancel = () => {

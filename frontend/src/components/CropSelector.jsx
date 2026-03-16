@@ -5,6 +5,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
   const containerRef = useRef(null);
+  const transformRef = useRef(null);
   const [selector, setSelector] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
@@ -24,6 +25,8 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
   const handleCanvasMouseDown = (e) => {
     if (confirmed || !selectionMode) return;
+    e.stopPropagation();
+    e.preventDefault();
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -33,6 +36,8 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
   const handleCanvasMouseMove = (e) => {
     if (!isDragging || !dragStart || confirmed || !selectionMode) return;
+    e.stopPropagation();
+    e.preventDefault();
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -45,7 +50,11 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     setSelector({ x_start, x_end, y_start, y_end });
   };
 
-  const handleCanvasMouseUp = () => {
+  const handleCanvasMouseUp = (e) => {
+    if (selectionMode) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
     setIsDragging(false);
   };
 
@@ -55,6 +64,22 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     setConfirmed(true);
     if (onConfirm) {
       onConfirm(selector);
+    }
+  };
+
+  const handleZoomIn = () => {
+    if (transformRef.current) {
+      const newZoom = Math.min(200, zoomLevel + 25);
+      setZoomLevel(newZoom);
+      transformRef.current.setInstance({ scale: newZoom / 100 });
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (transformRef.current) {
+      const newZoom = Math.max(50, zoomLevel - 25);
+      setZoomLevel(newZoom);
+      transformRef.current.setInstance({ scale: newZoom / 100 });
     }
   };
 
@@ -152,7 +177,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
         {/* Canvas Container */}
         <div ref={containerRef} className="flex-1 overflow-hidden bg-surface m-4 rounded-lg flex items-center justify-center">
-          <TransformWrapper initialScale={1}>
+          <TransformWrapper initialScale={1} ref={transformRef}>
             <TransformComponent>
               <canvas
                 ref={canvasRef}
@@ -183,13 +208,13 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSelectionMode(!selectionMode)}
-              className={`py-1.5 px-3 rounded border text-sm font-medium transition-colors ${
+              className={`py-1.5 px-3 rounded border text-sm font-medium transition-colors w-40 ${
                 selectionMode
                   ? 'bg-accent text-base border-accent'
                   : 'bg-panel hover:bg-surface text-gray-300 border-[#313244]'
               }`}
             >
-              {selectionMode ? '✓ Modo Seleccionar' : 'Modo Pan/Zoom'}
+              {selectionMode ? '✓ Seleccionar' : 'Pan/Zoom'}
             </button>
           </div>
 
@@ -221,14 +246,14 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
           {/* Zoom Controls */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setZoomLevel(Math.max(50, zoomLevel - 25))}
+              onClick={handleZoomOut}
               className="bg-panel hover:bg-surface text-gray-300 py-1 px-3 rounded border border-[#313244] text-sm"
             >
               Alejar −
             </button>
             <span className="text-gray-400 text-sm w-16 text-center">{zoomLevel}%</span>
             <button
-              onClick={() => setZoomLevel(Math.min(200, zoomLevel + 25))}
+              onClick={handleZoomIn}
               className="bg-panel hover:bg-surface text-gray-300 py-1 px-3 rounded border border-[#313244] text-sm"
             >
               Acercar +
