@@ -12,6 +12,7 @@ params keys (all required):
     xval_cap                                  — Phase 3
     fallback_base, fallback_hom_base, fallback_hom_mul  — Phase 4
     ds_boost_max                              — Phase 5 (period evidence not ported)
+    min_conf_for_new_doc                      — Phase 6 (orphan suppression)
     window, hom_threshold                     — Global
 """
 from __future__ import annotations
@@ -27,6 +28,8 @@ class PageRead:
     total:      int | None
     method:     str
     confidence: float
+    # Internal flag set during inference (not in fixture JSON — has default):
+    _ph1_orphan_candidate: bool = field(default=False, repr=False, compare=False)
 
 
 @dataclass
@@ -134,6 +137,19 @@ def _infer(reads: list[PageRead], params: dict) -> None:
                         r.curr, r.total = prev.curr + 1, prev.total
                         r.method, r.confidence = "inferred", back_conf
 
+    # ── Phase 1b: Orphan candidate marking ──────────────────────────
+    # An inferred curr==1 page whose immediate next page is also curr==1
+    # (confirmed or inferred) is a "Phase 1 orphan candidate": it claims
+    # to start a new multi-page doc but the very next page restarts again,
+    # which is inconsistent. Phase 3 will cap its confidence via xval_cap.
+    # This flag lets Phase 6 suppress only these pages (not Phase 4 fallbacks).
+    for i in range(n - 1):
+        r = reads[i]
+        if r.method == "inferred" and r.curr == 1:
+            nxt = reads[i + 1]
+            if nxt.curr == 1:
+                r._ph1_orphan_candidate = True
+
     # ── Phase 3: Cross-validation ────────────────────────────────────
     for i in range(n):
         r = reads[i]
@@ -194,6 +210,23 @@ def _infer(reads: list[PageRead], params: dict) -> None:
         if neighbors_agree == 2:
             boost = min(neighbors_agree * 0.08 + prior_support * 0.05, ds_boost_max)
             r.confidence = min(r.confidence + boost, 0.75)
+
+    # ── Phase 6: Orphan suppression ──────────────────────────────────
+    # Suppress Phase-1 orphan candidates whose final confidence (after Phase 3
+    # xval_cap and Phase 5 D-S) is below the threshold.
+    # ONLY targets _ph1_orphan_candidate pages — pages assigned curr=1 by Phase 1
+    # that are immediately followed by another curr=1 (structural inconsistency).
+    # Phase-4 fallbacks (also curr=1) are never _ph1_orphan_candidate and are
+    # therefore not suppressed, preventing regressions on data-poor regions.
+    min_conf_for_new_doc = params["min_conf_for_new_doc"]
+    if min_conf_for_new_doc > 0.0:
+        for r in reads:
+            if (r.method == "inferred" and r.curr == 1
+                    and r._ph1_orphan_candidate
+                    and r.confidence < min_conf_for_new_doc):
+                r.method = "excluded"
+                r.curr   = None
+                r.total  = None
 
 
 # ── Build Documents ──────────────────────────────────────────────────────────
