@@ -5,7 +5,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
   const containerRef = useRef(null);
-  const [selector, setSelector] = useState({ x_start: 0.25, x_end: 0.75, y_start: 0.25, y_end: 0.75 });
+  const [selector, setSelector] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -18,6 +18,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   useEffect(() => {
     if (!isOpen) {
       setConfirmed(false);
+      setSelector(null);
     }
   }, [isOpen]);
 
@@ -49,6 +50,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   };
 
   const handleConfirm = () => {
+    if (!selector) return;
     console.log({ ...selector });
     setConfirmed(true);
     if (onConfirm) {
@@ -57,7 +59,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   };
 
   const handleReset = () => {
-    setSelector({ x_start: 0.25, x_end: 0.75, y_start: 0.25, y_end: 0.75 });
+    setSelector(null);
     setConfirmed(false);
   };
 
@@ -102,22 +104,34 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     // Draw image
     ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
 
-    // Draw overlay (dark) - covers entire canvas
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(0, 0, displayWidth, displayHeight);
+    // Only show overlay and selection if selector is active
+    if (selector) {
+      // Draw overlay (dark) on areas OUTSIDE selection
+      const x = selector.x_start * displayWidth;
+      const y = selector.y_start * displayHeight;
+      const w = (selector.x_end - selector.x_start) * displayWidth;
+      const h = (selector.y_end - selector.y_start) * displayHeight;
 
-    // Clear selected area to show image beneath
-    const x = selector.x_start * displayWidth;
-    const y = selector.y_start * displayHeight;
-    const w = (selector.x_end - selector.x_start) * displayWidth;
-    const h = (selector.y_end - selector.y_start) * displayHeight;
+      // Dark overlay on entire canvas
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.fillRect(0, 0, displayWidth, displayHeight);
 
-    ctx.clearRect(x, y, w, h);
+      // Clear (brighten) the selected area
+      ctx.clearRect(x, y, w, h);
 
-    // Draw border around selection
-    ctx.strokeStyle = '#89b4fa';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(x, y, w, h);
+      // Redraw the image only in the selected area
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      ctx.clip();
+      ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+      ctx.restore();
+
+      // Draw border around selection
+      ctx.strokeStyle = '#89b4fa';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, w, h);
+    }
   }, [isOpen, selector, imageLoaded]);
 
   if (!isOpen) return null;
@@ -148,6 +162,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
                 onMouseLeave={handleCanvasMouseUp}
                 style={{
                   cursor: !selectionMode ? 'grab' : (confirmed ? 'default' : 'crosshair'),
+                  pointerEvents: selectionMode ? 'auto' : 'none',
                   touchAction: selectionMode ? 'none' : 'auto'
                 }}
                 className="border border-[#313244]"
@@ -222,13 +237,17 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
           {/* Coordinate Display */}
           <div className="bg-surface p-3 rounded border border-[#313244]">
-            <div className="text-xs text-gray-400 space-y-1 font-mono">
-              <div>x_start: {selector.x_start.toFixed(3)} | x_end: {selector.x_end.toFixed(3)}</div>
-              <div>y_start: {selector.y_start.toFixed(3)} | y_end: {selector.y_end.toFixed(3)}</div>
-            </div>
+            {selector ? (
+              <div className="text-xs text-gray-400 space-y-1 font-mono">
+                <div>x_start: {selector.x_start.toFixed(3)} | x_end: {selector.x_end.toFixed(3)}</div>
+                <div>y_start: {selector.y_start.toFixed(3)} | y_end: {selector.y_end.toFixed(3)}</div>
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500 font-mono">Arrastra para seleccionar una zona</div>
+            )}
           </div>
 
-          {confirmed && (
+          {confirmed && selector && (
             <div className="bg-green-900/30 border border-green-700 text-green-300 p-2 rounded text-sm">
               ✓ Coordenadas capturadas: {JSON.stringify(selector)}
             </div>
@@ -238,13 +257,15 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
           <div className="flex gap-3">
             <button
               onClick={handleReset}
-              className="bg-panel hover:bg-surface text-gray-300 py-2 px-4 rounded border border-[#313244] text-sm flex-1"
+              disabled={!selector}
+              className="bg-panel hover:bg-surface text-gray-300 py-2 px-4 rounded border border-[#313244] text-sm flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Limpiar
             </button>
             <button
               onClick={handleConfirm}
-              className="bg-accent hover:bg-blue-500 text-base py-2 px-4 rounded text-sm flex-1 font-medium"
+              disabled={!selector || confirmed}
+              className="bg-accent hover:bg-blue-500 text-base py-2 px-4 rounded text-sm flex-1 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Seleccionar
             </button>
