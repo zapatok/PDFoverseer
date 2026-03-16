@@ -31,14 +31,25 @@ def _strip_accents(s: str) -> str:
 
 
 def _char_class(c: str) -> str:
-    """Return a regex character class for `c` including OCR alternatives."""
+    """Return a regex character class for `c` including OCR alternatives.
+
+    Includes both the accent-stripped form (matches normalized OCR) and the
+    original accented form (matches OCR output that preserves diacritics),
+    e.g. 'a' → [aá@à] so that both "Pagina" and "Página" are matched.
+    """
     base = _strip_accents(c).lower()
     alts = _ALTERNATIVES.get(base, [])
     chars: list[str] = [base]
+    seen: set[str] = {base}
     for alt in alts:
-        stripped = _strip_accents(alt).lower()
-        if stripped not in chars:
+        original = alt.lower()          # keep accent, normalize case
+        stripped = _strip_accents(original)
+        if original not in seen:        # accented form (matches real OCR output)
+            chars.append(original)
+            seen.add(original)
+        if stripped not in seen:        # stripped form (matches normalized output)
             chars.append(stripped)
+            seen.add(stripped)
     if len(chars) == 1:
         return re.escape(chars[0])
     inner = "".join(
@@ -48,7 +59,21 @@ def _char_class(c: str) -> str:
     return f"[{inner}]"
 
 
-def generate_charclass_pattern(word: str, min_prefix: int = 2) -> str:
+def _progressive_optional(parts: list[str]) -> str:
+    """Build a nested optional suffix so each char is independently optional.
+
+    E.g. ['A','B','C'] → '(?:A(?:B(?:C)?)?)?'
+
+    This lets the pattern match any prefix of the suffix, enabling
+    abbreviation forms like 'Pag' or 'Pagi' alongside the full 'Pagina'.
+    """
+    result = ""
+    for part in reversed(parts):
+        result = f"(?:{part}{result})?" if result else f"(?:{part})?"
+    return result
+
+
+def generate_charclass_pattern(word: str, min_prefix: int = 2, boundary: bool = True) -> str:
     """
     Generate a character-class regex pattern for `word`.
 
@@ -76,12 +101,12 @@ def generate_charclass_pattern(word: str, min_prefix: int = 2) -> str:
         prefix_pat = first + (".?" if n > min_prefix else "") + rest
 
     if suffix_chars:
-        suffix_pat = "".join(_char_class(c) for c in suffix_chars)
-        full_pat = prefix_pat + f"(?:{suffix_pat})?"
+        suffix_parts = [_char_class(c) for c in suffix_chars]
+        full_pat = prefix_pat + _progressive_optional(suffix_parts)
     else:
         full_pat = prefix_pat
 
-    return r"\b" + full_pat + r"\.?"
+    return (r"\b" if boundary else "") + full_pat + r"\.?"
 
 
 def generate_fuzzy_pattern(word: str, k: int = 1) -> str:

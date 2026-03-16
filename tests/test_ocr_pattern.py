@@ -32,6 +32,12 @@ def test_charclass_word_boundary():
     assert not pat.search("confirmar")
 
 
+def test_charclass_matches_accented_input():
+    # OCR may preserve the accent in output — á must be in the char class
+    pat = re.compile(generate_charclass_pattern("Pagina"), re.IGNORECASE)
+    assert pat.search("Página 3 de 8")
+
+
 # --- fuzzy pattern ---
 
 def test_fuzzy_matches_exact():
