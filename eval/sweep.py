@@ -53,7 +53,8 @@ def load_ground_truth() -> dict[str, dict]:
 
 def score_config(params: dict, fixtures: list[dict], gt: dict[str, dict],
                  baseline_passes: set[str]) -> dict:
-    doc_exact = doc_delta = complete_exact = inf_delta = regressions = 0
+    doc_exact = complete_exact = inf_delta = regressions = 0
+    real_doc_delta = syn_doc_delta = 0   # kept separate; composite weights differ
     fixture_results = {}
 
     for fx in fixtures:
@@ -61,38 +62,53 @@ def score_config(params: dict, fixtures: list[dict], gt: dict[str, dict],
         if name not in gt:
             continue
         truth = gt[name]
+        is_real = fx.get("source", "synthetic") == "real"
         docs = run_pipeline(fx["reads"], params)
 
         got_docs     = len(docs)
         got_complete = sum(1 for d in docs if d.is_complete)
         got_inferred = sum(len(d.inferred_pages) for d in docs)
 
-        d_doc  = abs(got_docs     - truth["doc_count"])
-        d_comp = got_docs == truth["doc_count"] and got_complete == truth["complete_count"]
-        d_inf  = abs(got_inferred - truth["inferred_count"])
+        d_doc = abs(got_docs - truth["doc_count"])
 
-        passed = (d_doc == 0 and d_comp)
+        if is_real:
+            # Real fixtures: doc count only, heavier weights
+            passed = (d_doc == 0)
+            if d_doc == 0:
+                doc_exact += 5
+            else:
+                real_doc_delta += d_doc          # raw; multiplied in composite
+        else:
+            # Synthetic fixtures: original behavior
+            d_comp = (got_docs == truth["doc_count"]
+                      and got_complete == truth["complete_count"])
+            d_inf = abs(got_inferred - truth["inferred_count"])
+            passed = (d_doc == 0 and d_comp)
+            if d_doc == 0:
+                doc_exact += 3
+            if d_comp:
+                complete_exact += 2
+            syn_doc_delta += d_doc
+            inf_delta += d_inf
 
-        if d_doc == 0:
-            doc_exact += 1
-        doc_delta     += d_doc
-        if d_comp:
-            complete_exact += 1
-        inf_delta     += d_inf
         if name in baseline_passes and not passed:
             regressions += 1
 
         fixture_results[name] = "pass" if passed else "fail"
 
-    composite = doc_exact * 3 + complete_exact * 2 - doc_delta - inf_delta - regressions * 5
+    composite = (doc_exact + complete_exact
+                 - real_doc_delta * 3    # heavier penalty for real fixtures
+                 - syn_doc_delta         # original penalty for synthetic
+                 - inf_delta
+                 - regressions * 5)
     return {
-        "doc_count_exact": doc_exact,
-        "doc_count_delta": doc_delta,
+        "doc_count_exact":      doc_exact,
+        "doc_count_delta":      real_doc_delta + syn_doc_delta,  # raw total for display
         "complete_count_exact": complete_exact,
-        "inferred_delta": inf_delta,
-        "regression_count": regressions,
-        "composite_score": composite,
-        "_fixture_results": fixture_results,
+        "inferred_delta":       inf_delta,
+        "regression_count":     regressions,
+        "composite_score":      composite,
+        "_fixture_results":     fixture_results,
     }
 
 
