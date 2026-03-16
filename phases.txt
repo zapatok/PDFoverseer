@@ -1,0 +1,40 @@
+7. Recomendación Final
+Implementación por fases:
+
+Fase A (impacto alto, esfuerzo bajo): Regex mejorado
+
+Ampliar _PAGE_RE a multi-formato
+Agregar corrección de dígitos OCR
+Estimación: ~2-3 horas de desarrollo
+Impacto esperado: recuperar 10-20% de páginas que hoy fallan por formato
+
+Fase B (impacto medio, esfuerzo bajo): Autocorrelación de período
+
+Agregar detección de período post-OCR
+Usar como evidencia adicional en _infer_missing
+Estimación: ~3-4 horas
+Dependencia: solo numpy + scipy (ya instalados)
+
+Fase C (impacto alto, esfuerzo medio): Dempster-Shafer para fusión de evidencia
+
+Reemplazar la lógica de confianza fija (0.95, 0.90, 0.70, 0.40) con fusión formal
+Combinar: vecinos + período + prior
+Estimación: ~4-6 horas
+Sin dependencias nuevas
+
+Fase D (impacto alto, esfuerzo alto): HMM como motor principal (opcional)
+
+Reemplazar _infer_missing completamente con Viterbi
+Estimación: ~8-12 horas
+Dependencia: hmmlearn (~5MB)
+Solo si las Fases A-C no dan suficiente mejora
+Lo que NO recomiendo:
+Deep Learning end-to-end: Entrenar un modelo para detectar números de página directamente. Requiere datos etiquetados que no tienes, y el regex mejorado + OCR existente debería ser suficiente.
+FFT/análisis espectral completo: Overkill para secuencias discretas cortas. La autocorrelación simple es suficiente.
+Grafos + Community Detection como método primario: Útil como validación pero no como motor principal.
+Resumen ejecutivo: El mayor impacto inmediato viene de mejorar el regex (Fase A) y agregar detección de período con fusión de evidencia (Fases B+C). Esto le daría al motor de inferencia una visión "macro" del documento que hoy no tiene, sin agregar dependencias pesadas ni tiempo de procesamiento significativo. Todo corre cómodamente en tu i7-8700 sin tocar la GPU.
+
+Lo que NO recomiendo:
+Deep Learning end-to-end: Entrenar un modelo para detectar números de página directamente. Requiere datos etiquetados que no tienes, y el regex mejorado + OCR existente debería ser suficiente.
+FFT/análisis espectral completo: Overkill para secuencias discretas cortas. La autocorrelación simple es suficiente.
+Grafos + Community Detection como método primario: Útil como validación pero no como motor principal.

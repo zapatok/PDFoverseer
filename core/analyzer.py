@@ -69,14 +69,20 @@ TESS_CONFIG      = "--psm 6 --oem 1"
 PARALLEL_WORKERS = 6      # concurrent Tesseract subprocesses
 BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
-# Page number pattern — original V4 regex
+# Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
     re.compile(
-        r"P.{0,2}[gq](?:ina?)?\.?\s*(\d{1,3})\s*\.?\s*de\s*(\d{1,3})",
+        r"P.{0,2}[gq](?:ina?)?\.?\s*([0-9OoIl|zZ]{1,3})\s*\.?\s*de\s*([0-9OoIl|zZ]{1,3})",
         re.IGNORECASE,
     ),
 ]
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
+
+# OCR digit normalization: handle Tesseract confusion
+_OCR_DIGIT = str.maketrans("OoIlzZ|", "0011220")
+def _to_int(s: str) -> int:
+    """Convert OCR-confused digits to int. E.g., 'O' → '0', 'l' → '1'."""
+    return int(s.translate(_OCR_DIGIT))
 
 
 # ── EasyOCR GPU (Tier 1.5) ───────────────────────────────────────────────────
@@ -206,7 +212,7 @@ def _parse(text: str) -> tuple[int | None, int | None]:
     for pat in _PAGE_PATTERNS:
         m = pat.search(t)
         if m:
-            c, tot = int(m.group(1)), int(m.group(2))
+            c, tot = _to_int(m.group(1)), _to_int(m.group(2))
             if 0 < c <= tot <= 99:
                 return c, tot
 
@@ -578,6 +584,104 @@ def _infer_missing(
     return reads
 
 
+# ── AI Telemetry ─────────────────────────────────────────────────────────────
+
+def _emit_ai_telemetry(
+    on_log: callable,
+    pdf_path,
+    documents: list["Document"],
+    reads_clean: list["_PageRead"],
+    period_info: dict,
+    elapsed: float,
+    total_pages: int,
+    method_tally: dict,
+) -> None:
+    """Emit [AI:] and [DS:] compact telemetry blocks to the log."""
+    fname = Path(pdf_path).name
+    mstr = ",".join(f"{k}:{v}" for k, v in method_tally.items() if v)
+
+    # Document size distribution
+    size_dist = Counter(d.declared_total for d in documents)
+    dist_str = " ".join(f"{s}p×{c}" for s, c in sorted(size_dist.items()))
+
+    # Bad doc breakdown: seq-broken vs under-count
+    docs_ok    = sum(1 for d in documents if d.is_complete)
+    docs_bad   = len(documents) - docs_ok
+    seq_broken = sum(1 for d in documents if not d.sequence_ok)
+    undercount = sum(1 for d in documents if d.sequence_ok and not d.is_complete)
+    bad_str = f"{docs_bad}bad(seq:{seq_broken} under:{undercount})" if docs_bad else "0bad"
+
+    # Inferred confidence buckets
+    inf_reads = [r for r in reads_clean if r.method == "inferred"]
+    inf_low   = [r for r in inf_reads if r.confidence < 0.50]
+    inf_mid   = [r for r in inf_reads if 0.50 <= r.confidence <= 0.60]
+    inf_high  = [r for r in inf_reads if r.confidence > 0.60]
+    low_pages = [f"p{r.pdf_page}={r.curr}/{r.total}({r.confidence:.0%})" for r in inf_low[:8]]
+    if len(inf_low) > 8:
+        low_pages.append(f"...+{len(inf_low)-8}more")
+    low_str = " ".join(low_pages) if low_pages else "none"
+
+    # Failed pages still unresolved
+    failed_pp = [r.pdf_page for r in reads_clean if r.method == "failed"]
+    fail_str = (
+        f"{len(failed_pp)}pp:{','.join(map(str, failed_pp[:10]))}"
+        f"{'...' if len(failed_pp) > 10 else ''}"
+        if failed_pp else "none"
+    )
+
+    on_log(
+        f"[AI:{_CORE_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p | W{PARALLEL_WORKERS}+GPU\n"
+        f"UI≡ DOC:{len(documents)} COM:{docs_ok} INC:{docs_bad} INF:{len(inf_reads)}\n"
+        f"OCR: {mstr}\n"
+        f"DOCS: {len(documents)}total → {docs_ok}ok+{bad_str} | dist: {dist_str}\n"
+        f"INF: {len(inf_reads)}total(low:{len(inf_low)} mid:{len(inf_mid)} hi:{len(inf_high)}) | LOW: {low_str}\n"
+        f"FAIL: {fail_str}",
+        "ai",
+    )
+
+    # [DS:] block — D-S inference telemetry + XVAL
+    _p = period_info
+    per_str = (
+        f"P={_p['period']} conf={_p['confidence']:.0%} expect={_p['expected_total']}"
+        if _p.get("period") else "none"
+    )
+    avg_inf_conf  = sum(r.confidence for r in inf_reads) / len(inf_reads) if inf_reads else 0.0
+    n_consistent  = sum(1 for r in inf_reads if r.confidence >= 0.90)
+    n_conflicting = sum(1 for r in inf_reads if r.confidence < 0.45)
+
+    _M = {"direct": "d", "super_resolution": "s", "easyocr": "e", "inferred": "i", "failed": "f"}
+    _rc = reads_clean
+
+    def _nb(idx: int) -> str:
+        if idx < 0 or idx >= len(_rc):
+            return "-"
+        r = _rc[idx]
+        return f"{r.curr}/{r.total}{_M.get(r.method, '?')}"
+
+    xv_ok, xv_unk, xv_bad = [], [], []
+    for idx, r in enumerate(_rc):
+        if r.method != "inferred":
+            continue
+        c = int(r.confidence * 100)
+        entry = f"{r.pdf_page}:{_nb(idx-1)}>{r.curr}/{r.total}@{c}>{_nb(idx+1)}"
+        if r.confidence >= 0.90:
+            xv_ok.append(entry)
+        elif r.confidence < 0.45:
+            xv_bad.append(entry)
+        else:
+            xv_unk.append(entry)
+
+    on_log(
+        f"[DS:{_CORE_HASH}] D:{len(documents)} P:{per_str}\n"
+        f"INF:{len(inf_reads)} x̄={avg_inf_conf:.0%} "
+        f"{n_consistent}✓{len(xv_unk)}~{n_conflicting}✗\n"
+        f"✓{','.join(xv_ok) or '-'}\n"
+        f"~{','.join(xv_unk) or '-'}\n"
+        f"✗{','.join(xv_bad) or '-'}",
+        "ai_inf",
+    )
+
+
 # ── Main analysis function ────────────────────────────────────────────────────
 
 def analyze_pdf(
@@ -775,6 +879,13 @@ def analyze_pdf(
     # ── Phase 4: Build documents from reads ───────────────────────────────
     documents = _build_documents(reads_clean, on_log, _issue)
 
+    # Telemetry snapshot BEFORE Phase 5 — Phase 5 directly manipulates the
+    # documents list but only mutates r.curr for inferred reads in reads_clean.
+    # _recalculate_metrics rebuilds from reads, so it also skips non-inferred
+    # first pages of absorbed docs.  Both give the same pre-Phase-5 count,
+    # which is what the UI displays.
+    _tele_docs = _build_documents(reads_clean, lambda m, l: None, lambda p, k, d: None)
+
     # ── Phase 5: Undercount recovery ─────────────────────────────────────
     # When a doc is incomplete (found < declared), check if the gap is
     # caused by a wrong doc-start that should have been a continuation.
@@ -812,6 +923,8 @@ def analyze_pdf(
             d.index = i + 1
         on_log(f"Recuperacion undercount: {_uc_fixed} docs completados", "ok")
 
+    # (_tele_docs captured above, before Phase 5)
+
     # ── Summary ───────────────────────────────────────────────────────────
     elapsed = time.time() - t0
     on_log(f"Metodos OCR: {method_tally}", "info")
@@ -821,95 +934,16 @@ def analyze_pdf(
         f"{PARALLEL_WORKERS}+1gpu workers)",
         "info",
     )
-
-    # AI-compact summary — scales to any PDF size
-    fname = Path(pdf_path).name
-    mstr = ",".join(f"{k}:{v}" for k, v in method_tally.items() if v)
-
-    # Document size distribution: {declared_total: count}
-    from collections import Counter
-    size_dist = Counter(d.declared_total for d in documents)
-    dist_str = " ".join(f"{s}p×{c}" for s, c in sorted(size_dist.items()))
-
-    # Bad doc breakdown: seq-broken vs under-count
-    docs_ok  = sum(1 for d in documents if d.is_complete)
-    docs_bad = len(documents) - docs_ok
-    seq_broken  = sum(1 for d in documents if not d.sequence_ok)
-    undercount  = sum(1 for d in documents if d.sequence_ok and not d.is_complete)
-    bad_str = f"{docs_bad}bad(seq:{seq_broken} under:{undercount})" if docs_bad else "0bad"
-
-    # Inferred confidence buckets
-    inf_reads = [r for r in reads_clean if r.method == "inferred"]
-    inf_low  = [r for r in inf_reads if r.confidence < 0.50]
-    inf_mid  = [r for r in inf_reads if 0.50 <= r.confidence <= 0.60]
-    inf_high = [r for r in inf_reads if r.confidence > 0.60]
-    # Show first 8 low-conf pages explicitly, rest as count
-    low_pages = [f"p{r.pdf_page}={r.curr}/{r.total}({r.confidence:.0%})" for r in inf_low[:8]]
-    if len(inf_low) > 8:
-        low_pages.append(f"...+{len(inf_low)-8}more")
-    low_str = " ".join(low_pages) if low_pages else "none"
-
-    # Failed pages still unresolved
-    failed_pp = [r.pdf_page for r in reads_clean if r.method == "failed"]
-    fail_str = f"{len(failed_pp)}pp:{','.join(map(str,failed_pp[:10]))}{'...' if len(failed_pp)>10 else ''}" if failed_pp else "none"
-
-    on_log(
-        f"[AI:{_CORE_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p | W{PARALLEL_WORKERS}+GPU\n"
-        f"OCR: {mstr}\n"
-        f"DOCS: {len(documents)}total → {docs_ok}ok+{bad_str} | dist: {dist_str}\n"
-        f"INF: {len(inf_reads)}total(low:{len(inf_low)} mid:{len(inf_mid)} hi:{len(inf_high)}) | LOW: {low_str}\n"
-        f"FAIL: {fail_str}",
-        "ai",
+    _emit_ai_telemetry(
+        on_log=on_log,
+        pdf_path=pdf_path,
+        documents=_tele_docs,
+        reads_clean=reads_clean,
+        period_info=period_info,
+        elapsed=elapsed,
+        total_pages=total_pages,
+        method_tally=method_tally,
     )
-
-    # AI inference telemetry — separate block for D-S + period analysis
-    _p = period_info
-    per_str = (f"P={_p['period']} conf={_p['confidence']:.0%} "
-               f"expect={_p['expected_total']}") if _p.get("period") else "none"
-    avg_inf_conf = (sum(r.confidence for r in inf_reads) / len(inf_reads)
-                    if inf_reads else 0.0)
-    n_consistent  = sum(1 for r in inf_reads if r.confidence >= 0.90)
-    n_conflicting = sum(1 for r in inf_reads if r.confidence < 0.45)
-
-    # Dense XVAL: full neighbor context, machine-optimized
-    # Method key: d=direct s=SR e=easyocr i=inferred f=failed
-    _M = {"direct": "d", "super_resolution": "s", "easyocr": "e",
-          "inferred": "i", "failed": "f"}
-    _rc = reads_clean
-    _rv = {r.pdf_page: r for r in _rc}  # lookup by page
-
-    def _nb(idx: int) -> str:
-        """Neighbor as curr/total+method_char."""
-        if idx < 0 or idx >= len(_rc):
-            return "-"
-        r = _rc[idx]
-        return f"{r.curr}/{r.total}{_M.get(r.method, '?')}"
-
-    xv_ok, xv_unk, xv_bad = [], [], []
-    for idx, r in enumerate(_rc):
-        if r.method != "inferred":
-            continue
-        c = int(r.confidence * 100)
-        # dense: page:prev>curr/total@conf>next
-        entry = f"{r.pdf_page}:{_nb(idx-1)}>{r.curr}/{r.total}@{c}>{_nb(idx+1)}"
-        if r.confidence >= 0.90:
-            xv_ok.append(entry)
-        elif r.confidence < 0.45:
-            xv_bad.append(entry)
-        else:
-            xv_unk.append(entry)
-
-    on_log(
-        f"[DS:{_CORE_HASH}] D:{len(documents)} P:{per_str}\n"
-        f"INF:{len(inf_reads)} x̄={avg_inf_conf:.0%} "
-        f"{n_consistent}✓{len(xv_unk)}~{n_conflicting}✗\n"
-        f"✓{','.join(xv_ok) or '-'}\n"
-        f"~{','.join(xv_unk) or '-'}\n"
-        f"✗{','.join(xv_bad) or '-'}",
-        "ai_inf",
-    )
-
-    # User-facing: inference engine version (visible in normal log)
     on_log("Motor de inferencia: D-S v1 + deteccion de periodo", "section")
 
     return documents, reads_clean

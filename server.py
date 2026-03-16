@@ -541,8 +541,22 @@ def _process_pdfs(start_index: int = 0):
                 break
             
             state.pdf_reads[str(pdf_path)] = reads
-            
+
             _recalculate_metrics()
+
+            # [UI:] line — actual UI counters after _recalculate_metrics rebuild
+            try:
+                from core.analyzer import _build_documents, _CORE_HASH
+                _ud = _build_documents(reads, lambda m, l: None, lambda p, k, d, i=None: None)
+                _uo = sum(1 for d in _ud if d.is_complete)
+                _ui = sum(len(d.inferred_pages) for d in _ud)
+                on_log(
+                    f"[UI:{_CORE_HASH}] {pdf_path.name} "
+                    f"DOC:{len(_ud)} COM:{_uo} INC:{len(_ud)-_uo} INF:{_ui}",
+                    "ai",
+                )
+            except Exception as _ui_err:
+                on_log(f"[UI:ERR] {pdf_path.name} — {_ui_err!r}", "ai")
             
             if state.stop_requested:
                 _emit("status_update", {"idx": idx, "status": "error"})
