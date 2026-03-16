@@ -184,10 +184,11 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
   if (!isOpen) return null;
 
-  // Instruction text based on current mode
-  const instructionText = selectionMode
-    ? 'Arrastra sobre el documento para seleccionar la zona de escaneo'
-    : 'Usa scroll para zoom y arrastra para mover el documento';
+  // Instruction bar content per mode
+  const modeLabel = selectionMode ? 'MODO SELECCIONAR' : 'MODO ZOOM/PAN';
+  const modeHint = selectionMode
+    ? 'Arrastra sobre el documento para delimitar la zona'
+    : 'Scroll para zoom, arrastra para mover';
 
   // Shared button styles — all h-8, consistent font
   const btn = 'h-8 px-3 rounded text-sm transition-all duration-150 shrink-0 select-none font-sans';
@@ -200,9 +201,9 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
         {/* Header */}
         <div className="flex justify-between items-center px-5 py-3 border-b border-[#313244]/60">
-          <h2 className="text-base font-semibold text-[#cdd6f4] font-sans tracking-tight">
+          <span className="uppercase text-[10px] tracking-widest text-gray-500 font-bold">
             Esc&aacute;ner
-          </h2>
+          </span>
           <button
             onClick={handleCancel}
             className="w-7 h-7 rounded-md flex items-center justify-center text-[#6c7086] hover:text-[#f38ba8] hover:bg-[#f38ba8]/10 transition-all duration-150"
@@ -212,12 +213,15 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
         </div>
 
         {/* Instruction bar */}
-        <div className={`px-5 py-1.5 text-xs font-sans border-b transition-colors duration-200 ${
+        <div className={`px-5 py-1.5 text-xs border-b transition-colors duration-200 flex items-center gap-2 ${
           selectionMode
-            ? 'bg-[#89b4fa]/8 border-[#89b4fa]/20 text-[#89b4fa]'
-            : 'bg-[#313244]/20 border-[#313244]/40 text-[#6c7086]'
+            ? 'bg-[#89b4fa]/8 border-[#89b4fa]/20'
+            : 'bg-[#313244]/20 border-[#313244]/40'
         }`}>
-          {instructionText}
+          <span className={`uppercase text-[10px] tracking-widest font-bold shrink-0 ${
+            selectionMode ? 'text-[#89b4fa]' : 'text-gray-500'
+          }`}>{modeLabel}:</span>
+          <span className={`text-xs ${selectionMode ? 'text-[#89b4fa]/70' : 'text-[#6c7086]'}`}>{modeHint}</span>
         </div>
 
         {/* Canvas Container */}
@@ -321,7 +325,8 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
           <div className="flex-1" />
 
-          {/* Right: Mode + Reset + Confirm */}
+          {/* Right: MODO label + toggle | separator | Reset + Confirm */}
+          <span className="uppercase text-[10px] tracking-widest text-gray-500 font-bold shrink-0">Modo</span>
           <button
             onClick={() => setSelectionMode(!selectionMode)}
             className={`${btn} w-28 ${
@@ -333,6 +338,8 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
             {selectionMode ? 'Seleccionar' : 'Zoom / Pan'}
           </button>
 
+          <div className="w-px h-5 bg-[#313244]/60" />
+
           <button onClick={handleReset} disabled={!selector} className={btnGhost}>
             Reset
           </button>
@@ -340,7 +347,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
           <button
             onClick={handleConfirmClick}
             disabled={!selector}
-            className={`${btn} bg-[#89b4fa] text-[#11111b] hover:bg-[#b4d0fb] active:bg-[#74a8f7] disabled:opacity-40 disabled:pointer-events-none font-medium`}
+            className={`${btn} bg-[#89b4fa] text-[#11111b] hover:bg-[#b4d0fb] active:bg-[#74a8f7] disabled:opacity-40 disabled:pointer-events-none`}
           >
             Confirmar
           </button>
@@ -350,10 +357,12 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
       {/* Confirmation Dialog */}
       {showConfirmDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" style={{ backdropFilter: 'blur(2px)' }}>
-          <div className="bg-[#1e1e2e] rounded-xl border border-[#313244] shadow-2xl p-5 w-80 flex flex-col gap-4">
-            <h3 className="text-sm font-semibold text-[#cdd6f4] font-sans">Confirmar coordenadas</h3>
+          <div className="bg-[#1e1e2e] rounded-xl border border-[#313244] shadow-2xl w-72 flex flex-col overflow-hidden">
+            <div className="px-4 pt-4 pb-3">
+              <span className="uppercase text-[10px] tracking-widest text-gray-500 font-bold">Confirmar coordenadas</span>
+            </div>
             {selector && (
-              <div className="bg-[#11111b] rounded-lg p-3 border border-[#313244]/50">
+              <div className="mx-4 bg-[#11111b] rounded-lg p-3 border border-[#313244]/50">
                 <div className="text-xs text-[#6c7086] font-mono space-y-1">
                   <div className="flex justify-between">
                     <span>x</span>
@@ -370,13 +379,13 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
                 </div>
               </div>
             )}
-            <div className="flex gap-2">
+            <div className="flex gap-2 p-4">
               <button onClick={handleConfirmBack} className={`${btnGhost} flex-1`}>
                 Volver
               </button>
               <button
                 onClick={handleConfirmYes}
-                className={`${btn} flex-1 bg-[#a6e3a1] text-[#11111b] hover:bg-[#b8eab3] active:bg-[#94d890] font-medium`}
+                className={`${btn} flex-1 bg-[#a6e3a1] text-[#11111b] hover:bg-[#b8eab3] active:bg-[#94d890]`}
               >
                 Confirmar
               </button>
