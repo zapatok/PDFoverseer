@@ -364,14 +364,45 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             ratio = agreeing / len(reads_with_total)
 
             if ratio >= ph5b_ratio_min:
-                for r in reads:
+                corrected_indices: set[int] = set()
+                for idx_r, r in enumerate(reads):
                     if (r.method not in ("failed", "inferred", "excluded")
                             and r.total is not None
                             and r.total != expected_total):
-                        r.curr = 1
-                        r.total = expected_total
+                        # Preserve curr if it fits within the expected total;
+                        # otherwise reset to 1.
+                        if r.curr is not None and 1 <= r.curr <= expected_total:
+                            r.total = expected_total
+                        else:
+                            r.curr = 1
+                            r.total = expected_total
                         r.method = "inferred"
                         r.confidence = 0.50
+                        corrected_indices.add(idx_r)
+
+                # Re-propagate: fix inferred pages downstream of corrected pages
+                # whose curr/total was derived from the now-corrected values.
+                if corrected_indices:
+                    for idx_r in sorted(corrected_indices):
+                        j = idx_r + 1
+                        while j < n:
+                            rj = reads[j]
+                            if rj.method != "inferred":
+                                break
+                            prev = reads[j - 1]
+                            if prev.curr is not None and prev.total is not None:
+                                if prev.curr == prev.total:
+                                    rj.curr = 1
+                                    rj.total = expected_total
+                                    rj.confidence = new_doc_base + _local_total(j)[1] * new_doc_hom_mul
+                                elif prev.curr < prev.total:
+                                    rj.curr = prev.curr + 1
+                                    rj.total = prev.total
+                                else:
+                                    break
+                            else:
+                                break
+                            j += 1
 
     # ── Phase 6: Orphan suppression ──────────────────────────────────
     # Suppress Phase-1 orphan candidates whose final confidence (after Phase 3
@@ -443,6 +474,15 @@ def _undercount_recovery(reads: list[PageRead], docs: list[Document]) -> list[Do
         if (d_next.found_total <= missing
                 and d_next.declared_total == d.declared_total):
             next_pages = d_next.pages + d_next.inferred_pages
+            # Guard: if the next doc contains a confirmed (OCR-read) curr==1
+            # page, it is a genuine new-document start — do NOT merge it.
+            has_confirmed_start = any(
+                reads_by_page[pp].curr == 1
+                and reads_by_page[pp].method not in ("inferred", "failed", "excluded")
+                for pp in next_pages if pp in reads_by_page
+            )
+            if has_confirmed_start:
+                continue
             for pp in next_pages:
                 r = reads_by_page.get(pp)
                 if r and r.method == "inferred":
