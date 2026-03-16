@@ -74,8 +74,8 @@ BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 # (Phase 3 xval_cap = 0.50) are excluded when their final confidence
 # is below this value. 0.0 = disabled. Sweep-validated: >=0.55 fixes
 # orphan over-counting across all fixtures without regressions.
-MIN_CONF_FOR_NEW_DOC = 0.75
-INFERENCE_ENGINE_VERSION = "6ph-t1"  # 6-phase + sweep-tuned params (run 1)
+MIN_CONF_FOR_NEW_DOC = 0.0
+INFERENCE_ENGINE_VERSION = "6ph-t2"  # 6-phase + undercount guard + Phase 5b
 
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
@@ -601,9 +601,66 @@ def _infer_missing(
 
             # Combine: period + neighbors + prior
             if support > 0.2 or neighbors_agree == 2:
-                boost = min(support * 0.10 + neighbors_agree * 0.08
-                            + prior_support * 0.05, 0.30)
+                boost = min(support * 0.10 + neighbors_agree * 0.10
+                            + prior_support * 0.05, 0.23)
                 r.confidence = min(r.confidence + boost, 0.75)
+
+    # ── Phase 5b: Period-contradiction correction ─────────────────────────────
+    # If dominant period is confident and most reads agree, correct reads that
+    # contradict the dominant total (e.g., misread "1/4" when period=1).
+    PH5B_CONF_MIN  = 0.69   # min period confidence to activate
+    PH5B_RATIO_MIN = 0.93   # min fraction of reads that must agree with period
+    if period is not None and period_conf >= PH5B_CONF_MIN:
+        expected_total = period_info.get("expected_total")
+        if expected_total is not None:
+            reads_with_total = [r for r in reads
+                                if r.method not in ("failed", "inferred", "excluded")
+                                and r.total is not None]
+            if reads_with_total:
+                agreeing = sum(1 for r in reads_with_total
+                               if r.total == expected_total)
+                ratio = agreeing / len(reads_with_total)
+
+                if ratio >= PH5B_RATIO_MIN:
+                    corrected_indices: set[int] = set()
+                    for idx_r, r in enumerate(reads):
+                        if (r.method not in ("failed", "inferred", "excluded")
+                                and r.total is not None
+                                and r.total != expected_total):
+                            # Preserve curr if it fits within the expected total;
+                            # otherwise reset to 1.
+                            if r.curr is not None and 1 <= r.curr <= expected_total:
+                                r.total = expected_total
+                            else:
+                                r.curr = 1
+                                r.total = expected_total
+                            r.method = "inferred"
+                            r.confidence = 0.50
+                            corrected_indices.add(idx_r)
+
+                    # Re-propagate: fix inferred pages downstream of corrected pages.
+                    if corrected_indices:
+                        for idx_r in sorted(corrected_indices):
+                            j = idx_r + 1
+                            while j < n:
+                                rj = reads[j]
+                                if rj.method != "inferred":
+                                    break
+                                prev = reads[j - 1]
+                                if prev.curr is not None and prev.total is not None:
+                                    if prev.curr == prev.total:
+                                        rj.curr = 1
+                                        rj.total = expected_total
+                                        lt, hom = _local_total(j)
+                                        rj.confidence = 0.60 + hom * 0.30
+                                    elif prev.curr < prev.total:
+                                        rj.curr = prev.curr + 1
+                                        rj.total = prev.total
+                                    else:
+                                        break
+                                else:
+                                    break
+                                j += 1
 
     # ── Phase 6: Orphan suppression ─────────────────────────────────
     # Exclude Phase-1 orphan candidates whose final confidence (after
@@ -934,6 +991,7 @@ def analyze_pdf(
     # caused by a wrong doc-start that should have been a continuation.
     # E.g., doc A declares total=2 but has 1 page, and the next doc B
     # starts with curr=1 inferred — B's first page should be A's page 2.
+    reads_by_page = {r.pdf_page: r for r in reads_clean}
     _uc_fixed = 0
     for di in range(len(documents) - 1):
         d = documents[di]
@@ -946,6 +1004,15 @@ def analyze_pdf(
                 and d_next.declared_total == d.declared_total):
             # Find the reads for the next doc's pages and reassign
             next_pages = d_next.pages + d_next.inferred_pages
+            # Guard: if the next doc contains a confirmed (OCR-read) curr==1
+            # page, it is a genuine new-document start — do NOT merge it.
+            has_confirmed_start = any(
+                reads_by_page[pp].curr == 1
+                and reads_by_page[pp].method not in ("inferred", "failed", "excluded")
+                for pp in next_pages if pp in reads_by_page
+            )
+            if has_confirmed_start:
+                continue
             for pp in next_pages:
                 rv = {r.pdf_page: r for r in reads_clean}
                 r = rv.get(pp)
