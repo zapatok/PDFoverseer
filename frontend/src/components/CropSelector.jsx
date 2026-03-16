@@ -140,6 +140,30 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     ctx.strokeStyle = '#89b4fa';
     ctx.lineWidth = 2;
     ctx.strokeRect(sx, sy, sw, sh);
+
+    // Corner coordinate labels
+    ctx.font = '11px monospace';
+    const pad = 4;
+    const labels = [
+      { text: `${selector.x_start.toFixed(2)}, ${selector.y_start.toFixed(2)}`, x: sx + pad, y: sy - pad, baseline: 'bottom' },
+      { text: `${selector.x_end.toFixed(2)}, ${selector.y_start.toFixed(2)}`, x: sx + sw - pad, y: sy - pad, baseline: 'bottom', align: 'right' },
+      { text: `${selector.x_start.toFixed(2)}, ${selector.y_end.toFixed(2)}`, x: sx + pad, y: sy + sh + pad, baseline: 'top' },
+      { text: `${selector.x_end.toFixed(2)}, ${selector.y_end.toFixed(2)}`, x: sx + sw - pad, y: sy + sh + pad, baseline: 'top', align: 'right' },
+    ];
+
+    for (const l of labels) {
+      ctx.textBaseline = l.baseline;
+      ctx.textAlign = l.align || 'left';
+      // Background pill
+      const m = ctx.measureText(l.text);
+      const bx = l.align === 'right' ? l.x - m.width - 4 : l.x - 2;
+      const by = l.baseline === 'bottom' ? l.y - 13 : l.y + 1;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(bx, by, m.width + 4, 14);
+      // Text
+      ctx.fillStyle = '#cdd6f4';
+      ctx.fillText(l.text, l.x, l.y);
+    }
   }, [selector, imageLoaded, canvasSize]);
 
   if (!isOpen) return null;
