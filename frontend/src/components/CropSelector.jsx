@@ -201,7 +201,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
         {/* Header */}
         <div className="flex justify-between items-center px-5 py-3 border-b border-[#313244]/60">
-          <span className="uppercase text-[10px] tracking-widest text-gray-500 font-bold">
+          <span className="uppercase tracking-widest text-xs text-gray-300 font-bold">
             Esc&aacute;ner
           </span>
           <button
@@ -218,7 +218,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
             ? 'bg-[#89b4fa]/8 border-[#89b4fa]/20'
             : 'bg-[#313244]/20 border-[#313244]/40'
         }`}>
-          <span className={`uppercase text-[10px] tracking-widest font-bold shrink-0 ${
+          <span className={`uppercase text-xs tracking-widest font-bold shrink-0 ${
             selectionMode ? 'text-[#89b4fa]' : 'text-gray-500'
           }`}>{modeLabel}:</span>
           <span className={`text-xs ${selectionMode ? 'text-[#89b4fa]/70' : 'text-[#6c7086]'}`}>{modeHint}</span>
@@ -326,7 +326,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
           <div className="flex-1" />
 
           {/* Right: MODO label + toggle | separator | Reset + Confirm */}
-          <span className="uppercase text-[10px] tracking-widest text-gray-500 font-bold shrink-0">Modo</span>
+          <span className="uppercase tracking-widest text-sm text-gray-500 font-bold shrink-0">Modo</span>
           <button
             onClick={() => setSelectionMode(!selectionMode)}
             className={`${btn} w-28 ${
@@ -359,7 +359,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" style={{ backdropFilter: 'blur(2px)' }}>
           <div className="bg-[#1e1e2e] rounded-xl border border-[#313244] shadow-2xl w-72 flex flex-col overflow-hidden">
             <div className="px-4 pt-4 pb-3">
-              <span className="uppercase text-[10px] tracking-widest text-gray-500 font-bold">Confirmar coordenadas</span>
+              <span className="uppercase tracking-widest text-xs text-gray-300 font-bold">Confirmar coordenadas</span>
             </div>
             {selector && (
               <div className="mx-4 bg-[#11111b] rounded-lg p-3 border border-[#313244]/50">
