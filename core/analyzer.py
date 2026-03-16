@@ -69,6 +69,13 @@ TESS_CONFIG      = "--psm 6 --oem 1"
 PARALLEL_WORKERS = 6      # concurrent Tesseract subprocesses
 BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
+# Orphan suppression threshold (Phase 6).
+# Inferred curr==1 pages sandwiched between two confirmed doc starts
+# (Phase 3 xval_cap = 0.50) are excluded when their final confidence
+# is below this value. 0.0 = disabled. Sweep-validated: >=0.55 fixes
+# orphan over-counting across all fixtures without regressions.
+MIN_CONF_FOR_NEW_DOC = 0.55
+
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
     re.compile(
@@ -202,6 +209,8 @@ class _PageRead:
     total:      int | None
     method:     str
     confidence: float
+    # Set by Phase 1b; not stored in sessions (has default):
+    _ph1_orphan_candidate: bool = field(default=False, repr=False, compare=False)
 
 
 # ── OCR helpers ───────────────────────────────────────────────────────────────
@@ -510,6 +519,20 @@ def _infer_missing(
                         r.method = "inferred"
                         r.confidence = 0.90
 
+    # ── Phase 1b: Orphan candidate marking ──────────────────────────
+    # Mark inferred curr==1 pages whose immediate next page is also
+    # curr==1. These are structural orphan candidates: a page claims to
+    # start a new doc but the very next page also restarts, which is
+    # inconsistent. Phase 3 will cap their confidence to 0.50 (xval_cap).
+    # Phase 6 then suppresses them if confidence < MIN_CONF_FOR_NEW_DOC.
+    # Phase-4 fallbacks are assigned after this pass and are never marked.
+    for i in range(n - 1):
+        r = reads[i]
+        if r.method == "inferred" and r.curr == 1:
+            nxt = reads[i + 1]
+            if nxt.curr == 1:
+                r._ph1_orphan_candidate = True
+
     # ── Phase 3: Cross-validation ───────────────────────────────────
     for i in range(n):
         r = reads[i]
@@ -580,6 +603,21 @@ def _infer_missing(
                 boost = min(support * 0.15 + neighbors_agree * 0.08
                             + prior_support * 0.05, 0.25)
                 r.confidence = min(r.confidence + boost, 0.75)
+
+    # ── Phase 6: Orphan suppression ─────────────────────────────────
+    # Exclude Phase-1 orphan candidates whose final confidence (after
+    # Phase 3 xval_cap + Phase 5 D-S boost) is below MIN_CONF_FOR_NEW_DOC.
+    # Only _ph1_orphan_candidate pages are eligible — this excludes Phase-4
+    # fallbacks (also curr==1) which are legitimate new-doc guesses in
+    # data-poor regions and must not be suppressed.
+    if MIN_CONF_FOR_NEW_DOC > 0.0:
+        for r in reads:
+            if (r.method == "inferred" and r.curr == 1
+                    and r._ph1_orphan_candidate
+                    and r.confidence < MIN_CONF_FOR_NEW_DOC):
+                r.method = "excluded"
+                r.curr   = None
+                r.total  = None
 
     return reads
 

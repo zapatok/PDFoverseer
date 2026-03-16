@@ -5,13 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from eval.inference import run_pipeline, PageRead
 
-PROD_PARAMS = {
-    "fwd_conf": 0.95, "new_doc_base": 0.60, "new_doc_hom_mul": 0.30,
-    "back_conf": 0.90, "xval_cap": 0.50,
-    "fallback_base": 0.40, "fallback_hom_base": 0.30, "fallback_hom_mul": 0.20,
-    "ds_boost_max": 0.25,
-    "window": 5, "hom_threshold": 0.85,
-}
+from eval.params import PRODUCTION_PARAMS as PROD_PARAMS
 
 
 def make_reads(specs):
