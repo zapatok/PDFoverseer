@@ -4,6 +4,7 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePath }) {
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
+  const containerRef = useRef(null);
   const [selector, setSelector] = useState({ x_start: 0.25, x_end: 0.75, y_start: 0.25, y_end: 0.75 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
@@ -11,6 +12,8 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   const [totalPages] = useState(1);
   const [zoomLevel, setZoomLevel] = useState(100);
   const [confirmed, setConfirmed] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(true);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -19,7 +22,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   }, [isOpen]);
 
   const handleCanvasMouseDown = (e) => {
-    if (confirmed) return;
+    if (confirmed || !selectionMode) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -28,7 +31,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   };
 
   const handleCanvasMouseMove = (e) => {
-    if (!isDragging || !dragStart || confirmed) return;
+    if (!isDragging || !dragStart || confirmed || !selectionMode) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -58,6 +61,10 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     setConfirmed(false);
   };
 
+  const handleImageLoad = () => {
+    setImageLoaded(true);
+  };
+
   const handleCancel = () => {
     if (onCancel) {
       onCancel();
@@ -65,37 +72,53 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   };
 
   useEffect(() => {
-    if (!isOpen || !canvasRef.current) return;
+    if (!imageLoaded || !canvasRef.current || !containerRef.current) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     const img = imageRef.current;
+    const container = containerRef.current;
 
     if (!img || !img.complete) return;
 
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    // Calculate dimensions to fit container
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    const imgAspect = img.naturalWidth / img.naturalHeight;
+    const containerAspect = containerWidth / containerHeight;
+
+    let displayWidth, displayHeight;
+    if (imgAspect > containerAspect) {
+      displayWidth = containerWidth;
+      displayHeight = containerWidth / imgAspect;
+    } else {
+      displayHeight = containerHeight;
+      displayWidth = containerHeight * imgAspect;
+    }
+
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
 
     // Draw image
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
 
-    // Draw overlay (dark)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Draw overlay (dark) - covers entire canvas
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, displayWidth, displayHeight);
 
-    // Clear selected area
-    const x = selector.x_start * canvas.width;
-    const y = selector.y_start * canvas.height;
-    const w = (selector.x_end - selector.x_start) * canvas.width;
-    const h = (selector.y_end - selector.y_start) * canvas.height;
+    // Clear selected area to show image beneath
+    const x = selector.x_start * displayWidth;
+    const y = selector.y_start * displayHeight;
+    const w = (selector.x_end - selector.x_start) * displayWidth;
+    const h = (selector.y_end - selector.y_start) * displayHeight;
 
     ctx.clearRect(x, y, w, h);
 
-    // Draw border
+    // Draw border around selection
     ctx.strokeStyle = '#89b4fa';
     ctx.lineWidth = 3;
     ctx.strokeRect(x, y, w, h);
-  }, [isOpen, selector]);
+  }, [isOpen, selector, imageLoaded]);
 
   if (!isOpen) return null;
 
@@ -114,7 +137,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
         </div>
 
         {/* Canvas Container */}
-        <div className="flex-1 overflow-hidden bg-surface m-4 rounded-lg flex items-center justify-center">
+        <div ref={containerRef} className="flex-1 overflow-hidden bg-surface m-4 rounded-lg flex items-center justify-center">
           <TransformWrapper initialScale={1}>
             <TransformComponent>
               <canvas
@@ -123,7 +146,10 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
                 onMouseMove={handleCanvasMouseMove}
                 onMouseUp={handleCanvasMouseUp}
                 onMouseLeave={handleCanvasMouseUp}
-                style={{ cursor: confirmed ? 'default' : 'crosshair' }}
+                style={{
+                  cursor: !selectionMode ? 'grab' : (confirmed ? 'default' : 'crosshair'),
+                  touchAction: selectionMode ? 'none' : 'auto'
+                }}
                 className="border border-[#313244]"
               />
             </TransformComponent>
@@ -131,16 +157,27 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
           <img
             ref={imageRef}
             src={testImagePath}
+            onLoad={handleImageLoad}
             style={{ display: 'none' }}
-            onLoad={() => {
-              const canvas = canvasRef.current;
-              if (canvas) canvas.width = canvas.offsetWidth;
-            }}
           />
         </div>
 
         {/* Controls Panel */}
         <div className="border-t border-[#313244] p-4 space-y-4">
+          {/* Mode Toggle */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectionMode(!selectionMode)}
+              className={`py-1.5 px-3 rounded border text-sm font-medium transition-colors ${
+                selectionMode
+                  ? 'bg-accent text-base border-accent'
+                  : 'bg-panel hover:bg-surface text-gray-300 border-[#313244]'
+              }`}
+            >
+              {selectionMode ? '✓ Modo Seleccionar' : 'Modo Pan/Zoom'}
+            </button>
+          </div>
+
           {/* Page Navigation */}
           <div className="flex items-center gap-3">
             <span className="text-gray-400 text-sm">Página {currentPage} de {totalPages}</span>
