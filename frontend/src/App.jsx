@@ -487,7 +487,7 @@ function App() {
           </button>
 
           <button onClick={handleOpenCropSelector} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
-            Zona de Escaneo
+            Esc&aacute;ner
           </button>
 
           <button onClick={handleViewHistory} className="bg-panel/40 border-accent/30 hover:bg-accent/20 hover:border-accent text-accent font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border">

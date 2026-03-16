@@ -5,7 +5,7 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
   const containerRef = useRef(null);
-  const transformRef = useRef(null); // store transform API for external buttons
+  const transformRef = useRef(null);
   const [selector, setSelector] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
@@ -17,7 +17,6 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
   const [currentScale, setCurrentScale] = useState(1);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
-  // Reset all state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setSelector(null);
@@ -30,24 +29,20 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     }
   }, [isOpen]);
 
-  // Compute canvas dimensions from container + image aspect ratio
   const computeCanvasSize = useCallback(() => {
     const container = containerRef.current;
     const img = imageRef.current;
     if (!container || !img || !img.complete) return null;
-
     const cw = container.clientWidth;
     const ch = container.clientHeight;
     const imgAspect = img.naturalWidth / img.naturalHeight;
     const containerAspect = cw / ch;
-
     if (imgAspect > containerAspect) {
       return { w: cw, h: cw / imgAspect };
     }
     return { w: ch * imgAspect, h: ch };
   }, []);
 
-  // ResizeObserver — adapt canvas when window/container resizes
   useEffect(() => {
     if (!isOpen || !containerRef.current) return;
     const ro = new ResizeObserver(() => {
@@ -58,14 +53,12 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     return () => ro.disconnect();
   }, [isOpen, computeCanvasSize]);
 
-  // Set initial canvas size when image loads
   const handleImageLoad = () => {
     setImageLoaded(true);
     const size = computeCanvasSize();
     if (size) setCanvasSize(size);
   };
 
-  // --- Mouse handlers (selection mode only) ---
   const handleCanvasMouseDown = (e) => {
     if (!selectionMode) return;
     const rect = canvasRef.current.getBoundingClientRect();
@@ -80,7 +73,6 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-
     setSelector({
       x_start: Math.max(0, Math.min(dragStart.x, x)),
       x_end:   Math.min(1, Math.max(dragStart.x, x)),
@@ -89,11 +81,8 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     });
   };
 
-  const handleCanvasMouseUp = () => {
-    setIsDragging(false);
-  };
+  const handleCanvasMouseUp = () => setIsDragging(false);
 
-  // --- Actions ---
   const handleConfirmClick = () => {
     if (!selector) return;
     setShowConfirmDialog(true);
@@ -103,23 +92,17 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     console.log({ ...selector });
     if (onConfirm) onConfirm(selector);
     setShowConfirmDialog(false);
-    if (onCancel) onCancel(); // close panel
+    if (onCancel) onCancel();
   };
 
-  const handleConfirmBack = () => {
-    setShowConfirmDialog(false);
-  };
+  const handleConfirmBack = () => setShowConfirmDialog(false);
 
   const handleReset = () => {
     setSelector(null);
-    if (transformRef.current) {
-      transformRef.current.resetTransform();
-    }
+    if (transformRef.current) transformRef.current.resetTransform();
   };
 
-  const handleCancel = () => {
-    if (onCancel) onCancel();
-  };
+  const handleCancel = () => { if (onCancel) onCancel(); };
 
   // --- Canvas rendering (zoom-invariant annotations) ---
   useEffect(() => {
@@ -131,85 +114,85 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
     canvas.width = canvasSize.w;
     canvas.height = canvasSize.h;
-
-    // Draw full image
     ctx.drawImage(img, 0, 0, canvasSize.w, canvasSize.h);
 
     if (!selector) return;
 
-    // Compensate for zoom so annotations stay visually constant
     const scale = currentScale || 1;
-    const invScale = 1 / scale;
+    const inv = 1 / scale;
 
-    // Selection pixel coords
     const sx = selector.x_start * canvasSize.w;
     const sy = selector.y_start * canvasSize.h;
     const sw = (selector.x_end - selector.x_start) * canvasSize.w;
     const sh = (selector.y_end - selector.y_start) * canvasSize.h;
 
-    // Draw 4 dark rects around selection
+    // Dark overlay around selection
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    ctx.fillRect(0, 0, canvasSize.w, sy);                          // top
-    ctx.fillRect(0, sy + sh, canvasSize.w, canvasSize.h - sy - sh); // bottom
-    ctx.fillRect(0, sy, sx, sh);                                    // left
-    ctx.fillRect(sx + sw, sy, canvasSize.w - sx - sw, sh);          // right
+    ctx.fillRect(0, 0, canvasSize.w, sy);
+    ctx.fillRect(0, sy + sh, canvasSize.w, canvasSize.h - sy - sh);
+    ctx.fillRect(0, sy, sx, sh);
+    ctx.fillRect(sx + sw, sy, canvasSize.w - sx - sw, sh);
 
-    // Selection border — zoom-invariant
+    // Selection border
     ctx.strokeStyle = '#89b4fa';
-    ctx.lineWidth = 2 * invScale;
+    ctx.lineWidth = 2 * inv;
     ctx.strokeRect(sx, sy, sw, sh);
 
-    // Corner coordinate labels — zoom-invariant font
-    const fontSize = Math.round(10 * invScale);
-    const fontSizeBold = Math.round(13 * invScale);
-    const padX = 3 * invScale;
-    const padY = 7 * invScale;
-    const offsetAbove = 10 * invScale;
-    const offsetBelow = 14 * invScale;
-    const labelH = 14 * invScale;
+    // Zoom-invariant label dimensions
+    const fs = Math.round(10 * inv);
+    const fsBold = Math.round(13 * inv);
+    const px = 3 * inv;
+    const py = 7 * inv;
+    const above = 10 * inv;
+    const below = 14 * inv;
+    const lh = 14 * inv;
 
-    ctx.font = `${fontSize}px monospace`;
-    const corners = [
-      { text: `${selector.x_start.toFixed(2)}, ${selector.y_start.toFixed(2)}`, x: sx, y: sy - offsetAbove },
-      { text: `${selector.x_end.toFixed(2)}, ${selector.y_start.toFixed(2)}`, x: sx + sw, y: sy - offsetAbove },
-      { text: `${selector.x_start.toFixed(2)}, ${selector.y_end.toFixed(2)}`, x: sx, y: sy + sh + offsetBelow },
-      { text: `${selector.x_end.toFixed(2)}, ${selector.y_end.toFixed(2)}`, x: sx + sw, y: sy + sh + offsetBelow },
-    ];
-
+    // Corner labels
+    ctx.font = `${fs}px Inter, system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    const corners = [
+      { text: `${selector.x_start.toFixed(2)}, ${selector.y_start.toFixed(2)}`, x: sx, y: sy - above },
+      { text: `${selector.x_end.toFixed(2)}, ${selector.y_start.toFixed(2)}`, x: sx + sw, y: sy - above },
+      { text: `${selector.x_start.toFixed(2)}, ${selector.y_end.toFixed(2)}`, x: sx, y: sy + sh + below },
+      { text: `${selector.x_end.toFixed(2)}, ${selector.y_end.toFixed(2)}`, x: sx + sw, y: sy + sh + below },
+    ];
     for (const c of corners) {
       const m = ctx.measureText(c.text);
       ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-      ctx.fillRect(c.x - m.width / 2 - padX, c.y - padY, m.width + padX * 2, labelH);
+      ctx.fillRect(c.x - m.width / 2 - px, c.y - py, m.width + px * 2, lh);
       ctx.fillStyle = '#cdd6f4';
       ctx.fillText(c.text, c.x, c.y);
     }
 
-    // Center label — area percentage, zoom-invariant
+    // Center area percentage
     const areaPct = ((selector.x_end - selector.x_start) * (selector.y_end - selector.y_start) * 100).toFixed(1);
-    const centerLabel = `${areaPct}%`;
-    ctx.font = `bold ${fontSizeBold}px monospace`;
+    ctx.font = `600 ${fsBold}px Inter, system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const cx = sx + sw / 2;
     const cy = sy + sh / 2;
-    const cm = ctx.measureText(centerLabel);
-    const cPadX = 5 * invScale;
-    const cPadY = 9 * invScale;
-    const cH = 18 * invScale;
+    const cm = ctx.measureText(`${areaPct}%`);
+    const cpx = 5 * inv;
+    const cpy = 9 * inv;
+    const ch2 = 18 * inv;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-    ctx.fillRect(cx - cm.width / 2 - cPadX, cy - cPadY, cm.width + cPadX * 2, cH);
+    ctx.fillRect(cx - cm.width / 2 - cpx, cy - cpy, cm.width + cpx * 2, ch2);
     ctx.fillStyle = '#cdd6f4';
-    ctx.fillText(centerLabel, cx, cy);
+    ctx.fillText(`${areaPct}%`, cx, cy);
   }, [selector, imageLoaded, canvasSize, currentScale]);
 
   if (!isOpen) return null;
 
-  // Shared button base classes
-  const btnBase = 'h-8 px-3 rounded text-sm font-medium transition-all duration-150 shrink-0 select-none';
-  const btnGhost = `${btnBase} border border-[#313244] bg-[#181825] text-[#a6adc8] hover:bg-[#1e1e2e] hover:text-[#cdd6f4] hover:border-[#45475a] active:bg-[#313244] disabled:opacity-40 disabled:pointer-events-none`;
-  const btnIcon = 'h-8 w-8 rounded text-sm font-medium transition-all duration-150 shrink-0 select-none border border-[#313244] bg-[#181825] text-[#a6adc8] hover:bg-[#1e1e2e] hover:text-[#cdd6f4] hover:border-[#45475a] active:bg-[#313244] disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center';
+  // Instruction text based on current mode
+  const instructionText = selectionMode
+    ? 'Arrastra sobre el documento para seleccionar la zona de escaneo'
+    : 'Usa scroll para zoom y arrastra para mover el documento';
+
+  // Shared button styles — all h-8, consistent font
+  const btn = 'h-8 px-3 rounded text-sm transition-all duration-150 shrink-0 select-none font-sans';
+  const btnGhost = `${btn} border border-[#313244] bg-[#181825] text-[#a6adc8] hover:bg-[#1e1e2e] hover:text-[#cdd6f4] hover:border-[#45475a] active:bg-[#313244] disabled:opacity-40 disabled:pointer-events-none`;
+  const btnIcon = 'h-8 w-8 rounded text-sm transition-all duration-150 shrink-0 select-none border border-[#313244] bg-[#181825] text-[#a6adc8] hover:bg-[#1e1e2e] hover:text-[#cdd6f4] hover:border-[#45475a] active:bg-[#313244] disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center';
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" style={{ backdropFilter: 'blur(4px)' }}>
@@ -217,10 +200,9 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
         {/* Header */}
         <div className="flex justify-between items-center px-5 py-3 border-b border-[#313244]/60">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-[#89b4fa]" />
-            <h2 className="text-base font-semibold text-[#cdd6f4] tracking-tight">Zona de Escaneo</h2>
-          </div>
+          <h2 className="text-base font-semibold text-[#cdd6f4] font-sans tracking-tight">
+            Esc&aacute;ner
+          </h2>
           <button
             onClick={handleCancel}
             className="w-7 h-7 rounded-md flex items-center justify-center text-[#6c7086] hover:text-[#f38ba8] hover:bg-[#f38ba8]/10 transition-all duration-150"
@@ -229,8 +211,17 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
           </button>
         </div>
 
+        {/* Instruction bar */}
+        <div className={`px-5 py-1.5 text-xs font-sans border-b transition-colors duration-200 ${
+          selectionMode
+            ? 'bg-[#89b4fa]/8 border-[#89b4fa]/20 text-[#89b4fa]'
+            : 'bg-[#313244]/20 border-[#313244]/40 text-[#6c7086]'
+        }`}>
+          {instructionText}
+        </div>
+
         {/* Canvas Container */}
-        <div ref={containerRef} className="flex-1 overflow-hidden bg-[#0a0a14] m-3 rounded-lg flex items-center justify-center relative">
+        <div ref={containerRef} className="flex-1 overflow-hidden bg-[#0a0a14] mx-3 mb-3 mt-2 rounded-lg flex items-center justify-center relative">
           <TransformWrapper
             initialScale={1}
             minScale={0.5}
@@ -239,14 +230,10 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
             wheel={{ disabled: selectionMode }}
             pinch={{ disabled: selectionMode }}
             centerOnInit={true}
-            onTransformed={(_, state) => {
-              setCurrentScale(state.scale);
-            }}
-            onInit={(ref) => {
-              transformRef.current = ref;
-            }}
+            onTransformed={(_, state) => setCurrentScale(state.scale)}
+            onInit={(ref) => { transformRef.current = ref; }}
           >
-            {({ zoomIn, zoomOut, resetTransform, state }) => (
+            {({ zoomIn, zoomOut, resetTransform }) => (
               <>
                 <TransformComponent
                   wrapperStyle={{ width: '100%', height: '100%' }}
@@ -262,15 +249,21 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
                   />
                 </TransformComponent>
 
-                {/* Floating zoom controls — bottom-right of viewer */}
+                {/* Floating zoom pill */}
                 <div className="absolute bottom-2.5 right-2.5 flex items-center gap-0.5 bg-[#11111b]/80 backdrop-blur-sm rounded-lg border border-[#313244]/50 px-1.5 py-1 z-10">
-                  <button onClick={() => zoomOut()} className={btnIcon} style={{ border: 'none', background: 'none', width: '28px', height: '28px' }}>
+                  <button
+                    onClick={() => zoomOut()}
+                    className="w-7 h-7 flex items-center justify-center text-[#a6adc8] hover:text-[#cdd6f4] transition-colors"
+                  >
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                   </button>
                   <span className="text-[#6c7086] text-xs w-11 text-center font-mono tabular-nums">
-                    {Math.round((state?.scale ?? 1) * 100)}%
+                    {Math.round(currentScale * 100)}%
                   </span>
-                  <button onClick={() => zoomIn()} className={btnIcon} style={{ border: 'none', background: 'none', width: '28px', height: '28px' }}>
+                  <button
+                    onClick={() => zoomIn()}
+                    className="w-7 h-7 flex items-center justify-center text-[#a6adc8] hover:text-[#cdd6f4] transition-colors"
+                  >
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 3v8M3 7h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                   </button>
                   <div className="w-px h-4 bg-[#313244] mx-0.5" />
@@ -284,44 +277,28 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
               </>
             )}
           </TransformWrapper>
-          <img
-            ref={imageRef}
-            src={testImagePath}
-            onLoad={handleImageLoad}
-            style={{ display: 'none' }}
-          />
+          <img ref={imageRef} src={testImagePath} onLoad={handleImageLoad} style={{ display: 'none' }} />
         </div>
 
-        {/* Controls Panel */}
+        {/* Controls Panel — single row: Cancel | Page Nav (center) | Mode + Reset + Confirm */}
         <div className="border-t border-[#313244]/60 px-5 py-3 flex items-center gap-2">
 
-          {/* Cancel — left side, red */}
-          <button onClick={handleCancel} className={`${btnBase} border border-[#45475a] bg-[#181825] text-[#f38ba8] hover:bg-[#f38ba8]/10 hover:border-[#f38ba8]/40 active:bg-[#f38ba8]/20`}>
+          {/* Left: Cancel */}
+          <button
+            onClick={handleCancel}
+            className={`${btn} border border-[#45475a] bg-[#181825] text-[#f38ba8] hover:bg-[#f38ba8]/10 hover:border-[#f38ba8]/40 active:bg-[#f38ba8]/20`}
+          >
             Cancelar
           </button>
 
-          <div className="w-px h-5 bg-[#313244]/60" />
+          <div className="flex-1" />
 
-          {/* Mode Toggle */}
-          <button
-            onClick={() => setSelectionMode(!selectionMode)}
-            className={`${btnBase} w-28 ${
-              selectionMode
-                ? 'bg-[#89b4fa]/15 text-[#89b4fa] border border-[#89b4fa]/30 hover:bg-[#89b4fa]/20'
-                : 'border border-[#313244] bg-[#181825] text-[#a6adc8] hover:bg-[#1e1e2e] hover:text-[#cdd6f4] hover:border-[#45475a]'
-            }`}
-          >
-            {selectionMode ? 'Seleccionar' : 'Pan / Zoom'}
-          </button>
-
-          <div className="w-px h-5 bg-[#313244]/60" />
-
-          {/* Page Navigation */}
+          {/* Center: Page Navigation */}
           <div className="flex items-center gap-1 shrink-0">
             <button disabled={currentPage === 1} className={btnIcon}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M7.5 2.5L4 6l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
-            <div className="flex items-center bg-[#181825] border border-[#313244] rounded h-8 px-1">
+            <div className="flex items-center bg-[#181825] border border-[#313244] rounded h-8 px-1.5 gap-0.5">
               <input
                 type="number"
                 min="1"
@@ -332,29 +309,38 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
                   if (!isNaN(v)) setCurrentPage(Math.min(totalPages, Math.max(1, v)));
                 }}
                 onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-                className="w-7 bg-transparent text-[#cdd6f4] text-xs text-center font-mono outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-6 bg-transparent text-[#cdd6f4] text-xs text-center font-mono outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <span className="text-[#585b70] text-xs font-mono">/</span>
-              <span className="text-[#585b70] text-xs font-mono w-7 text-center">{totalPages}</span>
+              <span className="text-[#585b70] text-xs font-mono w-6 text-center">{totalPages}</span>
             </div>
             <button disabled={currentPage === totalPages} className={btnIcon}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
           </div>
 
-          {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Reset */}
+          {/* Right: Mode + Reset + Confirm */}
+          <button
+            onClick={() => setSelectionMode(!selectionMode)}
+            className={`${btn} w-28 ${
+              selectionMode
+                ? 'bg-[#89b4fa]/15 text-[#89b4fa] border border-[#89b4fa]/30 hover:bg-[#89b4fa]/20'
+                : 'border border-[#313244] bg-[#181825] text-[#a6adc8] hover:bg-[#1e1e2e] hover:text-[#cdd6f4] hover:border-[#45475a]'
+            }`}
+          >
+            {selectionMode ? 'Seleccionar' : 'Zoom / Pan'}
+          </button>
+
           <button onClick={handleReset} disabled={!selector} className={btnGhost}>
             Reset
           </button>
 
-          {/* Confirm */}
           <button
             onClick={handleConfirmClick}
             disabled={!selector}
-            className={`${btnBase} bg-[#89b4fa] text-[#11111b] hover:bg-[#b4d0fb] active:bg-[#74a8f7] disabled:opacity-40 disabled:pointer-events-none`}
+            className={`${btn} bg-[#89b4fa] text-[#11111b] hover:bg-[#b4d0fb] active:bg-[#74a8f7] disabled:opacity-40 disabled:pointer-events-none font-medium`}
           >
             Confirmar
           </button>
@@ -364,11 +350,8 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
       {/* Confirmation Dialog */}
       {showConfirmDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" style={{ backdropFilter: 'blur(2px)' }}>
-          <div className="bg-[#1e1e2e] rounded-xl border border-[#313244] shadow-2xl p-6 w-80 flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[#a6e3a1]" />
-              <h3 className="text-sm font-semibold text-[#cdd6f4]">Confirmar coordenadas</h3>
-            </div>
+          <div className="bg-[#1e1e2e] rounded-xl border border-[#313244] shadow-2xl p-5 w-80 flex flex-col gap-4">
+            <h3 className="text-sm font-semibold text-[#cdd6f4] font-sans">Confirmar coordenadas</h3>
             {selector && (
               <div className="bg-[#11111b] rounded-lg p-3 border border-[#313244]/50">
                 <div className="text-xs text-[#6c7086] font-mono space-y-1">
@@ -387,13 +370,13 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
                 </div>
               </div>
             )}
-            <div className="flex gap-2 justify-end">
-              <button onClick={handleConfirmBack} className={btnGhost}>
+            <div className="flex gap-2">
+              <button onClick={handleConfirmBack} className={`${btnGhost} flex-1`}>
                 Volver
               </button>
               <button
                 onClick={handleConfirmYes}
-                className={`${btnBase} bg-[#a6e3a1] text-[#11111b] hover:bg-[#b8eab3] active:bg-[#94d890]`}
+                className={`${btn} flex-1 bg-[#a6e3a1] text-[#11111b] hover:bg-[#b8eab3] active:bg-[#94d890] font-medium`}
               >
                 Confirmar
               </button>
