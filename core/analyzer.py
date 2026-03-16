@@ -74,7 +74,8 @@ BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 # (Phase 3 xval_cap = 0.50) are excluded when their final confidence
 # is below this value. 0.0 = disabled. Sweep-validated: >=0.55 fixes
 # orphan over-counting across all fixtures without regressions.
-MIN_CONF_FOR_NEW_DOC = 0.55
+MIN_CONF_FOR_NEW_DOC = 0.75
+INFERENCE_ENGINE_VERSION = "6ph-t1"  # 6-phase + sweep-tuned params (run 1)
 
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
@@ -495,7 +496,7 @@ def _infer_missing(
                     r.curr = 1
                     r.total = lt
                     r.method = "inferred"
-                    r.confidence = 0.60 + hom * 0.30  # 0.60..0.90
+                    r.confidence = 0.70 + hom * 0.30  # 0.70..1.00
 
     # ── Phase 2: Backward propagation ───────────────────────────────
     for i in range(n - 2, -1, -1):
@@ -561,7 +562,7 @@ def _infer_missing(
             r.curr = 1
             r.total = lt
             r.method = "inferred"
-            r.confidence = 0.40 if hom < 0.85 else 0.30 + hom * 0.20
+            r.confidence = 0.40 if hom < 0.85 else 0.40 + hom * 0.15
 
     # ── Phase 5: D-S post-validation for uncertain pages (≤0.60) ──
     # Does NOT change curr/total assignments — only boosts confidence
@@ -600,8 +601,8 @@ def _infer_missing(
 
             # Combine: period + neighbors + prior
             if support > 0.2 or neighbors_agree == 2:
-                boost = min(support * 0.15 + neighbors_agree * 0.08
-                            + prior_support * 0.05, 0.25)
+                boost = min(support * 0.10 + neighbors_agree * 0.08
+                            + prior_support * 0.05, 0.30)
                 r.confidence = min(r.confidence + boost, 0.75)
 
     # ── Phase 6: Orphan suppression ─────────────────────────────────
@@ -667,11 +668,15 @@ def _emit_ai_telemetry(
         if failed_pp else "none"
     )
 
+    n_docs = len(documents)
+    success_pct = f"{docs_ok/n_docs:.0%}" if n_docs else "n/a"
+
     on_log(
-        f"[AI:{_CORE_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p | W{PARALLEL_WORKERS}+GPU\n"
-        f"UI≡ DOC:{len(documents)} COM:{docs_ok} INC:{docs_bad} INF:{len(inf_reads)}\n"
+        f"[AI:{_CORE_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
+        f" | W{PARALLEL_WORKERS}+GPU | INF:{INFERENCE_ENGINE_VERSION}\n"
+        f"UI≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
         f"OCR: {mstr}\n"
-        f"DOCS: {len(documents)}total → {docs_ok}ok+{bad_str} | dist: {dist_str}\n"
+        f"DOCS: {n_docs}total → {docs_ok}ok+{bad_str} | dist: {dist_str}\n"
         f"INF: {len(inf_reads)}total(low:{len(inf_low)} mid:{len(inf_mid)} hi:{len(inf_high)}) | LOW: {low_str}\n"
         f"FAIL: {fail_str}",
         "ai",
@@ -710,7 +715,7 @@ def _emit_ai_telemetry(
             xv_unk.append(entry)
 
     on_log(
-        f"[DS:{_CORE_HASH}] D:{len(documents)} P:{per_str}\n"
+        f"[DS:{_CORE_HASH}] D:{n_docs} P:{per_str}\n"
         f"INF:{len(inf_reads)} x̄={avg_inf_conf:.0%} "
         f"{n_consistent}✓{len(xv_unk)}~{n_conflicting}✗\n"
         f"✓{','.join(xv_ok) or '-'}\n"
