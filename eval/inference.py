@@ -11,7 +11,9 @@ params keys (all required):
     back_conf                                 — Phase 2
     xval_cap                                  — Phase 3
     fallback_base, fallback_hom_base, fallback_hom_mul  — Phase 4
-    ds_boost_max                              — Phase 5 (period evidence not ported)
+    ds_period_weight, ds_neighbor_weight,     — Phase 5 (D-S evidence weights)
+      ds_prior_weight, ds_boost_max
+    ph5b_conf_min, ph5b_ratio_min            — Phase 5b (period-contradiction)
     min_conf_for_new_doc                      — Phase 6 (orphan suppression)
     window, hom_threshold                     — Global
 """
@@ -19,6 +21,8 @@ from __future__ import annotations
 import copy
 from collections import Counter
 from dataclasses import dataclass, field
+
+import numpy as np
 
 
 @dataclass
@@ -51,17 +55,130 @@ class Document:
 
 
 def run_pipeline(reads: list[PageRead], params: dict) -> list[Document]:
-    """Full pipeline: deepcopy → infer → build docs → undercount recovery."""
+    """Full pipeline: deepcopy → detect period → infer → build docs → undercount recovery."""
     reads = copy.deepcopy(reads)
-    _infer(reads, params)
+    period_info = _detect_period(reads)
+    _infer(reads, params, period_info)
     docs = _build_documents(reads)
     docs = _undercount_recovery(reads, docs)
     return docs
 
 
+# ── Period Detection ─────────────────────────────────────────────────────────
+
+def _detect_period(reads: list[PageRead]) -> dict:
+    """
+    Detect repeating period in page numbering via:
+      1. Spacing between curr=1 occurrences
+      2. Most common declared total
+      3. Autocorrelation of curr value sequence
+    Returns dict with 'period', 'confidence', 'expected_total'.
+    """
+    n = len(reads)
+    result: dict = {"period": None, "confidence": 0.0, "expected_total": None}
+    if n < 4:
+        return result
+
+    confirmed = [
+        (i, r) for i, r in enumerate(reads)
+        if r.curr is not None and r.method not in ("failed", "excluded")
+    ]
+    if len(confirmed) < 3:
+        return result
+
+    # Method 1: Spacing between curr=1
+    starts = [i for i, r in confirmed if r.curr == 1]
+    gap_period, gap_conf = None, 0.0
+    if len(starts) >= 2:
+        gaps = [starts[j + 1] - starts[j] for j in range(len(starts) - 1)]
+        if gaps:
+            gc = Counter(gaps)
+            gap_period, freq = gc.most_common(1)[0]
+            gap_conf = freq / len(gaps)
+
+    # Method 2: Most common total
+    totals = [r.total for _, r in confirmed if r.total is not None]
+    mode_total, total_conf = None, 0.0
+    if totals:
+        tc = Counter(totals)
+        mode_total, freq = tc.most_common(1)[0]
+        total_conf = freq / len(totals)
+
+    # Method 3: Autocorrelation on curr sequence
+    acorr_period, acorr_conf = None, 0.0
+    curr_vals = np.array([
+        float(r.curr) if r.curr is not None and r.method not in ("failed",)
+        else np.nan for r in reads
+    ])
+    valid_mask = ~np.isnan(curr_vals)
+
+    if valid_mask.sum() >= 6:
+        valid_idx = np.where(valid_mask)[0]
+        filled = np.interp(np.arange(n), valid_idx, curr_vals[valid_mask])
+        centered = filled - filled.mean()
+        energy = np.sum(centered ** 2)
+
+        if energy > 0:
+            acorr = np.correlate(centered, centered, mode="full")[n - 1:]
+            acorr = acorr / energy
+            for lag in range(2, min(n // 2, 50)):
+                if lag + 1 < len(acorr):
+                    if (acorr[lag] > acorr[lag - 1]
+                            and acorr[lag] >= acorr[lag + 1]
+                            and acorr[lag] > 0.3):
+                        acorr_period = lag
+                        acorr_conf = float(acorr[lag])
+                        break
+
+    # Combine evidence
+    candidates: dict[int, float] = {}
+    if gap_period is not None and gap_conf > 0.3:
+        candidates[gap_period] = candidates.get(gap_period, 0) + gap_conf * 0.45
+    if mode_total is not None and total_conf > 0.3:
+        candidates[mode_total] = candidates.get(mode_total, 0) + total_conf * 0.30
+    if acorr_period is not None and acorr_conf > 0.3:
+        candidates[acorr_period] = candidates.get(acorr_period, 0) + acorr_conf * 0.25
+
+    if not candidates:
+        result["expected_total"] = mode_total
+        return result
+
+    best = max(candidates, key=candidates.get)
+    return {
+        "period": best,
+        "confidence": min(candidates[best], 1.0),
+        "expected_total": mode_total or best,
+    }
+
+
+def _period_evidence(
+    i: int, reads: list[PageRead], period: int,
+) -> dict | None:
+    """Find pages at the same cycle position (±k*period) and return mass function."""
+    n = len(reads)
+    candidates: dict[tuple, float] = {}
+
+    for mult in range(1, 8):
+        for sign in (-1, 1):
+            pos = i + sign * mult * period
+            if 0 <= pos < n:
+                r = reads[pos]
+                if r.curr is not None and r.method not in ("failed", "excluded"):
+                    h = (r.curr, r.total)
+                    dist_w = 1.0 / mult
+                    method_w = (1.0 if r.method in ("direct", "SR", "easyocr", "manual")
+                                else 0.5)
+                    candidates[h] = candidates.get(h, 0) + dist_w * method_w
+
+    if not candidates:
+        return None
+    total_w = sum(candidates.values())
+    return {h: w / total_w for h, w in candidates.items()}
+
+
 # ── Phase 1–5 Inference ──────────────────────────────────────────────────────
 
-def _infer(reads: list[PageRead], params: dict) -> None:
+def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None) -> None:
     """Mutates reads in-place. Mirrors _infer_missing in core/analyzer.py."""
     n = len(reads)
     if n == 0:
@@ -75,9 +192,10 @@ def _infer(reads: list[PageRead], params: dict) -> None:
     fallback_base    = params["fallback_base"]
     fallback_hom_base = params["fallback_hom_base"]
     fallback_hom_mul  = params["fallback_hom_mul"]
-    # ds_support_min omitted: period evidence not ported — support stays 0.0 always.
-    # D-S phase only fires via neighbors_agree == 2.
-    ds_boost_max     = params["ds_boost_max"]
+    ds_period_weight   = params["ds_period_weight"]
+    ds_neighbor_weight = params["ds_neighbor_weight"]
+    ds_prior_weight    = params["ds_prior_weight"]
+    ds_boost_max       = params["ds_boost_max"]
     window           = params["window"]
     hom_threshold    = params["hom_threshold"]
 
@@ -181,35 +299,79 @@ def _infer(reads: list[PageRead], params: dict) -> None:
                             else fallback_hom_base + hom * fallback_hom_mul)
 
     # ── Phase 5: D-S post-validation ─────────────────────────────────
-    # Does NOT change curr/total — only boosts confidence when neighbor
-    # evidence confirms the inferred assignment.
-    # Period evidence not ported (requires OCR context); support stays 0.0.
-    # D-S fires only when both neighbors agree (neighbors_agree == 2).
-    for i in range(n):
-        r = reads[i]
-        if r.method != "inferred" or r.confidence > 0.60:
-            continue
+    # Does NOT change curr/total — only boosts confidence when
+    # independent evidence (period + neighbors) confirms the assignment.
+    period = period_info.get("period") if period_info else None
+    period_conf = period_info.get("confidence", 0.0) if period_info else 0.0
 
-        neighbors_agree = 0
+    if period is not None and period_conf > 0.3:
+        for i in range(n):
+            r = reads[i]
+            if r.method != "inferred" or r.confidence > 0.60:
+                continue
 
-        if i > 0:
-            prev = reads[i - 1]
-            if prev.curr is not None and prev.total is not None:
-                if ((prev.total == r.total and prev.curr == r.curr - 1) or
-                        (prev.curr == prev.total and r.curr == 1)):
-                    neighbors_agree += 1
-        if i < n - 1:
-            nxt = reads[i + 1]
-            if nxt.curr is not None and nxt.total is not None:
-                if ((nxt.total == r.total and nxt.curr == r.curr + 1) or
-                        (r.curr == r.total and nxt.curr == 1)):
-                    neighbors_agree += 1
+            h = (r.curr, r.total)
+            support = 0.0
 
-        prior_support = prior.get(r.total, 0.0)
+            # Evidence 1: Period-aligned pages agree?
+            palign = _period_evidence(i, reads, period)
+            if palign and h in palign:
+                support += palign[h] * period_conf
 
-        if neighbors_agree == 2:
-            boost = min(neighbors_agree * 0.08 + prior_support * 0.05, ds_boost_max)
-            r.confidence = min(r.confidence + boost, 0.75)
+            # Evidence 2: Neighbor consistency (both sides)
+            neighbors_agree = 0
+            if i > 0:
+                prev = reads[i - 1]
+                if prev.curr is not None and prev.total is not None:
+                    if ((prev.total == r.total and prev.curr == r.curr - 1) or
+                            (prev.curr == prev.total and r.curr == 1)):
+                        neighbors_agree += 1
+            if i < n - 1:
+                nxt = reads[i + 1]
+                if nxt.curr is not None and nxt.total is not None:
+                    if ((nxt.total == r.total and nxt.curr == r.curr + 1) or
+                            (r.curr == r.total and nxt.curr == 1)):
+                        neighbors_agree += 1
+
+            # Evidence 3: Prior supports this total?
+            prior_support = prior.get(r.total, 0.0)
+
+            # Combine: period + neighbors + prior
+            if support > 0.2 or neighbors_agree == 2:
+                boost = min(support * ds_period_weight
+                            + neighbors_agree * ds_neighbor_weight
+                            + prior_support * ds_prior_weight,
+                            ds_boost_max)
+                r.confidence = min(r.confidence + boost, 0.75)
+
+    # ── Phase 5b: Period-contradiction correction ────────────────────
+    # Direct OCR reads whose total contradicts the dominant period are
+    # rewritten when the period evidence is overwhelmingly strong.
+    # Example: INS_31 — 29/31 pages read as 1/1 (P=1), but pages 30-31
+    # read as "1/4" and "2/4". Phase 5b corrects them to 1/1.
+    ph5b_conf_min  = params.get("ph5b_conf_min", 0.0)
+    ph5b_ratio_min = params.get("ph5b_ratio_min", 0.85)
+
+    if (ph5b_conf_min > 0
+            and period is not None
+            and period_conf >= ph5b_conf_min):
+        expected_total = period_info.get("expected_total", period)
+        reads_with_total = [r for r in reads if r.total is not None
+                           and r.method not in ("failed", "excluded")]
+        if reads_with_total:
+            agreeing = sum(1 for r in reads_with_total
+                          if r.total == expected_total)
+            ratio = agreeing / len(reads_with_total)
+
+            if ratio >= ph5b_ratio_min:
+                for r in reads:
+                    if (r.method not in ("failed", "inferred", "excluded")
+                            and r.total is not None
+                            and r.total != expected_total):
+                        r.curr = 1
+                        r.total = expected_total
+                        r.method = "inferred"
+                        r.confidence = 0.50
 
     # ── Phase 6: Orphan suppression ──────────────────────────────────
     # Suppress Phase-1 orphan candidates whose final confidence (after Phase 3

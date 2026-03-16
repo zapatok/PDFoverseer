@@ -18,8 +18,15 @@ PARAM_SPACE: dict[str, list] = {
     "fallback_base":     [0.30, 0.40, 0.50],
     "fallback_hom_base": [0.20, 0.30, 0.40],
     "fallback_hom_mul":  [0.15, 0.20, 0.25],
-    # Phase 5 — D-S post-validation (period evidence not ported; support=0 always)
-    "ds_boost_max":     [0.20, 0.25, 0.30],
+    # Phase 5 — D-S post-validation (with period evidence)
+    "ds_period_weight":   [0.10, 0.15, 0.20],
+    "ds_neighbor_weight": [0.06, 0.08, 0.10],
+    "ds_prior_weight":    [0.03, 0.05, 0.07],
+    "ds_boost_max":       [0.20, 0.25, 0.30],
+    # Phase 5b — Period-contradiction correction
+    # 0.0 = disabled (baseline). >0 = min period confidence to activate.
+    "ph5b_conf_min":      [0.0, 0.50, 0.60, 0.70],
+    "ph5b_ratio_min":     [0.75, 0.85, 0.90],
     # Phase 6 — Orphan suppression
     # Inferred new-doc triggers (curr==1) below this confidence are excluded.
     # 0.0 = no suppression (baseline behavior).
@@ -41,7 +48,12 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "fallback_base":    0.40,
     "fallback_hom_base":0.30,
     "fallback_hom_mul": 0.20,
-    "ds_boost_max":     0.25,
+    "ds_period_weight":   0.15,
+    "ds_neighbor_weight": 0.08,
+    "ds_prior_weight":    0.05,
+    "ds_boost_max":       0.25,
+    "ph5b_conf_min":      0.0,   # disabled — matches core (no Phase 5b)
+    "ph5b_ratio_min":     0.85,
     "min_conf_for_new_doc": 0.0,
     "window":           5,
     "hom_threshold":    0.85,
