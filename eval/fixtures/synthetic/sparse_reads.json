@@ -1,0 +1,76 @@
+{
+  "name": "sparse_reads",
+  "source": "synthetic",
+  "reads": [
+    {
+      "pdf_page": 1,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 2,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 3,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 4,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 5,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 6,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 7,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 8,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 9,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 10,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    }
+  ]
+}

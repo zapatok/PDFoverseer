@@ -17,5 +17,12 @@
   "many_1page_stream":     {"doc_count": 50, "complete_count": 50, "inferred_count": 20},
   "period1_then_multipage":{"doc_count": 29, "complete_count": 28, "inferred_count": 0},
   "mixed_1_and_2page":     {"doc_count": 10, "complete_count": 9,  "inferred_count": 2},
-  "high_failure_period2":  {"doc_count": 10, "complete_count": 10, "inferred_count": 12}
+  "high_failure_period2":  {"doc_count": 10, "complete_count": 10, "inferred_count": 12},
+  "clean_period2":         {"doc_count": 10, "complete_count": 10, "inferred_count": 0},
+  "clean_period4":         {"doc_count": 5,  "complete_count": 5,  "inferred_count": 0},
+  "all_1page_clean":       {"doc_count": 20, "complete_count": 20, "inferred_count": 0},
+  "variable_doc_sizes":    {"doc_count": 10, "complete_count": 10, "inferred_count": 0},
+  "single_long_doc":       {"doc_count": 1,  "complete_count": 1,  "inferred_count": 3},
+  "two_zones_diff_period": {"doc_count": 15, "complete_count": 15, "inferred_count": 0},
+  "sparse_reads":          {"doc_count": 10, "complete_count": 10, "inferred_count": 8}
 }
