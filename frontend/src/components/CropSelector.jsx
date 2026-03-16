@@ -1,32 +1,70 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
 export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePath }) {
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
   const containerRef = useRef(null);
-  const transformRef = useRef(null);
   const [selector, setSelector] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages] = useState(1);
-  const [zoomLevel, setZoomLevel] = useState(100);
   const [confirmed, setConfirmed] = useState(false);
   const [selectionMode, setSelectionMode] = useState(true);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
 
+  // Reset all state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setConfirmed(false);
       setSelector(null);
+      setImageLoaded(false);
+      setIsDragging(false);
+      setDragStart(null);
+      setSelectionMode(true);
     }
   }, [isOpen]);
 
+  // Compute canvas dimensions from container + image aspect ratio
+  const computeCanvasSize = useCallback(() => {
+    const container = containerRef.current;
+    const img = imageRef.current;
+    if (!container || !img || !img.complete) return null;
+
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    const imgAspect = img.naturalWidth / img.naturalHeight;
+    const containerAspect = cw / ch;
+
+    if (imgAspect > containerAspect) {
+      return { w: cw, h: cw / imgAspect };
+    }
+    return { w: ch * imgAspect, h: ch };
+  }, []);
+
+  // ResizeObserver — adapt canvas when window/container resizes
+  useEffect(() => {
+    if (!isOpen || !containerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      const size = computeCanvasSize();
+      if (size) setCanvasSize(size);
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, [isOpen, computeCanvasSize]);
+
+  // Set initial canvas size when image loads
+  const handleImageLoad = () => {
+    setImageLoaded(true);
+    const size = computeCanvasSize();
+    if (size) setCanvasSize(size);
+  };
+
+  // --- Mouse handlers (selection mode only) ---
   const handleCanvasMouseDown = (e) => {
     if (confirmed || !selectionMode) return;
-    e.stopPropagation();
-    e.preventDefault();
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -36,45 +74,28 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
 
   const handleCanvasMouseMove = (e) => {
     if (!isDragging || !dragStart || confirmed || !selectionMode) return;
-    e.stopPropagation();
-    e.preventDefault();
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
 
-    const x_start = Math.max(0, Math.min(dragStart.x, x));
-    const x_end = Math.max(0, Math.min(1, Math.max(dragStart.x, x)));
-    const y_start = Math.max(0, Math.min(dragStart.y, y));
-    const y_end = Math.max(0, Math.min(1, Math.max(dragStart.y, y)));
-
-    setSelector({ x_start, x_end, y_start, y_end });
+    setSelector({
+      x_start: Math.max(0, Math.min(dragStart.x, x)),
+      x_end:   Math.min(1, Math.max(dragStart.x, x)),
+      y_start: Math.max(0, Math.min(dragStart.y, y)),
+      y_end:   Math.min(1, Math.max(dragStart.y, y)),
+    });
   };
 
-  const handleCanvasMouseUp = (e) => {
-    if (selectionMode) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
+  const handleCanvasMouseUp = () => {
     setIsDragging(false);
   };
 
+  // --- Actions ---
   const handleConfirm = () => {
     if (!selector) return;
     console.log({ ...selector });
     setConfirmed(true);
-    if (onConfirm) {
-      onConfirm(selector);
-    }
-  };
-
-  const handleZoomIn = () => {
-    const newZoom = Math.min(200, zoomLevel + 25);
-    setZoomLevel(newZoom);
-  };
-
-  const handleZoomOut = () => {
-    const newZoom = Math.max(50, zoomLevel - 25);
-    setZoomLevel(newZoom);
+    if (onConfirm) onConfirm(selector);
   };
 
   const handleReset = () => {
@@ -82,76 +103,44 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     setConfirmed(false);
   };
 
-  const handleImageLoad = () => {
-    setImageLoaded(true);
-  };
-
   const handleCancel = () => {
-    if (onCancel) {
-      onCancel();
-    }
+    if (onCancel) onCancel();
   };
 
+  // --- Canvas rendering ---
   useEffect(() => {
-    if (!imageLoaded || !canvasRef.current || !containerRef.current) return;
-
+    if (!imageLoaded || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     const img = imageRef.current;
-    const container = containerRef.current;
+    if (!img || !img.complete || canvasSize.w === 0) return;
 
-    if (!img || !img.complete) return;
+    canvas.width = canvasSize.w;
+    canvas.height = canvasSize.h;
 
-    // Calculate dimensions to fit container
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    const imgAspect = img.naturalWidth / img.naturalHeight;
-    const containerAspect = containerWidth / containerHeight;
+    // Draw full image
+    ctx.drawImage(img, 0, 0, canvasSize.w, canvasSize.h);
 
-    let displayWidth, displayHeight;
-    if (imgAspect > containerAspect) {
-      displayWidth = containerWidth;
-      displayHeight = containerWidth / imgAspect;
-    } else {
-      displayHeight = containerHeight;
-      displayWidth = containerHeight * imgAspect;
-    }
+    if (!selector) return;
 
-    canvas.width = displayWidth;
-    canvas.height = displayHeight;
+    // Selection pixel coords
+    const sx = selector.x_start * canvasSize.w;
+    const sy = selector.y_start * canvasSize.h;
+    const sw = (selector.x_end - selector.x_start) * canvasSize.w;
+    const sh = (selector.y_end - selector.y_start) * canvasSize.h;
 
-    // Draw image
-    ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+    // Draw 4 dark rects around selection (avoids clearRect+clip redraw)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(0, 0, canvasSize.w, sy);                          // top
+    ctx.fillRect(0, sy + sh, canvasSize.w, canvasSize.h - sy - sh); // bottom
+    ctx.fillRect(0, sy, sx, sh);                                    // left
+    ctx.fillRect(sx + sw, sy, canvasSize.w - sx - sw, sh);          // right
 
-    // Only show overlay and selection if selector is active
-    if (selector) {
-      // Draw overlay (dark) on areas OUTSIDE selection
-      const x = selector.x_start * displayWidth;
-      const y = selector.y_start * displayHeight;
-      const w = (selector.x_end - selector.x_start) * displayWidth;
-      const h = (selector.y_end - selector.y_start) * displayHeight;
-
-      // Dark overlay on entire canvas
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-      ctx.fillRect(0, 0, displayWidth, displayHeight);
-
-      // Clear (brighten) the selected area
-      ctx.clearRect(x, y, w, h);
-
-      // Redraw the image only in the selected area
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x, y, w, h);
-      ctx.clip();
-      ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
-      ctx.restore();
-
-      // Draw border around selection
-      ctx.strokeStyle = '#89b4fa';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(x, y, w, h);
-    }
-  }, [isOpen, selector, imageLoaded]);
+    // Selection border
+    ctx.strokeStyle = '#89b4fa';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(sx, sy, sw, sh);
+  }, [selector, imageLoaded, canvasSize]);
 
   if (!isOpen) return null;
 
@@ -161,32 +150,61 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-[#313244]">
           <h2 className="text-xl font-bold text-gray-200">Seleccionar Zona de Escaneo</h2>
-          <button
-            onClick={handleCancel}
-            className="text-gray-400 hover:text-gray-200 text-2xl"
-          >
+          <button onClick={handleCancel} className="text-gray-400 hover:text-gray-200 text-2xl">
             ✕
           </button>
         </div>
 
         {/* Canvas Container */}
         <div ref={containerRef} className="flex-1 overflow-hidden bg-surface m-4 rounded-lg flex items-center justify-center">
-          <TransformWrapper initialScale={1} ref={transformRef}>
-            <TransformComponent>
-              <canvas
-                ref={canvasRef}
-                onMouseDown={handleCanvasMouseDown}
-                onMouseMove={handleCanvasMouseMove}
-                onMouseUp={handleCanvasMouseUp}
-                onMouseLeave={handleCanvasMouseUp}
-                style={{
-                  cursor: !selectionMode ? 'grab' : (confirmed ? 'default' : 'crosshair'),
-                  pointerEvents: selectionMode ? 'auto' : 'none',
-                  touchAction: selectionMode ? 'none' : 'auto'
-                }}
-                className="border border-[#313244]"
-              />
-            </TransformComponent>
+          <TransformWrapper
+            initialScale={1}
+            minScale={0.5}
+            maxScale={4}
+            panning={{ disabled: selectionMode }}
+            wheel={{ disabled: selectionMode }}
+            pinch={{ disabled: selectionMode }}
+          >
+            {({ zoomIn, zoomOut, resetTransform, state }) => (
+              <>
+                <TransformComponent>
+                  <canvas
+                    ref={canvasRef}
+                    onMouseDown={handleCanvasMouseDown}
+                    onMouseMove={handleCanvasMouseMove}
+                    onMouseUp={handleCanvasMouseUp}
+                    onMouseLeave={handleCanvasMouseUp}
+                    style={{ cursor: selectionMode ? (confirmed ? 'default' : 'crosshair') : 'grab' }}
+                    className="border border-[#313244]"
+                  />
+                </TransformComponent>
+
+                {/* Zoom buttons rendered inside children-as-function to access zoomIn/zoomOut */}
+                <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/60 rounded-lg px-2 py-1 z-10">
+                  <button
+                    onClick={() => zoomOut()}
+                    className="text-gray-300 hover:text-white text-sm px-2 py-0.5"
+                  >
+                    −
+                  </button>
+                  <span className="text-gray-400 text-xs w-12 text-center">
+                    {Math.round((state?.scale ?? 1) * 100)}%
+                  </span>
+                  <button
+                    onClick={() => zoomIn()}
+                    className="text-gray-300 hover:text-white text-sm px-2 py-0.5"
+                  >
+                    +
+                  </button>
+                  <button
+                    onClick={() => resetTransform()}
+                    className="text-gray-400 hover:text-white text-xs px-1.5 py-0.5 ml-1 border-l border-gray-600"
+                  >
+                    1:1
+                  </button>
+                </div>
+              </>
+            )}
           </TransformWrapper>
           <img
             ref={imageRef}
@@ -197,100 +215,71 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
         </div>
 
         {/* Controls Panel */}
-        <div className="border-t border-[#313244] p-4 space-y-4">
+        <div className="border-t border-[#313244] p-4 flex items-center gap-4">
           {/* Mode Toggle */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSelectionMode(!selectionMode)}
-              className={`py-1.5 px-3 rounded border text-sm font-medium transition-colors w-40 ${
-                selectionMode
-                  ? 'bg-accent text-base border-accent'
-                  : 'bg-panel hover:bg-surface text-gray-300 border-[#313244]'
-              }`}
-            >
-              {selectionMode ? '✓ Seleccionar' : 'Pan/Zoom'}
-            </button>
-          </div>
+          <button
+            onClick={() => setSelectionMode(!selectionMode)}
+            className={`py-1.5 px-3 rounded border text-sm font-medium transition-colors w-36 shrink-0 ${
+              selectionMode
+                ? 'bg-accent text-base border-accent'
+                : 'bg-panel hover:bg-surface text-gray-300 border-[#313244]'
+            }`}
+          >
+            {selectionMode ? '✓ Seleccionar' : 'Pan / Zoom'}
+          </button>
 
           {/* Page Navigation */}
-          <div className="flex items-center gap-3">
-            <span className="text-gray-400 text-sm">Página {currentPage} de {totalPages}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-gray-400 text-sm">Pag {currentPage}/{totalPages}</span>
             <button
               disabled={currentPage === 1}
-              className="bg-panel hover:bg-surface text-gray-300 py-1 px-3 rounded border border-[#313244] disabled:opacity-50 text-sm"
+              className="bg-panel hover:bg-surface text-gray-300 py-1 px-2 rounded border border-[#313244] disabled:opacity-50 text-sm"
             >
-              ← Anterior
+              ←
             </button>
             <button
               disabled={currentPage === totalPages}
-              className="bg-panel hover:bg-surface text-gray-300 py-1 px-3 rounded border border-[#313244] disabled:opacity-50 text-sm"
+              className="bg-panel hover:bg-surface text-gray-300 py-1 px-2 rounded border border-[#313244] disabled:opacity-50 text-sm"
             >
-              Siguiente →
-            </button>
-            <input
-              type="number"
-              min="1"
-              max={totalPages}
-              value={currentPage}
-              onChange={(e) => setCurrentPage(Math.min(totalPages, Math.max(1, parseInt(e.target.value) || 1)))}
-              className="bg-panel border border-[#313244] text-gray-300 py-1 px-2 rounded w-16 text-sm"
-            />
-          </div>
-
-          {/* Zoom Controls */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleZoomOut}
-              className="bg-panel hover:bg-surface text-gray-300 py-1 px-3 rounded border border-[#313244] text-sm"
-            >
-              Alejar −
-            </button>
-            <span className="text-gray-400 text-sm w-16 text-center">{zoomLevel}%</span>
-            <button
-              onClick={handleZoomIn}
-              className="bg-panel hover:bg-surface text-gray-300 py-1 px-3 rounded border border-[#313244] text-sm"
-            >
-              Acercar +
+              →
             </button>
           </div>
 
           {/* Coordinate Display */}
-          <div className="bg-surface p-3 rounded border border-[#313244]">
+          <div className="bg-surface px-3 py-1.5 rounded border border-[#313244] flex-1 min-w-0">
             {selector ? (
-              <div className="text-xs text-gray-400 space-y-1 font-mono">
-                <div>x_start: {selector.x_start.toFixed(3)} | x_end: {selector.x_end.toFixed(3)}</div>
-                <div>y_start: {selector.y_start.toFixed(3)} | y_end: {selector.y_end.toFixed(3)}</div>
+              <div className="text-xs text-gray-400 font-mono flex gap-4">
+                <span>x: {selector.x_start.toFixed(3)} → {selector.x_end.toFixed(3)}</span>
+                <span>y: {selector.y_start.toFixed(3)} → {selector.y_end.toFixed(3)}</span>
               </div>
             ) : (
-              <div className="text-xs text-gray-500 font-mono">Arrastra para seleccionar una zona</div>
+              <div className="text-xs text-gray-500 font-mono">Arrastra sobre la pagina para seleccionar zona</div>
             )}
           </div>
 
           {confirmed && selector && (
-            <div className="bg-green-900/30 border border-green-700 text-green-300 p-2 rounded text-sm">
-              ✓ Coordenadas capturadas: {JSON.stringify(selector)}
-            </div>
+            <span className="text-green-400 text-xs shrink-0">✓ Capturado</span>
           )}
 
           {/* Action Buttons */}
-          <div className="flex gap-3">
+          <div className="flex gap-2 shrink-0">
             <button
               onClick={handleReset}
               disabled={!selector}
-              className="bg-panel hover:bg-surface text-gray-300 py-2 px-4 rounded border border-[#313244] text-sm flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-panel hover:bg-surface text-gray-300 py-1.5 px-3 rounded border border-[#313244] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Limpiar
             </button>
             <button
               onClick={handleConfirm}
               disabled={!selector || confirmed}
-              className="bg-accent hover:bg-blue-500 text-base py-2 px-4 rounded text-sm flex-1 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-accent hover:bg-blue-500 text-base py-1.5 px-4 rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Seleccionar
+              Confirmar
             </button>
             <button
               onClick={handleCancel}
-              className="bg-panel hover:bg-surface text-gray-300 py-2 px-4 rounded border border-[#313244] text-sm flex-1"
+              className="bg-panel hover:bg-surface text-gray-300 py-1.5 px-3 rounded border border-[#313244] text-sm"
             >
               Cancelar
             </button>
