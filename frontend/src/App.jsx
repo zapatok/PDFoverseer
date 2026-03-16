@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
+import CropSelector from './components/CropSelector'
 
 function App() {
   const [pdfs, setPdfs] = useState([])
@@ -33,6 +34,8 @@ function App() {
   const [showTerminal, setShowTerminal] = useState(true)
   const [terminalMenuOpen, setTerminalMenuOpen] = useState(false)
   const [aiLogMode, setAiLogMode] = useState(false)
+  const [showCropSelector, setShowCropSelector] = useState(false)
+  const [cropParams, setCropParams] = useState(null)
 
   const handleCopyLogs = () => {
     const filtered = aiLogMode ? aiLogs : logs;
@@ -52,6 +55,20 @@ function App() {
     a.click();
     URL.revokeObjectURL(url);
     setTerminalMenuOpen(false);
+  };
+
+  const handleOpenCropSelector = () => {
+    setShowCropSelector(true);
+  };
+
+  const handleCropConfirm = (coords) => {
+    setCropParams(coords);
+    console.log('Crop parameters confirmed:', coords);
+    setShowCropSelector(false);
+  };
+
+  const handleCropCancel = () => {
+    setShowCropSelector(false);
   };
 
   // F5 Survival: Reload state from backend on mount
@@ -467,6 +484,10 @@ function App() {
 
           <button onClick={handleSaveSession} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
             Guardar
+          </button>
+
+          <button onClick={handleOpenCropSelector} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+            Zona de Escaneo
           </button>
 
           <button onClick={handleViewHistory} className="bg-panel/40 border-accent/30 hover:bg-accent/20 hover:border-accent text-accent font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border">
@@ -991,6 +1012,14 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Crop Selector Modal */}
+      <CropSelector
+        isOpen={showCropSelector}
+        onConfirm={handleCropConfirm}
+        onCancel={handleCropCancel}
+        testImagePath="/assets/test-page.png"
+      />
 
     </div>
   )
