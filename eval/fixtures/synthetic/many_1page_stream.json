@@ -1,0 +1,356 @@
+{
+  "name": "many_1page_stream",
+  "source": "synthetic",
+  "reads": [
+    {
+      "pdf_page": 1,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 2,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 3,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 4,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 5,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 6,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 7,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 8,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 9,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 10,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 11,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 12,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 13,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 14,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 15,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 16,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 17,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 18,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 19,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 20,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 21,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 22,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 23,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 24,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 25,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 26,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 27,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 28,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 29,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 30,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 31,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 32,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 33,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 34,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 35,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 36,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 37,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 38,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 39,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 40,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 41,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 42,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 43,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 44,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 45,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 46,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 47,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 48,
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 49,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    },
+    {
+      "pdf_page": 50,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
+    }
+  ]
+}

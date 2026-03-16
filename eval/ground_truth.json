@@ -13,5 +13,9 @@
   "seq_break":       {"doc_count": 1, "complete_count": 1, "inferred_count": 1},
   "ds_conflict":     {"doc_count": 1, "complete_count": 0, "inferred_count": 3},
   "orphan_after_complete": {"doc_count": 2, "complete_count": 2, "inferred_count": 0},
-  "dense_1page_failures":  {"doc_count": 10, "complete_count": 10, "inferred_count": 2}
+  "dense_1page_failures":  {"doc_count": 10, "complete_count": 10, "inferred_count": 2},
+  "many_1page_stream":     {"doc_count": 50, "complete_count": 50, "inferred_count": 20},
+  "period1_then_multipage":{"doc_count": 29, "complete_count": 28, "inferred_count": 0},
+  "mixed_1_and_2page":     {"doc_count": 10, "complete_count": 9,  "inferred_count": 2},
+  "high_failure_period2":  {"doc_count": 10, "complete_count": 10, "inferred_count": 12}
 }
