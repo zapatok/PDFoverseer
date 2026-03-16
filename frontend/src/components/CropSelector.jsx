@@ -141,29 +141,38 @@ export default function CropSelector({ isOpen, onConfirm, onCancel, testImagePat
     ctx.lineWidth = 2;
     ctx.strokeRect(sx, sy, sw, sh);
 
-    // Corner coordinate labels
-    ctx.font = '11px monospace';
-    const pad = 4;
-    const labels = [
-      { text: `${selector.x_start.toFixed(2)}, ${selector.y_start.toFixed(2)}`, x: sx + pad, y: sy - pad, baseline: 'bottom' },
-      { text: `${selector.x_end.toFixed(2)}, ${selector.y_start.toFixed(2)}`, x: sx + sw - pad, y: sy - pad, baseline: 'bottom', align: 'right' },
-      { text: `${selector.x_start.toFixed(2)}, ${selector.y_end.toFixed(2)}`, x: sx + pad, y: sy + sh + pad, baseline: 'top' },
-      { text: `${selector.x_end.toFixed(2)}, ${selector.y_end.toFixed(2)}`, x: sx + sw - pad, y: sy + sh + pad, baseline: 'top', align: 'right' },
+    // Corner coordinate labels — centered on each corner point
+    ctx.font = '10px monospace';
+    const corners = [
+      { text: `${selector.x_start.toFixed(2)}, ${selector.y_start.toFixed(2)}`, x: sx, y: sy - 10 },
+      { text: `${selector.x_end.toFixed(2)}, ${selector.y_start.toFixed(2)}`, x: sx + sw, y: sy - 10 },
+      { text: `${selector.x_start.toFixed(2)}, ${selector.y_end.toFixed(2)}`, x: sx, y: sy + sh + 14 },
+      { text: `${selector.x_end.toFixed(2)}, ${selector.y_end.toFixed(2)}`, x: sx + sw, y: sy + sh + 14 },
     ];
 
-    for (const l of labels) {
-      ctx.textBaseline = l.baseline;
-      ctx.textAlign = l.align || 'left';
-      // Background pill
-      const m = ctx.measureText(l.text);
-      const bx = l.align === 'right' ? l.x - m.width - 4 : l.x - 2;
-      const by = l.baseline === 'bottom' ? l.y - 13 : l.y + 1;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const c of corners) {
+      const m = ctx.measureText(c.text);
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(bx, by, m.width + 4, 14);
-      // Text
+      ctx.fillRect(c.x - m.width / 2 - 3, c.y - 7, m.width + 6, 14);
       ctx.fillStyle = '#cdd6f4';
-      ctx.fillText(l.text, l.x, l.y);
+      ctx.fillText(c.text, c.x, c.y);
     }
+
+    // Center label — area percentage
+    const areaPct = ((selector.x_end - selector.x_start) * (selector.y_end - selector.y_start) * 100).toFixed(1);
+    const centerLabel = `${areaPct}%`;
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const cx = sx + sw / 2;
+    const cy = sy + sh / 2;
+    const cm = ctx.measureText(centerLabel);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(cx - cm.width / 2 - 5, cy - 9, cm.width + 10, 18);
+    ctx.fillStyle = '#cdd6f4';
+    ctx.fillText(centerLabel, cx, cy);
   }, [selector, imageLoaded, canvasSize]);
 
   if (!isOpen) return null;
