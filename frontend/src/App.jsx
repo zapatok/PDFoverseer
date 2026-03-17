@@ -33,6 +33,27 @@ function App() {
   const [showTerminal, setShowTerminal] = useState(true)
   const [terminalMenuOpen, setTerminalMenuOpen] = useState(false)
   const [aiLogMode, setAiLogMode] = useState(false)
+  const [showAllIssues, setShowAllIssues] = useState(false)
+  const [cascadeToast, setCascadeToast] = useState(null)
+  const preCascadeRef = useRef(null)
+
+  const IMPACT_PRIORITY = {
+    'ph5b': 1,
+    'ph5-merge': 2,
+    'boundary': 3,
+    'sequence': 4,
+    'orphan': 5,
+    'internal': 6,
+  };
+
+  const IMPACT_LABELS = {
+    'ph5b': { label: 'Ph5b', color: 'text-red-400 bg-red-400/10' },
+    'ph5-merge': { label: 'Fusión', color: 'text-orange-400 bg-orange-400/10' },
+    'boundary': { label: 'Frontera', color: 'text-yellow-400 bg-yellow-400/10' },
+    'sequence': { label: 'Secuencia', color: 'text-red-400 bg-red-400/10' },
+    'orphan': { label: 'Huérfana', color: 'text-red-400 bg-red-400/10' },
+    'internal': { label: 'Interna', color: 'text-gray-500 bg-gray-500/10' },
+  };
 
   const handleCopyLogs = () => {
     const filtered = aiLogMode ? aiLogs : logs;
@@ -111,9 +132,26 @@ function App() {
       } else if (type === 'issues_refresh') {
         // CASCADING RESET: El backend manda { pdf_path, issues }
         setIssues(prev => {
-          if (!payload.pdf_path) return prev; // fallback
+          if (!payload.pdf_path) return prev;
           const targetPdf = payload.pdf_path;
-          return [...prev.filter(i => i.pdf_path !== targetPdf), ...(payload.issues || [])];
+          const newList = [...prev.filter(i => i.pdf_path !== targetPdf), ...(payload.issues || [])];
+
+          // Cascade impact toast
+          if (preCascadeRef.current) {
+            const prev_snap = preCascadeRef.current;
+            const newIssueCount = (payload.issues || []).length;
+            const parts = [];
+            const issuesDelta = prev_snap.issueCount - newIssueCount;
+            if (issuesDelta > 0) parts.push(`${issuesDelta} issues resueltos`);
+            if (issuesDelta < 0) parts.push(`${Math.abs(issuesDelta)} issues nuevos`);
+            if (parts.length > 0) {
+              setCascadeToast(parts.join(', '));
+              setTimeout(() => setCascadeToast(null), 5000);
+            }
+            preCascadeRef.current = null;
+          }
+
+          return newList;
         });
       } else if (type === 'metrics') {
         setMetrics(payload)
@@ -365,6 +403,10 @@ function App() {
     }
 
     try {
+      // Snapshot for cascade impact toast
+      preCascadeRef.current = {
+        issueCount: issues.filter(i => i.pdf_path === selectedIssue.pdf_path).length,
+      };
       await fetch('http://localhost:8000/api/correct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -750,33 +792,81 @@ function App() {
                     })()}
                   </div>
                 </div>
-                {issues.length === 0 && (
-                  <div className="flex items-center justify-center h-48 border-2 border-dashed border-[#313244] rounded-2xl text-gray-500">
-                    Aún no hay problemas por revisar
+                {/* Cascade impact toast */}
+                {cascadeToast && (
+                  <div className="bg-accent/10 border border-accent/30 text-accent text-sm px-4 py-2 rounded-lg mb-3 animate-pulse">
+                    {cascadeToast}
                   </div>
                 )}
 
-                <div className="grid gap-3">
-                  {(selectedPdfFilter ? issues.filter(i => i.filename === selectedPdfFilter) : issues).map(iss => (
-                    <div key={iss.id}
-                      onClick={() => setSelectedIssue(iss)}
-                      className={`bg-surface rounded-xl p-4 border flex items-center shadow-sm transition-all cursor-pointer group
-                     ${selectedIssue?.id === iss.id ? 'border-accent ring-1 ring-accent scale-[1.01]' : 'border-[#313244] hover:border-warning/50'}`}>
-                      <div className="bg-warning/10 text-warning px-3 py-1.5 rounded-lg font-mono text-xl w-16 text-center shadow-inner">
-                        {iss.page}
+                {/* Filter toggle + issue count */}
+                {(() => {
+                  const filteredIssues = (selectedPdfFilter
+                    ? issues.filter(i => i.filename === selectedPdfFilter)
+                    : issues
+                  ).filter(i => showAllIssues || (i.impact || 'internal') !== 'internal')
+                   .sort((a, b) => (IMPACT_PRIORITY[a.impact] || 6) - (IMPACT_PRIORITY[b.impact] || 6));
+
+                  const totalCount = (selectedPdfFilter
+                    ? issues.filter(i => i.filename === selectedPdfFilter)
+                    : issues).length;
+
+                  return (
+                    <>
+                      {totalCount > 0 && (
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-gray-500 text-xs">
+                            {filteredIssues.length} de {totalCount} issues
+                          </span>
+                          <button
+                            onClick={() => setShowAllIssues(v => !v)}
+                            className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded transition-all cursor-pointer ${
+                              showAllIssues ? 'bg-gray-600 text-white' : 'bg-transparent text-gray-500 hover:text-gray-300'
+                            }`}
+                          >
+                            {showAllIssues ? 'TODOS' : 'CRÍTICOS'}
+                          </button>
+                        </div>
+                      )}
+
+                      {filteredIssues.length === 0 && (
+                        <div className="flex items-center justify-center h-48 border-2 border-dashed border-[#313244] rounded-2xl text-gray-500">
+                          {totalCount === 0 ? 'Aún no hay problemas por revisar' : 'No hay issues críticos — pulsa TODOS para ver internos'}
+                        </div>
+                      )}
+
+                      <div className="grid gap-3">
+                        {filteredIssues.map(iss => {
+                          const imp = IMPACT_LABELS[iss.impact] || IMPACT_LABELS.internal;
+                          return (
+                            <div key={iss.id}
+                              onClick={() => setSelectedIssue(iss)}
+                              className={`bg-surface rounded-xl p-4 border flex items-center shadow-sm transition-all cursor-pointer group
+                             ${selectedIssue?.id === iss.id ? 'border-accent ring-1 ring-accent scale-[1.01]' : 'border-[#313244] hover:border-warning/50'}`}>
+                              <div className="bg-warning/10 text-warning px-3 py-1.5 rounded-lg font-mono text-xl w-16 text-center shadow-inner">
+                                {iss.page}
+                              </div>
+                              <div className="ml-4 flex-1">
+                                <div className="flex items-center">
+                                  <h3 className="font-semibold text-gray-100 truncate">{iss.filename}</h3>
+                                  <span className={`${imp.color} px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ml-2`}>
+                                    {imp.label}
+                                  </span>
+                                </div>
+                                <p className="text-gray-400 text-sm mt-0.5">{iss.type} — {iss.detail}</p>
+                              </div>
+                              <div className={`transition-opacity ${selectedIssue?.id === iss.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                                <button className="bg-accent/20 text-accent hover:bg-accent hover:text-base px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer text-sm">
+                                  Revisar ➔
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="ml-4 flex-1">
-                        <h3 className="font-semibold text-gray-100 truncate">{iss.filename}</h3>
-                        <p className="text-gray-400 text-sm mt-0.5">{iss.type} — {iss.detail}</p>
-                      </div>
-                      <div className={`transition-opacity ${selectedIssue?.id === iss.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                        <button className="bg-accent/20 text-accent hover:bg-accent hover:text-base px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer text-sm">
-                          Revisar ➔
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Log Console Terminal (Bottom half of center workspace) */}
