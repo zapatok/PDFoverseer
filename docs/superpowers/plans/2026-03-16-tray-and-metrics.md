@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the issue tray show only problems that impact document count when corrected, and replace the single "complete" percentage with an honest three-tier reliability metric.
+**Goal:** Make the issue tray show only problems that impact document count when corrected, replace the single "complete" percentage with an honest three-tier reliability metric and a `verified%` score, and show cascade impact feedback after corrections.
 
-**Architecture:** Backend emits richer issue metadata (impact category, priority) and three-tier doc counts. Phase 5/5b emit issues for their actions. Frontend renders tiered metrics and filters/sorts tray by impact. The cascade system (`re_infer_documents`) is untouched — corrections still reset inferences and re-run the full pipeline.
+**Architecture:** Backend emits richer issue metadata (impact category, doc_index, priority) and three-tier doc counts + `verified%`. Phase 5/5b emit issues for their actions. Frontend renders tiered metrics, filters/sorts tray by impact, and shows a post-cascade impact toast after corrections. The cascade system (`re_infer_documents`) is untouched — corrections still reset inferences and re-run the full pipeline.
 
 **Tech Stack:** Python (core/analyzer.py, server.py), React (frontend/src/App.jsx)
 
@@ -14,16 +14,17 @@
 
 | File | Action | Responsibility |
 |------|--------|---------------|
-| `core/analyzer.py:186-200` | Modify | Add `min_inferred_confidence` property to `Document` |
+| `core/analyzer.py:~201` | Modify | Add `classify_doc` helper after `Document` class |
 | `core/analyzer.py:608-679` | Modify | Phase 5b emits issues for corrected reads |
-| `core/analyzer.py:989-1034` | Modify | Phase 5 emits issues for merged docs |
+| `core/analyzer.py:989-1034` | Modify | Phase 5 emits issues for merged docs; add `doc_index` to `_issue` |
 | `core/analyzer.py:964-977` | Modify | Move issue emission after Phase 5/5b; add impact category |
-| `core/analyzer.py:722-753` | Modify | `_recalculate_metrics` computes three-tier counts |
-| `server.py:722-791` | Modify | `_recalculate_metrics` emits `direct`, `inferred_hi`, `inferred_lo` counts |
-| `server.py:511-524` | Modify | Issue payload includes `impact` and `priority` fields |
-| `frontend/src/App.jsx:704-715` | Modify | Header shows three-tier metrics instead of COM/INC |
+| `core/analyzer.py:1062-1123` | Modify | `_build_documents` passes `doc_index` in orphan/sequence issues |
+| `server.py:722-791` | Modify | `_recalculate_metrics` emits three-tier counts + `verified%` |
+| `server.py:511-524` | Modify | Issue payload includes `impact`, `doc_index` fields |
+| `frontend/src/App.jsx:704-715` | Modify | Header shows three-tier metrics + verified% instead of COM/INC |
 | `frontend/src/App.jsx:724-743` | Modify | Tray cards show impact badge and sort by priority |
-| `tests/test_tray_issues.py` | Create | Tests for issue emission from Phase 5, 5b, and impact classification |
+| `frontend/src/App.jsx` | Modify | Post-cascade impact toast on `issues_refresh` |
+| `tests/test_tray_issues.py` | Create | Tests for classify_doc, issue emission from Phase 5, 5b |
 
 ---
 
@@ -59,11 +60,23 @@ Only these things change the document count:
 
 Internal inferred pages (curr > 1) with high confidence are noise in the tray.
 
+### Confidence percentage today — and what replaces it
+
+`pdf_confidences[path]` = `sum(r.confidence) / len(valid_reads)` — a naive per-page average. A PDF with 600 perfect pages and 3 shaky inferred boundaries shows ~99.7%. Meaningless for the user who cares about whether the *count* is right.
+
+**Replacement:** `verified% = direct_docs / total_docs × 100`. Means: "X% of documents have every page confirmed by OCR." If 95%, the user knows 5% rely on inference. The three-tier counts (DIR/INF/INC) provide the detail; the percentage provides the quick summary.
+
+### Cascade feedback gap
+
+After `/api/correct`, the user sees the refreshed issue list but has no indication of what changed. Did the count go up or down? Were other issues resolved? The user has to compare before/after mentally.
+
+**Fix:** The frontend captures metrics before the correction, compares with the new metrics after `issues_refresh`, and shows a toast: "DOC 674→673 (−1), 3 issues resueltos, 2 nuevos."
+
 ---
 
 ## Chunk 1: Backend — Issue enrichment and three-tier metrics
 
-### Task 1: Add `min_inferred_confidence` to Document
+### Task 1: Add `classify_doc` helper for three-tier classification
 
 **Files:**
 - Modify: `core/analyzer.py:186-200`
@@ -275,7 +288,19 @@ self.total_inferred_lo: int = 0
 
 Reset these in the two reset blocks (~266, ~351).
 
-- [ ] **Step 2: Update metrics emission to include tiers**
+- [ ] **Step 2: Replace naive confidence with `verified%`**
+
+In the same loop, replace the per-PDF confidence calculation (line ~768):
+
+```python
+        # Replace naive page-average confidence with doc-level verified%
+        n_direct = sum(1 for d in docs if classify_doc(d, reads_by_page) == "direct")
+        pdf_confidences[path] = n_direct / len(docs) if docs else 1.0
+```
+
+This replaces `sum(r.confidence) / len(valid_reads)` — the new metric means "fraction of documents fully verified by OCR."
+
+- [ ] **Step 3: Update metrics emission to include tiers**
 
 In the `_emit("metrics", ...)` block (line ~784), add:
 ```python
@@ -284,18 +309,32 @@ In the `_emit("metrics", ...)` block (line ~784), add:
 "inferred_lo": state.total_inferred_lo,
 ```
 
-Also update `pdf_metrics[path]` (line ~775) to include per-PDF tiers.
+Also update `pdf_metrics[path]` (line ~775) to include per-PDF tiers:
+```python
+        pdf_direct = sum(1 for d in docs if classify_doc(d, reads_by_page) == "direct")
+        pdf_inf_hi = sum(1 for d in docs if classify_doc(d, reads_by_page) == "inferred_hi")
+        pdf_inf_lo = sum(1 for d in docs if classify_doc(d, reads_by_page) == "inferred_lo")
+        pdf_metrics[path] = {
+            "docs": len(docs),
+            "complete": len(complete),
+            "incomplete": len(incomplete),
+            "inferred": inferred,
+            "direct": pdf_direct,
+            "inferred_hi": pdf_inf_hi,
+            "inferred_lo": pdf_inf_lo,
+        }
+```
 
-- [ ] **Step 3: Run server manually, verify metrics payload includes new fields**
+- [ ] **Step 4: Run server manually, verify metrics payload includes new fields**
 
 Run: `python -c "from server import _recalculate_metrics; print('import ok')"`
 Expected: no import errors
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add server.py
-git commit -m "feat(server): emit three-tier doc reliability metrics (direct/inferred_hi/inferred_lo)"
+git commit -m "feat(server): emit three-tier metrics + verified% confidence (direct/inferred_hi/inferred_lo)"
 ```
 
 ---
@@ -413,20 +452,20 @@ Today, low-confidence inferred pages are reported as issues at line 964 **before
 | `"orphan"` | Orphan page in _build_documents | Always |
 | `"internal"` | Internal inferred page, low confidence | Only if conf < 0.50 |
 
-- [ ] **Step 1: Modify `_issue` signature to accept impact**
+- [ ] **Step 1: Modify `_issue` signature to accept impact and doc_index**
 
 In `analyze_pdf` (line ~827):
 
 ```python
-    def _issue(page: int, kind: str, detail: str, impact: str = "internal"):
+    def _issue(page: int, kind: str, detail: str, impact: str = "internal", doc_index: int | None = None):
         if on_issue is not None:
-            on_issue(page, kind, detail, None, impact)
+            on_issue(page, kind, detail, None, impact, doc_index)
 ```
 
 Update `on_issue` signature in `server.py:511`:
 
 ```python
-    def on_issue(page, kind, detail, pil_img, impact="internal"):
+    def on_issue(page, kind, detail, pil_img, impact="internal", doc_index=None):
         with state._lock:
             issue = {
                 "id": len(state.issues),
@@ -436,25 +475,56 @@ Update `on_issue` signature in `server.py:511`:
                 "type": kind,
                 "detail": detail,
                 "impact": impact,
+                "doc_index": doc_index,
             }
 ```
 
-- [ ] **Step 2: Tag existing issue calls with impact**
+`doc_index` links the issue to a specific document (1-based). This lets the frontend group issues by document in the future without UI changes now.
 
-- Phase 5b issues (Task 3): already `"ph5b-corregida"` → impact=`"ph5b"`
-- Phase 5 issues (Task 3): already `"ph5-fusion"` → impact=`"ph5-merge"`
-- `_build_documents` orphan (line 1094): impact=`"orphan"`
-- `_build_documents` sequence break (line 1105): impact=`"sequence"`
+Update `on_issue` in `/api/correct` (line ~610) with the same signature:
+
+```python
+    def on_issue(page, kind, detail, pil_img, impact="internal", doc_index=None, _path=pdf_str):
+        with state._lock:
+            issue = {
+                "id": len(state.issues),
+                "pdf_path": _path,
+                "filename": Path(_path).name,
+                "page": page,
+                "type": kind,
+                "detail": detail,
+                "impact": impact,
+                "doc_index": doc_index,
+            }
+            state.issues.append(issue)
+```
+
+- [ ] **Step 2: Tag existing issue calls with impact and doc_index**
+
+- Phase 5b issues (Task 3): `"ph5b-corregida"` → impact=`"ph5b"`. Phase 5b runs before `_build_documents`, so doc_index is unknown → pass `None`.
+- Phase 5 issues (Task 3): `"ph5-fusion"` → impact=`"ph5-merge"`, doc_index=`d_next.index` (the doc being merged).
+- `_build_documents` orphan (line 1094): impact=`"orphan"`, doc_index=`None` (no active doc).
+- `_build_documents` sequence break (line 1105): impact=`"sequence"`, doc_index=`current.index`.
 
 - [ ] **Step 3: Move low-confidence issue emission after Phase 5/5b**
 
-Delete the block at lines 964-977. Re-add it after Phase 5 (after line ~1034), with impact classification:
+Delete the block at lines 964-977. Re-add it after Phase 5 (after line ~1034), with impact classification and doc_index.
+
+To resolve doc_index, build a page→doc_index lookup from the post-Phase-5 documents:
 
 ```python
+    # ── Build page→doc_index map for issue attribution ────────────
+    _post_docs = _build_documents(reads_clean, on_log, lambda p, k, d: None)
+    _page_to_doc = {}
+    for _d in _post_docs:
+        for _p in _d.pages + _d.inferred_pages:
+            _page_to_doc[_p] = _d.index
+
     # ── Report issues — AFTER Phase 5/5b so state is final ────────────
     for r in reads_clean:
         if r.method != "inferred":
             continue
+        _di = _page_to_doc.get(r.pdf_page)
         if r.confidence <= 0.60:
             conf_label = "MEDIA" if r.confidence >= 0.50 else "BAJA"
             if r.curr == 1:
@@ -463,20 +533,29 @@ Delete the block at lines 964-977. Re-add it after Phase 5 (after line ~1034), w
                 impact = "internal"
             detail = (f"Pag {r.pdf_page}: inferida como {r.curr}/{r.total} "
                       f"(confianza {conf_label}: {r.confidence:.0%})")
-            _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail, impact)
+            _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail, impact, _di)
         elif r.curr == 1:
             # High-confidence boundary — still worth flagging
             impact = "boundary"
             detail = (f"Pag {r.pdf_page}: frontera de documento inferida {r.curr}/{r.total} "
                       f"(confianza: {r.confidence:.0%})")
-            _issue(r.pdf_page, "frontera inferida", detail, impact)
+            _issue(r.pdf_page, "frontera inferida", detail, impact, _di)
 ```
 
-Note: this also adds boundary pages with conf > 0.60 that were previously invisible.
+Note: `_post_docs` is a lightweight call — `_build_documents` just iterates reads, no heavy computation. This also adds boundary pages with conf > 0.60 that were previously invisible.
 
 - [ ] **Step 4: Update `re_infer_documents` issue emission too**
 
-In `re_infer_documents` (line 1167-1174), apply the same impact logic so cascaded re-inference produces consistent issues.
+In `re_infer_documents` (line 1167-1174), apply the same impact + doc_index logic so cascaded re-inference produces consistent issues.
+
+Update the local `_issue` in `re_infer_documents`:
+```python
+    def _issue(page: int, kind: str, detail: str, impact: str = "internal", doc_index: int | None = None):
+        if on_issue is not None:
+            on_issue(page, kind, detail, None, impact, doc_index)
+```
+
+After `_infer_missing` and before `_build_documents`, add the same page→doc_index resolution and impact-tagged issue emission as in `analyze_pdf` (Step 3 above).
 
 - [ ] **Step 5: Run tests**
 
@@ -499,11 +578,11 @@ git commit -m "feat(core): relocate issue emission after Phase 5/5b; add impact 
 **Files:**
 - Modify: `frontend/src/App.jsx:704-715`
 
-- [ ] **Step 1: Replace COM/INC counters with three-tier display**
+- [ ] **Step 1: Replace COM/INC counters with three-tier display + verified%**
 
 Current header shows: `DOC | COM | INC | INF`
 
-Replace with: `DOC | ✓ directo | ◐ inferido | ✗ incompleto`
+Replace with: `DOC | DIR | INF | INC | verified%`
 
 In `App.jsx` around line 704-715, replace the metrics rendering:
 
@@ -529,7 +608,31 @@ In `App.jsx` around line 704-715, replace the metrics rendering:
 </div>
 ```
 
-The INF column now shows inferred-complete docs (both hi and lo), not inferred pages. Hover tooltip explains each.
+After the four columns, add the `verified%` indicator. This uses the `confidences` field from the metrics payload (which now contains `direct_docs / total_docs` instead of the old naive average):
+
+```jsx
+{/* Verified% — uses the per-PDF confidence which is now direct/total */}
+{(() => {
+  const conf = metrics?.confidences && targetPdf
+    ? metrics.confidences[targetPdf.path]
+    : (ind.docs > 0 ? ((ind.direct || 0) / ind.docs) : null);
+  if (conf === null || conf === undefined) return null;
+  const pct = Math.round(conf * 100);
+  const color = pct >= 90 ? 'text-success' : pct >= 70 ? 'text-warning' : 'text-error';
+  return (
+    <>
+      <div className="w-px h-6 bg-white/5 self-center"></div>
+      <div className="flex flex-col items-center justify-center min-w-[40px]"
+           title="Porcentaje de documentos con todas las páginas verificadas por OCR">
+        <span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">VER</span>
+        <span className={`${color} font-mono font-bold`}>{pct}%</span>
+      </div>
+    </>
+  );
+})()}
+```
+
+The INF column now shows inferred-complete docs (both hi and lo), not inferred pages. The VER column shows what fraction of the doc count is backed by direct OCR. Hover tooltips explain each.
 
 - [ ] **Step 2: Test visually — start server, load a PDF**
 
@@ -621,18 +724,75 @@ Near the tray header, add a small toggle:
 </button>
 ```
 
-- [ ] **Step 5: Test visually**
+- [ ] **Step 5: Add post-cascade impact toast**
+
+When the user corrects a page and the cascade runs, the frontend receives `issues_refresh`. Before applying it, capture the current state and show a diff.
+
+Add a ref to track pre-correction state:
+```jsx
+const preCascadeRef = useRef(null)
+```
+
+When the user submits a correction (in the existing correction handler), snapshot the current metrics:
+```jsx
+// Before calling /api/correct
+preCascadeRef.current = {
+  docs: metrics?.docs || 0,
+  issueCount: issues.filter(i => i.pdf_path === selectedIssue.pdf_path).length,
+}
+```
+
+In the `issues_refresh` WebSocket handler (line ~109-117), after updating the issue list, show the toast:
+```jsx
+case 'issues_refresh': {
+  // ... existing issue refresh logic ...
+
+  // Cascade impact toast
+  if (preCascadeRef.current) {
+    const prev = preCascadeRef.current
+    const newDocs = metrics?.docs || 0
+    const newIssueCount = msg.issues.length
+    const docDelta = newDocs - prev.docs
+    const issuesDelta = prev.issueCount - newIssueCount
+    const parts = []
+    if (docDelta !== 0) parts.push(`DOC ${prev.docs}→${newDocs} (${docDelta > 0 ? '+' : ''}${docDelta})`)
+    if (issuesDelta > 0) parts.push(`${issuesDelta} issues resueltos`)
+    if (issuesDelta < 0) parts.push(`${Math.abs(issuesDelta)} issues nuevos`)
+    if (parts.length > 0) {
+      setCascadeToast(parts.join(', '))
+      setTimeout(() => setCascadeToast(null), 5000)
+    }
+    preCascadeRef.current = null
+  }
+  break
+}
+```
+
+Add the toast state and render:
+```jsx
+const [cascadeToast, setCascadeToast] = useState(null)
+
+// In the JSX, near the tray header:
+{cascadeToast && (
+  <div className="bg-accent/10 border border-accent/30 text-accent text-sm px-4 py-2 rounded-lg mb-3 animate-pulse">
+    {cascadeToast}
+  </div>
+)}
+```
+
+- [ ] **Step 6: Test visually**
 
 Run the app, process a PDF with known issues, verify:
 - Tray shows ph5b/merge/boundary issues by default
 - Internal issues hidden unless toggled
 - Issues sorted by priority (ph5b first)
+- After correcting a page, toast appears showing doc count change and issues resolved
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add frontend/src/App.jsx
-git commit -m "feat(ui): smart tray filtering — critical issues first, internal hidden by default"
+git commit -m "feat(ui): smart tray filtering + post-cascade impact toast"
 ```
 
 ---
@@ -683,18 +843,22 @@ cd frontend && npm run dev
 
 - [ ] **Step 2: Process a small PDF (CH_9 or CH_39) and verify:**
 
-1. Header shows DIR / INF / INC counts
-2. Tray shows issues sorted by priority
-3. Ph5b and Ph5 merge issues appear (if applicable for this PDF)
-4. "CRÍTICOS" toggle hides internal issues
-5. Clicking an issue still opens the PDF viewer and correction dialog works
-6. After correcting a page, cascade runs and issues refresh correctly
+1. Header shows DIR / INF / INC / VER% counts
+2. VER% is green (>90%) for CH_9 which has good OCR
+3. Tray shows issues sorted by priority with impact badges
+4. Ph5b and Ph5 merge issues appear (if applicable for this PDF)
+5. "CRITICOS" toggle hides internal issues
+6. Clicking an issue still opens the PDF viewer and correction dialog works
+7. After correcting a page, cascade impact toast appears (e.g. "DOC 9→9, 1 issues resueltos")
+8. Issues have `doc_index` in the payload (check browser DevTools Network tab)
 
 - [ ] **Step 3: Process ART to verify at scale:**
 
 1. Check that most internal inferred pages are hidden by default
 2. Boundary issues (curr==1 inferred) are visible
 3. Ph5b corrections appear if any (ART has period conf=67%, below 69% threshold, so Phase 5b should NOT fire for ART — verify no ph5b issues)
+4. VER% is low for ART (42% OCR failure rate → many inferred docs)
+5. Correcting a boundary page shows cascade impact toast with doc count change
 
 - [ ] **Step 4: Final commit if any adjustments needed**
 
