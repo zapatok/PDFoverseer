@@ -640,6 +640,7 @@ def _infer_missing(
                         if (r.method not in ("failed", "inferred", "excluded")
                                 and r.total is not None
                                 and r.total != expected_total):
+                            orig_total = r.total
                             # Preserve curr if it fits within the expected total;
                             # otherwise reset to 1.
                             if r.curr is not None and 1 <= r.curr <= expected_total:
@@ -649,6 +650,16 @@ def _infer_missing(
                                 r.total = expected_total
                             r.method = "inferred"
                             r.confidence = 0.50
+                            on_log(
+                                f"  -> Ph5b: pag {r.pdf_page} corregida "
+                                f"total={orig_total}→{expected_total} "
+                                f"(period conf={period_conf:.0%}, agreement={ratio:.0%})",
+                                "warn",
+                            )
+                            _issue(r.pdf_page, "ph5b-corregida",
+                                   f"Pag {r.pdf_page}: OCR leyo total={orig_total} "
+                                   f"pero periodo dominante={expected_total} "
+                                   f"(conf={period_conf:.0%}, acuerdo={ratio:.0%})")
                             corrected_indices.add(idx_r)
 
                     # Re-propagate: fix inferred pages downstream of corrected pages.
@@ -1038,6 +1049,14 @@ def analyze_pdf(
             d_next.pages.clear()
             d_next.inferred_pages.clear()
             d_next.declared_total = 0  # mark for removal
+            _issue(d_next.start_pdf_page, "ph5-fusion",
+                   f"Doc en pag {d_next.start_pdf_page} fusionado con doc anterior "
+                   f"(pag {d.start_pdf_page}, faltaban {missing} pags)")
+            on_log(
+                f"  -> Ph5: doc pag {d_next.start_pdf_page} absorbido por doc pag {d.start_pdf_page} "
+                f"({missing} pags faltantes)",
+                "warn",
+            )
             _uc_fixed += 1
     if _uc_fixed:
         documents = [d for d in documents if d.declared_total > 0]
