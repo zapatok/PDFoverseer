@@ -200,6 +200,19 @@ class Document:
         return self.sequence_ok and self.found_total == self.declared_total
 
 
+def classify_doc(doc: "Document", reads_by_page: dict) -> str:
+    """Classify doc reliability: direct | inferred_hi | inferred_lo | incomplete."""
+    if not doc.is_complete:
+        return "incomplete"
+    if not doc.inferred_pages:
+        return "direct"
+    confs = [reads_by_page[p].confidence
+             for p in doc.inferred_pages if p in reads_by_page]
+    if not confs:
+        return "direct"
+    return "inferred_hi" if min(confs) >= 0.75 else "inferred_lo"
+
+
 # ── Inference result for each page ────────────────────────────────────────────
 
 @dataclass
