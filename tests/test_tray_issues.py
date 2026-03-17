@@ -9,7 +9,7 @@ def _make_read(page, curr, total, method="direct", confidence=1.0):
 def test_classify_doc_direct():
     """Doc with all direct reads → 'direct' tier."""
     reads = [_make_read(1, 1, 2, "direct"), _make_read(2, 2, 2, "direct")]
-    docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
+    docs = _build_documents(reads, lambda m, l: None, lambda p, k, d, *a: None)
     rmap = {r.pdf_page: r for r in reads}
     assert len(docs) == 1
     assert docs[0].is_complete
@@ -18,7 +18,7 @@ def test_classify_doc_direct():
 def test_classify_doc_inferred_hi():
     """Doc complete with inferred pages, all conf >= 0.75 → 'inferred_hi'."""
     reads = [_make_read(1, 1, 2, "direct"), _make_read(2, 2, 2, "inferred", 0.80)]
-    docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
+    docs = _build_documents(reads, lambda m, l: None, lambda p, k, d, *a: None)
     rmap = {r.pdf_page: r for r in reads}
     assert len(docs) == 1
     assert classify_doc(docs[0], rmap) == "inferred_hi"
@@ -26,7 +26,7 @@ def test_classify_doc_inferred_hi():
 def test_classify_doc_inferred_lo():
     """Doc complete with inferred pages, min conf < 0.75 → 'inferred_lo'."""
     reads = [_make_read(1, 1, 2, "direct"), _make_read(2, 2, 2, "inferred", 0.50)]
-    docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
+    docs = _build_documents(reads, lambda m, l: None, lambda p, k, d, *a: None)
     rmap = {r.pdf_page: r for r in reads}
     assert len(docs) == 1
     assert classify_doc(docs[0], rmap) == "inferred_lo"
@@ -40,6 +40,6 @@ def test_classify_doc_incomplete():
 def test_classify_doc_boundary_0_75():
     """Exactly 0.75 confidence → 'inferred_hi' (threshold is >=)."""
     reads = [_make_read(1, 1, 2, "direct"), _make_read(2, 2, 2, "inferred", 0.75)]
-    docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
+    docs = _build_documents(reads, lambda m, l: None, lambda p, k, d, *a: None)
     rmap = {r.pdf_page: r for r in reads}
     assert classify_doc(docs[0], rmap) == "inferred_hi"

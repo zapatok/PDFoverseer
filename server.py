@@ -517,7 +517,7 @@ def _process_pdfs(start_index: int = 0):
         def on_log(msg, level="info"):
             _emit("log", {"msg": msg, "level": level})
             
-        def on_issue(page, kind, detail, pil_img):
+        def on_issue(page, kind, detail, pil_img, impact="internal", doc_index=None):
             with state._lock:
                 issue = {
                     "id": len(state.issues),
@@ -526,6 +526,8 @@ def _process_pdfs(start_index: int = 0):
                     "page": page,
                     "type": kind,
                     "detail": detail,
+                    "impact": impact,
+                    "doc_index": doc_index,
                 }
                 state.issues.append(issue)
                 if len(state.issues) > 10_000:
@@ -615,8 +617,8 @@ def api_correct(req: CorrectRequest):
         
     reads = state.pdf_reads[pdf_str]
     corrections = {req.page: (req.correct_curr, req.correct_tot)}
-    
-    def on_issue(page, kind, detail, pil_img, _path=pdf_str):
+
+    def on_issue(page, kind, detail, pil_img, impact="internal", doc_index=None, _path=pdf_str):
         with state._lock:
             issue = {
                 "id": len(state.issues),
@@ -625,6 +627,8 @@ def api_correct(req: CorrectRequest):
                 "page": page,
                 "type": kind,
                 "detail": detail,
+                "impact": impact,
+                "doc_index": doc_index,
             }
             state.issues.append(issue)
 
@@ -690,8 +694,8 @@ def api_exclude(req: ExcludeRequest):
         
     reads = state.pdf_reads[pdf_str]
     exclusions = [req.page]
-    
-    def on_issue(page, kind, detail, pil_img, _path=pdf_str):
+
+    def on_issue(page, kind, detail, pil_img, impact="internal", doc_index=None, _path=pdf_str):
         with state._lock:
             issue = {
                 "id": len(state.issues),
@@ -700,6 +704,8 @@ def api_exclude(req: ExcludeRequest):
                 "page": page,
                 "type": kind,
                 "detail": detail,
+                "impact": impact,
+                "doc_index": doc_index,
             }
             state.issues.append(issue)
 
@@ -749,7 +755,7 @@ def _recalculate_metrics():
             continue
 
         # Rebuild docs purely to count them
-        docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
+        docs = _build_documents(reads, lambda m, l: None, lambda p, k, d, *a: None)
         complete = [d for d in docs if d.is_complete]
         incomplete = [d for d in docs if not d.is_complete]
         inferred = sum(len(d.inferred_pages) for d in docs)
@@ -787,7 +793,7 @@ def _recalculate_metrics():
                                   "direct": 0, "inferred_hi": 0, "inferred_lo": 0}
             continue
 
-        docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
+        docs = _build_documents(reads, lambda m, l: None, lambda p, k, d, *a: None)
         reads_by_page = {r.pdf_page: r for r in reads}
         n_direct = sum(1 for d in docs if classify_doc(d, reads_by_page) == "direct")
         pdf_confidences[path] = n_direct / len(docs) if docs else 1.0

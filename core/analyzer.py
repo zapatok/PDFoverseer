@@ -659,7 +659,8 @@ def _infer_missing(
                             _issue(r.pdf_page, "ph5b-corregida",
                                    f"Pag {r.pdf_page}: OCR leyo total={orig_total} "
                                    f"pero periodo dominante={expected_total} "
-                                   f"(conf={period_conf:.0%}, acuerdo={ratio:.0%})")
+                                   f"(conf={period_conf:.0%}, acuerdo={ratio:.0%})",
+                                   impact="ph5b")
                             corrected_indices.add(idx_r)
 
                     # Re-propagate: fix inferred pages downstream of corrected pages.
@@ -848,9 +849,9 @@ def analyze_pdf(
         "info",
     )
 
-    def _issue(page: int, kind: str, detail: str):
+    def _issue(page: int, kind: str, detail: str, impact: str = "internal", doc_index: int | None = None):
         if on_issue is not None:
-            on_issue(page, kind, detail, None)
+            on_issue(page, kind, detail, None, impact, doc_index)
 
     # ── Setup producer-consumer pipeline ──────────────────────────────────
     reads: list[_PageRead] = [None] * total_pages
@@ -985,21 +986,6 @@ def analyze_pdf(
         inferred = sum(1 for r in reads_clean if r.method == "inferred")
         on_log(f"Inferencia: {inferred} paginas recuperadas", "ok")
 
-    # Report inferred pages with low/medium confidence as issues — grouped by pattern
-    from collections import defaultdict as _dd
-    inf_groups: dict = _dd(list)
-    for r in reads_clean:
-        if r.method == "inferred" and r.confidence <= 0.60:
-            conf_label = "MEDIA" if r.confidence >= 0.50 else "BAJA"
-            key = (r.curr, r.total, conf_label, f"{r.confidence:.0%}")
-            inf_groups[key].append(r.pdf_page)
-            detail = (f"Pag {r.pdf_page}: inferida como {r.curr}/{r.total} "
-                      f"(confianza {conf_label}: {r.confidence:.0%})")
-            _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail)
-    for (curr, total, conf_label, conf_pct), pages in inf_groups.items():
-        pages_str = ", ".join(map(str, pages))
-        on_log(f"  -> inferida {curr}/{total} {conf_label}({conf_pct}): pags {pages_str}", "warn")
-
     # ── Phase 4: Build documents from reads ───────────────────────────────
     documents = _build_documents(reads_clean, on_log, _issue)
 
@@ -1008,7 +994,7 @@ def analyze_pdf(
     # _recalculate_metrics rebuilds from reads, so it also skips non-inferred
     # first pages of absorbed docs.  Both give the same pre-Phase-5 count,
     # which is what the UI displays.
-    _tele_docs = _build_documents(reads_clean, lambda m, l: None, lambda p, k, d: None)
+    _tele_docs = _build_documents(reads_clean, lambda m, l: None, lambda p, k, d, *a: None)
 
     # ── Phase 5: Undercount recovery ─────────────────────────────────────
     # When a doc is incomplete (found < declared), check if the gap is
@@ -1051,7 +1037,8 @@ def analyze_pdf(
             d_next.declared_total = 0  # mark for removal
             _issue(d_next.start_pdf_page, "ph5-fusion",
                    f"Doc en pag {d_next.start_pdf_page} fusionado con doc anterior "
-                   f"(pag {d.start_pdf_page}, faltaban {missing} pags)")
+                   f"(pag {d.start_pdf_page}, faltaban {missing} pags)",
+                   impact="ph5-merge", doc_index=d_next.index)
             on_log(
                 f"  -> Ph5: doc pag {d_next.start_pdf_page} absorbido por doc pag {d.start_pdf_page} "
                 f"({missing} pags faltantes)",
@@ -1066,6 +1053,41 @@ def analyze_pdf(
         on_log(f"Recuperacion undercount: {_uc_fixed} docs completados", "ok")
 
     # (_tele_docs captured above, before Phase 5)
+
+    # ── Build page→doc_index map for issue attribution ────────────
+    _post_docs = _build_documents(reads_clean, lambda m, l: None, lambda p, k, d, *a: None)
+    _page_to_doc = {}
+    for _d in _post_docs:
+        for _p in _d.pages + _d.inferred_pages:
+            _page_to_doc[_p] = _d.index
+
+    # ── Report issues — AFTER Phase 5/5b so state is final ────────────
+    from collections import defaultdict as _dd
+    inf_groups: dict = _dd(list)
+    for r in reads_clean:
+        if r.method != "inferred":
+            continue
+        _di = _page_to_doc.get(r.pdf_page)
+        if r.confidence <= 0.60:
+            conf_label = "MEDIA" if r.confidence >= 0.50 else "BAJA"
+            key = (r.curr, r.total, conf_label, f"{r.confidence:.0%}")
+            inf_groups[key].append(r.pdf_page)
+            if r.curr == 1:
+                impact = "boundary"
+            else:
+                impact = "internal"
+            detail = (f"Pag {r.pdf_page}: inferida como {r.curr}/{r.total} "
+                      f"(confianza {conf_label}: {r.confidence:.0%})")
+            _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail, impact, _di)
+        elif r.curr == 1:
+            # High-confidence boundary — still worth flagging
+            impact = "boundary"
+            detail = (f"Pag {r.pdf_page}: frontera de documento inferida {r.curr}/{r.total} "
+                      f"(confianza: {r.confidence:.0%})")
+            _issue(r.pdf_page, "frontera inferida", detail, impact, _di)
+    for (curr, total, conf_label, conf_pct), pages in inf_groups.items():
+        pages_str = ", ".join(map(str, pages))
+        on_log(f"  -> inferida {curr}/{total} {conf_label}({conf_pct}): pags {pages_str}", "warn")
 
     # ── Summary ───────────────────────────────────────────────────────────
     elapsed = time.time() - t0
@@ -1123,7 +1145,7 @@ def _build_documents(
             if current is None:
                 orphans.append(pdf_page)
                 on_log(f"  -> pag {pdf_page}: huerfana curr={curr} sin doc activo", "warn")
-                on_issue(pdf_page, "huerfana", f"curr={curr} sin doc activo")
+                on_issue(pdf_page, "huerfana", f"curr={curr} sin doc activo", "orphan", None)
             else:
                 expected = current.found_total + 1
                 if is_inferred:
@@ -1134,7 +1156,7 @@ def _build_documents(
                     current.sequence_ok = False
                     current.pages.append(pdf_page)
                     detail = f"Pag {pdf_page}: secuencia rota curr={curr}/expected={expected}"
-                    on_issue(pdf_page, "secuencia rota", detail)
+                    on_issue(pdf_page, "secuencia rota", detail, "sequence", current.index)
                     seq_breaks.append((pdf_page, curr, expected))
 
     if current is not None:
@@ -1166,9 +1188,9 @@ def re_infer_documents(
     Applies manual user corrections and exclusions, resets other inferred pages,
     and runs the inference algorithm again to cascade probabilities.
     """
-    def _issue(page: int, kind: str, detail: str):
+    def _issue(page: int, kind: str, detail: str, impact: str = "internal", doc_index: int | None = None):
         if on_issue is not None:
-            on_issue(page, kind, detail, None)
+            on_issue(page, kind, detail, None, impact, doc_index)
 
     if exclusions is None:
         exclusions = []
@@ -1196,16 +1218,34 @@ def re_infer_documents(
     period_info = _detect_period(reads)
     reads = _infer_missing(reads, period_info)
 
-    # 3. Report remaining issues (<= 0.60)
+    # 3. Rebuild documents first (needed for doc_index lookup)
+    documents = _build_documents(reads, on_log, _issue)
+
+    # 4. Build page→doc_index map for issue attribution
+    _page_to_doc = {}
+    for _d in documents:
+        for _p in _d.pages + _d.inferred_pages:
+            _page_to_doc[_p] = _d.index
+
+    # 5. Report remaining issues — with impact and doc_index
     for r in reads:
-        if r.method == "inferred" and r.confidence <= 0.60:
+        if r.method != "inferred":
+            continue
+        _di = _page_to_doc.get(r.pdf_page)
+        if r.confidence <= 0.60:
             conf_label = "MEDIA" if r.confidence >= 0.50 else "BAJA"
             detail = (f"Pag {r.pdf_page}: inferida como {r.curr}/{r.total} "
                       f"(confianza {conf_label}: {r.confidence:.0%})")
             on_log(f"  -> {detail}", "warn")
-            _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail)
-
-    # 4. Rebuild document logic
-    documents = _build_documents(reads, on_log, _issue)
+            if r.curr == 1:
+                impact = "boundary"
+            else:
+                impact = "internal"
+            _issue(r.pdf_page, f"inferida ({conf_label} {r.confidence:.0%})", detail, impact, _di)
+        elif r.curr == 1:
+            impact = "boundary"
+            detail = (f"Pag {r.pdf_page}: frontera de documento inferida {r.curr}/{r.total} "
+                      f"(confianza: {r.confidence:.0%})")
+            _issue(r.pdf_page, "frontera inferida", detail, impact, _di)
 
     return documents, reads
