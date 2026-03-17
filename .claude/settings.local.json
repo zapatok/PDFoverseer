@@ -89,7 +89,10 @@
       "Bash(python -c \"import weighted_levenshtein; print\\(''wl ok''\\)\")",
       "Bash(python -m pytest -v)",
       "Bash(git check-ignore:*)",
-      "Bash(git worktree:*)"
+      "Bash(git worktree:*)",
+      "Bash(source .venv-cuda/Scripts/activate)",
+      "Bash(python -c \"from server import _recalculate_metrics; print\\(''''import ok''''\\)\")",
+      "Bash(pytest tests/test_tray_issues.py -v)"
     ]
   }
 }
