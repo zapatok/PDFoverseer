@@ -731,7 +731,7 @@ def _emit_ai_telemetry(
     on_log(
         f"[AI:{_CORE_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
         f" | W{PARALLEL_WORKERS}+GPU | INF:{INFERENCE_ENGINE_VERSION}\n"
-        f"UI≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
+        f"PRE5≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
         f"OCR: {mstr}\n"
         f"DOCS: {n_docs}total → {docs_ok}ok+{bad_str} | dist: {dist_str}\n"
         f"INF: {len(inf_reads)}total(low:{len(inf_low)} mid:{len(inf_mid)} hi:{len(inf_high)}) | LOW: {low_str}\n"
