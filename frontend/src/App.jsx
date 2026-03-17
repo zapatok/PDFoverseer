@@ -926,8 +926,9 @@ function App() {
                     </div>
                     <div className="flex space-x-6 text-sm bg-panel/30 group-hover:bg-panel/80 p-3 rounded-lg border border-white/5">
                       <div className="flex flex-col items-center"><span className="text-gray-400">Documentos</span><span className="font-bold text-white text-lg">{s.metrics.docs}</span></div>
-                      <div className="flex flex-col items-center"><span className="text-gray-400">Completos</span><span className="font-bold text-success text-lg">{s.metrics.complete}</span></div>
-                      <div className="flex flex-col items-center"><span className="text-gray-400">Incompletos</span><span className="font-bold text-error text-lg">{s.metrics.incomplete}</span></div>
+                      <div className="flex flex-col items-center"><span className="text-gray-400">Directo</span><span className="font-bold text-success text-lg">{s.metrics.direct || s.metrics.complete}</span></div>
+                      <div className="flex flex-col items-center"><span className="text-gray-400">Inferido</span><span className="font-bold text-warning text-lg">{(s.metrics.inferred_hi || 0) + (s.metrics.inferred_lo || 0)}</span></div>
+                      <div className="flex flex-col items-center"><span className="text-gray-400">Incompleto</span><span className="font-bold text-error text-lg">{s.metrics.incomplete}</span></div>
                     </div>
                   </div>
                 ))
