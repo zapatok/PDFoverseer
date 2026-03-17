@@ -87,7 +87,7 @@ _PAGE_PATTERNS = [
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
 
 # OCR digit normalization: handle Tesseract confusion
-_OCR_DIGIT = str.maketrans("OoIlzZ|", "0011220")
+_OCR_DIGIT = str.maketrans("OoIilzZ|", "00111220")
 def _to_int(s: str) -> int:
     """Convert OCR-confused digits to int. E.g., 'O' → '0', 'l' → '1'."""
     return int(s.translate(_OCR_DIGIT))
