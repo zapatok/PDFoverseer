@@ -83,6 +83,45 @@ Matches: "Página 1 de 10", "Pag 1 de 10", "page 1 of 10", etc. (Spanish-centric
 
 ## Development
 
+### Restart Procedure ("reinicia todo")
+
+When testing the app locally:
+1. Kill processes: `powershell -Command "Get-Process | Where-Object { (\$_.ProcessName -eq 'python' -or \$_.ProcessName -eq 'node') } | Stop-Process -Force"`
+2. Verify ports free: `netstat -ano | grep -E ':(8000|5173)'`
+3. Start backend (background): `source .venv-cuda/Scripts/activate && python server.py`
+4. Start frontend (background): `cd frontend && npm run dev`
+5. Access: http://localhost:5173 (React UI) · http://localhost:8000/ui/ (API/Swagger docs)
+
+### Testing Baseline (real PDFs)
+
+All 7 must pass before merging inference changes (`eval/fixtures/real/`):
+
+| File | Pages | Notes |
+|------|-------|-------|
+| CH_9docs.pdf | 17 | Minimal, fast smoke test |
+| CH_39docs.pdf | 78 | Medium, catches inference bugs |
+| CH_51docs.pdf | 102 | OCR challenges |
+| CH_74docs.pdf | 150 | Large stress test |
+| INS_31docs.pdf | 31 | Triggers Phase 5b (period detection) |
+| HLL_363docs.pdf | 538 | Large, multi-document |
+| ART_HLL_674docsapp.pdf | 2719 | Stress test, Phase 5 merge boundary issues |
+
+### Safe Revert Checkpoint
+
+Tag `6ph-t2-almost-there` = known-stable state. Revert specific files without changing branch:
+```bash
+git checkout 6ph-t2-almost-there -- server.py core/analyzer.py
+```
+
+### OCR Digit Normalization
+
+`_OCR_DIGIT` (core/analyzer.py:90) maps Tesseract-confused chars (O→0, I/i→1, l→1, etc.).
+Keep in sync with regex flags — if `re.IGNORECASE` is used, both upper and lowercase must be mapped.
+
+### Debugging
+
+Use `superpowers:systematic-debugging` skill before attempting fixes. Partial fixes compound problems — find root cause first, then fix one thing at a time.
+
 ### Worktrees
 
 **Location:** `.worktrees/` (project-local, hidden)
