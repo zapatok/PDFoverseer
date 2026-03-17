@@ -86,9 +86,6 @@ class ServerState:
         self.total_complete: int = 0
         self.total_incomplete: int = 0
         self.total_inferred: int = 0
-        self.total_direct: int = 0
-        self.total_inferred_hi: int = 0
-        self.total_inferred_lo: int = 0
         self.issues: list[dict] = []
         self.start_time: float = 0.0
         self.pause_start_time: float = 0.0
@@ -254,9 +251,6 @@ def api_get_state():
             "complete": state.total_complete,
             "incomplete": state.total_incomplete,
             "inferred": state.total_inferred,
-            "direct": state.total_direct,
-            "inferred_hi": state.total_inferred_hi,
-            "inferred_lo": state.total_inferred_lo,
             "confidences": state.confidences
         },
         "globalProg": {"done": state.global_done_pages, "total": state.global_total_pages}
@@ -273,9 +267,6 @@ def api_reset():
     state.total_complete = 0
     state.total_incomplete = 0
     state.total_inferred = 0
-    state.total_direct = 0
-    state.total_inferred_hi = 0
-    state.total_inferred_lo = 0
     state.global_total_pages = 0
     state.global_done_pages = 0
     state.running = False
@@ -298,9 +289,6 @@ def api_save_session():
             "complete": state.total_complete,
             "incomplete": state.total_incomplete,
             "inferred": state.total_inferred,
-            "direct": state.total_direct,
-            "inferred_hi": state.total_inferred_hi,
-            "inferred_lo": state.total_inferred_lo,
             "total_time": time.time() - state.start_time if state.start_time > 0 else 0.0
         },
         "issues_count": len(state.issues),
@@ -364,9 +352,6 @@ async def api_start(req: StartProcessRequest):
         state.total_complete = 0
         state.total_incomplete = 0
         state.total_inferred = 0
-        state.total_direct = 0
-        state.total_inferred_hi = 0
-        state.total_inferred_lo = 0
         state.issues = []
         state.skipped_pdfs.clear()
         state.pdf_reads = {}
@@ -523,7 +508,7 @@ def _process_pdfs(start_index: int = 0):
         def on_log(msg, level="info"):
             _emit("log", {"msg": msg, "level": level})
             
-        def on_issue(page, kind, detail, pil_img, impact="internal", doc_index=None):
+        def on_issue(page, kind, detail, pil_img):
             with state._lock:
                 issue = {
                     "id": len(state.issues),
@@ -532,8 +517,6 @@ def _process_pdfs(start_index: int = 0):
                     "page": page,
                     "type": kind,
                     "detail": detail,
-                    "impact": impact,
-                    "doc_index": doc_index,
                 }
                 state.issues.append(issue)
                 if len(state.issues) > 10_000:
@@ -623,8 +606,8 @@ def api_correct(req: CorrectRequest):
         
     reads = state.pdf_reads[pdf_str]
     corrections = {req.page: (req.correct_curr, req.correct_tot)}
-
-    def on_issue(page, kind, detail, pil_img, impact="internal", doc_index=None, _path=pdf_str):
+    
+    def on_issue(page, kind, detail, pil_img, _path=pdf_str):
         with state._lock:
             issue = {
                 "id": len(state.issues),
@@ -633,8 +616,6 @@ def api_correct(req: CorrectRequest):
                 "page": page,
                 "type": kind,
                 "detail": detail,
-                "impact": impact,
-                "doc_index": doc_index,
             }
             state.issues.append(issue)
 
@@ -700,8 +681,8 @@ def api_exclude(req: ExcludeRequest):
         
     reads = state.pdf_reads[pdf_str]
     exclusions = [req.page]
-
-    def on_issue(page, kind, detail, pil_img, impact="internal", doc_index=None, _path=pdf_str):
+    
+    def on_issue(page, kind, detail, pil_img, _path=pdf_str):
         with state._lock:
             issue = {
                 "id": len(state.issues),
@@ -710,8 +691,6 @@ def api_exclude(req: ExcludeRequest):
                 "page": page,
                 "type": kind,
                 "detail": detail,
-                "impact": impact,
-                "doc_index": doc_index,
             }
             state.issues.append(issue)
 
@@ -746,78 +725,67 @@ def _recalculate_metrics():
     total_complete = 0
     total_incomplete = 0
     total_inferred = 0
-    total_direct = 0
-    total_inferred_hi = 0
-    total_inferred_lo = 0
 
     # Snapshot under lock to avoid RuntimeError if worker modifies dict during iteration
     with state._lock:
         reads_snapshot = dict(state.pdf_reads)
     skipped_paths = state.skipped_pdfs
 
-    from core.analyzer import _build_documents, classify_doc
+    from core.analyzer import _build_documents
+    for path, reads in reads_snapshot.items():
+        if path in skipped_paths:
+            continue
+            
+        # Rebuild docs purely to count them
+        docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
+        complete = [d for d in docs if d.is_complete]
+        incomplete = [d for d in docs if not d.is_complete]
+        inferred = sum(len(d.inferred_pages) for d in docs)
+        
+        total_docs += len(docs)
+        total_complete += len(complete)
+        total_incomplete += len(incomplete)
+        total_inferred += inferred
+        
+    state.total_docs = total_docs
+    state.total_complete = total_complete
+    state.total_incomplete = total_incomplete
+    state.total_inferred = total_inferred
+    
+    # Calculate PDF confidences and individual metrics (use same snapshot)
     pdf_confidences = {}
     pdf_metrics = {}
     for path, reads in reads_snapshot.items():
         if path in skipped_paths:
             pdf_confidences[path] = 0.0
-            pdf_metrics[path] = {"docs": 0, "complete": 0, "incomplete": 0, "inferred": 0,
-                                  "direct": 0, "inferred_hi": 0, "inferred_lo": 0}
+            pdf_metrics[path] = {"docs": 0, "complete": 0, "incomplete": 0, "inferred": 0}
             continue
-
-        docs = _build_documents(reads, lambda m, l: None, lambda p, k, d, *a: None)
-        reads_by_page = {r.pdf_page: r for r in reads}
+            
+        valid_reads = [r for r in reads if r.method != "excluded"]
+        if not valid_reads:
+            pdf_confidences[path] = 1.0
+        else:
+            pdf_confidences[path] = sum(r.confidence for r in valid_reads) / len(valid_reads)
+            
+        # Also rebuild docs to calculate individual stats per file
+        docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
         complete = [d for d in docs if d.is_complete]
         incomplete = [d for d in docs if not d.is_complete]
         inferred = sum(len(d.inferred_pages) for d in docs)
-
-        # Three-tier classification (cached per doc)
-        pdf_direct = pdf_inf_hi = pdf_inf_lo = 0
-        for d in docs:
-            tier = classify_doc(d, reads_by_page)
-            if tier == "direct":
-                pdf_direct += 1
-            elif tier == "inferred_hi":
-                pdf_inf_hi += 1
-            elif tier == "inferred_lo":
-                pdf_inf_lo += 1
-
-        total_docs += len(docs)
-        total_complete += len(complete)
-        total_incomplete += len(incomplete)
-        total_inferred += inferred
-        total_direct += pdf_direct
-        total_inferred_hi += pdf_inf_hi
-        total_inferred_lo += pdf_inf_lo
-
-        pdf_confidences[path] = pdf_direct / len(docs) if docs else 1.0
         pdf_metrics[path] = {
             "docs": len(docs),
             "complete": len(complete),
             "incomplete": len(incomplete),
-            "inferred": inferred,
-            "direct": pdf_direct,
-            "inferred_hi": pdf_inf_hi,
-            "inferred_lo": pdf_inf_lo,
+            "inferred": inferred
         }
-
-    state.total_docs = total_docs
-    state.total_complete = total_complete
-    state.total_incomplete = total_incomplete
-    state.total_inferred = total_inferred
-    state.total_direct = total_direct
-    state.total_inferred_hi = total_inferred_hi
-    state.total_inferred_lo = total_inferred_lo
+            
     state.confidences = pdf_confidences
-
+    
     _emit("metrics", {
         "docs": state.total_docs,
         "complete": state.total_complete,
         "incomplete": state.total_incomplete,
         "inferred": state.total_inferred,
-        "direct": state.total_direct,
-        "inferred_hi": state.total_inferred_hi,
-        "inferred_lo": state.total_inferred_lo,
         "confidences": state.confidences,
         "individual": pdf_metrics
     })
