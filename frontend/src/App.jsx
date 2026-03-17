@@ -136,24 +136,29 @@ function App() {
           const targetPdf = payload.pdf_path;
           const newList = [...prev.filter(i => i.pdf_path !== targetPdf), ...(payload.issues || [])];
 
-          // Cascade impact toast
+          // Track refreshed issue count for cascade toast (fired on next metrics event)
           if (preCascadeRef.current) {
-            const prev_snap = preCascadeRef.current;
-            const newIssueCount = (payload.issues || []).length;
-            const parts = [];
-            const issuesDelta = prev_snap.issueCount - newIssueCount;
-            if (issuesDelta > 0) parts.push(`${issuesDelta} issues resueltos`);
-            if (issuesDelta < 0) parts.push(`${Math.abs(issuesDelta)} issues nuevos`);
-            if (parts.length > 0) {
-              setCascadeToast(parts.join(', '));
-              setTimeout(() => setCascadeToast(null), 5000);
-            }
-            preCascadeRef.current = null;
+            preCascadeRef.current.newIssueCount = (payload.issues || []).length;
           }
 
           return newList;
         });
       } else if (type === 'metrics') {
+        // Cascade impact toast — fires when metrics arrive after a correction
+        if (preCascadeRef.current && preCascadeRef.current.newIssueCount !== undefined) {
+          const prev_snap = preCascadeRef.current;
+          const parts = [];
+          const docDelta = (payload.docs || 0) - prev_snap.docs;
+          if (docDelta !== 0) parts.push(`DOC ${prev_snap.docs}→${payload.docs} (${docDelta > 0 ? '+' : ''}${docDelta})`);
+          const issuesDelta = prev_snap.issueCount - prev_snap.newIssueCount;
+          if (issuesDelta > 0) parts.push(`${issuesDelta} issues resueltos`);
+          if (issuesDelta < 0) parts.push(`${Math.abs(issuesDelta)} issues nuevos`);
+          if (parts.length > 0) {
+            setCascadeToast(parts.join(', '));
+            setTimeout(() => setCascadeToast(null), 5000);
+          }
+          preCascadeRef.current = null;
+        }
         setMetrics(payload)
       } else if (type === 'process_finished') {
         setStatus('idle')
@@ -405,6 +410,7 @@ function App() {
     try {
       // Snapshot for cascade impact toast
       preCascadeRef.current = {
+        docs: metrics?.docs || 0,
         issueCount: issues.filter(i => i.pdf_path === selectedIssue.pdf_path).length,
       };
       await fetch('http://localhost:8000/api/correct', {

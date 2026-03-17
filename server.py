@@ -254,6 +254,9 @@ def api_get_state():
             "complete": state.total_complete,
             "incomplete": state.total_incomplete,
             "inferred": state.total_inferred,
+            "direct": state.total_direct,
+            "inferred_hi": state.total_inferred_hi,
+            "inferred_lo": state.total_inferred_lo,
             "confidences": state.confidences
         },
         "globalProg": {"done": state.global_done_pages, "total": state.global_total_pages}
@@ -295,6 +298,9 @@ def api_save_session():
             "complete": state.total_complete,
             "incomplete": state.total_incomplete,
             "inferred": state.total_inferred,
+            "direct": state.total_direct,
+            "inferred_hi": state.total_inferred_hi,
+            "inferred_lo": state.total_inferred_lo,
             "total_time": time.time() - state.start_time if state.start_time > 0 else 0.0
         },
         "issues_count": len(state.issues),
@@ -750,40 +756,6 @@ def _recalculate_metrics():
     skipped_paths = state.skipped_pdfs
 
     from core.analyzer import _build_documents, classify_doc
-    for path, reads in reads_snapshot.items():
-        if path in skipped_paths:
-            continue
-
-        # Rebuild docs purely to count them
-        docs = _build_documents(reads, lambda m, l: None, lambda p, k, d, *a: None)
-        complete = [d for d in docs if d.is_complete]
-        incomplete = [d for d in docs if not d.is_complete]
-        inferred = sum(len(d.inferred_pages) for d in docs)
-
-        total_docs += len(docs)
-        total_complete += len(complete)
-        total_incomplete += len(incomplete)
-        total_inferred += inferred
-
-        reads_by_page = {r.pdf_page: r for r in reads}
-        for d in docs:
-            tier = classify_doc(d, reads_by_page)
-            if tier == "direct":
-                total_direct += 1
-            elif tier == "inferred_hi":
-                total_inferred_hi += 1
-            elif tier == "inferred_lo":
-                total_inferred_lo += 1
-
-    state.total_docs = total_docs
-    state.total_complete = total_complete
-    state.total_incomplete = total_incomplete
-    state.total_inferred = total_inferred
-    state.total_direct = total_direct
-    state.total_inferred_hi = total_inferred_hi
-    state.total_inferred_lo = total_inferred_lo
-
-    # Calculate PDF confidences and individual metrics (use same snapshot)
     pdf_confidences = {}
     pdf_metrics = {}
     for path, reads in reads_snapshot.items():
@@ -795,15 +767,30 @@ def _recalculate_metrics():
 
         docs = _build_documents(reads, lambda m, l: None, lambda p, k, d, *a: None)
         reads_by_page = {r.pdf_page: r for r in reads}
-        n_direct = sum(1 for d in docs if classify_doc(d, reads_by_page) == "direct")
-        pdf_confidences[path] = n_direct / len(docs) if docs else 1.0
-
         complete = [d for d in docs if d.is_complete]
         incomplete = [d for d in docs if not d.is_complete]
         inferred = sum(len(d.inferred_pages) for d in docs)
-        pdf_direct = sum(1 for d in docs if classify_doc(d, reads_by_page) == "direct")
-        pdf_inf_hi = sum(1 for d in docs if classify_doc(d, reads_by_page) == "inferred_hi")
-        pdf_inf_lo = sum(1 for d in docs if classify_doc(d, reads_by_page) == "inferred_lo")
+
+        # Three-tier classification (cached per doc)
+        pdf_direct = pdf_inf_hi = pdf_inf_lo = 0
+        for d in docs:
+            tier = classify_doc(d, reads_by_page)
+            if tier == "direct":
+                pdf_direct += 1
+            elif tier == "inferred_hi":
+                pdf_inf_hi += 1
+            elif tier == "inferred_lo":
+                pdf_inf_lo += 1
+
+        total_docs += len(docs)
+        total_complete += len(complete)
+        total_incomplete += len(incomplete)
+        total_inferred += inferred
+        total_direct += pdf_direct
+        total_inferred_hi += pdf_inf_hi
+        total_inferred_lo += pdf_inf_lo
+
+        pdf_confidences[path] = pdf_direct / len(docs) if docs else 1.0
         pdf_metrics[path] = {
             "docs": len(docs),
             "complete": len(complete),
@@ -814,6 +801,13 @@ def _recalculate_metrics():
             "inferred_lo": pdf_inf_lo,
         }
 
+    state.total_docs = total_docs
+    state.total_complete = total_complete
+    state.total_incomplete = total_incomplete
+    state.total_inferred = total_inferred
+    state.total_direct = total_direct
+    state.total_inferred_hi = total_inferred_hi
+    state.total_inferred_lo = total_inferred_lo
     state.confidences = pdf_confidences
 
     _emit("metrics", {
