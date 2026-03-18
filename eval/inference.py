@@ -510,7 +510,7 @@ def _undercount_recovery(reads: list[PageRead], docs: list[Document], params: di
                 and d_next.declared_total == d.declared_total):
             next_pages = d_next.pages + d_next.inferred_pages
             # Guard: do NOT merge if next doc has a confirmed OCR curr==1 start
-            # OR a high-confidence inferred curr==1 start (via ph5_guard_conf).
+            # OR a high-confidence inferred curr==1 start (via effective_guard, scaled by ph5_guard_slope).
             has_confirmed_start = any(
                 reads_by_page[pp].curr == 1
                 and (
