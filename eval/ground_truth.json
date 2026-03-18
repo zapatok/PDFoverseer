@@ -26,5 +26,6 @@
   "sparse_reads":          {"doc_count": 10, "complete_count": 10, "inferred_count": 8},
   "period2_low_conf":      {"doc_count": 20, "complete_count": 16, "inferred_count": 0},
   "period2_noisy_splits":  {"doc_count": 15, "complete_count": 12, "inferred_count": 0},
-  "mixed_1_2_dense":       {"doc_count": 30, "complete_count": 30, "inferred_count": 0}
+  "mixed_1_2_dense":       {"doc_count": 30, "complete_count": 30, "inferred_count": 0},
+  "period2_boundary_fp":   {"doc_count": 13, "complete_count": 7, "inferred_count": 0}
 }

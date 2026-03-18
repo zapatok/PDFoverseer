@@ -213,3 +213,14 @@ def test_mixed_1_2_dense_loads():
                  for r in data["reads"]]
     docs = run_pipeline(reads_raw, PROD_PARAMS)
     assert len(docs) >= 1
+
+
+def test_period2_boundary_fp_loads():
+    """period2_boundary_fp: 10 x 2-page docs, 3 false-positive curr=1 mid-doc pages."""
+    import json
+    from pathlib import Path
+    data = json.loads(Path("eval/fixtures/synthetic/period2_boundary_fp.json").read_text())
+    reads_raw = [PageRead(**{k: v for k, v in r.items() if not k.startswith("_")})
+                 for r in data["reads"]]
+    docs = run_pipeline(reads_raw, PROD_PARAMS)
+    assert len(docs) >= 1
