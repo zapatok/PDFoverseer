@@ -388,3 +388,64 @@ def test_run_pipeline_accepts_recon_weight():
     ])
     docs = run_pipeline(reads, {**PROD_PARAMS, "recon_weight": 0.25})
     assert len(docs) == 2
+
+
+# ── ph5_guard_slope (Approach B) tests ────────────────────────────────────────
+
+def test_ph5_guard_slope_zero_matches_baseline():
+    """ph5_guard_slope=0.0 produces identical result to PROD_PARAMS."""
+    reads = make_reads([
+        (0, 1, 2, "H", 0.95), (1, 2, 2, "H", 0.92),
+        (2, 1, 2, "H", 0.91), (3, 2, 2, "H", 0.90),
+    ])
+    docs_prod  = run_pipeline(reads, PROD_PARAMS)
+    docs_slope = run_pipeline(reads, {**PROD_PARAMS, "ph5_guard_slope": 0.0})
+    assert len(docs_prod) == len(docs_slope)
+
+
+def test_ph5_guard_slope_protects_low_conf_inferred_boundary():
+    """slope=1.5 lowers effective_guard so a 0.55-confidence boundary is protected.
+
+    Setup:
+      reads[0]: direct  1/3 — doc1 p1
+      reads[1]: direct  3/3 — doc1 p3 (p2 missing — incomplete)
+      reads[2]: inferred 1/3 at conf=0.55 — doc2 start
+
+    Only reads[2] is inferred → inferred_ratio = 1/3 ≈ 0.333
+    slope=0.0: effective_guard=0.90, conf=0.55 < 0.90 → guard silent → merge → 1 doc
+    slope=1.5: effective_guard=0.90*(1-1.5*0.333)≈0.45, conf=0.55 ≥ 0.45 → protected → 2 docs
+
+    Note: reads[1] must be "direct" (not "inferred") so only reads[2] is counted
+    in inferred_ratio. If reads[1] were inferred, ratio=2/3 and slope=1.5 would
+    disable the guard entirely (effective_guard=0.0), failing the assertion.
+    """
+    reads = [
+        PageRead(pdf_page=0, curr=1, total=3, method="direct",   confidence=0.95),
+        PageRead(pdf_page=1, curr=3, total=3, method="direct",   confidence=0.90),
+        PageRead(pdf_page=2, curr=1, total=3, method="inferred", confidence=0.55),
+    ]
+    docs_no_slope   = run_pipeline(reads, {**PROD_PARAMS, "ph5_guard_slope": 0.0})
+    docs_with_slope = run_pipeline(reads, {**PROD_PARAMS, "ph5_guard_slope": 1.5})
+
+    assert len(docs_no_slope) == 1,   "No slope: low-conf boundary not protected, merge occurs"
+    assert len(docs_with_slope) == 2, "Slope=1.5: boundary protected from recovery merge"
+
+
+def test_ph5_guard_slope_high_disables_guard():
+    """slope=2.0 with inferred_ratio≥0.5 disables the guard entirely (effective_guard=0)."""
+    reads = [
+        PageRead(pdf_page=0, curr=1, total=3, method="direct",   confidence=0.95),
+        PageRead(pdf_page=1, curr=3, total=3, method="inferred", confidence=0.95),
+        PageRead(pdf_page=2, curr=1, total=3, method="inferred", confidence=0.90),
+    ]
+    # inferred_ratio = 2/3 ≈ 0.667
+    # slope=2.0: effective_guard = 0.90 * max(1 - 2.0*0.667, 0) = 0.90 * 0.0 = 0.0
+    # effective_guard=0.0 → guard disabled → same as ph5_guard_conf=0.0
+    docs_high_slope = run_pipeline(reads, {**PROD_PARAMS, "ph5_guard_slope": 2.0})
+    docs_no_guard   = run_pipeline(reads, {**PROD_PARAMS, "ph5_guard_conf": 0.0,
+                                           "ph5_guard_slope": 0.0})
+    # Guard disabled → undercount recovery merges → 1 doc (not 2)
+    assert len(docs_high_slope) == 1, \
+        "slope=2.0 with high inferred_ratio disables guard — recovery merges into 1 doc"
+    assert len(docs_high_slope) == len(docs_no_guard), \
+        "slope=2.0 should be equivalent to ph5_guard_conf=0.0"

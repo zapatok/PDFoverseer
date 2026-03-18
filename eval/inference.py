@@ -495,6 +495,11 @@ def _undercount_recovery(reads: list[PageRead], docs: list[Document], params: di
     """Mirrors the undercount recovery loop in analyze_pdf."""
     reads_by_page = {r.pdf_page: r for r in reads}
     ph5_guard_conf = params.get("ph5_guard_conf", 0.0)
+    inferred_ratio = sum(
+        1 for r in reads if r.method == "inferred"
+    ) / max(len(reads), 1)
+    ph5_guard_slope = params.get("ph5_guard_slope", 0.0)
+    effective_guard = ph5_guard_conf * max(1.0 - ph5_guard_slope * inferred_ratio, 0.0)
     fixed = 0
     for di in range(len(docs) - 1):
         d, d_next = docs[di], docs[di + 1]
@@ -510,9 +515,9 @@ def _undercount_recovery(reads: list[PageRead], docs: list[Document], params: di
                 reads_by_page[pp].curr == 1
                 and (
                     reads_by_page[pp].method not in ("inferred", "failed", "excluded")
-                    or (ph5_guard_conf > 0.0
+                    or (effective_guard > 0.0
                         and reads_by_page[pp].method == "inferred"
-                        and reads_by_page[pp].confidence >= ph5_guard_conf)
+                        and reads_by_page[pp].confidence >= effective_guard)
                 )
                 for pp in next_pages if pp in reads_by_page
             )
