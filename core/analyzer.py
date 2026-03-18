@@ -255,6 +255,7 @@ def _tess_ocr(bgr: np.ndarray) -> str:
     # Apply Otsu Binarization
     _, th = cv2.threshold(img_clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     
+    cv2.imwrite(r"C:\temp\tess_dump.png", th)
     return pytesseract.image_to_string(th, lang="eng", config=TESS_CONFIG)
 
 
