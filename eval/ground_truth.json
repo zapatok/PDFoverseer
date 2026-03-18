@@ -143,5 +143,10 @@
     "doc_count": 10,
     "complete_count": 7,
     "inferred_count": 0
+  },
+  "art_like_high_failure": {
+    "doc_count": 15,
+    "complete_count": 15,
+    "inferred_count": 10
   }
 }

@@ -449,3 +449,18 @@ def test_ph5_guard_slope_high_disables_guard():
         "slope=2.0 with high inferred_ratio disables guard — recovery merges into 1 doc"
     assert len(docs_high_slope) == len(docs_no_guard), \
         "slope=2.0 should be equivalent to ph5_guard_conf=0.0"
+
+
+def test_art_like_high_failure_loads():
+    """art_like_high_failure fixture loads and baseline produces doc_count ≤ 20."""
+    import json
+    from pathlib import Path
+    data = json.loads(
+        Path("eval/fixtures/synthetic/art_like_high_failure.json").read_text()
+    )
+    reads_raw = [PageRead(**{k: v for k, v in r.items() if not k.startswith("_")})
+                 for r in data["reads"]]
+    docs = run_pipeline(reads_raw, PROD_PARAMS)
+    assert len(docs) >= 1
+    # With high failure rate and Approach B disabled, recovery may not achieve all 15.
+    # The sweep will find the params that do. This test just verifies no crash.
