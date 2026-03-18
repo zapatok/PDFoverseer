@@ -152,13 +152,15 @@ python eval/report.py
 
 ## Important Notes
 
-### OCR Assumptions
+### OCR Assumptions & Noise Mitigation Rules
 
-- **Spanish-centric regex** for "Página N de M" — adapt if needed for other languages
-- **Image preprocessing cascade:** Otsu → color removal → red channel → inpainting
+- **Spanish-centric regex** for "Página N de M". The current regex intentionally allows confusing typos (e.g., lowercase l instead of 1, O instead of 0) and spacing issues to give Tesseract the maximum leeway. These are remapped via `_OCR_DIGIT`.
+- **Image preprocessing cascade (CRITICAL):**
+  1. **Color Ink Masking:** We convert the original BGR image to HSV to isolate specific ink matices (Blue Hue `90-150`).
+  2. **Inpainting:** We apply `cv2.inpaint(img, mask, 3, cv2.INPAINT_NS)` to remove the blue ink and *rebuild* the black text boundaries underneath the signature. **DO NOT** use naive saturation clipping or `v_channel[mask]=255` as it erodes the black text characters intersecting the ink, making them unreadable to Tesseract.
+  3. **Otsu Threshold:** Finally, this cleaned BGR image is grayscaled and binarized using `cv2.THRESH_OTSU`.
+- **Alucination Handling on Blank Pages:** Tesseract's Super Resolution (Tier 2) naturally generates noise/garbage characters when fed an empty page. This is *expected and handled*. Rather than implementing fragile "blank image detection" logic, we rely on the strict Regex and Dempster-Shafer engine to discard these hallucinated artifacts.
 - **Tesseract config:** `--psm 6 --oem 1` (uniform block text)
-
-### GPU Pipeline
 
 - EasyOCR runs on GPU thread while Tesseract continues (concurrent)
 - Fallback only triggered if Tesseract tiers fail

@@ -46,6 +46,9 @@ from pathlib import Path
 # Auto-hash: changes every time this file is modified
 _CORE_HASH = hashlib.md5(Path(__file__).read_bytes()).hexdigest()[:8]
 
+# CUDA GPU pipeline version marker
+_CUDA_HASH = hashlib.md5(("CUDA-GPU-V4-Producer-Consumer").encode()).hexdigest()[:8]
+
 import cv2
 import numpy as np
 import pytesseract
@@ -80,14 +83,14 @@ INFERENCE_ENGINE_VERSION = "6ph-t2"  # 6-phase + undercount guard + Phase 5b
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
     re.compile(
-        r"P.{0,2}[gq](?:ina?)?\.?\s*([0-9OoIl|zZ]{1,3})\s*\.?\s*de\s*([0-9OoIl|zZ]{1,3})",
+        r"P.{0,6}\s*([0-9OoIilL|zZtT\'\‘\’\`\´]{1,3})\s*\.?\s*d[ea]\s*([0-9OoIilL|zZtT\'\‘\’\`\´]{1,3})",
         re.IGNORECASE,
     ),
 ]
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
 
 # OCR digit normalization: handle Tesseract confusion
-_OCR_DIGIT = str.maketrans("OoIilzZ|", "00111220")
+_OCR_DIGIT = str.maketrans("OoIilLzZ|tT'‘’`´", "0011112201111111")
 def _to_int(s: str) -> int:
     """Convert OCR-confused digits to int. E.g., 'O' → '0', 'l' → '1'."""
     return int(s.translate(_OCR_DIGIT))
@@ -229,8 +232,30 @@ def _parse(text: str) -> tuple[int | None, int | None]:
     return None, None
 
 
-def _tess_ocr(gray: np.ndarray) -> str:
-    _, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+def _tess_ocr(bgr: np.ndarray) -> str:
+    # If image is already grayscale, skip HSV filtering
+    if len(bgr.shape) == 2 or bgr.shape[2] == 1:
+        img_clean = bgr
+    else:
+        # Convert to HSV to detect specific ink colors
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        
+        # Define typical Hue ranges for Blue ink (often 90 to 150)
+        lower_blue = np.array([90, 50, 50])
+        upper_blue = np.array([150, 255, 255])
+        mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
+        
+        # Inpaint removes the masked pixels and interpolates the background 
+        # preserving the black boundaries of printed text underneath the ink.
+        bgr_clean = cv2.inpaint(bgr, mask_blue, 3, cv2.INPAINT_NS)
+        
+        # Convert the cleaned image to grayscale for Otsu
+        img_clean = cv2.cvtColor(bgr_clean, cv2.COLOR_BGR2GRAY)
+    
+    # Apply Otsu Binarization
+    _, th = cv2.threshold(img_clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    cv2.imwrite(r"C:\temp\tess_dump.png", th)
     return pytesseract.image_to_string(th, lang="eng", config=TESS_CONFIG)
 
 
@@ -270,18 +295,15 @@ def _process_page(doc: fitz.Document, page_idx: int) -> _PageRead:
     pdf_page = page_idx + 1
     bgr = _render_clip(doc[page_idx])
 
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-
-    # Tier 1: Tesseract direct
-    text = _tess_ocr(gray)
+    # Tier 1: Tesseract direct (passing BGR so _tess_ocr can filter colors)
+    text = _tess_ocr(bgr)
     c, t = _parse(text)
     if c:
         return _PageRead(pdf_page, c, t, "direct", 1.0)
 
     # Tier 2: 4x upscale (GPU bicubic ~1ms or FSRCNN CPU ~150ms) + Tesseract
     bgr_sr = _upsample_4x(bgr)
-    gray_sr = cv2.cvtColor(bgr_sr, cv2.COLOR_BGR2GRAY)
-    text_sr = _tess_ocr(gray_sr)
+    text_sr = _tess_ocr(bgr_sr)
     c, t = _parse(text_sr)
     if c:
         return _PageRead(pdf_page, c, t, "SR", 1.0)
@@ -729,7 +751,7 @@ def _emit_ai_telemetry(
     success_pct = f"{docs_ok/n_docs:.0%}" if n_docs else "n/a"
 
     on_log(
-        f"[AI:{_CORE_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
+        f"[AI:{_CORE_HASH}] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
         f" | W{PARALLEL_WORKERS}+GPU | INF:{INFERENCE_ENGINE_VERSION}\n"
         f"PRE5≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
         f"OCR: {mstr}\n"
