@@ -202,3 +202,14 @@ def test_period2_noisy_splits_loads():
                  for r in data["reads"]]
     docs = run_pipeline(reads_raw, PROD_PARAMS)
     assert len(docs) >= 1
+
+
+def test_mixed_1_2_dense_loads():
+    """mixed_1_2_dense: 30 docs alternating 1-page and 2-page, all clean reads."""
+    import json
+    from pathlib import Path
+    data = json.loads(Path("eval/fixtures/synthetic/mixed_1_2_dense.json").read_text())
+    reads_raw = [PageRead(**{k: v for k, v in r.items() if not k.startswith("_")})
+                 for r in data["reads"]]
+    docs = run_pipeline(reads_raw, PROD_PARAMS)
+    assert len(docs) >= 1
