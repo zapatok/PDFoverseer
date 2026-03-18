@@ -26,14 +26,15 @@ PARAM_SPACE: dict[str, list] = {
     # Phase 5b — Period-contradiction correction
     # 0.0 = disabled (baseline). >0 = min period confidence to activate.
     # Sweet spot: 0.69 catches INS_31 (conf=0.698) but not ART (conf=0.685).
-    "ph5b_conf_min":      [0.0, 0.50, 0.60, 0.69, 0.70],
+    "ph5b_conf_min":      [0.0, 0.40, 0.50, 0.60, 0.69, 0.70],
     "ph5b_ratio_min":     [0.90, 0.93, 0.95],
+    "ph5_guard_conf":     [0.0, 0.70, 0.80, 0.90],
     # Phase 6 — Orphan suppression
     # Inferred new-doc triggers (curr==1) below this confidence are excluded.
     # 0.0 = no suppression (baseline behavior).
     # xval_cap (Ph3) caps inconsistent orphans to ≤0.60, so values in
     # [0.45, 0.65] are the discriminating range.
-    "min_conf_for_new_doc": [0.0, 0.45, 0.55, 0.65],
+    "min_conf_for_new_doc": [0.0],
     # Global
     "window":           [3, 5, 7],
     "hom_threshold":    [0.83, 0.85, 0.88],
@@ -55,6 +56,7 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "ds_boost_max":       0.25,
     "ph5b_conf_min":      0.0,   # disabled — matches core (no Phase 5b)
     "ph5b_ratio_min":     0.85,
+    "ph5_guard_conf":     0.0,   # disabled — baseline (guard not yet in core/analyzer.py)
     "min_conf_for_new_doc": 0.0,
     "window":           5,
     "hom_threshold":    0.85,

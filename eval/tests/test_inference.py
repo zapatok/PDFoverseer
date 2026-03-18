@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from eval.inference import run_pipeline, PageRead, _detect_period
 
-from eval.params import PRODUCTION_PARAMS as PROD_PARAMS
+from eval.params import PRODUCTION_PARAMS as PROD_PARAMS, PARAM_SPACE
 
 
 def make_reads(specs):
@@ -123,3 +123,19 @@ def test_ph5b_respects_conf_threshold():
     docs = run_pipeline(reads, ph5b_params(ph5b_conf_min=0.99))
     docs_prod = run_pipeline(reads, PROD_PARAMS)
     assert len(docs) == len(docs_prod)
+
+
+def test_params_ph5_guard_conf_in_prod():
+    """ph5_guard_conf must be in PRODUCTION_PARAMS with value 0.0 (disabled baseline)."""
+    assert "ph5_guard_conf" in PROD_PARAMS
+    assert PROD_PARAMS["ph5_guard_conf"] == 0.0
+
+
+def test_params_ph5b_conf_min_has_040():
+    """ph5b_conf_min param space must include 0.40 to cover HLL's ~43% period confidence."""
+    assert 0.40 in PARAM_SPACE["ph5b_conf_min"]
+
+
+def test_params_min_conf_locked():
+    """min_conf_for_new_doc must be locked to [0.0] — no sweep needed (binary tradeoff)."""
+    assert PARAM_SPACE["min_conf_for_new_doc"] == [0.0]
