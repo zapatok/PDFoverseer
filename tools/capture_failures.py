@@ -167,3 +167,48 @@ def capture_pdf(
 
     print(f"[capture] done: {len(captured)} failures / {total_pages} pages")
     return captured
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Capture OCR failure image strips from PDFs for analysis."
+    )
+    parser.add_argument(
+        "path",
+        help="Path to a PDF file, or a directory to scan all PDFs inside it.",
+    )
+    parser.add_argument(
+        "--out", default=str(OUTPUT_ROOT),
+        help=f"Output directory (default: {OUTPUT_ROOT})",
+    )
+    parser.add_argument(
+        "--easyocr", action="store_true",
+        help="Also run EasyOCR Tier 3 and record its output in the CSV.",
+    )
+    args = parser.parse_args()
+
+    target = Path(args.path)
+    out_dir = Path(args.out)
+
+    if target.is_dir():
+        pdfs = sorted(target.glob("*.pdf"))
+        if not pdfs:
+            print(f"No PDF files found in {target}")
+            sys.exit(1)
+    elif target.is_file() and target.suffix.lower() == ".pdf":
+        pdfs = [target]
+    else:
+        print(f"Error: {target} is not a PDF file or a directory.")
+        sys.exit(1)
+
+    # SR and EasyOCR are initialized inside capture_pdf() — no separate init needed here.
+
+    total_failures = 0
+    for pdf in pdfs:
+        rows = capture_pdf(pdf, out_dir=out_dir, include_easyocr=args.easyocr)
+        total_failures += len(rows)
+
+    print(f"\n[capture] Total: {total_failures} failures captured → {out_dir}/failures_index.csv")
+
+
+if __name__ == "__main__":
+    main()
