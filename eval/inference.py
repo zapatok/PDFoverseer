@@ -176,6 +176,27 @@ def _period_evidence(
     return {h: w / total_w for h, w in candidates.items()}
 
 
+def _recon_confidence(reads: list[PageRead], period: int) -> float:
+    """
+    Reconstruction confidence: fraction of observed curr=1 positions
+    that align within ±1 of positions predicted by repeating 'period'.
+    Robust to misread total values since it only uses curr==1 positions.
+    """
+    if period < 2:
+        return 0.0
+    starts = [i for i, r in enumerate(reads)
+              if r.curr == 1 and r.method not in ("failed", "excluded")]
+    if len(starts) < 2:
+        return 0.0
+    anchor = starts[0]
+    predicted = set(range(anchor, len(reads), period))
+    hits = sum(
+        1 for s in starts
+        if (s in predicted) or ((s - 1) in predicted) or ((s + 1) in predicted)
+    )
+    return hits / len(starts)
+
+
 # ── Phase 1–5 Inference ──────────────────────────────────────────────────────
 
 def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None) -> None:
