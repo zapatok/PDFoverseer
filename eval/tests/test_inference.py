@@ -323,7 +323,7 @@ def test_recon_confidence_partial_match():
     assert rc > 0.0   # at least some hits
 
 
-def test_recon_confidence_no_match():
+def test_recon_confidence_small_doc_no_crash():
     """All-period-1 docs: period=2 doesn't match → low recon_conf."""
     reads = make_reads([
         (0, 1, 1, "direct", 0.90),
