@@ -235,20 +235,25 @@ def _parse(text: str) -> tuple[int | None, int | None]:
 def _tess_ocr(bgr: np.ndarray) -> str:
     # If image is already grayscale, skip HSV filtering
     if len(bgr.shape) == 2 or bgr.shape[2] == 1:
-        v_clean = bgr
+        img_clean = bgr
     else:
-        # 1. Convert to HSV to detect high-saturation colors (ink)
+        # Convert to HSV to detect specific ink colors
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-        s = hsv[:, :, 1]
-        v = hsv[:, :, 2]
         
-        # 2. Drop high saturation pixels (blue/red pen ink) by mapping their Value to 255 (White)
-        # The printed text is usually very low saturation (black/gray).
-        v_clean = v.copy()
-        v_clean[s > 60] = 255
+        # Define typical Hue ranges for Blue ink (often 90 to 150)
+        lower_blue = np.array([90, 50, 50])
+        upper_blue = np.array([150, 255, 255])
+        mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
+        
+        # Inpaint removes the masked pixels and interpolates the background 
+        # preserving the black boundaries of printed text underneath the ink.
+        bgr_clean = cv2.inpaint(bgr, mask_blue, 3, cv2.INPAINT_NS)
+        
+        # Convert the cleaned image to grayscale for Otsu
+        img_clean = cv2.cvtColor(bgr_clean, cv2.COLOR_BGR2GRAY)
     
-    # 3. Apply Otsu Binarization on the cleaned Value channel
-    _, th = cv2.threshold(v_clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Apply Otsu Binarization
+    _, th = cv2.threshold(img_clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     
     return pytesseract.image_to_string(th, lang="eng", config=TESS_CONFIG)
 
