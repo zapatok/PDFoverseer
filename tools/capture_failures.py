@@ -59,3 +59,111 @@ def _build_csv_row(
         "tier2_text":   tier2_text,
         "tier3_text":   tier3_text,
     }
+
+def capture_pdf(
+    pdf_path: Path | str,
+    out_dir: Path | str = OUTPUT_ROOT,
+    include_easyocr: bool = False,
+) -> list[dict]:
+    """
+    Scan a PDF and capture every page where both Tesseract tiers fail
+    to match the page number pattern.
+
+    Args:
+        pdf_path:       Path to the PDF file.
+        out_dir:        Root output directory (default: data/ocr_failures/).
+        include_easyocr: If True, also run EasyOCR Tier 3 and record its text.
+
+    Returns:
+        List of CSV row dicts, one per captured page.
+    """
+    # Deferred heavy imports — keep module-level imports stdlib-only
+    import cv2
+    import fitz  # PyMuPDF
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parent.parent))
+    import core.analyzer as analyzer
+    from core.analyzer import (
+        _render_clip, _tess_ocr, _upsample_4x, _parse,
+        _setup_sr, _init_easyocr,
+        DPI, EASYOCR_DPI,
+    )
+
+    # One-time SR init (idempotent — safe to call on every capture_pdf() invocation)
+    _setup_sr(print)
+
+    # EasyOCR init (idempotent) — only when caller requests Tier 3 capture
+    if include_easyocr:
+        _init_easyocr(print)
+
+    pdf_path = Path(pdf_path)
+    out_dir  = Path(out_dir)
+    nickname = pdf_path.stem
+
+    # Output dirs
+    img_dir  = out_dir / nickname
+    img_dir.mkdir(parents=True, exist_ok=True)
+
+    # CSV (append mode — multiple PDFs may write to same file)
+    csv_path    = out_dir / "failures_index.csv"
+    write_header = not csv_path.exists()
+    csv_file    = open(csv_path, "a", newline="", encoding="utf-8")
+    writer      = csv.DictWriter(csv_file, fieldnames=CSV_COLUMNS)
+    if write_header:
+        writer.writeheader()
+
+    captured = []
+
+    try:
+        doc = fitz.open(str(pdf_path))
+        total_pages = len(doc)
+        print(f"[capture] {nickname}: {total_pages} pages")
+
+        for page_idx in range(total_pages):
+            page    = doc[page_idx]
+            page_num = page_idx + 1
+
+            bgr_raw  = _render_clip(page, dpi=DPI)
+            gray     = cv2.cvtColor(bgr_raw, cv2.COLOR_BGR2GRAY)
+
+            # Tier 1: Tesseract on raw crop (Otsu applied inside _tess_ocr)
+            text1 = _tess_ocr(gray)
+            c, _ = _parse(text1)
+            if c:
+                continue
+
+            # Tier 2: 4x SR upscale + Tesseract
+            bgr_sr  = _upsample_4x(bgr_raw)   # expects BGR, not gray
+            gray_sr = cv2.cvtColor(bgr_sr, cv2.COLOR_BGR2GRAY)
+            text2   = _tess_ocr(gray_sr)
+            c, _    = _parse(text2)
+            if c:
+                continue
+
+            # Both tiers failed — capture this page
+            text3 = ""
+            if include_easyocr and analyzer._easyocr_reader is not None:
+                # Re-render at EASYOCR_DPI for results comparable to production
+                bgr_hires = _render_clip(page, dpi=EASYOCR_DPI)
+                results   = analyzer._easyocr_reader.readtext(bgr_hires, detail=0)
+                text3     = " ".join(results)
+
+            dt       = datetime.now()
+            filename = _make_image_filename(page_num, dt)
+            rel_path = _make_image_path(nickname, page_num, dt)
+
+            # Save raw BGR strip (what the human eye sees, pre-Otsu)
+            cv2.imwrite(str(img_dir / filename), bgr_raw)
+
+            row = _build_csv_row(nickname, page_num, dt, rel_path, text1.strip(), text2.strip(), text3.strip())
+            writer.writerow(row)
+            captured.append(row)
+            print(f"  [FAIL] page {page_num:3d} — saved {rel_path}")
+
+        doc.close()
+
+    finally:
+        csv_file.close()
+
+    print(f"[capture] done: {len(captured)} failures / {total_pages} pages")
+    return captured

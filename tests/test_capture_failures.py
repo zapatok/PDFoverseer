@@ -48,3 +48,32 @@ CSV_COLUMNS = [
 def test_build_csv_row_has_all_columns():
     row = _build_csv_row("x", 1, datetime.now(), "x/p001.png", "", "", "")
     assert list(row.keys()) == CSV_COLUMNS
+
+import pytest
+from pathlib import Path
+from tools.capture_failures import capture_pdf
+
+FIXTURE_INS31 = Path("eval/fixtures/real/INS_31docs.pdf")
+
+@pytest.mark.skipif(not FIXTURE_INS31.exists(), reason="fixture not found")
+def test_capture_pdf_ins31_produces_failures(tmp_path):
+    """INS_31docs is a known failure case — must produce at least 1 captured page."""
+    failures = capture_pdf(FIXTURE_INS31, out_dir=tmp_path)
+
+    assert len(failures) >= 1, "Expected at least 1 OCR failure in INS_31docs"
+
+    # Every failure must have a saved PNG
+    for row in failures:
+        img_path = tmp_path / row["image_path"]
+        assert img_path.exists(), f"Missing image: {img_path}"
+        assert img_path.stat().st_size > 0
+
+    # CSV must exist and have correct headers
+    csv_path = tmp_path / "failures_index.csv"
+    assert csv_path.exists()
+    import csv as _csv
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = _csv.DictReader(f)
+        rows = list(reader)
+    assert len(rows) == len(failures)
+    assert list(rows[0].keys()) == CSV_COLUMNS
