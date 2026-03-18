@@ -223,9 +223,9 @@ def test_params_recon_weight_in_production():
 
 
 def test_params_ph5_guard_slope_in_production():
-    """ph5_guard_slope must be in PRODUCTION_PARAMS at 0.0 (disabled by default)."""
+    """ph5_guard_slope must be in PRODUCTION_PARAMS at the sweep-winning value 1.0."""
     assert "ph5_guard_slope" in PROD_PARAMS
-    assert PROD_PARAMS["ph5_guard_slope"] == 0.0
+    assert PROD_PARAMS["ph5_guard_slope"] == 1.0
 
 
 def test_params_recon_weight_in_space():

@@ -59,8 +59,8 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "ph5b_conf_min":      0.69,
     "ph5b_ratio_min":     0.93,
     "ph5_guard_conf":     0.90,
-    "recon_weight":       0.0,   # disabled until sweep validates
-    "ph5_guard_slope":    0.0,   # disabled until sweep validates
+    "recon_weight":       0.0,   # Approach A: no improvement over baseline
+    "ph5_guard_slope":    1.0,   # Approach B: sweep winner, improves undercount recovery
     "min_conf_for_new_doc": 0.0,
     "window":           7,
     "hom_threshold":    0.88,
