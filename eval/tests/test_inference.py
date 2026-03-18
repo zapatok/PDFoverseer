@@ -191,3 +191,14 @@ def test_period2_low_conf_loads():
                  for r in data["reads"]]
     docs = run_pipeline(reads_raw, PROD_PARAMS)
     assert len(docs) >= 1
+
+
+def test_period2_noisy_splits_loads():
+    """period2_noisy_splits fixture loads and runs without error."""
+    import json
+    from pathlib import Path
+    data = json.loads(Path("eval/fixtures/synthetic/period2_noisy_splits.json").read_text())
+    reads_raw = [PageRead(**{k: v for k, v in r.items() if not k.startswith("_")})
+                 for r in data["reads"]]
+    docs = run_pipeline(reads_raw, PROD_PARAMS)
+    assert len(docs) >= 1
