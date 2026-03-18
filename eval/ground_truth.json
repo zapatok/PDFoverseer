@@ -23,5 +23,6 @@
   "variable_doc_sizes":    {"doc_count": 10, "complete_count": 10, "inferred_count": 0},
   "single_long_doc":       {"doc_count": 1,  "complete_count": 1,  "inferred_count": 3},
   "two_zones_diff_period": {"doc_count": 15, "complete_count": 15, "inferred_count": 0},
-  "sparse_reads":          {"doc_count": 10, "complete_count": 10, "inferred_count": 8}
+  "sparse_reads":          {"doc_count": 10, "complete_count": 10, "inferred_count": 8},
+  "period2_low_conf":      {"doc_count": 20, "complete_count": 16, "inferred_count": 0}
 }

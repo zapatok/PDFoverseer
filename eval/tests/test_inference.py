@@ -180,3 +180,14 @@ def test_ph5_guard_protects_inferred_boundary():
 
     assert len(docs_no_guard)   == 1, "Without guard: over-merge expected (recovery fires)"
     assert len(docs_with_guard) == 2, "With guard: boundary preserved (recovery blocked)"
+
+
+def test_period2_low_conf_loads():
+    """period2_low_conf fixture loads and runs without error."""
+    import json
+    from pathlib import Path
+    data = json.loads(Path("eval/fixtures/synthetic/period2_low_conf.json").read_text())
+    reads_raw = [PageRead(**{k: v for k, v in r.items() if not k.startswith("_")})
+                 for r in data["reads"]]
+    docs = run_pipeline(reads_raw, PROD_PARAMS)
+    assert len(docs) >= 1
