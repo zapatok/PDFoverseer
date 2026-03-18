@@ -75,8 +75,10 @@ BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 # is below this value. 0.0 = disabled. Sweep-validated: >=0.55 fixes
 # orphan over-counting across all fixtures without regressions.
 MIN_CONF_FOR_NEW_DOC = 0.0
-PH5_GUARD_CONF = 0.90  # min confidence for inferred curr==1 to block undercount merge
-INFERENCE_ENGINE_VERSION = "6ph-t2"  # 6-phase + undercount guard + Phase 5b
+PH5_GUARD_CONF  = 0.90  # min confidence for inferred curr==1 to block undercount merge
+RECON_WEIGHT    = 0.0   # Approach A: no improvement, disabled
+PH5_GUARD_SLOPE = 1.0   # Approach B: sweep winner
+INFERENCE_ENGINE_VERSION = "6ph-t2-phC"  # 6-phase + undercount guard + Phase C
 
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
@@ -292,6 +294,26 @@ def _process_page(doc: fitz.Document, page_idx: int) -> _PageRead:
 
 # ── Period Detection ─────────────────────────────────────────────────────────
 
+def _recon_confidence(reads: list[_PageRead], period: int) -> float:
+    """
+    Reconstruction confidence: fraction of observed curr=1 positions
+    that align within ±1 of positions predicted by repeating 'period'.
+    """
+    if period < 2:
+        return 0.0
+    starts = [i for i, r in enumerate(reads)
+              if r.curr == 1 and r.method not in ("failed", "excluded")]
+    if len(starts) < 2:
+        return 0.0
+    anchor = starts[0]
+    predicted = set(range(anchor, len(reads), period))
+    hits = sum(
+        1 for s in starts
+        if (s in predicted) or ((s - 1) in predicted) or ((s + 1) in predicted)
+    )
+    return hits / len(starts)
+
+
 def _detect_period(reads: list[_PageRead]) -> dict:
     """
     Detect repeating period in page numbering via:
@@ -365,6 +387,13 @@ def _detect_period(reads: list[_PageRead]) -> dict:
         candidates[mode_total] = candidates.get(mode_total, 0) + total_conf * 0.30
     if acorr_period is not None and acorr_conf > 0.3:
         candidates[acorr_period] = candidates.get(acorr_period, 0) + acorr_conf * 0.25
+
+    # ── Method 4: Reconstruction confidence ──────────────────────────────
+    if RECON_WEIGHT > 0.0:
+        recon_period = gap_period or mode_total or 2
+        rc = _recon_confidence(reads, recon_period)
+        if rc > 0.3:
+            candidates[recon_period] = candidates.get(recon_period, 0) + rc * RECON_WEIGHT
 
     if not candidates:
         result["expected_total"] = mode_total
@@ -993,6 +1022,10 @@ def analyze_pdf(
     # E.g., doc A declares total=2 but has 1 page, and the next doc B
     # starts with curr=1 inferred — B's first page should be A's page 2.
     reads_by_page = {r.pdf_page: r for r in reads_clean}
+    _inferred_ratio = sum(
+        1 for r in reads_clean if r.method == "inferred"
+    ) / max(len(reads_clean), 1)
+    _effective_guard = PH5_GUARD_CONF * max(1.0 - PH5_GUARD_SLOPE * _inferred_ratio, 0.0)
     _uc_fixed = 0
     for di in range(len(documents) - 1):
         d = documents[di]
@@ -1012,9 +1045,9 @@ def analyze_pdf(
                 reads_by_page[pp].curr == 1
                 and (
                     reads_by_page[pp].method not in ("inferred", "failed", "excluded")
-                    or (PH5_GUARD_CONF > 0.0
+                    or (_effective_guard > 0.0
                         and reads_by_page[pp].method == "inferred"
-                        and reads_by_page[pp].confidence >= PH5_GUARD_CONF)
+                        and reads_by_page[pp].confidence >= _effective_guard)
                 )
                 for pp in next_pages if pp in reads_by_page
             )
