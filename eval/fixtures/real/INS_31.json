@@ -6,7 +6,7 @@
       "pdf_page": 1,
       "curr": 1,
       "total": 1,
-      "method": "easyocr",
+      "method": "direct",
       "confidence": 1.0
     },
     {

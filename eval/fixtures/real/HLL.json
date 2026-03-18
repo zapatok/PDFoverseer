@@ -62,7 +62,7 @@
       "pdf_page": 9,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "easyocr",
       "confidence": 1.0
     },
     {
@@ -95,10 +95,10 @@
     },
     {
       "pdf_page": 14,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 2,
+      "total": 2,
+      "method": "direct",
+      "confidence": 1.0
     },
     {
       "pdf_page": 15,
@@ -363,7 +363,7 @@
       "pdf_page": 52,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -468,7 +468,7 @@
       "pdf_page": 67,
       "curr": 2,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -601,7 +601,7 @@
       "pdf_page": 86,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -657,7 +657,7 @@
       "pdf_page": 94,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -704,10 +704,10 @@
     },
     {
       "pdf_page": 101,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 2,
+      "method": "direct",
+      "confidence": 1.0
     },
     {
       "pdf_page": 102,
@@ -741,7 +741,7 @@
       "pdf_page": 106,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "easyocr",
       "confidence": 1.0
     },
     {
@@ -762,15 +762,15 @@
       "pdf_page": 109,
       "curr": 1,
       "total": 1,
-      "method": "easyocr",
+      "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 110,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 111,
@@ -839,7 +839,7 @@
       "pdf_page": 120,
       "curr": 1,
       "total": 1,
-      "method": "easyocr",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -853,7 +853,7 @@
       "pdf_page": 122,
       "curr": 1,
       "total": 1,
-      "method": "easyocr",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -865,10 +865,10 @@
     },
     {
       "pdf_page": 124,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
     },
     {
       "pdf_page": 125,
@@ -895,7 +895,7 @@
       "pdf_page": 128,
       "curr": 1,
       "total": 1,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -923,7 +923,7 @@
       "pdf_page": 132,
       "curr": 1,
       "total": 1,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -1028,7 +1028,7 @@
       "pdf_page": 147,
       "curr": 1,
       "total": 1,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -1056,7 +1056,7 @@
       "pdf_page": 151,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "easyocr",
       "confidence": 1.0
     },
     {
@@ -1173,17 +1173,17 @@
     },
     {
       "pdf_page": 168,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 169,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "direct",
+      "confidence": 1.0
     },
     {
       "pdf_page": 170,
@@ -1208,10 +1208,10 @@
     },
     {
       "pdf_page": 173,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 174,
@@ -1257,10 +1257,10 @@
     },
     {
       "pdf_page": 180,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 181,
@@ -1278,10 +1278,10 @@
     },
     {
       "pdf_page": 183,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 184,
@@ -1292,10 +1292,10 @@
     },
     {
       "pdf_page": 185,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 186,
@@ -1306,10 +1306,10 @@
     },
     {
       "pdf_page": 187,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 188,
@@ -1320,10 +1320,10 @@
     },
     {
       "pdf_page": 189,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 190,
@@ -1357,7 +1357,7 @@
       "pdf_page": 194,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -1399,7 +1399,7 @@
       "pdf_page": 200,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -1413,7 +1413,7 @@
       "pdf_page": 202,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -1469,7 +1469,7 @@
       "pdf_page": 210,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -1665,7 +1665,7 @@
       "pdf_page": 238,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -1707,7 +1707,7 @@
       "pdf_page": 244,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "easyocr",
       "confidence": 1.0
     },
     {
@@ -2008,7 +2008,7 @@
       "pdf_page": 287,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2078,7 +2078,7 @@
       "pdf_page": 297,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2106,7 +2106,7 @@
       "pdf_page": 301,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2218,7 +2218,7 @@
       "pdf_page": 317,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2274,7 +2274,7 @@
       "pdf_page": 325,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2295,7 +2295,7 @@
       "pdf_page": 328,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2309,7 +2309,7 @@
       "pdf_page": 330,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2330,7 +2330,7 @@
       "pdf_page": 333,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2421,7 +2421,7 @@
       "pdf_page": 346,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "easyocr",
       "confidence": 1.0
     },
     {
@@ -2498,7 +2498,7 @@
       "pdf_page": 357,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "easyocr",
       "confidence": 1.0
     },
     {
@@ -2582,7 +2582,7 @@
       "pdf_page": 369,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2729,7 +2729,7 @@
       "pdf_page": 390,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2771,7 +2771,7 @@
       "pdf_page": 396,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2848,7 +2848,7 @@
       "pdf_page": 407,
       "curr": 1,
       "total": 1,
-      "method": "easyocr",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -2869,7 +2869,7 @@
       "pdf_page": 410,
       "curr": 1,
       "total": 1,
-      "method": "easyocr",
+      "method": "SR",
       "confidence": 1.0
     },
     {
@@ -2918,7 +2918,7 @@
       "pdf_page": 417,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "easyocr",
       "confidence": 1.0
     },
     {
@@ -3380,7 +3380,7 @@
       "pdf_page": 483,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -3492,7 +3492,7 @@
       "pdf_page": 499,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "easyocr",
       "confidence": 1.0
     },
     {
@@ -3646,7 +3646,7 @@
       "pdf_page": 521,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -3700,10 +3700,10 @@
     },
     {
       "pdf_page": 529,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 530,
@@ -3721,10 +3721,10 @@
     },
     {
       "pdf_page": 532,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 533,
@@ -3735,10 +3735,10 @@
     },
     {
       "pdf_page": 534,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 535,
@@ -3749,24 +3749,24 @@
     },
     {
       "pdf_page": 536,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 537,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 538,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 1,
+      "method": "SR",
+      "confidence": 1.0
     }
   ]
 }

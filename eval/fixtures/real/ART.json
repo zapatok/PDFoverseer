@@ -349,7 +349,7 @@
       "pdf_page": 50,
       "curr": 2,
       "total": 4,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -522,9 +522,9 @@
     },
     {
       "pdf_page": 75,
-      "curr": 3,
+      "curr": 1,
       "total": 4,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -733,14 +733,14 @@
     {
       "pdf_page": 105,
       "curr": 1,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 106,
       "curr": 2,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -1314,7 +1314,7 @@
     {
       "pdf_page": 188,
       "curr": 4,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -1825,7 +1825,7 @@
     {
       "pdf_page": 261,
       "curr": 1,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -2020,10 +2020,10 @@
     },
     {
       "pdf_page": 289,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 4,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 290,
@@ -2497,7 +2497,7 @@
     {
       "pdf_page": 357,
       "curr": 4,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -2532,7 +2532,7 @@
     {
       "pdf_page": 362,
       "curr": 2,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -2860,10 +2860,10 @@
     },
     {
       "pdf_page": 409,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 4,
+      "method": "direct",
+      "confidence": 1.0
     },
     {
       "pdf_page": 410,
@@ -4415,7 +4415,7 @@
     {
       "pdf_page": 631,
       "curr": 1,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -4813,10 +4813,10 @@
     },
     {
       "pdf_page": 688,
-      "curr": 2,
-      "total": 4,
-      "method": "SR",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 689,
@@ -4905,7 +4905,7 @@
     {
       "pdf_page": 701,
       "curr": 4,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -4940,7 +4940,7 @@
     {
       "pdf_page": 706,
       "curr": 4,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -5683,7 +5683,7 @@
       "pdf_page": 812,
       "curr": 2,
       "total": 4,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -6305,7 +6305,7 @@
     {
       "pdf_page": 901,
       "curr": 3,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -6564,7 +6564,7 @@
     {
       "pdf_page": 938,
       "curr": 4,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -7480,10 +7480,10 @@
     },
     {
       "pdf_page": 1069,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 3,
+      "total": 10,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 1070,
@@ -7508,10 +7508,10 @@
     },
     {
       "pdf_page": 1073,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 4,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 1074,
@@ -7725,10 +7725,10 @@
     },
     {
       "pdf_page": 1104,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 2,
+      "total": 12,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 1105,
@@ -8145,10 +8145,10 @@
     },
     {
       "pdf_page": 1164,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 2,
+      "total": 2,
+      "method": "direct",
+      "confidence": 1.0
     },
     {
       "pdf_page": 1165,
@@ -8447,7 +8447,7 @@
     {
       "pdf_page": 1207,
       "curr": 1,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -9322,7 +9322,7 @@
     {
       "pdf_page": 1332,
       "curr": 2,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -9721,7 +9721,7 @@
     {
       "pdf_page": 1389,
       "curr": 3,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -9742,7 +9742,7 @@
     {
       "pdf_page": 1392,
       "curr": 2,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -9847,7 +9847,7 @@
     {
       "pdf_page": 1407,
       "curr": 1,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -10736,7 +10736,7 @@
     {
       "pdf_page": 1534,
       "curr": 4,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -11576,7 +11576,7 @@
     {
       "pdf_page": 1654,
       "curr": 4,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -11625,7 +11625,7 @@
     {
       "pdf_page": 1661,
       "curr": 3,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -11703,7 +11703,7 @@
       "pdf_page": 1672,
       "curr": 2,
       "total": 4,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -11793,7 +11793,7 @@
     {
       "pdf_page": 1685,
       "curr": 3,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -12968,10 +12968,10 @@
     },
     {
       "pdf_page": 1853,
-      "curr": 1,
-      "total": 12,
-      "method": "easyocr",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 1854,
@@ -13983,10 +13983,10 @@
     },
     {
       "pdf_page": 1998,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 4,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 1999,
@@ -14236,7 +14236,7 @@
     {
       "pdf_page": 2034,
       "curr": 3,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -15559,7 +15559,7 @@
     {
       "pdf_page": 2223,
       "curr": 1,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -15601,7 +15601,7 @@
     {
       "pdf_page": 2229,
       "curr": 3,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -15852,9 +15852,9 @@
     },
     {
       "pdf_page": 2265,
-      "curr": 3,
-      "total": 4,
-      "method": "SR",
+      "curr": 5,
+      "total": 40,
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -16293,10 +16293,10 @@
     },
     {
       "pdf_page": 2328,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 4,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 2329,
@@ -16587,9 +16587,9 @@
     },
     {
       "pdf_page": 2370,
-      "curr": 1,
-      "total": 4,
-      "method": "SR",
+      "curr": 5,
+      "total": 40,
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -17127,7 +17127,7 @@
     {
       "pdf_page": 2447,
       "curr": 2,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -17225,7 +17225,7 @@
     {
       "pdf_page": 2461,
       "curr": 4,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -17890,7 +17890,7 @@
     {
       "pdf_page": 2556,
       "curr": 3,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -17903,17 +17903,17 @@
     },
     {
       "pdf_page": 2558,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 4,
+      "method": "SR",
+      "confidence": 1.0
     },
     {
       "pdf_page": 2559,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 7,
+      "total": 40,
+      "method": "direct",
+      "confidence": 1.0
     },
     {
       "pdf_page": 2560,
@@ -18814,7 +18814,7 @@
     {
       "pdf_page": 2688,
       "curr": 1,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },
@@ -19017,7 +19017,7 @@
     {
       "pdf_page": 2717,
       "curr": 2,
-      "total": 4,
+      "total": 40,
       "method": "direct",
       "confidence": 1.0
     },

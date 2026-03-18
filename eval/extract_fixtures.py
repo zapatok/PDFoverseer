@@ -51,7 +51,7 @@ PDF_PATHS: dict[str, str] = {
     "CH_51":  r"a:/PROJECTS/PDFoverseer/CH_51docs.pdf",
     "CH_74":  r"a:/PROJECTS/PDFoverseer/CH_74docs.pdf",
     "HLL":    r"a:/PROJECTS/PDFoverseer/HLL_363docs.pdf",
-    "INS_31": r"a:/PROJECTS/PDFoverseer/INS_31docs.pdf",
+    "INS_31": r"a:/PROJECTS/PDFoverseer/INS_31.pdf.pdf",
 }
 
 OUT_DIR = PROJECT_ROOT / "eval" / "fixtures" / "real"
