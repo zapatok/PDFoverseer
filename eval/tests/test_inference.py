@@ -337,3 +337,54 @@ def test_recon_confidence_small_doc_no_crash():
     # This test verifies no crash, not a specific value
     rc = _recon_confidence(reads, 2)
     assert 0.0 <= rc <= 1.0
+
+
+# ── _detect_period with recon_weight tests ─────────────────────────────────────
+
+def test_detect_period_recon_weight_zero_no_change():
+    """recon_weight=0.0 produces same result as calling with params=None."""
+    reads = make_reads([
+        (0, 1, 2, "direct", 0.90), (1, 2, 2, "direct", 0.90),
+        (2, 1, 2, "direct", 0.90), (3, 2, 2, "direct", 0.90),
+    ])
+    p_none  = _detect_period(reads, None)
+    p_zero  = _detect_period(reads, {"recon_weight": 0.0})
+    assert p_none["period"] == p_zero["period"]
+    assert p_none["confidence"] == p_zero["confidence"]
+
+
+def test_detect_period_recon_weight_boosts_confidence():
+    """recon_weight=0.25 strictly raises confidence when baseline is below 1.0.
+
+    Uses 4 reads (n<6 so acorr is skipped) with one misread total=1.
+    gap_conf=1.0 (gap=2 appears once, 1/1=1.0), gap_period=2 (no tie).
+    total_conf=0.75 (3 of 4 reads have total=2).
+    Without recon: candidates[2] = 1.0*0.45 + 0.75*0.30 = 0.675.
+    With recon: starts=[0,2], anchor=0, predicted={0,2} → rc=1.0.
+               candidates[2] += 1.0*0.25 = 0.25 → 0.925.
+    0.925 > 0.675 → strict improvement, neither value is at the 1.0 cap.
+    """
+    reads = make_reads([
+        (0, 1, 2, "direct", 0.90),
+        (1, 2, 2, "direct", 0.90),
+        (2, 1, 1, "direct", 0.88),  # total misread as 1; curr=1 still at expected position
+        (3, 2, 2, "direct", 0.90),
+    ])
+    p_no_recon   = _detect_period(reads, {"recon_weight": 0.0})
+    p_with_recon = _detect_period(reads, {"recon_weight": 0.25})
+    assert p_with_recon["period"] == 2
+    assert p_with_recon["confidence"] > p_no_recon["confidence"]
+
+
+def test_run_pipeline_accepts_recon_weight():
+    """run_pipeline passes recon_weight through to _detect_period without error.
+
+    Uses ≥4 reads so _detect_period doesn't early-return on the n<4 guard,
+    ensuring the recon_weight branch inside _detect_period is actually reached.
+    """
+    reads = make_reads([
+        (0, 1, 2, "H", 0.95), (1, 2, 2, "H", 0.92),
+        (2, 1, 2, "H", 0.91), (3, 2, 2, "H", 0.90),
+    ])
+    docs = run_pipeline(reads, {**PROD_PARAMS, "recon_weight": 0.25})
+    assert len(docs) == 2

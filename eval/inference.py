@@ -57,7 +57,7 @@ class Document:
 def run_pipeline(reads: list[PageRead], params: dict) -> list[Document]:
     """Full pipeline: deepcopy → detect period → infer → build docs → undercount recovery."""
     reads = copy.deepcopy(reads)
-    period_info = _detect_period(reads)
+    period_info = _detect_period(reads, params)
     _infer(reads, params, period_info)
     docs = _build_documents(reads)
     docs = _undercount_recovery(reads, docs, params)
@@ -66,7 +66,7 @@ def run_pipeline(reads: list[PageRead], params: dict) -> list[Document]:
 
 # ── Period Detection ─────────────────────────────────────────────────────────
 
-def _detect_period(reads: list[PageRead]) -> dict:
+def _detect_period(reads: list[PageRead], params: dict | None = None) -> dict:
     """
     Detect repeating period in page numbering via:
       1. Spacing between curr=1 occurrences
@@ -138,6 +138,14 @@ def _detect_period(reads: list[PageRead]) -> dict:
         candidates[mode_total] = candidates.get(mode_total, 0) + total_conf * 0.30
     if acorr_period is not None and acorr_conf > 0.3:
         candidates[acorr_period] = candidates.get(acorr_period, 0) + acorr_conf * 0.25
+
+    # ── Method 4: Reconstruction confidence ──────────────────────────────
+    recon_weight = params.get("recon_weight", 0.0) if params else 0.0
+    if recon_weight > 0.0:
+        recon_period = gap_period or mode_total or 2
+        rc = _recon_confidence(reads, recon_period)
+        if rc > 0.3:
+            candidates[recon_period] = candidates.get(recon_period, 0) + rc * recon_weight
 
     if not candidates:
         result["expected_total"] = mode_total
