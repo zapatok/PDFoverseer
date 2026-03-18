@@ -71,10 +71,11 @@ BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
 # Orphan suppression threshold (Phase 6).
 # Inferred curr==1 pages sandwiched between two confirmed doc starts
-# (Phase 3 xval_cap = 0.50) are excluded when their final confidence
+# (Phase 3 xval_cap = 0.35) are excluded when their final confidence
 # is below this value. 0.0 = disabled. Sweep-validated: >=0.55 fixes
 # orphan over-counting across all fixtures without regressions.
 MIN_CONF_FOR_NEW_DOC = 0.0
+PH5_GUARD_CONF = 0.90  # min confidence for inferred curr==1 to block undercount merge
 INFERENCE_ENGINE_VERSION = "6ph-t2"  # 6-phase + undercount guard + Phase 5b
 
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
@@ -461,9 +462,9 @@ def _infer_missing(
     period = period_info.get("period") if period_info else None
     period_conf = period_info.get("confidence", 0.0) if period_info else 0.0
 
-    def _local_total(idx: int, window: int = 5) -> tuple[int, float]:
+    def _local_total(idx: int, window: int = 7) -> tuple[int, float]:
         """Return (most_common_total, homogeneity) from ±window confirmed reads.
-        Only overrides best_total when local region is highly homogeneous (≥85%).
+        Only overrides best_total when local region is highly homogeneous (≥88%).
         Mixed regions fall back to best_total to avoid bias."""
         lo, hi = max(0, idx - window), min(n, idx + window + 1)
         local = [reads[j].total for j in range(lo, hi)
@@ -474,7 +475,7 @@ def _infer_missing(
         tc = Counter(local)
         mode_val, mode_freq = tc.most_common(1)[0]
         homogeneity = mode_freq / len(local)
-        if homogeneity >= 0.85:
+        if homogeneity >= 0.88:
             return mode_val, homogeneity
         return best_total, homogeneity
 
@@ -490,13 +491,13 @@ def _infer_missing(
                     r.curr = prev.curr + 1
                     r.total = prev.total
                     r.method = "inferred"
-                    r.confidence = 0.95
+                    r.confidence = 0.99
                 elif prev.curr == prev.total:
                     lt, hom = _local_total(i)
                     r.curr = 1
                     r.total = lt
                     r.method = "inferred"
-                    r.confidence = 0.70 + hom * 0.30  # 0.70..1.00
+                    r.confidence = 0.60 + hom * 0.35  # 0.60..0.95
 
     # ── Phase 2: Backward propagation ───────────────────────────────
     for i in range(n - 2, -1, -1):
@@ -510,7 +511,7 @@ def _infer_missing(
                     r.curr = nxt.curr - 1
                     r.total = nxt.total
                     r.method = "inferred"
-                    r.confidence = 0.90
+                    r.confidence = 0.93
                 elif nxt.curr == 1 and i > 0:
                     prev = reads[i - 1]
                     if (prev.curr is not None and prev.total is not None
@@ -518,13 +519,13 @@ def _infer_missing(
                         r.curr = prev.curr + 1
                         r.total = prev.total
                         r.method = "inferred"
-                        r.confidence = 0.90
+                        r.confidence = 0.93
 
     # ── Phase 1b: Orphan candidate marking ──────────────────────────
     # Mark inferred curr==1 pages whose immediate next page is also
     # curr==1. These are structural orphan candidates: a page claims to
     # start a new doc but the very next page also restarts, which is
-    # inconsistent. Phase 3 will cap their confidence to 0.50 (xval_cap).
+    # inconsistent. Phase 3 will cap their confidence to 0.35 (xval_cap).
     # Phase 6 then suppresses them if confidence < MIN_CONF_FOR_NEW_DOC.
     # Phase-4 fallbacks are assigned after this pass and are never marked.
     for i in range(n - 1):
@@ -553,7 +554,7 @@ def _infer_missing(
                         (r.curr == r.total and nxt.curr == 1)):
                     consistent = False
         if not consistent:
-            r.confidence = min(r.confidence, 0.50)
+            r.confidence = min(r.confidence, 0.35)
 
     # ── Phase 4: Fallback for remaining failures ────────────────────
     for i, r in enumerate(reads):
@@ -562,7 +563,7 @@ def _infer_missing(
             r.curr = 1
             r.total = lt
             r.method = "inferred"
-            r.confidence = 0.40 if hom < 0.85 else 0.40 + hom * 0.15
+            r.confidence = 0.40 if hom < 0.88 else 0.30 + hom * 0.12
 
     # ── Phase 5: D-S post-validation for uncertain pages (≤0.60) ──
     # Does NOT change curr/total assignments — only boosts confidence
@@ -652,7 +653,7 @@ def _infer_missing(
                                         rj.curr = 1
                                         rj.total = expected_total
                                         lt, hom = _local_total(j)
-                                        rj.confidence = 0.60 + hom * 0.30
+                                        rj.confidence = 0.60 + hom * 0.35
                                     elif prev.curr < prev.total:
                                         rj.curr = prev.curr + 1
                                         rj.total = prev.total
@@ -1005,10 +1006,16 @@ def analyze_pdf(
             # Find the reads for the next doc's pages and reassign
             next_pages = d_next.pages + d_next.inferred_pages
             # Guard: if the next doc contains a confirmed (OCR-read) curr==1
-            # page, it is a genuine new-document start — do NOT merge it.
+            # page, or a high-confidence inferred curr==1 page, it is a genuine
+            # new-document start — do NOT merge it.
             has_confirmed_start = any(
                 reads_by_page[pp].curr == 1
-                and reads_by_page[pp].method not in ("inferred", "failed", "excluded")
+                and (
+                    reads_by_page[pp].method not in ("inferred", "failed", "excluded")
+                    or (PH5_GUARD_CONF > 0.0
+                        and reads_by_page[pp].method == "inferred"
+                        and reads_by_page[pp].confidence >= PH5_GUARD_CONF)
+                )
                 for pp in next_pages if pp in reads_by_page
             )
             if has_confirmed_start:

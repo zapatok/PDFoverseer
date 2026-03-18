@@ -70,21 +70,22 @@ def test_inferred_count():
 
 def test_ph5b_ins31_scenario():
     """INS_31: 29 pages read as 1/1, last 2 read as 1/4 and 2/4.
-    Without Phase 5b: 30 docs (pages 30-31 form one 4-page doc, incomplete).
-    With Phase 5b: 31 docs (pages 30-31 corrected to 1/1 each)."""
+    Phase 5b is now enabled in PRODUCTION_PARAMS (ph5b_conf_min=0.69).
+    Expected result with production params: 31 docs (all corrected to 1/1)."""
     specs = [(i, 1, 1, "direct", 0.90) for i in range(29)]
     specs.append((29, 1, 4, "direct", 0.85))  # OCR misread
     specs.append((30, 2, 4, "direct", 0.85))  # OCR misread
     reads = make_reads(specs)
 
-    # Without Phase 5b (production defaults: disabled)
-    docs_no_5b = run_pipeline(reads, PROD_PARAMS)
-    assert len(docs_no_5b) == 30, f"Without 5b expected 30 docs, got {len(docs_no_5b)}"
-
-    # With Phase 5b enabled
-    docs_5b = run_pipeline(reads, ph5b_params())
+    # With Phase 5b enabled (production defaults)
+    docs_5b = run_pipeline(reads, PROD_PARAMS)
     assert len(docs_5b) == 31, f"With 5b expected 31 docs, got {len(docs_5b)}"
     assert all(d.is_complete for d in docs_5b)
+
+    # Without Phase 5b explicitly disabled
+    disabled_params = {**PROD_PARAMS, "ph5b_conf_min": 0.0}
+    docs_no_5b = run_pipeline(reads, disabled_params)
+    assert len(docs_no_5b) == 30, f"Without 5b expected 30 docs, got {len(docs_no_5b)}"
 
 
 def test_ph5b_no_correction_when_mixed():
@@ -107,9 +108,9 @@ def test_ph5b_no_correction_when_mixed():
     assert len(docs_5b) == len(docs_no_5b)
 
 
-def test_ph5b_disabled_by_default():
-    """PRODUCTION_PARAMS has ph5b_conf_min=0.0, so Phase 5b is disabled."""
-    assert PROD_PARAMS["ph5b_conf_min"] == 0.0
+def test_ph5b_enabled_in_production():
+    """PRODUCTION_PARAMS has ph5b_conf_min=0.69 (sweep-tuned to enable Phase 5b)."""
+    assert PROD_PARAMS["ph5b_conf_min"] == 0.69
 
 
 def test_ph5b_respects_conf_threshold():
@@ -126,9 +127,9 @@ def test_ph5b_respects_conf_threshold():
 
 
 def test_params_ph5_guard_conf_in_prod():
-    """ph5_guard_conf must be in PRODUCTION_PARAMS with value 0.0 (disabled baseline)."""
+    """ph5_guard_conf must be in PRODUCTION_PARAMS with sweep-tuned value 0.90."""
     assert "ph5_guard_conf" in PROD_PARAMS
-    assert PROD_PARAMS["ph5_guard_conf"] == 0.0
+    assert PROD_PARAMS["ph5_guard_conf"] == 0.90
 
 
 def test_params_ph5b_conf_min_has_040():

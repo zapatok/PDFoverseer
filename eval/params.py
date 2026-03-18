@@ -42,22 +42,22 @@ PARAM_SPACE: dict[str, list] = {
 
 # Current production values (hardcoded constants in analyzer.py)
 PRODUCTION_PARAMS: dict[str, float | int] = {
-    "fwd_conf":         0.95,
+    "fwd_conf":         0.99,
     "new_doc_base":     0.60,
-    "new_doc_hom_mul":  0.30,
-    "back_conf":        0.90,
-    "xval_cap":         0.50,
+    "new_doc_hom_mul":  0.35,
+    "back_conf":        0.93,
+    "xval_cap":         0.35,
     "fallback_base":    0.40,
     "fallback_hom_base":0.30,
-    "fallback_hom_mul": 0.20,
-    "ds_period_weight":   0.15,
-    "ds_neighbor_weight": 0.08,
+    "fallback_hom_mul": 0.12,
+    "ds_period_weight":   0.10,
+    "ds_neighbor_weight": 0.10,
     "ds_prior_weight":    0.05,
-    "ds_boost_max":       0.25,
-    "ph5b_conf_min":      0.0,   # disabled — matches core (no Phase 5b)
-    "ph5b_ratio_min":     0.85,
-    "ph5_guard_conf":     0.0,   # disabled — baseline (guard not yet in core/analyzer.py)
+    "ds_boost_max":       0.23,
+    "ph5b_conf_min":      0.69,
+    "ph5b_ratio_min":     0.93,
+    "ph5_guard_conf":     0.90,
     "min_conf_for_new_doc": 0.0,
-    "window":           5,
-    "hom_threshold":    0.85,
+    "window":           7,
+    "hom_threshold":    0.88,
 }
