@@ -148,5 +148,10 @@
     "doc_count": 15,
     "complete_count": 15,
     "inferred_count": 10
+  },
+  "hll_recon_period2": {
+    "doc_count": 20,
+    "complete_count": 20,
+    "inferred_count": 2
   }
 }
