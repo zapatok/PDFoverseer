@@ -83,14 +83,14 @@ INFERENCE_ENGINE_VERSION = "6ph-t2"  # 6-phase + undercount guard + Phase 5b
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
     re.compile(
-        r"P.{0,6}\s*([0-9OoIl|zZtT\'\‘\’\`\´]{1,3})\s*\.?\s*d[ea]\s*([0-9OoIl|zZtT\'\‘\’\`\´]{1,3})",
+        r"P.{0,6}\s*([0-9OoIilL|zZtT\'\‘\’\`\´]{1,3})\s*\.?\s*d[ea]\s*([0-9OoIilL|zZtT\'\‘\’\`\´]{1,3})",
         re.IGNORECASE,
     ),
 ]
 _Z2 = re.compile(r"(?<!\d)Z(?!\d)")
 
 # OCR digit normalization: handle Tesseract confusion
-_OCR_DIGIT = str.maketrans("OoIilzZ|tT'‘’`´", "001112201111111")
+_OCR_DIGIT = str.maketrans("OoIilLzZ|tT'‘’`´", "0011112201111111")
 def _to_int(s: str) -> int:
     """Convert OCR-confused digits to int. E.g., 'O' → '0', 'l' → '1'."""
     return int(s.translate(_OCR_DIGIT))
@@ -232,8 +232,24 @@ def _parse(text: str) -> tuple[int | None, int | None]:
     return None, None
 
 
-def _tess_ocr(gray: np.ndarray) -> str:
-    _, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+def _tess_ocr(bgr: np.ndarray) -> str:
+    # If image is already grayscale, skip HSV filtering
+    if len(bgr.shape) == 2 or bgr.shape[2] == 1:
+        v_clean = bgr
+    else:
+        # 1. Convert to HSV to detect high-saturation colors (ink)
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        s = hsv[:, :, 1]
+        v = hsv[:, :, 2]
+        
+        # 2. Drop high saturation pixels (blue/red pen ink) by mapping their Value to 255 (White)
+        # The printed text is usually very low saturation (black/gray).
+        v_clean = v.copy()
+        v_clean[s > 60] = 255
+    
+    # 3. Apply Otsu Binarization on the cleaned Value channel
+    _, th = cv2.threshold(v_clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
     return pytesseract.image_to_string(th, lang="eng", config=TESS_CONFIG)
 
 
@@ -273,18 +289,15 @@ def _process_page(doc: fitz.Document, page_idx: int) -> _PageRead:
     pdf_page = page_idx + 1
     bgr = _render_clip(doc[page_idx])
 
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-
-    # Tier 1: Tesseract direct
-    text = _tess_ocr(gray)
+    # Tier 1: Tesseract direct (passing BGR so _tess_ocr can filter colors)
+    text = _tess_ocr(bgr)
     c, t = _parse(text)
     if c:
         return _PageRead(pdf_page, c, t, "direct", 1.0)
 
     # Tier 2: 4x upscale (GPU bicubic ~1ms or FSRCNN CPU ~150ms) + Tesseract
     bgr_sr = _upsample_4x(bgr)
-    gray_sr = cv2.cvtColor(bgr_sr, cv2.COLOR_BGR2GRAY)
-    text_sr = _tess_ocr(gray_sr)
+    text_sr = _tess_ocr(bgr_sr)
     c, t = _parse(text_sr)
     if c:
         return _PageRead(pdf_page, c, t, "SR", 1.0)
