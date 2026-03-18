@@ -216,6 +216,30 @@ def test_mixed_1_2_dense_loads():
     assert len(docs) >= 1
 
 
+def test_params_recon_weight_in_production():
+    """recon_weight must be in PRODUCTION_PARAMS at 0.0 (disabled by default)."""
+    assert "recon_weight" in PROD_PARAMS
+    assert PROD_PARAMS["recon_weight"] == 0.0
+
+
+def test_params_ph5_guard_slope_in_production():
+    """ph5_guard_slope must be in PRODUCTION_PARAMS at 0.0 (disabled by default)."""
+    assert "ph5_guard_slope" in PROD_PARAMS
+    assert PROD_PARAMS["ph5_guard_slope"] == 0.0
+
+
+def test_params_recon_weight_in_space():
+    """recon_weight param space must include 0.0 (disabled) and 0.25."""
+    assert 0.0 in PARAM_SPACE["recon_weight"]
+    assert 0.25 in PARAM_SPACE["recon_weight"]
+
+
+def test_params_ph5_guard_slope_in_space():
+    """ph5_guard_slope param space must include 0.0 and 1.0."""
+    assert 0.0 in PARAM_SPACE["ph5_guard_slope"]
+    assert 1.0 in PARAM_SPACE["ph5_guard_slope"]
+
+
 def test_period2_boundary_fp_loads():
     """period2_boundary_fp: 10 x 2-page docs, 3 false-positive curr=1 mid-doc pages."""
     import json

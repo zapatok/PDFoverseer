@@ -29,6 +29,8 @@ PARAM_SPACE: dict[str, list] = {
     "ph5b_conf_min":      [0.0, 0.40, 0.50, 0.60, 0.69, 0.70],
     "ph5b_ratio_min":     [0.90, 0.93, 0.95],
     "ph5_guard_conf":     [0.0, 0.70, 0.80, 0.90],
+    "recon_weight":       [0.0, 0.15, 0.20, 0.25, 0.30],   # Approach A
+    "ph5_guard_slope":    [0.0, 0.5, 1.0, 1.5, 2.0],        # Approach B
     # Phase 6 — Orphan suppression
     # Inferred new-doc triggers (curr==1) below this confidence are excluded.
     # 0.0 = no suppression (baseline behavior).
@@ -57,6 +59,8 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "ph5b_conf_min":      0.69,
     "ph5b_ratio_min":     0.93,
     "ph5_guard_conf":     0.90,
+    "recon_weight":       0.0,   # disabled until sweep validates
+    "ph5_guard_slope":    0.0,   # disabled until sweep validates
     "min_conf_for_new_doc": 0.0,
     "window":           7,
     "hom_threshold":    0.88,
