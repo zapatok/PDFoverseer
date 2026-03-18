@@ -60,7 +60,7 @@ def run_pipeline(reads: list[PageRead], params: dict) -> list[Document]:
     period_info = _detect_period(reads)
     _infer(reads, params, period_info)
     docs = _build_documents(reads)
-    docs = _undercount_recovery(reads, docs)
+    docs = _undercount_recovery(reads, docs, params)
     return docs
 
 
@@ -462,9 +462,10 @@ def _build_documents(reads: list[PageRead]) -> list[Document]:
 
 # ── Undercount Recovery ──────────────────────────────────────────────────────
 
-def _undercount_recovery(reads: list[PageRead], docs: list[Document]) -> list[Document]:
+def _undercount_recovery(reads: list[PageRead], docs: list[Document], params: dict) -> list[Document]:
     """Mirrors the undercount recovery loop in analyze_pdf."""
     reads_by_page = {r.pdf_page: r for r in reads}
+    ph5_guard_conf = params.get("ph5_guard_conf", 0.0)
     fixed = 0
     for di in range(len(docs) - 1):
         d, d_next = docs[di], docs[di + 1]
@@ -474,11 +475,16 @@ def _undercount_recovery(reads: list[PageRead], docs: list[Document]) -> list[Do
         if (d_next.found_total <= missing
                 and d_next.declared_total == d.declared_total):
             next_pages = d_next.pages + d_next.inferred_pages
-            # Guard: if the next doc contains a confirmed (OCR-read) curr==1
-            # page, it is a genuine new-document start — do NOT merge it.
+            # Guard: do NOT merge if next doc has a confirmed OCR curr==1 start
+            # OR a high-confidence inferred curr==1 start (via ph5_guard_conf).
             has_confirmed_start = any(
                 reads_by_page[pp].curr == 1
-                and reads_by_page[pp].method not in ("inferred", "failed", "excluded")
+                and (
+                    reads_by_page[pp].method not in ("inferred", "failed", "excluded")
+                    or (ph5_guard_conf > 0.0
+                        and reads_by_page[pp].method == "inferred"
+                        and reads_by_page[pp].confidence >= ph5_guard_conf)
+                )
                 for pp in next_pages if pp in reads_by_page
             )
             if has_confirmed_start:

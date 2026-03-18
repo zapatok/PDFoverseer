@@ -139,3 +139,44 @@ def test_params_ph5b_conf_min_has_040():
 def test_params_min_conf_locked():
     """min_conf_for_new_doc must be locked to [0.0] — no sweep needed (binary tradeoff)."""
     assert PARAM_SPACE["min_conf_for_new_doc"] == [0.0]
+
+
+def test_ph5_guard_baseline_no_change():
+    """ph5_guard_conf=0.0 (disabled) produces identical result to PRODUCTION_PARAMS."""
+    reads = make_reads([
+        (0, 1, 2, "H", 0.95), (1, 2, 2, "H", 0.92),
+        (2, 1, 2, "H", 0.91), (3, 2, 2, "H", 0.90),
+    ])
+    docs_prod  = run_pipeline(reads, PROD_PARAMS)
+    docs_guard = run_pipeline(reads, {**PROD_PARAMS, "ph5_guard_conf": 0.0})
+    assert len(docs_prod) == len(docs_guard)
+
+
+def test_ph5_guard_protects_inferred_boundary():
+    """With guard enabled, high-conf inferred curr=1 is NOT merged by undercount recovery.
+
+    Setup:
+      reads[0]: pdf=0, confirmed 1/3  — doc1 start
+      reads[1]: pdf=1, pre-set inferred 3/3 — doc1 "last page" (inconsistent sequence
+                with reads[0]; Phase 3 caps its confidence to xval_cap but keeps it
+                in doc1.inferred_pages. doc1: declared=3, pages=[0], inferred=[1],
+                found_total=2, missing=1.)
+      reads[2]: pdf=2, pre-set inferred 1/3 at conf=0.90 — doc2 start.
+                Consistent with reads[1] (prev.curr==prev.total → new-doc start valid).
+                Phase 3 does NOT cap it. Confidence stays 0.90.
+
+    doc2: declared=3, pages=[], inferred=[2], found_total=1.
+    Undercount recovery condition: missing(1) >= found_total(1), declared match.
+    Current guard: reads[2].method=="inferred" → has_confirmed_start=False → merge fires.
+    New guard (ph5_guard_conf=0.80): reads[2].conf(0.90) >= 0.80 → protected → no merge.
+    """
+    reads = [
+        PageRead(pdf_page=0, curr=1, total=3, method="direct",   confidence=0.95),
+        PageRead(pdf_page=1, curr=3, total=3, method="inferred", confidence=0.95),
+        PageRead(pdf_page=2, curr=1, total=3, method="inferred", confidence=0.90),
+    ]
+    docs_no_guard   = run_pipeline(reads, {**PROD_PARAMS, "ph5_guard_conf": 0.0})
+    docs_with_guard = run_pipeline(reads, {**PROD_PARAMS, "ph5_guard_conf": 0.80})
+
+    assert len(docs_no_guard)   == 1, "Without guard: over-merge expected (recovery fires)"
+    assert len(docs_with_guard) == 2, "With guard: boundary preserved (recovery blocked)"
