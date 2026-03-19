@@ -78,11 +78,18 @@ MIN_CONF_FOR_NEW_DOC = 0.0
 PH5_GUARD_CONF  = 0.90  # min confidence for inferred curr==1 to block undercount merge
 RECON_WEIGHT    = 0.0   # Approach A: no improvement, disabled
 PH5_GUARD_SLOPE = 1.0   # Approach B: sweep winner
-INFERENCE_ENGINE_VERSION = "6ph-t2-phD"  # 6-phase + undercount guard + Phase C + Phase D (Viterbi)
+INFERENCE_ENGINE_VERSION = "6ph-t2-phD-MP-PDM"  # + Phase MP (multi-period) + PDM (period-doc merge)
 # Phase D — Viterbi anchor-constrained segment fill
 VITERBI_ANCHOR_CONF_MIN = 0.90
 VITERBI_PERIOD_WEIGHT   = 0.5
 VITERBI_PRIOR_WEIGHT    = 0.4
+# Phase MP — Multi-period local correction
+MP_WINDOW    = 80    # full window size (0 = disabled); pages on each side = half
+MP_RATIO_MIN = 0.69  # min local agreement ratio to trigger correction
+MP_MIN_RUN   = 5     # min consecutive total=1 direct reads to consider suspicious
+# PDM — Period-Aware Document Merge
+PDM_ENABLE          = True   # merge consecutive small docs summing to period
+PDM_PERIOD_CONF_MIN = 0.40   # min period confidence to activate
 
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
@@ -463,6 +470,31 @@ def _period_evidence(
         return None
     total_w = sum(candidates.values())
     return {h: w / total_w for h, w in candidates.items()}
+
+
+def _local_period_info(
+    reads: list[_PageRead], idx: int, half_window: int,
+) -> dict:
+    """
+    Local period detection via most-common declared total in a sliding window.
+    Only considers direct OCR reads (not inferred) to avoid circularity.
+    """
+    n = len(reads)
+    lo = max(0, idx - half_window)
+    hi = min(n, idx + half_window + 1)
+
+    totals = [r.total for r in reads[lo:hi]
+              if r.total is not None
+              and r.method not in ("failed", "excluded", "inferred")]
+
+    if len(totals) < 5:
+        return {"period": None, "confidence": 0.0, "expected_total": None}
+
+    tc = Counter(totals)
+    best_total, freq = tc.most_common(1)[0]
+    conf = freq / len(totals)
+
+    return {"period": best_total, "confidence": conf, "expected_total": best_total}
 
 
 # ── Tier 4: Inference Engine (D-S fusion) ────────────────────────────────────
@@ -1170,6 +1202,9 @@ def analyze_pdf(
         inferred = sum(1 for r in reads_clean if r.method == "inferred")
         on_log(f"Inferencia: {inferred} paginas recuperadas", "ok")
 
+    # ── Phase MP: Multi-period local correction ─────────────────────────────
+    _multi_period_correction(reads_clean)
+
     # ── Phase D: Viterbi anchor-constrained segment fill ───────────────────
     _viterbi_anchor_constrained(reads_clean, period_info)
 
@@ -1190,6 +1225,9 @@ def analyze_pdf(
 
     # ── Phase 4: Build documents from reads ───────────────────────────────
     documents = _build_documents(reads_clean, on_log, _issue)
+
+    # ── PDM: Period-Aware Document Merge ──────────────────────────────────
+    documents = _period_doc_merge(documents, period_info)
 
     # Telemetry snapshot BEFORE Phase 5 — Phase 5 directly manipulates the
     # documents list but only mutates r.curr for inferred reads in reads_clean.
@@ -1279,6 +1317,176 @@ def analyze_pdf(
     on_log("Motor de inferencia: D-S v1 + deteccion de periodo", "section")
 
     return documents, reads_clean
+
+
+# ── Phase MP: Multi-Period Local Correction ──────────────────────────────────
+
+def _multi_period_correction(reads: list[_PageRead]) -> None:
+    """
+    Correct direct OCR reads in suspicious "total=1 runs" — long stretches
+    where every direct read says total=1 but the local neighborhood is
+    dominated by a higher total (e.g., period=2).
+
+    Only runs longer than MP_MIN_RUN are considered suspicious; isolated
+    1-page docs and small clusters (1–3 pages) are preserved.
+    """
+    if MP_WINDOW <= 0:
+        return
+
+    half_w = MP_WINDOW // 2
+    n = len(reads)
+
+    # Step 1: Identify suspicious total=1 runs
+    in_suspicious_run: list[bool] = [False] * n
+    i = 0
+    while i < n:
+        r = reads[i]
+        is_direct = r.method not in ("failed", "inferred", "excluded")
+        if is_direct and r.total == 1:
+            run_start = i
+            direct_count = 0
+            j = i
+            while j < n:
+                rj = reads[j]
+                rj_direct = rj.method not in ("failed", "inferred", "excluded")
+                if rj_direct:
+                    if rj.total == 1:
+                        direct_count += 1
+                    else:
+                        break
+                j += 1
+            run_end = j
+            if direct_count >= MP_MIN_RUN:
+                for k in range(run_start, run_end):
+                    in_suspicious_run[k] = True
+            i = run_end
+        else:
+            i += 1
+
+    # Step 2: Correct direct total=1 reads inside suspicious runs
+    corrected_indices: set[int] = set()
+
+    for idx_r, r in enumerate(reads):
+        if not in_suspicious_run[idx_r]:
+            continue
+        if r.method in ("failed", "inferred", "excluded"):
+            continue
+        if r.total is None or r.total != 1:
+            continue
+
+        local = _local_period_info(reads, idx_r, half_w)
+        local_expected = local.get("expected_total")
+        local_conf = local.get("confidence", 0.0)
+
+        if local_expected is None or local_expected <= 1:
+            continue
+        if local_conf < MP_RATIO_MIN:
+            continue
+
+        if r.curr is not None and 1 <= r.curr <= local_expected:
+            r.total = local_expected
+        else:
+            r.curr = 1
+            r.total = local_expected
+        r.method = "inferred"
+        r.confidence = 0.50
+        corrected_indices.add(idx_r)
+
+    # Re-propagate forward from each corrected read
+    if corrected_indices:
+        for idx_r in sorted(corrected_indices):
+            j = idx_r + 1
+            while j < n:
+                rj = reads[j]
+                if rj.method != "inferred":
+                    break
+                prev = reads[j - 1]
+                if prev.curr is not None and prev.total is not None:
+                    if prev.curr == prev.total:
+                        rj.curr = 1
+                        rj.total = prev.total
+                    elif prev.curr < prev.total:
+                        rj.curr = prev.curr + 1
+                        rj.total = prev.total
+                    else:
+                        break
+                else:
+                    break
+                j += 1
+
+
+# ── PDM: Period-Aware Document Merge ─────────────────────────────────────────
+
+def _period_doc_merge(
+    docs: list["Document"],
+    period_info: dict,
+) -> list["Document"]:
+    """
+    Merge consecutive docs whose declared_total values sum to the period.
+
+    Only activates when PDM_ENABLE is True and period confidence is sufficient.
+    Only merges ISOLATED pairs (run of exactly 2 small docs) surrounded by
+    period-sized docs to avoid over-merging genuine 1-page zones.
+    """
+    if not PDM_ENABLE:
+        return docs
+
+    period = period_info.get("period") if period_info else None
+    period_conf = period_info.get("confidence", 0.0) if period_info else 0.0
+
+    if period is None or period < 2:
+        return docs
+    if period_conf < PDM_PERIOD_CONF_MIN:
+        return docs
+
+    is_small = [d.declared_total < period for d in docs]
+    n = len(docs)
+
+    merge_ok: list[bool] = [False] * n
+
+    i = 0
+    while i < n:
+        if not is_small[i]:
+            i += 1
+            continue
+        run_start = i
+        while i < n and is_small[i]:
+            i += 1
+        run_end = i
+        run_len = run_end - run_start
+
+        if run_len == 2:
+            d1, d2 = docs[run_start], docs[run_start + 1]
+            if d1.declared_total + d2.declared_total == period:
+                has_period_neighbor = False
+                if run_start > 0 and docs[run_start - 1].declared_total == period:
+                    has_period_neighbor = True
+                if run_end < n and docs[run_end].declared_total == period:
+                    has_period_neighbor = True
+                if has_period_neighbor:
+                    merge_ok[run_start] = True
+
+    merged: list[Document] = []
+    i = 0
+    while i < n:
+        if merge_ok[i] and i + 1 < n:
+            d, d_next = docs[i], docs[i + 1]
+            combined = Document(
+                index=len(merged) + 1,
+                start_pdf_page=d.start_pdf_page,
+                declared_total=period,
+                pages=d.pages + d_next.pages,
+                inferred_pages=d.inferred_pages + d_next.inferred_pages,
+                sequence_ok=True,
+            )
+            merged.append(combined)
+            i += 2
+        else:
+            docs[i].index = len(merged) + 1
+            merged.append(docs[i])
+            i += 1
+
+    return merged
 
 
 def _build_documents(

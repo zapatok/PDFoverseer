@@ -31,10 +31,23 @@ PARAM_SPACE: dict[str, list] = {
     "ph5_guard_conf":     [0.0, 0.70, 0.80, 0.90],
     "recon_weight":       [0.0, 0.15, 0.20, 0.25, 0.30],   # Approach A
     "ph5_guard_slope":    [0.0, 0.5, 1.0, 1.5, 2.0],        # Approach B
+    # Period-Consistency Filter (PCF) — corrects inferred reads with wrong totals
+    # 0.0 = disabled. Higher = more aggressive (corrects higher-confidence reads).
+    "pcf_conf_max":        [0.0, 0.40, 0.50, 0.60],
+    "pcf_period_conf_min": [0.40, 0.50, 0.60],  # min period confidence to activate
+    # Period-Aware Doc Merge (PDM) — merges consecutive small docs summing to period
+    "pdm_enable":          [0.0, 1.0],        # 0.0 = disabled, 1.0 = enabled
+    "pdm_period_conf_min": [0.40, 0.50, 0.60],  # min period confidence to activate
+    # Phase MP — Multi-period local correction
+    # Uses sliding-window local period to correct direct OCR reads that
+    # contradict their neighborhood.  0 = disabled (global Phase 5b only).
+    "mp_window":    [0, 60, 80, 100],     # full window size (pages on each side = half)
+    "mp_ratio_min": [0.55, 0.65, 0.69, 0.75],  # local agreement ratio to trigger correction
+    "mp_min_run":   [3, 5, 8],            # min consecutive total=1 direct reads to correct
     # Phase D — Viterbi anchor-constrained segment fill
-    "viterbi_anchor_conf_min": [0.85, 0.90, 0.95],   # min conf for hard anchor
-    "viterbi_period_weight":   [0.3, 0.5, 0.8],       # weight of period alignment bonus
-    "viterbi_prior_weight":    [0.2, 0.4, 0.6],       # weight of prior(total) (reserved)
+    "viterbi_anchor_conf_min": [0.80, 0.85, 0.90, 0.95],   # min conf for hard anchor
+    "viterbi_period_weight":   [0.2, 0.3, 0.5, 0.7, 0.8],  # weight of period alignment bonus
+    "viterbi_prior_weight":    [0.2, 0.4, 0.6],             # weight of prior(total) (reserved)
     # Phase 6 — Orphan suppression
     # Inferred new-doc triggers (curr==1) below this confidence are excluded.
     # 0.0 = no suppression (baseline behavior).
@@ -65,6 +78,13 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "ph5_guard_conf":     0.90,
     "recon_weight":       0.0,   # Approach A: no improvement over baseline
     "ph5_guard_slope":    1.0,   # Approach B: sweep winner, improves undercount recovery
+    "pcf_conf_max":        0.0,   # PCF: disabled by default (0.0 = off)
+    "pcf_period_conf_min": 0.50,  # PCF: min period confidence to activate
+    "pdm_enable":          1.0,   # PDM: enabled (aggressive sweep winner), was 0.0
+    "pdm_period_conf_min": 0.40,  # PDM: min period confidence to activate (sweep winner)
+    "mp_window":    80,    # Phase MP: sweep winner (aggressive), was 0
+    "mp_ratio_min": 0.69,  # Phase MP: local agreement ratio threshold
+    "mp_min_run":   5,     # Phase MP: min run length of total=1 direct reads
     "viterbi_anchor_conf_min": 0.90,  # Phase D: confidence threshold for hard anchors
     "viterbi_period_weight":   0.5,   # Phase D: weight of period-alignment confidence boost
     "viterbi_prior_weight":    0.4,   # Phase D: weight of prior(total) (reserved)
