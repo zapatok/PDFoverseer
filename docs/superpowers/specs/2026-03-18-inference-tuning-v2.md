@@ -55,86 +55,153 @@ After extraction, update `eval/ground_truth.json` with validated doc counts from
 | HLL | 363 | exact |
 | INS_31 | 31 | exact |
 
-`complete_count` and `inferred_count` for real fixtures are computed by running `run_pipeline` with PRODUCTION_PARAMS on the fresh fixtures — recorded in ground_truth once and used as baseline.
+**`complete_count` and `inferred_count` for real fixtures are reference-only.** The scoring function (`sweep.py:score_config`) only evaluates `doc_count` for real fixtures; `complete_count` and `inferred_count` are ignored in scoring. These fields are computed by running `run_pipeline` with PRODUCTION_PARAMS on the fresh fixtures and recorded in `ground_truth.json` for human inspection, not for automated scoring. Synthetic fixtures continue to use all three fields in scoring.
 
 ## Track B — HLL-targeted Synthetic Fixtures
 
-HLL profile: 538 pages, 363 docs expected, +9 overcount, period=2 detected at ~43% confidence, 5.6% OCR failure. The engine creates false-positive document boundaries where it should see continuity — almost certainly a period detection confidence problem.
+HLL profile: 538 pages, 363 docs expected, +9 overcount, period=2 detected at ~43% confidence, 5.6% OCR failure. The engine creates false-positive document boundaries where it should see continuity.
 
-Four new fixtures added to `eval/fixtures/synthetic/`:
+Four new fixtures added to `eval/fixtures/synthetic/`. All use `method: "direct"` for non-failed reads unless otherwise noted.
 
-| Name | Scenario | What it tests |
-|------|----------|---------------|
-| `period2_low_conf` | 20 × 2-page docs; period autocorrelation yields ~45% confidence | Phase 5b threshold in the ambiguous-confidence zone |
-| `period2_noisy_splits` | 15 × 2-page docs where some pages OCR as 1/1 (misread total) | Whether engine splits incorrectly on misread totals |
-| `mixed_1_2_dense` | 30 docs alternating 1 and 2 pages, high OCR success rate | Boundary detection when period is genuinely ambiguous |
-| `period2_boundary_fp` | 10 × 2-page docs with 3 injected false-positive boundaries | Phase 5 guard effectiveness against over-splitting |
+### `period2_low_conf`
 
-Ground truth for each is defined at fixture creation time (exact doc counts known by construction).
+**Scenario:** 20 × 2-page documents (40 pages total). Period=2 is correct but autocorrelation confidence is degraded by misread totals.
 
-Existing 19 synthetic fixtures are unchanged — they remain valid as they don't depend on OCR state.
+**Page layout:**
+- Pages 0,2,4,...,38 (even): `curr=1, total=2, confidence=0.90`
+- Pages 1,3,5,...,39 (odd): `curr=2, total=2, confidence=0.90`
+- Override pages 6,14,22,30 to: `curr=1, total=1, confidence=0.85` (4 pages misread as 1-page docs; these break the period-2 autocorrelation signal)
+
+**Ground truth:** `doc_count=20, complete_count=16, inferred_count=0`
+
+**What it tests:** Whether the engine correctly identifies 20 docs when the dominant period (2) has degraded autocorrelation due to ~10% total misreads. Phase 5b at `ph5b_conf_min=0.40` should be able to correct the 4 misread pages.
+
+---
+
+### `period2_noisy_splits`
+
+**Scenario:** 15 × 2-page documents (30 pages total). Several pages have `total` misread as 1, causing the engine to potentially split docs incorrectly.
+
+**Page layout:**
+- Pages 0,2,4,...,28 (even): `curr=1, total=2, confidence=0.90`
+- Pages 1,3,5,...,29 (odd): `curr=2, total=2, confidence=0.90`
+- Override pages 4,12,20: `curr=1, total=1, confidence=0.88` (3 mid-sequence misreads — these pages read as if they start a new 1-page doc)
+
+**Ground truth:** `doc_count=15, complete_count=12, inferred_count=0`
+
+**What it tests:** Whether the engine resists splitting on misread `curr=1, total=1` pages when the surrounding period signal is strong. Tests Phase 5b + Phase 5 guard interaction.
+
+---
+
+### `mixed_1_2_dense`
+
+**Scenario:** 30 documents alternating 1-page and 2-page (45 pages total). All reads are clean (no OCR failures). Period is genuinely ambiguous — mix of 1 and 2.
+
+**Page layout (by document):**
+- Docs 0,2,4,...,28 (15 even-indexed docs): 1-page docs → single page per doc, `curr=1, total=1, confidence=0.92`
+- Docs 1,3,5,...,29 (15 odd-indexed docs): 2-page docs → two pages per doc, `curr=1/2, total=2, confidence=0.91`
+- PDF pages: 0 (doc0), 1-2 (doc1), 3 (doc2), 4-5 (doc3), 6 (doc4), 7-8 (doc5), ... (30 docs, 45 pages)
+
+**Ground truth:** `doc_count=30, complete_count=30, inferred_count=0`
+
+**What it tests:** Boundary detection when no dominant period exists. The sweep should preserve this case (no correction should be applied). Phase 5b should NOT activate.
+
+---
+
+### `period2_boundary_fp`
+
+**Scenario:** 10 × 2-page documents (20 pages total). Three pages have their `curr` value misread as 1 instead of 2 — they look like document starts but are actually mid-document pages.
+
+**Page layout:**
+- Pages 0,2,4,...,18 (even): `curr=1, total=2, confidence=0.90`
+- Pages 1,3,5,...,19 (odd): `curr=2, total=2, confidence=0.90`
+- Override pages 5,11,17 to: `curr=1, total=2, confidence=0.87` (these should be `curr=2` but OCR misread as `curr=1` — false-positive new-doc signals)
+
+**Ground truth:** `doc_count=10, complete_count=7, inferred_count=0`
+
+**What it tests:** Whether the Phase 5 guard (`ph5_guard_conf`) prevents the engine from treating misread `curr=1` pages as document starts when surrounding evidence strongly indicates period=2.
+
+---
+
+**Existing synthetic fixtures (19 files on disk):** All unchanged. Note: `orphan_after_complete.json` exists on disk but is NOT in `ground_truth.json` and is therefore skipped by the sweep (`score_config` has `if name not in gt: continue`). It remains inactive.
 
 ## Track B — Minor Logic Adjustments
 
-Two targeted changes to `eval/inference.py` (not `core/analyzer.py`):
+Two targeted changes to `eval/inference.py` only (not `core/analyzer.py`):
 
 ### Adjustment 1 — Phase 5b coverage for low-confidence periods
 
-**Problem:** HLL's period is detected at 43% confidence. Current `ph5b_conf_min` param space is `[0.0, 0.50, 0.60, 0.69, 0.70]` — no value ≤0.43 except 0.0 (disabled). Phase 5b cannot activate for HLL-like cases.
+**Problem:** HLL's period is detected at ~43% confidence. The `ph5b_conf_min` param space `[0.0, 0.50, 0.60, 0.69, 0.70]` has no value ≤0.43 except 0.0 (disabled). Phase 5b cannot activate for HLL-like cases in any sweep config.
 
-**Change:** Add `0.40` to `ph5b_conf_min` param space → `[0.0, 0.40, 0.50, 0.60, 0.69, 0.70]`.
+**Change:** Add `0.40` to `ph5b_conf_min` param space:
+```python
+"ph5b_conf_min": [0.0, 0.40, 0.50, 0.60, 0.69, 0.70]
+```
 
-This lets the sweep test whether activating Phase 5b at 43% period confidence helps correct HLL's false-positive boundaries without over-correcting cleaner PDFs.
+No change to inference logic — only the param space expands to let the sweep explore this range.
 
 ### Adjustment 2 — Phase 5 guard for over-merge of high-confidence inferred boundaries
 
-**Problem:** Memory `project_art_guard_gap.md` documents that Phase 5 (D-S post-validation) over-merges inferred reads with `curr==1` and high confidence. This likely contributes to ART's +2 overcount.
+**Problem:** Phase 5 (D-S post-validation) over-merges inferred reads with `curr==1` and high confidence — documented in memory as `project_art_guard_gap.md`. Likely contributes to ART's +2 overcount.
 
-**Change:** Add configurable guard: if an inferred read has `curr==1` and `confidence >= ph5_guard_conf`, skip Phase 5 merge. New param: `ph5_guard_conf: [0.0, 0.70, 0.80, 0.90]` (0.0 = disabled = baseline behavior).
-
-**Implementation:** ~5 lines in `eval/inference.py`'s D-S phase, guarded by the new param.
-
-## Scoring Reform
-
-Current composite score treats real and synthetic fixtures equally. Reformed formula weights real PDFs higher since they represent actual production behavior:
+**Change:** In the D-S merge loop of `eval/inference.py`, add:
 
 ```python
-composite_score = (
-    doc_exact_real    * 5   # 7 real fixtures — primary target
-  + doc_exact_syn     * 2   # 23 synthetic fixtures (19 existing + 4 new)
-  + complete_exact    * 1
-  - real_delta        * 3   # penalizes error in real PDFs
-  - syn_delta         * 1
-  - inf_delta         * 1
-  - regressions       * 5   # regression = near-disqualifying
-)
+# Guard: skip Phase 5 merge for high-confidence inferred new-doc starts
+if (r.curr == 1 and r.curr is not None
+        and r.confidence >= params["ph5_guard_conf"] > 0.0):
+    continue
 ```
 
-Weights may be adjusted after reviewing initial sweep results.
+This guard fires only when `ph5_guard_conf > 0.0`. When `ph5_guard_conf = 0.0` (baseline), the guard is disabled and behavior is identical to current production.
 
-## Sweep Strategy
+New param added to `eval/params.py`:
+```python
+"ph5_guard_conf": [0.0, 0.70, 0.80, 0.90]
+```
+Default in `PRODUCTION_PARAMS`: `"ph5_guard_conf": 0.0` (disabled — matches current behavior).
 
-Unchanged 3-pass strategy from the original eval harness design:
+## Param Space Changes (Summary)
 
-- **Pass 1 — Latin Hypercube Sample:** 500 configs across full param space
-- **Pass 2 — Fine grid:** Top-20 from Pass 1, adjacent-value perturbations (~2000 configs)
-- **Pass 3 — Beam search:** Top-5 from Pass 2, single-param perturbations (~200 configs)
-
-Baseline is PRODUCTION_PARAMS. Any config with `regression_count > 0` is excluded from top-10 report regardless of composite score.
-
-## Updated Param Space
+Changes to `eval/params.py` relative to current state:
 
 ```python
-PARAM_SPACE = {
-    # ... existing params unchanged ...
-    "ph5b_conf_min":   [0.0, 0.40, 0.50, 0.60, 0.69, 0.70],  # added 0.40
-    "ph5b_ratio_min":  [0.90, 0.93, 0.95],
-    "ph5_guard_conf":  [0.0, 0.70, 0.80, 0.90],               # new param
-    "min_conf_for_new_doc": [0.0],                              # locked to 0.0 (binary tradeoff)
-}
+# Modified:
+"ph5b_conf_min": [0.0, 0.40, 0.50, 0.60, 0.69, 0.70],  # added 0.40
+
+# New:
+"ph5_guard_conf": [0.0, 0.70, 0.80, 0.90],
+
+# Locked (replace existing list with single value):
+"min_conf_for_new_doc": [0.0],  # was [0.0, 0.45, 0.55, 0.65]
 ```
 
-`min_conf_for_new_doc` is locked to 0.0 — memory `feedback_orphan_fixture_obsolete.md` documents that any value >0.0 causes real boundary misses with no compensating benefit.
+`min_conf_for_new_doc` is locked to `[0.0]` — memory `feedback_orphan_fixture_obsolete.md` documents that any value >0.0 causes real boundary misses with no compensating benefit. Removing it from the sweep eliminates ~4× dead search space.
+
+`PRODUCTION_PARAMS` additions:
+```python
+"ph5_guard_conf": 0.0,   # new param, disabled by default
+```
+
+## Scoring
+
+The existing `score_config` formula in `eval/sweep.py` is **unchanged**:
+
+```python
+# Per fixture (accumulated):
+doc_exact += 5          # real fixture passes doc count
+doc_exact += 3          # synthetic fixture passes doc count
+complete_exact += 2     # synthetic fixture passes complete count
+
+# Composite:
+composite = (doc_exact + complete_exact
+             - real_doc_delta * 3
+             - syn_doc_delta
+             - inf_delta
+             - regressions * 5)
+```
+
+The formula already weights real fixtures (×5) higher than synthetic (×3). No code changes to scoring — the reformed formula proposed during design was already implemented in the current `sweep.py`. Weights may be tuned after reviewing initial sweep results if real PDFs are still not resolving.
 
 ## Success Criteria
 
@@ -151,15 +218,19 @@ PARAM_SPACE = {
 ## Implementation Sequence
 
 1. Run `extract_fixtures.py` → fresh `fixtures/real/*.json`
-2. Update `ground_truth.json` with current doc counts and computed complete/inferred counts
-3. Add 4 new synthetic fixtures to `fixtures/synthetic/`; record ground truth
-4. Add `ph5_guard_conf` param to `eval/params.py`; add `0.40` to `ph5b_conf_min`
-5. Implement Phase 5b and Phase 5 guard adjustments in `eval/inference.py`
-6. Update composite score formula in `eval/sweep.py`
+2. Run `run_pipeline` with PRODUCTION_PARAMS on fresh fixtures → record `complete_count` and `inferred_count` per real fixture in `ground_truth.json` (reference only, not scored)
+3. Update `doc_count` in `ground_truth.json` for all 7 real fixtures (use table above)
+4. Add 4 new synthetic fixtures to `fixtures/synthetic/`; add their ground truth entries to `ground_truth.json`
+5. In `eval/params.py`:
+   - Add `0.40` to `ph5b_conf_min` list
+   - Add `"ph5_guard_conf": [0.0, 0.70, 0.80, 0.90]`
+   - Replace `min_conf_for_new_doc` list with `[0.0]`
+   - Add `"ph5_guard_conf": 0.0` to `PRODUCTION_PARAMS`
+6. Implement Phase 5 guard in `eval/inference.py` (see Adjustment 2 above)
 7. Run sweep → review report
-8. Apply winning params + validate no regressions
+8. Apply winning params + validate no regressions against current production
 9. Port validated changes to `core/analyzer.py`
 
 ## Deferred (Phase C)
 
-Structural redesign of period detection — explore if period confidence calculation itself can be improved for ambiguous cases (HLL: 43%, ART: mixed). Deferred until sweep results indicate parametric tuning is insufficient.
+Structural redesign of period detection — explore if period confidence calculation itself can be improved for ambiguous cases (HLL: ~43%, ART: mixed). Deferred until sweep results indicate parametric tuning is insufficient.

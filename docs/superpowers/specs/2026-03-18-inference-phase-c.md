@@ -224,16 +224,18 @@ With correct inference: all 10 failed pages are assigned by forward propagation.
 
 ### `hll_recon_period2`
 
-**Scenario:** 20 × 2-page documents (40 pages total), 10% of pages with `total` misread as 1.
+**Scenario:** 20 × 2-page documents (40 pages total), 5% of pages with `total` misread as 1.
 
 **Page layout:**
 - Pages 0,2,4,...,38 (even): `curr=1, total=2, conf=0.90`
 - Pages 1,3,5,...,39 (odd): `curr=2, total=2, conf=0.90`
-- Override pages 4,8,14,20 to: `curr=1, total=1, conf=0.88` (misread total; ~10% noise)
+- Override pages 4, 8 to: `curr=1, total=1, conf=0.88` (misread total; ~5% noise)
 
-**Ground truth:** `doc_count=20, complete_count=16, inferred_count=0`
+**Ground truth:** `doc_count=20, complete_count=20, inferred_count=2`
 
-**What it tests:** That Approach A (`recon_weight > 0`) raises period confidence above 0.69, enabling Phase 5b to correct the 4 misread pages. Global autocorrelation with 10% noise should be ~0.50; reconstruction confidence should be ~0.80+.
+With Phase 5b correcting the 2 misread pages (`total=1→2, method="inferred"`), all 20 docs are complete. Agreeing ratio: 38/40=0.95 ≥ `ph5b_ratio_min=0.93` (PROD_PARAMS) — Phase 5b fires once period confidence clears `ph5b_conf_min=0.69`.
+
+**What it tests:** That Approach A (`recon_weight > 0`) raises period confidence above 0.69, enabling Phase 5b to correct the 2 misread pages. Global autocorrelation with 5% noise should be ~0.60; reconstruction confidence should be ~0.90+.
 
 ## Param Space Changes (Summary)
 
