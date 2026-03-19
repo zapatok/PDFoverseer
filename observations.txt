@@ -26,3 +26,11 @@ dame tu opinión sobre este caso y si está considerado o si no vale la pena, et
 
 
 al reanudar, se borra el log de terminal
+
+
+los botones copiar y exportar deben estar deshabilitados durante un escaneo
+
+qué significa esto
+  Pag  688: error de procesamiento: invalid literal for int() with base 10: 'L1'
+  Pag 1782: error de procesamiento: invalid literal for int() with base 10: 'L'
+  Pag 1802: error de procesamiento: invalid literal for int() with base 10: 'L'

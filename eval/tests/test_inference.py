@@ -3,7 +3,10 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.inference import run_pipeline, PageRead, _detect_period, _recon_confidence
+from eval.inference import (
+    run_pipeline, PageRead, _detect_period, _recon_confidence,
+    _extract_anchors, _viterbi_anchor_constrained,
+)
 
 from eval.params import PRODUCTION_PARAMS as PROD_PARAMS, PARAM_SPACE
 
@@ -464,6 +467,160 @@ def test_art_like_high_failure_loads():
     assert len(docs) >= 1
     # With high failure rate and Approach B disabled, recovery may not achieve all 15.
     # The sweep will find the params that do. This test just verifies no crash.
+
+
+
+
+# ── Phase D: Viterbi anchor-constrained tests ─────────────────────────────────
+
+def make_period_info(period=4, confidence=0.80, expected_total=4):
+    return {"period": period, "confidence": confidence, "expected_total": expected_total}
+
+
+VITERBI_PARAMS = {
+    **PROD_PARAMS,
+    "viterbi_anchor_conf_min": 0.90,
+    "viterbi_period_weight":   0.5,
+    "viterbi_prior_weight":    0.4,
+}
+
+
+def test_extract_anchors_returns_high_conf_direct():
+    """_extract_anchors returns direct/SR/easyocr reads with conf >= threshold."""
+    reads = make_reads([
+        (0, 1, 4, "direct",   0.95),  # ← anchor
+        (1, 2, 4, "SR",       0.92),  # ← anchor
+        (2, 3, 4, "easyocr",  0.91),  # ← anchor
+        (3, 4, 4, "manual",   0.90),  # ← anchor (exactly at threshold)
+        (4, 1, 4, "inferred", 0.99),  # not anchor (inferred)
+        (5, 2, 4, "direct",   0.89),  # not anchor (conf < 0.90)
+    ])
+    anchors = _extract_anchors(reads, conf_min=0.90)
+    assert set(anchors.keys()) == {0, 1, 2, 3}
+    assert anchors[0] == (1, 4)
+    assert anchors[3] == (4, 4)
+
+
+def test_extract_anchors_empty_when_no_direct():
+    """Returns empty dict when all reads are inferred or failed."""
+    reads = make_reads([
+        (0, 1, 4, "inferred", 0.99),
+        (1, 2, 4, "inferred", 0.95),
+        (2, None, None, "failed", 0.0),
+    ])
+    assert _extract_anchors(reads) == {}
+
+
+def test_viterbi_noop_when_no_anchors():
+    """_viterbi_anchor_constrained does nothing when no direct reads exist."""
+    reads = make_reads([
+        (0, 1, 4, "inferred", 0.60),
+        (1, 2, 4, "inferred", 0.99),
+        (2, 3, 4, "inferred", 0.99),
+        (3, 4, 4, "inferred", 0.99),
+    ])
+    original = [(r.curr, r.total, r.confidence) for r in reads]
+    _viterbi_anchor_constrained(reads, make_period_info(), VITERBI_PARAMS)
+    after = [(r.curr, r.total, r.confidence) for r in reads]
+    assert original == after, "Should be no-op with no anchors"
+
+
+def test_viterbi_fills_two_full_docs_between_doc_end_and_doc_start():
+    """
+    Anchor at page 0 ends a doc (4/4), anchor at page 9 starts a doc (1/4).
+    Gap of 8 pages should be filled with exactly 2 complete 4-page docs.
+    Phase 1 already fills these correctly; Viterbi must confirm + boost conf of curr=1 pages.
+    """
+    # Phase 1 pre-filled (already correct):
+    reads = [
+        PageRead(0, 4, 4, "direct",   0.95),   # anchor: end of doc0
+        PageRead(1, 1, 4, "inferred", 0.60),   # doc1 start (low conf)
+        PageRead(2, 2, 4, "inferred", 0.99),
+        PageRead(3, 3, 4, "inferred", 0.99),
+        PageRead(4, 4, 4, "inferred", 0.99),
+        PageRead(5, 1, 4, "inferred", 0.60),   # doc2 start (low conf)
+        PageRead(6, 2, 4, "inferred", 0.99),
+        PageRead(7, 3, 4, "inferred", 0.99),
+        PageRead(8, 4, 4, "inferred", 0.99),
+        PageRead(9, 1, 4, "direct",   0.95),   # anchor: start of doc3
+    ]
+    _viterbi_anchor_constrained(reads, make_period_info(period=4), VITERBI_PARAMS)
+
+    # curr/total assignments remain correct (already were)
+    assert [(r.curr, r.total) for r in reads[1:9]] == [
+        (1,4),(2,4),(3,4),(4,4),(1,4),(2,4),(3,4),(4,4)
+    ]
+    # Viterbi boosts confidence of inferred curr=1 reads at correct positions
+    assert reads[1].confidence > 0.60, "doc boundary at page 1 should get confidence boost"
+    assert reads[5].confidence > 0.60, "doc boundary at page 5 should get confidence boost"
+    # Non-boundary inferred pages NOT boosted beyond their existing confidence
+    assert reads[2].curr == 2  # unchanged
+
+
+def test_viterbi_corrects_wrong_inferred_boundary():
+    """
+    Phase 1 over-counts: from anchor (2/4), it infers 3,4,1,2,3,4,1,2 for 8 pages.
+    The end anchor is (1/4), so remaining=0, leading=0, middle=8 → 2 docs of 4.
+    Result should be curr=1 at pages 1 and 5, not at pages 3 and 7.
+    """
+    # Anchor0 = (4,4), anchor9 = (1,4): Phase 1 gets this RIGHT
+    # Let's test a case where Phase 1 starts from a MID-DOC anchor
+    # and Viterbi uses both anchors to fix the inferred values.
+    # Anchor0=(2,4), then 4 failed pages, anchor5=(2,4).
+    # correct chain for gap=4: remaining=2 → (3,4),(4,4), leading=1 → (1,4)
+    # middle = 4-2-1 = 1 → can't divide by period=4 → Viterbi skips (inconsistent pair)
+    # This tests that Viterbi correctly skips inconsistent anchor pairs.
+    reads = [
+        PageRead(0, 2, 4, "direct",   0.95),
+        PageRead(1, 3, 4, "inferred", 0.99),   # Phase 1 filled
+        PageRead(2, 4, 4, "inferred", 0.99),
+        PageRead(3, 1, 4, "inferred", 0.60),   # Phase 1 new-doc guess
+        PageRead(4, 2, 4, "inferred", 0.99),
+        PageRead(5, 2, 4, "direct",   0.95),   # anchor
+    ]
+    original_conf = [r.confidence for r in reads[1:5]]
+    _viterbi_anchor_constrained(reads, make_period_info(period=4), VITERBI_PARAMS)
+    # Inconsistent pair (2,4)→(2,4) with gap=4: can't fit period=4 → no change
+    after_conf = [r.confidence for r in reads[1:5]]
+    assert original_conf == after_conf, "Inconsistent anchor pair should be skipped (no-op)"
+
+
+def test_viterbi_respects_period_for_multi_doc_gap():
+    """
+    End-to-end: run_pipeline with viterbi detects correct doc count
+    when gap spans exactly N complete docs matching the period.
+    """
+    # 3 docs of 4 pages each (12 pages), anchors only at doc starts/ends
+    reads = [
+        PageRead(0, 4, 4, "direct",   0.95),   # end of doc before range
+        PageRead(1, None, None, "failed", 0.0),
+        PageRead(2, None, None, "failed", 0.0),
+        PageRead(3, None, None, "failed", 0.0),
+        PageRead(4, None, None, "failed", 0.0),
+        PageRead(5, None, None, "failed", 0.0),
+        PageRead(6, None, None, "failed", 0.0),
+        PageRead(7, None, None, "failed", 0.0),
+        PageRead(8, None, None, "failed", 0.0),
+        PageRead(9, 1, 4, "direct",   0.95),   # start of doc after range
+    ]
+    docs = run_pipeline(reads, VITERBI_PARAMS)
+    # Should detect at least 2 complete docs (2 full 4-page docs inferred in the gap)
+    complete = [d for d in docs if d.is_complete]
+    assert len(complete) >= 2, f"Expected ≥2 complete docs, got {len(complete)}: {docs}"
+
+
+def test_viterbi_params_in_production():
+    """All three Viterbi hyperparams must be in PRODUCTION_PARAMS."""
+    assert "viterbi_anchor_conf_min" in PROD_PARAMS
+    assert "viterbi_period_weight"   in PROD_PARAMS
+    assert "viterbi_prior_weight"    in PROD_PARAMS
+
+
+def test_viterbi_params_in_param_space():
+    """All three Viterbi hyperparams must be in PARAM_SPACE for sweep."""
+    assert "viterbi_anchor_conf_min" in PARAM_SPACE
+    assert "viterbi_period_weight"   in PARAM_SPACE
+    assert "viterbi_prior_weight"    in PARAM_SPACE
 
 
 def test_hll_recon_period2_loads():

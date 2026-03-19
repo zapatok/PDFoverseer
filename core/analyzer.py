@@ -78,7 +78,11 @@ MIN_CONF_FOR_NEW_DOC = 0.0
 PH5_GUARD_CONF  = 0.90  # min confidence for inferred curr==1 to block undercount merge
 RECON_WEIGHT    = 0.0   # Approach A: no improvement, disabled
 PH5_GUARD_SLOPE = 1.0   # Approach B: sweep winner
-INFERENCE_ENGINE_VERSION = "6ph-t2-phC"  # 6-phase + undercount guard + Phase C
+INFERENCE_ENGINE_VERSION = "6ph-t2-phD"  # 6-phase + undercount guard + Phase C + Phase D (Viterbi)
+# Phase D — Viterbi anchor-constrained segment fill
+VITERBI_ANCHOR_CONF_MIN = 0.90
+VITERBI_PERIOD_WEIGHT   = 0.5
+VITERBI_PRIOR_WEIGHT    = 0.4
 
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
@@ -493,7 +497,7 @@ def _infer_missing(
 
     def _local_total(idx: int, window: int = 7) -> tuple[int, float]:
         """Return (most_common_total, homogeneity) from ±window confirmed reads.
-        Only overrides best_total when local region is highly homogeneous (≥88%).
+        Only overrides best_total when local region is highly homogeneous (≥83%).
         Mixed regions fall back to best_total to avoid bias."""
         lo, hi = max(0, idx - window), min(n, idx + window + 1)
         local = [reads[j].total for j in range(lo, hi)
@@ -504,7 +508,7 @@ def _infer_missing(
         tc = Counter(local)
         mode_val, mode_freq = tc.most_common(1)[0]
         homogeneity = mode_freq / len(local)
-        if homogeneity >= 0.88:
+        if homogeneity >= 0.83:
             return mode_val, homogeneity
         return best_total, homogeneity
 
@@ -592,7 +596,7 @@ def _infer_missing(
             r.curr = 1
             r.total = lt
             r.method = "inferred"
-            r.confidence = 0.40 if hom < 0.88 else 0.30 + hom * 0.12
+            r.confidence = 0.45 if hom < 0.83 else 0.30 + hom * 0.12
 
     # ── Phase 5: D-S post-validation for uncertain pages (≤0.60) ──
     # Does NOT change curr/total assignments — only boosts confidence
@@ -812,6 +816,181 @@ def _emit_ai_telemetry(
     )
 
 
+# ── Phase D: Viterbi anchor-constrained segment fill ───────────────────────────
+
+_DIRECT_METHODS: frozenset[str] = frozenset({"direct", "SR", "easyocr", "manual"})
+
+
+def _extract_anchors(
+    reads: list[_PageRead],
+    conf_min: float = 0.90,
+) -> dict[int, tuple[int, int]]:
+    """
+    Returns {index: (curr, total)} for high-confidence direct OCR reads.
+    These act as hard anchor constraints in the Viterbi phase.
+    """
+    return {
+        i: (r.curr, r.total)
+        for i, r in enumerate(reads)
+        if r.method in _DIRECT_METHODS
+        and r.curr is not None
+        and r.total is not None
+        and r.confidence >= conf_min
+    }
+
+
+def _pick_doc_size(
+    middle: int,
+    period: int | None,
+    t1: int,
+    t2: int,
+    prior: dict[int, float],
+) -> int | None:
+    """Find a doc size that evenly divides `middle` pages, preferring period."""
+    if middle == 0:
+        return None
+    for candidate in _size_candidates(period, t1, t2, prior):
+        if candidate > 0 and middle % candidate == 0:
+            return candidate
+    return None
+
+
+def _size_candidates(
+    period: int | None,
+    t1: int,
+    t2: int,
+    prior: dict[int, float],
+) -> list[int]:
+    """Ordered list of doc-size candidates to try (best first)."""
+    seen: set[int] = set()
+    result: list[int] = []
+    for val in [period, t2, t1] + sorted(prior, key=prior.get, reverse=True):
+        if val is not None and val > 0 and val not in seen:
+            seen.add(val)
+            result.append(val)
+    return result
+
+
+def _apply_chain(
+    reads: list[_PageRead],
+    a1: int,
+    chain: list[tuple[int, int]],
+    period_weight: float,
+) -> None:
+    """Apply a (curr, total) chain to the inferred reads immediately after anchor a1."""
+    for k, (c, t) in enumerate(chain):
+        r = reads[a1 + 1 + k]
+        if r.method != "inferred":
+            continue  # Never overwrite direct reads
+        r.curr  = c
+        r.total = t
+        # Boost confidence for inferred doc-boundary pages (curr==1) —
+        # these are now validated by anchor + period evidence.
+        if c == 1:
+            boost_floor = 0.65 + period_weight * 0.20
+            r.confidence = max(r.confidence, boost_floor)
+
+
+def _fill_anchor_segment(
+    reads: list[_PageRead],
+    a1: int,
+    a2: int,
+    c1: int,
+    t1: int,
+    c2: int,
+    t2: int,
+    gap: int,
+    period: int | None,
+    prior: dict[int, float],
+    period_weight: float,
+) -> None:
+    """
+    Attempt to fill reads[a1+1 .. a2-1] with an optimal (curr, total) chain.
+    Only modifies reads with method == "inferred".
+    """
+    # Case A: same-doc continuation (a1 and a2 are in the same document)
+    if t1 == t2 and c2 > c1 + 1 and (c2 - c1 - 1) == gap:
+        chain = [(c, t1) for c in range(c1 + 1, c2)]
+        _apply_chain(reads, a1, chain, period_weight)
+        return
+
+    # Case B: cross-doc segment
+    remaining = t1 - c1
+    leading   = c2 - 1
+    middle = gap - remaining - leading
+    if middle < 0:
+        return
+
+    if middle == 0:
+        chain_middle: list[tuple[int, int]] = []
+    else:
+        doc_size = _pick_doc_size(middle, period, t1, t2, prior)
+        if doc_size is None:
+            return
+        n_docs = middle // doc_size
+        chain_middle = [
+            (c, doc_size)
+            for _ in range(n_docs)
+            for c in range(1, doc_size + 1)
+        ]
+
+    chain = (
+        [(c, t1) for c in range(c1 + 1, t1 + 1)]
+        + chain_middle
+        + [(c, t2) for c in range(1, c2)]
+    )
+
+    if len(chain) != gap:
+        return
+
+    _apply_chain(reads, a1, chain, period_weight)
+
+
+def _viterbi_anchor_constrained(
+    reads: list[_PageRead],
+    period_info: dict | None,
+) -> None:
+    """
+    Phase D: Segment-based Viterbi using high-confidence direct reads as hard anchors.
+
+    For each consecutive pair of anchors, fills the gap between them with the
+    optimal (curr, total) sequence using period + prior as soft constraints.
+    Only modifies reads with method == "inferred"; boosts confidence of
+    correctly-placed inferred curr==1 boundaries to resist _undercount_recovery merges.
+    """
+    n = len(reads)
+    if n < 3:
+        return
+
+    conf_min      = VITERBI_ANCHOR_CONF_MIN
+    period_weight = VITERBI_PERIOD_WEIGHT
+    period        = period_info.get("period") if period_info else None
+
+    # Build prior (total → frequency) from all non-failed reads
+    total_counts = Counter(r.total for r in reads if r.total is not None)
+    total_sum    = sum(total_counts.values()) or 1
+    prior: dict[int, float] = {k: v / total_sum for k, v in total_counts.items()}
+
+    anchors = _extract_anchors(reads, conf_min)
+    if len(anchors) < 2:
+        return
+
+    anchor_indices = sorted(anchors.keys())
+
+    for a_idx in range(len(anchor_indices) - 1):
+        a1 = anchor_indices[a_idx]
+        a2 = anchor_indices[a_idx + 1]
+        gap = a2 - a1 - 1
+        if gap <= 0:
+            continue
+
+        c1, t1 = anchors[a1]
+        c2, t2 = anchors[a2]
+
+        _fill_anchor_segment(reads, a1, a2, c1, t1, c2, t2, gap,
+                             period, prior, period_weight)
+
+
 # ── Main analysis function ────────────────────────────────────────────────────
 
 def analyze_pdf(
@@ -990,6 +1169,9 @@ def analyze_pdf(
         reads_clean = _infer_missing(reads_clean, period_info)
         inferred = sum(1 for r in reads_clean if r.method == "inferred")
         on_log(f"Inferencia: {inferred} paginas recuperadas", "ok")
+
+    # ── Phase D: Viterbi anchor-constrained segment fill ───────────────────
+    _viterbi_anchor_constrained(reads_clean, period_info)
 
     # Report inferred pages with low/medium confidence as issues — grouped by pattern
     from collections import defaultdict as _dd

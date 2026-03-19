@@ -14,6 +14,8 @@ params keys (all required):
     ds_period_weight, ds_neighbor_weight,     — Phase 5 (D-S evidence weights)
       ds_prior_weight, ds_boost_max
     ph5b_conf_min, ph5b_ratio_min            — Phase 5b (period-contradiction)
+    viterbi_anchor_conf_min,                  — Phase D (Viterbi anchor-constrained)
+      viterbi_period_weight, viterbi_prior_weight
     min_conf_for_new_doc                      — Phase 6 (orphan suppression)
     window, hom_threshold                     — Global
 """
@@ -55,10 +57,11 @@ class Document:
 
 
 def run_pipeline(reads: list[PageRead], params: dict) -> list[Document]:
-    """Full pipeline: deepcopy → detect period → infer → build docs → undercount recovery."""
+    """Full pipeline: deepcopy → detect period → infer → Viterbi → build docs → undercount recovery."""
     reads = copy.deepcopy(reads)
     period_info = _detect_period(reads, params)
     _infer(reads, params, period_info)
+    _viterbi_anchor_constrained(reads, period_info, params)
     docs = _build_documents(reads)
     docs = _undercount_recovery(reads, docs, params)
     return docs
@@ -449,6 +452,187 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
                 r.method = "excluded"
                 r.curr   = None
                 r.total  = None
+
+
+# ── Phase D: Viterbi Anchor-Constrained Segment Fill ─────────────────────────
+
+_DIRECT_METHODS: frozenset[str] = frozenset({"direct", "SR", "easyocr", "manual"})
+
+
+def _extract_anchors(
+    reads: list[PageRead],
+    conf_min: float = 0.90,
+) -> dict[int, tuple[int, int]]:
+    """
+    Returns {index: (curr, total)} for high-confidence direct OCR reads.
+    These act as hard anchor constraints in the Viterbi phase.
+    """
+    return {
+        i: (r.curr, r.total)
+        for i, r in enumerate(reads)
+        if r.method in _DIRECT_METHODS
+        and r.curr is not None
+        and r.total is not None
+        and r.confidence >= conf_min
+    }
+
+
+def _viterbi_anchor_constrained(
+    reads: list[PageRead],
+    period_info: dict,
+    params: dict,
+) -> None:
+    """
+    Phase D: Segment-based Viterbi using high-confidence direct reads as hard anchors.
+
+    For each consecutive pair of anchors, fills the gap between them with the
+    optimal (curr, total) sequence using period + prior as soft constraints.
+    Only modifies reads with method == "inferred"; boosts confidence of
+    correctly-placed inferred curr==1 boundaries to resist _undercount_recovery merges.
+    """
+    n = len(reads)
+    if n < 3:
+        return
+
+    conf_min      = params.get("viterbi_anchor_conf_min", 0.90)
+    period_weight = params.get("viterbi_period_weight", 0.5)
+
+    period        = period_info.get("period") if period_info else None
+
+    # Build prior (total → frequency) from all non-failed reads
+    total_counts = Counter(r.total for r in reads if r.total is not None)
+    total_sum    = sum(total_counts.values()) or 1
+    prior: dict[int, float] = {k: v / total_sum for k, v in total_counts.items()}
+
+    anchors = _extract_anchors(reads, conf_min)
+    if len(anchors) < 2:
+        return  # Need at least 2 anchors to define a segment
+
+    anchor_indices = sorted(anchors.keys())
+
+    for a_idx in range(len(anchor_indices) - 1):
+        a1 = anchor_indices[a_idx]
+        a2 = anchor_indices[a_idx + 1]
+        gap = a2 - a1 - 1
+        if gap <= 0:
+            continue  # Adjacent anchors — nothing to fill
+
+        c1, t1 = anchors[a1]
+        c2, t2 = anchors[a2]
+
+        _fill_anchor_segment(reads, a1, a2, c1, t1, c2, t2, gap,
+                             period, prior, period_weight)
+
+
+def _pick_doc_size(
+    middle: int,
+    period: int | None,
+    t1: int,
+    t2: int,
+    prior: dict[int, float],
+) -> int | None:
+    """Find a doc size that evenly divides `middle` pages, preferring period."""
+    if middle == 0:
+        return None
+    for candidate in _size_candidates(period, t1, t2, prior):
+        if candidate > 0 and middle % candidate == 0:
+            return candidate
+    return None
+
+
+def _size_candidates(
+    period: int | None,
+    t1: int,
+    t2: int,
+    prior: dict[int, float],
+) -> list[int]:
+    """Ordered list of doc-size candidates to try (best first)."""
+    seen: set[int] = set()
+    result: list[int] = []
+    for val in [period, t2, t1] + sorted(prior, key=prior.get, reverse=True):
+        if val is not None and val > 0 and val not in seen:
+            seen.add(val)
+            result.append(val)
+    return result
+
+
+def _fill_anchor_segment(
+    reads: list[PageRead],
+    a1: int,
+    a2: int,
+    c1: int,
+    t1: int,
+    c2: int,
+    t2: int,
+    gap: int,
+    period: int | None,
+    prior: dict[int, float],
+    period_weight: float,
+) -> None:
+    """
+    Attempt to fill reads[a1+1 .. a2-1] with an optimal (curr, total) chain.
+    Only modifies reads with method == "inferred".
+    """
+    # Case A: same-doc continuation (a1 and a2 are in the same document)
+    # Expected intermediate pages: c1+1, c1+2, ..., c2-1 (same total)
+    if t1 == t2 and c2 > c1 + 1 and (c2 - c1 - 1) == gap:
+        chain = [(c, t1) for c in range(c1 + 1, c2)]
+        _apply_chain(reads, a1, chain, period_weight)
+        return
+
+    # Case B: cross-doc segment
+    #   remaining_in_first: pages after anchor1 still in its document
+    #   leading_in_last:    pages before anchor2 in anchor2's document
+    remaining = t1 - c1  # pages c1+1 .. t1
+    leading   = c2 - 1   # pages 1 .. c2-1
+
+    middle = gap - remaining - leading
+    if middle < 0:
+        return  # Anchors are inconsistent with this doc structure — skip
+
+    if middle == 0:
+        chain_middle: list[tuple[int, int]] = []
+    else:
+        doc_size = _pick_doc_size(middle, period, t1, t2, prior)
+        if doc_size is None:
+            return  # Can't find a valid division — skip
+        n_docs = middle // doc_size
+        chain_middle = [
+            (c, doc_size)
+            for _ in range(n_docs)
+            for c in range(1, doc_size + 1)
+        ]
+
+    chain = (
+        [(c, t1) for c in range(c1 + 1, t1 + 1)]   # rest of anchor1's doc
+        + chain_middle                                 # complete middle docs
+        + [(c, t2) for c in range(1, c2)]             # leading pages of anchor2's doc
+    )
+
+    if len(chain) != gap:
+        return  # Sanity check — should not happen if math is right
+
+    _apply_chain(reads, a1, chain, period_weight)
+
+
+def _apply_chain(
+    reads: list[PageRead],
+    a1: int,
+    chain: list[tuple[int, int]],
+    period_weight: float,
+) -> None:
+    """Apply a (curr, total) chain to the inferred reads immediately after anchor a1."""
+    for k, (c, t) in enumerate(chain):
+        r = reads[a1 + 1 + k]
+        if r.method != "inferred":
+            continue  # Never overwrite direct reads
+        r.curr  = c
+        r.total = t
+        # Boost confidence for inferred doc-boundary pages (curr==1) —
+        # these are now validated by anchor + period evidence.
+        if c == 1:
+            boost_floor = 0.65 + period_weight * 0.20
+            r.confidence = max(r.confidence, boost_floor)
 
 
 # ── Build Documents ──────────────────────────────────────────────────────────

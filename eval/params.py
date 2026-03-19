@@ -31,6 +31,10 @@ PARAM_SPACE: dict[str, list] = {
     "ph5_guard_conf":     [0.0, 0.70, 0.80, 0.90],
     "recon_weight":       [0.0, 0.15, 0.20, 0.25, 0.30],   # Approach A
     "ph5_guard_slope":    [0.0, 0.5, 1.0, 1.5, 2.0],        # Approach B
+    # Phase D — Viterbi anchor-constrained segment fill
+    "viterbi_anchor_conf_min": [0.85, 0.90, 0.95],   # min conf for hard anchor
+    "viterbi_period_weight":   [0.3, 0.5, 0.8],       # weight of period alignment bonus
+    "viterbi_prior_weight":    [0.2, 0.4, 0.6],       # weight of prior(total) (reserved)
     # Phase 6 — Orphan suppression
     # Inferred new-doc triggers (curr==1) below this confidence are excluded.
     # 0.0 = no suppression (baseline behavior).
@@ -49,7 +53,7 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "new_doc_hom_mul":  0.35,
     "back_conf":        0.93,
     "xval_cap":         0.35,
-    "fallback_base":    0.40,
+    "fallback_base":    0.45,  # Phase D sweep: increased from 0.40
     "fallback_hom_base":0.30,
     "fallback_hom_mul": 0.12,
     "ds_period_weight":   0.10,
@@ -61,7 +65,10 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "ph5_guard_conf":     0.90,
     "recon_weight":       0.0,   # Approach A: no improvement over baseline
     "ph5_guard_slope":    1.0,   # Approach B: sweep winner, improves undercount recovery
+    "viterbi_anchor_conf_min": 0.90,  # Phase D: confidence threshold for hard anchors
+    "viterbi_period_weight":   0.5,   # Phase D: weight of period-alignment confidence boost
+    "viterbi_prior_weight":    0.4,   # Phase D: weight of prior(total) (reserved)
     "min_conf_for_new_doc": 0.0,
     "window":           7,
-    "hom_threshold":    0.88,
+    "hom_threshold":    0.83,  # Phase D sweep: decreased from 0.88
 }

@@ -20,7 +20,7 @@ from pydantic import BaseModel
 import fitz  # For quick page counting
 
 # Core logic
-from core.analyzer import analyze_pdf, re_infer_documents
+from core.analyzer import analyze_pdf, re_infer_documents, INFERENCE_ENGINE_VERSION
 
 import logging
 logging.basicConfig(
@@ -36,6 +36,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="PDFoverseer V3 API", lifespan=lifespan)
+logger.info(f"Inference engine loaded: {INFERENCE_ENGINE_VERSION}")
 
 # Allow CORS for local Vite dev server
 app.add_middleware(
