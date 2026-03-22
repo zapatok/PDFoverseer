@@ -1,6 +1,6 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from core.analyzer import Document, _PageRead, _build_documents, classify_doc
+from core import Document, _PageRead, _build_documents, classify_doc
 
 def _make_read(page, curr, total, method="direct", confidence=1.0):
     return _PageRead(pdf_page=page, curr=curr, total=total,
