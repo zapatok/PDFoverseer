@@ -87,7 +87,7 @@ def _emit_ai_telemetry(
     success_pct = f"{docs_ok/n_docs:.0%}" if n_docs else "n/a"
 
     on_log(
-        f"[AI:{_CORE_HASH}] [MOD:v3.1-fix] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
+        f"[AI:{_CORE_HASH}] [MOD:master-port] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
         f" | W{PARALLEL_WORKERS}+GPU | INF:{INFERENCE_ENGINE_VERSION}\n"
         f"PRE5≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
         f"OCR: {mstr}\n"

@@ -1,13 +1,21 @@
-"""Inference engine: period detection, Dempster-Shafer fusion, phases 1-6."""
+"""Inference engine: period detection, Dempster-Shafer fusion, phases 1-6.
+
+This is the MASTER-branch algorithm ported to the modular architecture.
+Parameters are the sweep-validated values from master (6ph-t2).
+"""
 from __future__ import annotations
 
-from typing import Optional
 from collections import Counter
 import numpy as np
 
-from core.utils import Document, _PageRead, MIN_CONF_FOR_NEW_DOC, ANOMALY_DROPOUT
+from core.utils import Document, _PageRead, MIN_CONF_FOR_NEW_DOC
 
-# ── Period Detection ─────────────────────────────────────────────────────────
+# ── Parameters (master sweep-validated) ──────────────────────────────────────
+# Phase 5b thresholds from master
+PH5B_CONF_MIN  = 0.69   # min period confidence to activate
+PH5B_RATIO_MIN = 0.93   # min fraction of reads that must agree with period
+
+# ── Period Detection ──────────────────────────────────────────────────────────
 
 def _detect_period(reads: list[_PageRead]) -> dict:
     """
@@ -74,7 +82,7 @@ def _detect_period(reads: list[_PageRead]) -> dict:
                         acorr_conf = float(acorr[lag])
                         break
 
-    # ── Combine evidence ─────────────────────────────────────────────
+    # ── Combine evidence ──────────────────────────────────────────────
     candidates: dict[int, float] = {}
     if gap_period is not None and gap_conf > 0.3:
         candidates[gap_period] = candidates.get(gap_period, 0) + gap_conf * 0.45
@@ -98,11 +106,7 @@ def _detect_period(reads: list[_PageRead]) -> dict:
 # ── Dempster-Shafer Evidence Fusion ──────────────────────────────────────────
 
 def _ds_combine(m1: dict, m2: dict) -> dict:
-    """Dempster-Shafer combination of two mass functions.
-
-    Keys are hypothesis tuples ``(curr, total)`` or the string ``'unknown'``
-    representing the full frame of discernment (Theta).
-    """
+    """Dempster-Shafer combination of two mass functions."""
     combined: dict = {}
     conflict = 0.0
 
@@ -149,7 +153,7 @@ def _period_evidence(
     return {h: w / total_w for h, w in candidates.items()}
 
 
-# ── Tier 4: Inference Engine (D-S fusion) ────────────────────────────────────
+# ── Tier 4: Inference Engine (master 6-phase D-S) ────────────────────────────
 
 def _infer_missing(
     reads: list[_PageRead],
@@ -157,12 +161,16 @@ def _infer_missing(
 ) -> list[_PageRead]:
     """
     Constraint propagation inference for pages where OCR failed.
+    Master-branch algorithm: 6 phases, sweep-validated parameters.
 
     Phase 1: Forward propagation  (prev → curr)
     Phase 2: Backward propagation (next → curr)
-    Phase 3: Period-enhanced validation (boost/penalize via period alignment)
-    Phase 4: Cross-validation     (neighbor consistency check)
-    Phase 5: Fallback             (remaining failures → best prior)
+    Phase 1b: Orphan candidate marking
+    Phase 3: Cross-validation     (neighbor consistency, xval_cap=0.50)
+    Phase 4: Fallback             (remaining failures → best prior)
+    Phase 5: D-S post-validation  (uncertain pages ≤0.60)
+    Phase 5b: Period-contradiction correction (conf_min=0.69, ratio_min=0.93)
+    Phase 6: Orphan suppression
     """
     n = len(reads)
     if n == 0:
@@ -179,7 +187,7 @@ def _infer_missing(
     period = period_info.get("period") if period_info else None
     period_conf = period_info.get("confidence", 0.0) if period_info else 0.0
 
-    def _local_total(idx: int, window: int = 7) -> tuple[int, float]:
+    def _local_total(idx: int, window: int = 5) -> tuple[int, float]:
         """Return (most_common_total, homogeneity) from ±window confirmed reads.
         Only overrides best_total when local region is highly homogeneous (≥85%).
         Mixed regions fall back to best_total to avoid bias."""
@@ -192,145 +200,53 @@ def _infer_missing(
         tc = Counter(local)
         mode_val, mode_freq = tc.most_common(1)[0]
         homogeneity = mode_freq / len(local)
-        if homogeneity >= 0.88:
+        if homogeneity >= 0.85:
             return mode_val, homogeneity
         return best_total, homogeneity
 
-    # ── Phase 0: Anomaly Downgrade (Soft Dropout) ───────────────────
-    if ANOMALY_DROPOUT > 0.0:
-        for i in range(n):
-            r = reads[i]
-            if r.method in ("failed", "inferred", "excluded") or r.total is None:
-                continue
-            lt, hom = _local_total(i)
-            if r.total == 1 and hom >= 0.88 and lt > 1:
-                r.confidence -= hom
-                if r.confidence < ANOMALY_DROPOUT:
-                    r.method = "failed"
-                    r.curr = None
-                    r.total = None
-
-    # ── Phase 1 & 2: Bidirectional Soft Clash Resolution ────────────
-    gaps = []
-    start_idx = None
+    # ── Phase 1: Forward propagation ─────────────────────────────────
     for i in range(n):
-        if reads[i].method == "failed":
-            if start_idx is None:
-                start_idx = i
-        else:
-            if start_idx is not None:
-                gaps.append((start_idx, i))
-                start_idx = None
-    if start_idx is not None:
-        gaps.append((start_idx, n))
-
-    for gap_start, gap_end in gaps:
-        # Generate hyp_fwd
-        hyp_fwd = []
-        prev_c, prev_t = None, None
-        if gap_start > 0:
-            prev = reads[gap_start - 1]
+        r = reads[i]
+        if r.method != "failed":
+            continue
+        if i > 0:
+            prev = reads[i - 1]
             if prev.curr is not None and prev.total is not None:
-                prev_c, prev_t = prev.curr, prev.total
-        
-        for i in range(gap_start, gap_end):
-            lt, hom = _local_total(i)
-            if prev_c is not None and prev_t is not None:
-                if prev_c < prev_t:
-                    c, t = prev_c + 1, prev_t
-                else:
-                    c, t = 1, lt
-            else:
-                c, t = 1, lt
+                if prev.curr < prev.total:
+                    r.curr = prev.curr + 1
+                    r.total = prev.total
+                    r.method = "inferred"
+                    r.confidence = 0.95
+                elif prev.curr == prev.total:
+                    lt, hom = _local_total(i)
+                    r.curr = 1
+                    r.total = lt
+                    r.method = "inferred"
+                    r.confidence = 0.70 + hom * 0.30  # 0.70..1.00
 
-            if i == gap_end - 1 and gap_end < n:
-                r_nxt = reads[gap_end]
-                if r_nxt.curr == 1:
-                    t = c
-
-            hyp_fwd.append((c, t, hom))
-            prev_c, prev_t = c, t
-
-        # Generate hyp_bwd
-        hyp_bwd = []
-        nxt_c, nxt_t = None, None
-        if gap_end < n:
-            nxt = reads[gap_end]
+    # ── Phase 2: Backward propagation ────────────────────────────────
+    for i in range(n - 2, -1, -1):
+        r = reads[i]
+        if r.method != "failed":
+            continue
+        if i < n - 1:
+            nxt = reads[i + 1]
             if nxt.curr is not None and nxt.total is not None:
-                nxt_c, nxt_t = nxt.curr, nxt.total
-        
-        for i in range(gap_end - 1, gap_start - 1, -1):
-            lt, hom = _local_total(i)
-            if nxt_c is not None and nxt_t is not None:
-                if nxt_c > 1:
-                    c, t = nxt_c - 1, nxt_t
-                else:
-                    c, t = lt, lt
-            else:
-                c, t = lt, lt
-            hyp_bwd.insert(0, (c, t, hom))
-            nxt_c, nxt_t = c, t
+                if nxt.curr > 1:
+                    r.curr = nxt.curr - 1
+                    r.total = nxt.total
+                    r.method = "inferred"
+                    r.confidence = 0.90
+                elif nxt.curr == 1 and i > 0:
+                    prev = reads[i - 1]
+                    if (prev.curr is not None and prev.total is not None
+                            and prev.curr < prev.total):
+                        r.curr = prev.curr + 1
+                        r.total = prev.total
+                        r.method = "inferred"
+                        r.confidence = 0.90
 
-        # Score hypotheses
-        def seq_cost(seq):
-            cost = 0.0
-            for offset, (c, t, hom) in enumerate(seq):
-                idx = gap_start + offset
-                lt_val, _ = _local_total(idx)
-                if t != lt_val:
-                    cost += hom * 0.5
-                if c == 1 and period_info and period_info.get("period"):
-                    p_conf = period_info.get("confidence", 0.0)
-                    ex_t = period_info.get("expected_total", period_info["period"])
-                    if p_conf > 0.3 and t != ex_t:
-                        cost += p_conf * 1.0
-            return cost
-        
-        cost_fwd = seq_cost(hyp_fwd)
-        cost_bwd = seq_cost(hyp_bwd)
-
-        # Boundary divergence penalty
-        if gap_end < n:
-            r_nxt = reads[gap_end]
-            fwd_last_c, fwd_last_t, _ = hyp_fwd[-1]
-            if r_nxt.curr is not None and r_nxt.total is not None:
-                if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or 
-                        (fwd_last_c == fwd_last_t and r_nxt.curr == 1)):
-                    cost_fwd += 5.0
-        
-        if gap_start > 0:
-            r_prev = reads[gap_start - 1]
-            bwd_first_c, bwd_first_t, _ = hyp_bwd[0]
-            if r_prev.curr is not None and r_prev.total is not None:
-                if not ((r_prev.total == bwd_first_t and r_prev.curr == bwd_first_c - 1) or
-                        (r_prev.curr == r_prev.total and bwd_first_c == 1)):
-                    cost_bwd += 5.0
-
-        if cost_fwd <= cost_bwd:
-            best_hyp = hyp_fwd
-        else:
-            best_hyp = hyp_bwd
-
-        # Apply
-        for offset, (c, t, hom) in enumerate(best_hyp):
-            r = reads[gap_start + offset]
-            r.method = "inferred"
-            r.curr = c
-            r.total = t
-            if best_hyp is hyp_bwd:
-                r.confidence = 0.90
-            else:
-                if offset == 0 and gap_start > 0:
-                    rp = reads[gap_start - 1]
-                    if rp.curr == rp.total:
-                        r.confidence = 0.55 + hom * 0.25
-                        continue
-                if c == 1:
-                    r.confidence = 0.55 + hom * 0.25
-                else:
-                    r.confidence = 0.97
-
-    # ── Phase 1b: Orphan candidate marking ──────────────────────────
+    # ── Phase 1b: Orphan candidate marking ───────────────────────────
     for i in range(n - 1):
         r = reads[i]
         if r.method == "inferred" and r.curr == 1:
@@ -338,7 +254,7 @@ def _infer_missing(
             if nxt.curr == 1:
                 r._ph1_orphan_candidate = True
 
-    # ── Phase 3: Cross-validation ───────────────────────────────────
+    # ── Phase 3: Cross-validation ────────────────────────────────────
     for i in range(n):
         r = reads[i]
         if r.method != "inferred":
@@ -357,22 +273,35 @@ def _infer_missing(
                         (r.curr == r.total and nxt.curr == 1)):
                     consistent = False
         if not consistent:
-            r.confidence = min(r.confidence, 0.40)
+            r.confidence = min(r.confidence, 0.50)  # xval_cap=0.50 (master value)
 
-    # ── Phase 5: D-S post-validation for uncertain pages (≤0.60) ──
+    # ── Phase 4: Fallback for remaining failures ──────────────────────
+    for i, r in enumerate(reads):
+        if r.method == "failed":
+            lt, hom = _local_total(i)
+            r.curr = 1
+            r.total = lt
+            r.method = "inferred"
+            r.confidence = 0.40 if hom < 0.85 else 0.40 + hom * 0.15
+
+    # ── Phase 5: D-S post-validation for uncertain pages (≤0.60) ─────
+    # Does NOT change curr/total assignments — only boosts confidence
+    # when independent evidence (period + neighbors) confirms them.
     if period is not None and period_conf > 0.3:
         for i in range(n):
             r = reads[i]
             if r.method != "inferred" or r.confidence > 0.60:
-                continue
+                continue  # only validate uncertain pages
 
             h = (r.curr, r.total)
             support = 0.0
 
+            # Evidence 1: Period-aligned pages agree?
             palign = _period_evidence(i, reads, period)
             if palign and h in palign:
                 support += palign[h] * period_conf
 
+            # Evidence 2: Neighbor consistency (both sides)
             neighbors_agree = 0
             if i > 0:
                 prev = reads[i - 1]
@@ -387,16 +316,17 @@ def _infer_missing(
                             (r.curr == r.total and nxt.curr == 1)):
                         neighbors_agree += 1
 
+            # Evidence 3: Prior supports this total?
             prior_support = prior.get(r.total, 0.0)
 
+            # Combine: period + neighbors + prior (master boost weights)
             if support > 0.2 or neighbors_agree == 2:
-                boost = min(support * 0.08 + neighbors_agree * 0.12
+                boost = min(support * 0.10 + neighbors_agree * 0.10
                             + prior_support * 0.05, 0.23)
                 r.confidence = min(r.confidence + boost, 0.75)
 
-    # ── Phase 5b: Period-contradiction correction ─────────────────────────────
-    PH5B_CONF_MIN  = 0.60
-    PH5B_RATIO_MIN = 0.93
+    # ── Phase 5b: Period-contradiction correction ─────────────────────
+    # Master parameters: PH5B_CONF_MIN=0.69, PH5B_RATIO_MIN=0.93
     if period is not None and period_conf >= PH5B_CONF_MIN:
         expected_total = period_info.get("expected_total")
         if expected_total is not None:
@@ -446,7 +376,7 @@ def _infer_missing(
                                     break
                                 j += 1
 
-    # ── Phase 6: Orphan suppression ─────────────────────────────────
+    # ── Phase 6: Orphan suppression ──────────────────────────────────
     if MIN_CONF_FOR_NEW_DOC > 0.0:
         for r in reads:
             if (r.method == "inferred" and r.curr == 1
@@ -508,7 +438,8 @@ def _build_documents(
             if current is None:
                 orphans.append(pdf_page)
                 on_log(f"  -> pag {pdf_page}: huerfana curr={curr} sin doc activo", "warn")
-                on_issue(pdf_page, "huerfana", f"curr={curr} sin doc activo")
+                if on_issue:
+                    on_issue(pdf_page, "huerfana", f"curr={curr} sin doc activo")
             else:
                 expected = current.found_total + 1
                 if is_inferred:
@@ -558,4 +489,3 @@ def classify_doc(doc: Document, reads_by_page: dict) -> str:
     if not confs:
         return "direct"
     return "inferred_hi" if min(confs) >= 0.75 else "inferred_lo"
-
