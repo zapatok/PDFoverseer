@@ -88,6 +88,7 @@ class ServerState:
         self.total_incomplete: int = 0
         self.total_inferred: int = 0
         self.issues: list[dict] = []
+        self.issue_counter: int = 0
         self.start_time: float = 0.0
         self.pause_start_time: float = 0.0
         self.total_paused_time: float = 0.0
@@ -512,13 +513,15 @@ def _process_pdfs(start_index: int = 0):
         def on_issue(page, kind, detail, pil_img):
             with state._lock:
                 issue = {
-                    "id": len(state.issues),
+                    "id": state.issue_counter,
                     "pdf_path": str(pdf_path),
                     "filename": pdf_path.name,
                     "page": page,
                     "type": kind,
                     "detail": detail,
+                    "impact": "sequence",
                 }
+                state.issue_counter += 1
                 state.issues.append(issue)
                 if len(state.issues) > 10_000:
                     state.issues = state.issues[-10_000:]
@@ -611,13 +614,15 @@ def api_correct(req: CorrectRequest):
     def on_issue(page, kind, detail, pil_img, _path=pdf_str):
         with state._lock:
             issue = {
-                "id": len(state.issues),
+                "id": state.issue_counter,
                 "pdf_path": _path,
                 "filename": Path(_path).name,
                 "page": page,
                 "type": kind,
                 "detail": detail,
+                "impact": "sequence",
             }
+            state.issue_counter += 1
             state.issues.append(issue)
 
     _emit("log", {"msg": f"Recalculando inferencia para {Path(pdf_str).name}...", "level": "info"})
@@ -686,13 +691,15 @@ def api_exclude(req: ExcludeRequest):
     def on_issue(page, kind, detail, pil_img, _path=pdf_str):
         with state._lock:
             issue = {
-                "id": len(state.issues),
+                "id": state.issue_counter,
                 "pdf_path": _path,
                 "filename": Path(_path).name,
                 "page": page,
                 "type": kind,
                 "detail": detail,
+                "impact": "sequence",
             }
+            state.issue_counter += 1
             state.issues.append(issue)
 
     _emit("log", {"msg": f"Excluyendo página {req.page} y recalculando {Path(pdf_str).name}...", "level": "info"})
@@ -768,16 +775,20 @@ def _recalculate_metrics():
         else:
             pdf_confidences[path] = sum(r.confidence for r in valid_reads) / len(valid_reads)
             
-        # Also rebuild docs to calculate individual stats per file
         docs = _build_documents(reads, lambda m, l: None, lambda p, k, d: None)
         complete = [d for d in docs if d.is_complete]
         incomplete = [d for d in docs if not d.is_complete]
         inferred = sum(len(d.inferred_pages) for d in docs)
+        dir_docs = len([d for d in complete if not d.inferred_pages])
+        inf_docs = len([d for d in complete if len(d.inferred_pages) > 0])
         pdf_metrics[path] = {
             "docs": len(docs),
             "complete": len(complete),
             "incomplete": len(incomplete),
-            "inferred": inferred
+            "inferred": inferred,
+            "direct": dir_docs,
+            "inferred_hi": inf_docs,
+            "inferred_lo": 0
         }
             
     state.confidences = pdf_confidences

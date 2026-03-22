@@ -10,14 +10,9 @@ params keys (all required):
     fwd_conf, new_doc_base, new_doc_hom_mul  — Phase 1
     back_conf                                 — Phase 2
     xval_cap                                  — Phase 3
-    fallback_base, fallback_hom_base, fallback_hom_mul  — Phase 4
     ds_period_weight, ds_neighbor_weight,     — Phase 5 (D-S evidence weights)
       ds_prior_weight, ds_boost_max
     ph5b_conf_min, ph5b_ratio_min            — Phase 5b (period-contradiction)
-    pcf_conf_max, pcf_period_conf_min          — PCF (period-consistency filter)
-    mp_window, mp_ratio_min                   — Phase MP (multi-period local correction)
-    viterbi_anchor_conf_min,                  — Phase D (Viterbi anchor-constrained)
-      viterbi_period_weight, viterbi_prior_weight
     min_conf_for_new_doc                      — Phase 6 (orphan suppression)
     window, hom_threshold                     — Global
 """
@@ -59,22 +54,18 @@ class Document:
 
 
 def run_pipeline(reads: list[PageRead], params: dict) -> list[Document]:
-    """Full pipeline: deepcopy → detect period → infer → PCF → MP correction → Viterbi → build docs → period merge → undercount recovery."""
+    """Full pipeline: deepcopy → detect period → infer → build docs → undercount recovery."""
     reads = copy.deepcopy(reads)
-    period_info = _detect_period(reads, params)
+    period_info = _detect_period(reads)
     _infer(reads, params, period_info)
-    _period_consistency_filter(reads, period_info, params)
-    _multi_period_correction(reads, params)
-    _viterbi_anchor_constrained(reads, period_info, params)
     docs = _build_documents(reads)
-    docs = _period_doc_merge(docs, period_info, params)
-    docs = _undercount_recovery(reads, docs, params)
+    docs = _undercount_recovery(reads, docs)
     return docs
 
 
 # ── Period Detection ─────────────────────────────────────────────────────────
 
-def _detect_period(reads: list[PageRead], params: dict | None = None) -> dict:
+def _detect_period(reads: list[PageRead]) -> dict:
     """
     Detect repeating period in page numbering via:
       1. Spacing between curr=1 occurrences
@@ -147,14 +138,6 @@ def _detect_period(reads: list[PageRead], params: dict | None = None) -> dict:
     if acorr_period is not None and acorr_conf > 0.3:
         candidates[acorr_period] = candidates.get(acorr_period, 0) + acorr_conf * 0.25
 
-    # ── Method 4: Reconstruction confidence ──────────────────────────────
-    recon_weight = params.get("recon_weight", 0.0) if params else 0.0
-    if recon_weight > 0.0:
-        recon_period = gap_period or mode_total or 2
-        rc = _recon_confidence(reads, recon_period)
-        if rc > 0.3:
-            candidates[recon_period] = candidates.get(recon_period, 0) + rc * recon_weight
-
     if not candidates:
         result["expected_total"] = mode_total
         return result
@@ -192,53 +175,6 @@ def _period_evidence(
     return {h: w / total_w for h, w in candidates.items()}
 
 
-def _local_period_info(
-    reads: list[PageRead], idx: int, half_window: int,
-) -> dict:
-    """
-    Local period detection via most-common declared total in a sliding window.
-    Only considers direct OCR reads (not inferred) to avoid circularity.
-    Returns dict with 'period', 'confidence', 'expected_total'.
-    """
-    n = len(reads)
-    lo = max(0, idx - half_window)
-    hi = min(n, idx + half_window + 1)
-
-    totals = [r.total for r in reads[lo:hi]
-              if r.total is not None
-              and r.method not in ("failed", "excluded", "inferred")]
-
-    if len(totals) < 5:
-        return {"period": None, "confidence": 0.0, "expected_total": None}
-
-    tc = Counter(totals)
-    best_total, freq = tc.most_common(1)[0]
-    conf = freq / len(totals)
-
-    return {"period": best_total, "confidence": conf, "expected_total": best_total}
-
-
-def _recon_confidence(reads: list[PageRead], period: int) -> float:
-    """
-    Reconstruction confidence: fraction of observed curr=1 positions
-    that align within ±1 of positions predicted by repeating 'period'.
-    Robust to misread total values since it only uses curr==1 positions.
-    """
-    if period < 2:
-        return 0.0
-    starts = [i for i, r in enumerate(reads)
-              if r.curr == 1 and r.method not in ("failed", "excluded")]
-    if len(starts) < 2:
-        return 0.0
-    anchor = starts[0]
-    predicted = set(range(anchor, len(reads), period))
-    hits = sum(
-        1 for s in starts
-        if (s in predicted) or ((s - 1) in predicted) or ((s + 1) in predicted)
-    )
-    return hits / len(starts)
-
-
 # ── Phase 1–5 Inference ──────────────────────────────────────────────────────
 
 def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None) -> None:
@@ -252,9 +188,6 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
     new_doc_hom_mul  = params["new_doc_hom_mul"]
     back_conf        = params["back_conf"]
     xval_cap         = params["xval_cap"]
-    fallback_base    = params["fallback_base"]
-    fallback_hom_base = params["fallback_hom_base"]
-    fallback_hom_mul  = params["fallback_hom_mul"]
     ds_period_weight   = params["ds_period_weight"]
     ds_neighbor_weight = params["ds_neighbor_weight"]
     ds_prior_weight    = params["ds_prior_weight"]
@@ -283,40 +216,136 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             return mode_val, hom
         return best_total, hom
 
-    # ── Phase 1: Forward propagation ────────────────────────────────
-    for i in range(n):
-        r = reads[i]
-        if r.method != "failed":
-            continue
-        if i > 0:
-            prev = reads[i - 1]
-            if prev.curr is not None and prev.total is not None:
-                if prev.curr < prev.total:
-                    r.curr, r.total = prev.curr + 1, prev.total
-                    r.method, r.confidence = "inferred", fwd_conf
-                elif prev.curr == prev.total:
-                    lt, hom = _local_total(i)
-                    r.curr, r.total = 1, lt
-                    r.method = "inferred"
-                    r.confidence = new_doc_base + hom * new_doc_hom_mul
+    # ── Phase 0: Anomaly Downgrade (Soft Dropout) ───────────────────
+    anomaly_dropout = params.get("anomaly_dropout", 0.0)
+    if anomaly_dropout > 0.0:
+        for i in range(n):
+            r = reads[i]
+            if r.method in ("failed", "inferred", "excluded") or r.total is None:
+                continue
+            lt, hom = _local_total(i)
+            if r.total == 1 and hom >= hom_threshold and lt > 1:
+                r.confidence -= hom
+                if r.confidence < anomaly_dropout:
+                    r.method = "failed"
+                    r.curr = None
+                    r.total = None
 
-    # ── Phase 2: Backward propagation ───────────────────────────────
-    for i in range(n - 2, -1, -1):
-        r = reads[i]
-        if r.method != "failed":
-            continue
-        if i < n - 1:
-            nxt = reads[i + 1]
+    # ── Phase 1 & 2: Bidirectional Soft Clash Resolution ────────────
+    clash_w_local = params.get("clash_w_local", 1.0)
+    clash_w_period = params.get("clash_w_period", 1.0)
+
+    gaps = []
+    start_idx = None
+    for i in range(n):
+        if reads[i].method == "failed":
+            if start_idx is None:
+                start_idx = i
+        else:
+            if start_idx is not None:
+                gaps.append((start_idx, i))
+                start_idx = None
+    if start_idx is not None:
+        gaps.append((start_idx, n))
+
+    for gap_start, gap_end in gaps:
+        # Generate hyp_fwd
+        hyp_fwd = []
+        prev_c, prev_t = None, None
+        if gap_start > 0:
+            prev = reads[gap_start - 1]
+            if prev.curr is not None and prev.total is not None:
+                prev_c, prev_t = prev.curr, prev.total
+        
+        for i in range(gap_start, gap_end):
+            lt, hom = _local_total(i)
+            if prev_c is not None and prev_t is not None:
+                if prev_c < prev_t:
+                    c, t = prev_c + 1, prev_t
+                else:
+                    c, t = 1, lt
+            else:
+                c, t = 1, lt
+            hyp_fwd.append((c, t, hom))
+            prev_c, prev_t = c, t
+
+        # Generate hyp_bwd
+        hyp_bwd = []
+        nxt_c, nxt_t = None, None
+        if gap_end < n:
+            nxt = reads[gap_end]
             if nxt.curr is not None and nxt.total is not None:
-                if nxt.curr > 1:
-                    r.curr, r.total = nxt.curr - 1, nxt.total
-                    r.method, r.confidence = "inferred", back_conf
-                elif nxt.curr == 1 and i > 0:
-                    prev = reads[i - 1]
-                    if (prev.curr is not None and prev.total is not None
-                            and prev.curr < prev.total):
-                        r.curr, r.total = prev.curr + 1, prev.total
-                        r.method, r.confidence = "inferred", back_conf
+                nxt_c, nxt_t = nxt.curr, nxt.total
+        
+        for i in range(gap_end - 1, gap_start - 1, -1):
+            lt, hom = _local_total(i)
+            if nxt_c is not None and nxt_t is not None:
+                if nxt_c > 1:
+                    c, t = nxt_c - 1, nxt_t
+                else:
+                    c, t = lt, lt
+            else:
+                c, t = lt, lt
+            hyp_bwd.insert(0, (c, t, hom))
+            nxt_c, nxt_t = c, t
+
+        # Score hypotheses
+        def seq_cost(seq):
+            cost = 0.0
+            for offset, (c, t, hom) in enumerate(seq):
+                idx = gap_start + offset
+                lt_val, _ = _local_total(idx)
+                if t != lt_val:
+                    cost += hom * clash_w_local
+                if c == 1 and period_info and period_info.get("period"):
+                    p_conf = period_info.get("confidence", 0.0)
+                    ex_t = period_info.get("expected_total", period_info["period"])
+                    if p_conf > 0.3 and t != ex_t:
+                        cost += p_conf * clash_w_period
+            return cost
+        
+        cost_fwd = seq_cost(hyp_fwd)
+        cost_bwd = seq_cost(hyp_bwd)
+
+        # Boundary divergence penalty
+        if gap_end < n:
+            r_nxt = reads[gap_end]
+            fwd_last_c, fwd_last_t, _ = hyp_fwd[-1]
+            if r_nxt.curr is not None and r_nxt.total is not None:
+                if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or 
+                        (fwd_last_c == fwd_last_t and r_nxt.curr == 1)):
+                    cost_fwd += 1.0
+        
+        if gap_start > 0:
+            r_prev = reads[gap_start - 1]
+            bwd_first_c, bwd_first_t, _ = hyp_bwd[0]
+            if r_prev.curr is not None and r_prev.total is not None:
+                if not ((r_prev.total == bwd_first_t and r_prev.curr == bwd_first_c - 1) or
+                        (r_prev.curr == r_prev.total and bwd_first_c == 1)):
+                    cost_bwd += 1.0
+
+        if cost_fwd <= cost_bwd:
+            best_hyp = hyp_fwd
+        else:
+            best_hyp = hyp_bwd
+
+        # Apply
+        for offset, (c, t, hom) in enumerate(best_hyp):
+            r = reads[gap_start + offset]
+            r.method = "inferred"
+            r.curr, r.total = c, t
+            if best_hyp is hyp_bwd:
+                r.confidence = back_conf
+            else:
+                if offset == 0 and gap_start > 0:
+                    rp = reads[gap_start - 1]
+                    if rp.curr == rp.total:
+                        r.confidence = new_doc_base + hom * new_doc_hom_mul
+                        continue
+                if c == 1:
+                    r.confidence = new_doc_base + hom * new_doc_hom_mul
+                else:
+                    r.confidence = fwd_conf
 
     # ── Phase 1b: Orphan candidate marking ──────────────────────────
     # An inferred curr==1 page whose immediate next page is also curr==1
@@ -352,14 +381,7 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
         if not consistent:
             r.confidence = min(r.confidence, xval_cap)
 
-    # ── Phase 4: Fallback for remaining failures ─────────────────────
-    for i, r in enumerate(reads):
-        if r.method == "failed":
-            lt, hom = _local_total(i)
-            r.curr, r.total = 1, lt
-            r.method = "inferred"
-            r.confidence = (fallback_base if hom < hom_threshold
-                            else fallback_hom_base + hom * fallback_hom_mul)
+    # ── Phase 4: Obsolte (Removed) ───────────────────────────────────
 
     # ── Phase 5: D-S post-validation ─────────────────────────────────
     # Does NOT change curr/total — only boosts confidence when
@@ -485,389 +507,6 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
                 r.total  = None
 
 
-# ── Period-Consistency Filter (PCF) ──────────────────────────────────────────
-# Corrects inferred reads whose total contradicts the dominant period.
-# Complements Phase 5b (which only corrects direct OCR reads).
-# Target: HLL-style overcounts where low-confidence inferred reads have wrong
-# totals (e.g., total=4 when period=2), creating spurious doc boundaries.
-
-def _period_consistency_filter(
-    reads: list[PageRead],
-    period_info: dict,
-    params: dict,
-) -> None:
-    """
-    For inferred reads with low confidence whose total contradicts the detected
-    period, rewrite their total to match the expected total.  Re-propagate
-    curr values forward from each corrected read so the sequence stays coherent.
-
-    Controlled by params:
-      pcf_conf_max        – max confidence for a read to be eligible (0.0 = disabled)
-      pcf_period_conf_min – min period-detection confidence to activate
-    """
-    pcf_conf_max = params.get("pcf_conf_max", 0.0)
-    if pcf_conf_max <= 0.0:
-        return  # Disabled
-
-    pcf_period_conf_min = params.get("pcf_period_conf_min", 0.50)
-
-    period = period_info.get("period") if period_info else None
-    period_conf = period_info.get("confidence", 0.0) if period_info else 0.0
-    expected_total = period_info.get("expected_total", period) if period_info else None
-
-    if period is None or expected_total is None:
-        return
-    if period_conf < pcf_period_conf_min:
-        return
-
-    # Only activate if the period is well-supported by existing reads
-    reads_with_total = [r for r in reads if r.total is not None
-                        and r.method not in ("failed", "excluded")]
-    if not reads_with_total:
-        return
-    agreeing = sum(1 for r in reads_with_total if r.total == expected_total)
-    ratio = agreeing / len(reads_with_total)
-    if ratio < 0.70:
-        return  # Period not dominant enough to justify corrections
-
-    n = len(reads)
-    corrected_indices: list[int] = []
-
-    for i, r in enumerate(reads):
-        if (r.method == "inferred"
-                and r.confidence <= pcf_conf_max
-                and r.total is not None
-                and r.total != expected_total):
-            # Correct total; keep curr if it fits, else reset to 1
-            if r.curr is not None and 1 <= r.curr <= expected_total:
-                r.total = expected_total
-            else:
-                r.curr = 1
-                r.total = expected_total
-            r.confidence = max(r.confidence, 0.45)  # slight boost: now period-aligned
-            corrected_indices.append(i)
-
-    # Re-propagate forward from each corrected read
-    for idx in corrected_indices:
-        j = idx + 1
-        while j < n:
-            rj = reads[j]
-            if rj.method != "inferred":
-                break
-            prev = reads[j - 1]
-            if prev.curr is not None and prev.total is not None:
-                if prev.curr == prev.total:
-                    rj.curr = 1
-                    rj.total = expected_total
-                elif prev.curr < prev.total:
-                    rj.curr = prev.curr + 1
-                    rj.total = prev.total
-                else:
-                    break
-            else:
-                break
-            j += 1
-
-
-# ── Phase MP: Multi-Period Local Correction ──────────────────────────────────
-# Uses sliding-window local period detection to correct direct OCR reads that
-# contradict their neighborhood's dominant period.  Complements Phase 5b
-# (global): fires where Phase 5b can't because the global ratio is too low
-# (e.g., HLL has 89.5% global agreement but local zones are 95%+).
-
-def _multi_period_correction(
-    reads: list[PageRead],
-    params: dict,
-) -> None:
-    """
-    Correct direct OCR reads in suspicious "total=1 runs" — long stretches
-    where every direct read says total=1 but the local neighborhood is
-    dominated by a higher total (e.g., period=2).
-
-    A "total=1 run" is a maximal sequence of consecutive pages where every
-    direct OCR read has total=1 (failed/inferred pages don't break the run).
-    Only runs longer than mp_min_run are considered suspicious; isolated
-    1-page docs and small clusters (1–3 pages) are preserved.
-
-    Controlled by params:
-      mp_window    – full window size (0 = disabled); pages on each side = mp_window // 2
-      mp_ratio_min – minimum local agreement ratio to trigger correction
-      mp_min_run   – minimum run length of total=1 direct reads to consider suspicious
-    """
-    mp_window = params.get("mp_window", 0)
-    if mp_window <= 0:
-        return  # Disabled
-
-    mp_ratio_min = params.get("mp_ratio_min", 0.65)
-    mp_min_run = params.get("mp_min_run", 4)
-    half_w = mp_window // 2
-    n = len(reads)
-
-    # Step 1: Identify suspicious total=1 runs.
-    # A run is a maximal stretch of consecutive pages where every direct
-    # OCR read has total=1.  Failed/inferred pages don't break the run.
-    in_suspicious_run: list[bool] = [False] * n
-    i = 0
-    while i < n:
-        r = reads[i]
-        is_direct = r.method not in ("failed", "inferred", "excluded")
-        if is_direct and r.total == 1:
-            # Start of a potential run
-            run_start = i
-            direct_count = 0
-            j = i
-            while j < n:
-                rj = reads[j]
-                rj_direct = rj.method not in ("failed", "inferred", "excluded")
-                if rj_direct:
-                    if rj.total == 1:
-                        direct_count += 1
-                    else:
-                        break  # Direct read with total != 1 ends the run
-                # failed/inferred pages: continue (don't break run)
-                j += 1
-            run_end = j  # exclusive
-            if direct_count >= mp_min_run:
-                for k in range(run_start, run_end):
-                    in_suspicious_run[k] = True
-            i = run_end
-        else:
-            i += 1
-
-    # Step 2: Correct direct total=1 reads inside suspicious runs
-    corrected_indices: set[int] = set()
-
-    for idx_r, r in enumerate(reads):
-        if not in_suspicious_run[idx_r]:
-            continue
-        if r.method in ("failed", "inferred", "excluded"):
-            continue
-        if r.total is None or r.total != 1:
-            continue
-
-        local = _local_period_info(reads, idx_r, half_w)
-        local_expected = local.get("expected_total")
-        local_conf = local.get("confidence", 0.0)
-
-        if local_expected is None or local_expected <= 1:
-            continue  # Local period is also 1 — nothing to correct
-        if local_conf < mp_ratio_min:
-            continue
-
-        # Correct this read
-        if r.curr is not None and 1 <= r.curr <= local_expected:
-            r.total = local_expected
-        else:
-            r.curr = 1
-            r.total = local_expected
-        r.method = "inferred"
-        r.confidence = 0.50
-        corrected_indices.add(idx_r)
-
-    # Re-propagate forward from each corrected read
-    if corrected_indices:
-        for idx_r in sorted(corrected_indices):
-            j = idx_r + 1
-            while j < n:
-                rj = reads[j]
-                if rj.method != "inferred":
-                    break
-                prev = reads[j - 1]
-                if prev.curr is not None and prev.total is not None:
-                    if prev.curr == prev.total:
-                        rj.curr = 1
-                        rj.total = prev.total
-                    elif prev.curr < prev.total:
-                        rj.curr = prev.curr + 1
-                        rj.total = prev.total
-                    else:
-                        break
-                else:
-                    break
-                j += 1
-
-
-# ── Phase D: Viterbi Anchor-Constrained Segment Fill ─────────────────────────
-
-_DIRECT_METHODS: frozenset[str] = frozenset({"direct", "SR", "easyocr", "manual"})
-
-
-def _extract_anchors(
-    reads: list[PageRead],
-    conf_min: float = 0.90,
-) -> dict[int, tuple[int, int]]:
-    """
-    Returns {index: (curr, total)} for high-confidence direct OCR reads.
-    These act as hard anchor constraints in the Viterbi phase.
-    """
-    return {
-        i: (r.curr, r.total)
-        for i, r in enumerate(reads)
-        if r.method in _DIRECT_METHODS
-        and r.curr is not None
-        and r.total is not None
-        and r.confidence >= conf_min
-    }
-
-
-def _viterbi_anchor_constrained(
-    reads: list[PageRead],
-    period_info: dict,
-    params: dict,
-) -> None:
-    """
-    Phase D: Segment-based Viterbi using high-confidence direct reads as hard anchors.
-
-    For each consecutive pair of anchors, fills the gap between them with the
-    optimal (curr, total) sequence using period + prior as soft constraints.
-    Only modifies reads with method == "inferred"; boosts confidence of
-    correctly-placed inferred curr==1 boundaries to resist _undercount_recovery merges.
-    """
-    n = len(reads)
-    if n < 3:
-        return
-
-    conf_min      = params.get("viterbi_anchor_conf_min", 0.90)
-    period_weight = params.get("viterbi_period_weight", 0.5)
-
-    period        = period_info.get("period") if period_info else None
-
-    # Build prior (total → frequency) from all non-failed reads
-    total_counts = Counter(r.total for r in reads if r.total is not None)
-    total_sum    = sum(total_counts.values()) or 1
-    prior: dict[int, float] = {k: v / total_sum for k, v in total_counts.items()}
-
-    anchors = _extract_anchors(reads, conf_min)
-    if len(anchors) < 2:
-        return  # Need at least 2 anchors to define a segment
-
-    anchor_indices = sorted(anchors.keys())
-
-    for a_idx in range(len(anchor_indices) - 1):
-        a1 = anchor_indices[a_idx]
-        a2 = anchor_indices[a_idx + 1]
-        gap = a2 - a1 - 1
-        if gap <= 0:
-            continue  # Adjacent anchors — nothing to fill
-
-        c1, t1 = anchors[a1]
-        c2, t2 = anchors[a2]
-
-        _fill_anchor_segment(reads, a1, a2, c1, t1, c2, t2, gap,
-                             period, prior, period_weight)
-
-
-def _pick_doc_size(
-    middle: int,
-    period: int | None,
-    t1: int,
-    t2: int,
-    prior: dict[int, float],
-) -> int | None:
-    """Find a doc size that evenly divides `middle` pages, preferring period."""
-    if middle == 0:
-        return None
-    for candidate in _size_candidates(period, t1, t2, prior):
-        if candidate > 0 and middle % candidate == 0:
-            return candidate
-    return None
-
-
-def _size_candidates(
-    period: int | None,
-    t1: int,
-    t2: int,
-    prior: dict[int, float],
-) -> list[int]:
-    """Ordered list of doc-size candidates to try (best first)."""
-    seen: set[int] = set()
-    result: list[int] = []
-    for val in [period, t2, t1] + sorted(prior, key=prior.get, reverse=True):
-        if val is not None and val > 0 and val not in seen:
-            seen.add(val)
-            result.append(val)
-    return result
-
-
-def _fill_anchor_segment(
-    reads: list[PageRead],
-    a1: int,
-    a2: int,
-    c1: int,
-    t1: int,
-    c2: int,
-    t2: int,
-    gap: int,
-    period: int | None,
-    prior: dict[int, float],
-    period_weight: float,
-) -> None:
-    """
-    Attempt to fill reads[a1+1 .. a2-1] with an optimal (curr, total) chain.
-    Only modifies reads with method == "inferred".
-    """
-    # Case A: same-doc continuation (a1 and a2 are in the same document)
-    # Expected intermediate pages: c1+1, c1+2, ..., c2-1 (same total)
-    if t1 == t2 and c2 > c1 + 1 and (c2 - c1 - 1) == gap:
-        chain = [(c, t1) for c in range(c1 + 1, c2)]
-        _apply_chain(reads, a1, chain, period_weight)
-        return
-
-    # Case B: cross-doc segment
-    #   remaining_in_first: pages after anchor1 still in its document
-    #   leading_in_last:    pages before anchor2 in anchor2's document
-    remaining = t1 - c1  # pages c1+1 .. t1
-    leading   = c2 - 1   # pages 1 .. c2-1
-
-    middle = gap - remaining - leading
-    if middle < 0:
-        return  # Anchors are inconsistent with this doc structure — skip
-
-    if middle == 0:
-        chain_middle: list[tuple[int, int]] = []
-    else:
-        doc_size = _pick_doc_size(middle, period, t1, t2, prior)
-        if doc_size is None:
-            return  # Can't find a valid division — skip
-        n_docs = middle // doc_size
-        chain_middle = [
-            (c, doc_size)
-            for _ in range(n_docs)
-            for c in range(1, doc_size + 1)
-        ]
-
-    chain = (
-        [(c, t1) for c in range(c1 + 1, t1 + 1)]   # rest of anchor1's doc
-        + chain_middle                                 # complete middle docs
-        + [(c, t2) for c in range(1, c2)]             # leading pages of anchor2's doc
-    )
-
-    if len(chain) != gap:
-        return  # Sanity check — should not happen if math is right
-
-    _apply_chain(reads, a1, chain, period_weight)
-
-
-def _apply_chain(
-    reads: list[PageRead],
-    a1: int,
-    chain: list[tuple[int, int]],
-    period_weight: float,
-) -> None:
-    """Apply a (curr, total) chain to the inferred reads immediately after anchor a1."""
-    for k, (c, t) in enumerate(chain):
-        r = reads[a1 + 1 + k]
-        if r.method != "inferred":
-            continue  # Never overwrite direct reads
-        r.curr  = c
-        r.total = t
-        # Boost confidence for inferred doc-boundary pages (curr==1) —
-        # these are now validated by anchor + period evidence.
-        if c == 1:
-            boost_floor = 0.65 + period_weight * 0.20
-            r.confidence = max(r.confidence, boost_floor)
-
-
 # ── Build Documents ──────────────────────────────────────────────────────────
 
 def _build_documents(reads: list[PageRead]) -> list[Document]:
@@ -906,107 +545,11 @@ def _build_documents(reads: list[PageRead]) -> list[Document]:
     return documents
 
 
-# ── Period-Aware Document Merge ──────────────────────────────────────────────
-# Merges consecutive small docs whose total sizes sum to the detected period.
-# Target: HLL-style overcounts where OCR reads "1 de 1" instead of "1 de 2"/"2 de 2",
-# creating pairs of 1-page docs that should be single 2-page docs.
-
-def _period_doc_merge(
-    docs: list[Document],
-    period_info: dict,
-    params: dict,
-) -> list[Document]:
-    """
-    Merge consecutive docs whose declared_total values sum to the period.
-
-    Only activates when:
-      - pdm_enable > 0.0
-      - Period is detected with sufficient confidence (>= pdm_period_conf_min)
-      - Both docs are smaller than the period (undersized)
-
-    Greedy left-to-right: if docs[i] and docs[i+1] can merge, do it and skip to i+2.
-    """
-    pdm_enable = params.get("pdm_enable", 0.0)
-    if pdm_enable <= 0.0:
-        return docs
-
-    period = period_info.get("period") if period_info else None
-    period_conf = period_info.get("confidence", 0.0) if period_info else 0.0
-    pdm_period_conf_min = params.get("pdm_period_conf_min", 0.50)
-
-    if period is None or period < 2:
-        return docs
-    if period_conf < pdm_period_conf_min:
-        return docs
-
-    # Identify which docs are "small" (declared_total < period)
-    is_small = [d.declared_total < period for d in docs]
-    n = len(docs)
-
-    # Find runs of consecutive small docs. Only merge ISOLATED pairs (run length == 2)
-    # surrounded by period-sized docs. This avoids over-merging genuine 1-page zones.
-    merge_ok: list[bool] = [False] * n  # True = this doc can be merged with the next
-
-    i = 0
-    while i < n:
-        if not is_small[i]:
-            i += 1
-            continue
-        # Find end of this small-doc run
-        run_start = i
-        while i < n and is_small[i]:
-            i += 1
-        run_end = i  # exclusive
-        run_len = run_end - run_start
-
-        # Only consider runs of exactly 2 small docs that sum to period
-        if run_len == 2:
-            d1, d2 = docs[run_start], docs[run_start + 1]
-            if d1.declared_total + d2.declared_total == period:
-                # Check context: at least one adjacent doc has declared_total == period
-                has_period_neighbor = False
-                if run_start > 0 and docs[run_start - 1].declared_total == period:
-                    has_period_neighbor = True
-                if run_end < n and docs[run_end].declared_total == period:
-                    has_period_neighbor = True
-                if has_period_neighbor:
-                    merge_ok[run_start] = True
-
-    # Apply merges
-    merged: list[Document] = []
-    i = 0
-    while i < n:
-        if merge_ok[i] and i + 1 < n:
-            d, d_next = docs[i], docs[i + 1]
-            combined = Document(
-                index=len(merged) + 1,
-                start_pdf_page=d.start_pdf_page,
-                declared_total=period,
-                pages=d.pages + d_next.pages,
-                inferred_pages=d.inferred_pages + d_next.inferred_pages,
-                sequence_ok=True,
-            )
-            merged.append(combined)
-            i += 2
-        else:
-            docs[i].index = len(merged) + 1
-            merged.append(docs[i])
-            i += 1
-
-    return merged
-
-
 # ── Undercount Recovery ──────────────────────────────────────────────────────
 
-def _undercount_recovery(reads: list[PageRead], docs: list[Document], params: dict) -> list[Document]:
+def _undercount_recovery(reads: list[PageRead], docs: list[Document]) -> list[Document]:
     """Mirrors the undercount recovery loop in analyze_pdf."""
     reads_by_page = {r.pdf_page: r for r in reads}
-    ph5_guard_conf = params.get("ph5_guard_conf", 0.0)
-    inferred_ratio = sum(
-        1 for r in reads if r.method == "inferred"
-    ) / max(len(reads), 1)
-    ph5_guard_slope = params.get("ph5_guard_slope", 0.0)
-    effective_guard = ph5_guard_conf * max(1.0 - ph5_guard_slope * inferred_ratio, 0.0)
     fixed = 0
     for di in range(len(docs) - 1):
         d, d_next = docs[di], docs[di + 1]
@@ -1016,16 +559,11 @@ def _undercount_recovery(reads: list[PageRead], docs: list[Document], params: di
         if (d_next.found_total <= missing
                 and d_next.declared_total == d.declared_total):
             next_pages = d_next.pages + d_next.inferred_pages
-            # Guard: do NOT merge if next doc has a confirmed OCR curr==1 start
-            # OR a high-confidence inferred curr==1 start (via effective_guard, scaled by ph5_guard_slope).
+            # Guard: if the next doc contains a confirmed (OCR-read) curr==1
+            # page, it is a genuine new-document start — do NOT merge it.
             has_confirmed_start = any(
                 reads_by_page[pp].curr == 1
-                and (
-                    reads_by_page[pp].method not in ("inferred", "failed", "excluded")
-                    or (effective_guard > 0.0
-                        and reads_by_page[pp].method == "inferred"
-                        and reads_by_page[pp].confidence >= effective_guard)
-                )
+                and reads_by_page[pp].method not in ("inferred", "failed", "excluded")
                 for pp in next_pages if pp in reads_by_page
             )
             if has_confirmed_start:

@@ -52,6 +52,7 @@ function App() {
     'boundary': { label: 'Frontera', color: 'text-yellow-400 bg-yellow-400/10' },
     'sequence': { label: 'Secuencia', color: 'text-red-400 bg-red-400/10' },
     'orphan': { label: 'Huérfana', color: 'text-red-400 bg-red-400/10' },
+    'high': { label: 'Alcance/Alta', color: 'text-red-400 bg-red-400/10' },
     'internal': { label: 'Interna', color: 'text-gray-500 bg-gray-500/10' },
   };
 
@@ -363,16 +364,23 @@ function App() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  // Common filtered list logic so navigation stays confined
+  const filteredIssuesList = (selectedPdfFilter
+    ? issues.filter(i => i.filename === selectedPdfFilter)
+    : issues
+  ).filter(i => showAllIssues || (i.impact || 'internal') !== 'internal')
+   .sort((a, b) => (IMPACT_PRIORITY[a.impact] || 6) - (IMPACT_PRIORITY[b.impact] || 6));
+
   const _getNextIssue = (direction) => {
-    if (!selectedIssue || issues.length === 0) return null;
-    const currentIndex = issues.findIndex(i => i.id === selectedIssue.id);
+    if (!selectedIssue || filteredIssuesList.length === 0) return null;
+    const currentIndex = filteredIssuesList.findIndex(i => i.id === selectedIssue.id);
     let nextIndex = currentIndex + direction;
 
-    if (nextIndex >= issues.length) nextIndex = 0;
-    if (nextIndex < 0) nextIndex = issues.length - 1;
-    if (issues.length === 1 || nextIndex === currentIndex) return null;
+    if (nextIndex >= filteredIssuesList.length) nextIndex = 0;
+    if (nextIndex < 0) nextIndex = filteredIssuesList.length - 1;
+    if (filteredIssuesList.length === 1 || nextIndex === currentIndex) return null;
 
-    return issues[nextIndex];
+    return filteredIssuesList[nextIndex];
   };
 
   const handleCorrect = async () => {
@@ -435,12 +443,12 @@ function App() {
   }
 
   const navigateIssue = (direction) => {
-    if (!selectedIssue || issues.length === 0) return;
-    const currentIndex = issues.findIndex(i => i.id === selectedIssue.id);
+    if (!selectedIssue || filteredIssuesList.length === 0) return;
+    const currentIndex = filteredIssuesList.findIndex(i => i.id === selectedIssue.id);
     let nextIndex = currentIndex + direction;
-    if (nextIndex < 0) nextIndex = issues.length - 1;
-    if (nextIndex >= issues.length) nextIndex = 0;
-    setSelectedIssue(issues[nextIndex]);
+    if (nextIndex < 0) nextIndex = filteredIssuesList.length - 1;
+    if (nextIndex >= filteredIssuesList.length) nextIndex = 0;
+    setSelectedIssue(filteredIssuesList[nextIndex]);
     setCorrectCurr('');
     setCorrectTot('');
   };
@@ -765,9 +773,9 @@ function App() {
                             <span className={`${(ind.direct || 0) > 0 ? 'text-success' : 'text-gray-600'} font-mono font-bold`}>{ind.direct || 0}</span>
                           </div>
                           <div className="w-px h-6 bg-white/5 self-center"></div>
-                          <div className="flex flex-col items-center justify-center min-w-[30px]" title="Documentos completos con páginas inferidas">
+                          <div className="flex flex-col items-center justify-center min-w-[30px]" title="Cantidad de páginas inferidas en este documento">
                             <span className="text-gray-500 font-bold mb-1 tracking-widest text-[9px]">INF</span>
-                            <span className={`${((ind.inferred_hi || 0) + (ind.inferred_lo || 0)) > 0 ? 'text-warning' : 'text-gray-600'} font-mono font-bold`}>{(ind.inferred_hi || 0) + (ind.inferred_lo || 0)}</span>
+                            <span className={`${(ind.inferred || 0) > 0 ? 'text-warning' : 'text-gray-600'} font-mono font-bold`}>{ind.inferred || 0}</span>
                           </div>
                           <div className="w-px h-6 bg-white/5 self-center"></div>
                           <div className="flex flex-col items-center justify-center min-w-[30px]" title="Documentos incompletos">
@@ -807,11 +815,7 @@ function App() {
 
                 {/* Filter toggle + issue count */}
                 {(() => {
-                  const filteredIssues = (selectedPdfFilter
-                    ? issues.filter(i => i.filename === selectedPdfFilter)
-                    : issues
-                  ).filter(i => showAllIssues || (i.impact || 'internal') !== 'internal')
-                   .sort((a, b) => (IMPACT_PRIORITY[a.impact] || 6) - (IMPACT_PRIORITY[b.impact] || 6));
+                  const filteredIssues = filteredIssuesList;
 
                   const totalCount = (selectedPdfFilter
                     ? issues.filter(i => i.filename === selectedPdfFilter)

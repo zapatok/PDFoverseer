@@ -1,0 +1,101 @@
+commit b56df6f916d91b0b4c3a479f822df1e1f94e54c9
+Author: zapatok <kiba00@gmail.com>
+Date:   Thu Mar 19 13:17:22 2026 -0300
+
+    feat(inference): implement Phase MP + PDM — multi-period local correction and period-aware doc merge
+    
+    Port sweep-winning aggressive config to production: sliding-window total=1 run
+    correction (MP_WINDOW=80, MP_RATIO_MIN=0.69, MP_MIN_RUN=5) and period-aware
+    document merge (PDM_ENABLE=True, PDM_PERIOD_CONF_MIN=0.40). Reduces |delta|
+    from 8 to 2 (ART PASS, HLL PASS, CH_39 PASS; residual: CH_51 -1, CH_74 +1).
+    Corrected pages get conf=0.50 so they surface in the low-confidence bandeja.
+    
+    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+commit 6f4563ec88c0be216eb2e72d7ed297dec227edbf
+Author: zapatok <kiba00@gmail.com>
+Date:   Wed Mar 18 23:52:35 2026 -0300
+
+    docs(spec+plan): core modularization design and implementation plan
+    
+    - Spec: modularize core/analyzer.py into 5 focused modules (utils, ocr, image, inference, pipeline)
+    - Plan: 6 chunks with ~50 bite-sized tasks, incremental refactoring with frequent commits
+    - Preserves backward compatibility, full test coverage between steps
+    - Ready for implementation after tuning completion
+    
+    Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
+
+commit a6babed12135edbc67b2b7008a759066eec0b932
+Author: zapatok <kiba00@gmail.com>
+Date:   Wed Mar 18 23:52:14 2026 -0300
+
+    feat(inference): implement Phase D — Viterbi anchor-constrained segment fill
+    
+    Adds a new Phase D to both eval and production pipelines that uses
+    high-confidence direct OCR reads (≥0.90) as hard anchor constraints
+    to fill gaps between them with an optimal (curr, total) sequence.
+    
+    Key changes:
+    - core/analyzer.py: _viterbi_anchor_constrained(), _extract_anchors(),
+      _fill_anchor_segment(), _apply_chain(), _pick_doc_size() — ~180 lines
+    - eval/inference.py: parallel implementation for sweep harness
+    - eval/params.py: add viterbi_anchor_conf_min/period_weight/prior_weight
+      to PARAM_SPACE and PRODUCTION_PARAMS; fallback_base 0.40→0.45,
+      hom_threshold 0.88→0.83 (Phase D sweep winners)
+    - eval/tests/test_inference.py: 8 new Viterbi unit tests (44 total)
+    - server.py: log INFERENCE_ENGINE_VERSION at startup
+    
+    Production results (7 real PDFs):
+      ART 669→674 ✅ (was FAIL, now exact match)
+      CH_9=9 CH_39=40 CH_51=51 INS_31=31 ✅ (no regression)
+      CH_74=76 (+1 over ≤75 target), HLL=368 (+5, pre-existing FAIL)
+    
+    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+commit 72bb973ce0cde62ed7c693a80b1302c3f2006227
+Author: zapatok <kiba00@gmail.com>
+Date:   Wed Mar 18 21:44:14 2026 -0300
+
+    docs(eval): Phase C production validation — no improvement on ART/HLL
+    
+    Results: ART 669 (target ≥672), HLL 368 (target ≤366)
+    - Approach A (recon_weight): sweep disabled, stays 0.0
+    - Approach B (ph5_guard_slope=1.0): no real-world gain despite sweep success
+    - Others maintained without regression (CH_9/51/74/39, INS_31)
+    
+    Indicates structural limits of local optimization.
+    Proceeding to Phase D: Bayesian HMM anchor constraint.
+    
+    Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
+
+commit 125aa363cd7f13eee38894f1a2ff83073af8bf5e
+Author: zapatok <kiba00@gmail.com>
+Date:   Wed Mar 18 19:21:53 2026 -0300
+
+    feat(core): port Phase C — recon_weight + ph5_guard_slope from eval to production
+    
+    Adds _recon_confidence(), RECON_WEIGHT=0.0, PH5_GUARD_SLOPE=1.0 constants,
+    and dynamic guard scaling in undercount recovery. Bumps version to 6ph-t2-phC.
+    
+    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+On branch feature/inference-engine
+Your branch is ahead of 'origin/feature/inference-engine' by 29 commits.
+  (use "git push" to publish your local commits)
+
+Unmerged paths:
+  (use "git restore --staged <file>..." to unstage)
+  (use "git add <file>..." to mark resolution)
+	both modified:   observations.txt
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	data/ocr_failures/
+	docs/superpowers/plans/2026-03-17-frontend-cleanup.md
+	docs/superpowers/plans/2026-03-18-inference-phase-c.md
+	git.txt
+	git_status.txt
+	loginference.txt
+	ocr_analysis_report.md
+	test_out.txt
+
+no changes added to commit (use "git add" and/or "git commit -a")
