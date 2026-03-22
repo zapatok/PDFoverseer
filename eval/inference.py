@@ -234,6 +234,7 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
     # ── Phase 1 & 2: Bidirectional Soft Clash Resolution ────────────
     clash_w_local = params.get("clash_w_local", 1.0)
     clash_w_period = params.get("clash_w_period", 1.0)
+    clash_boundary_pen = params.get("clash_boundary_pen", 5.0)
 
     gaps = []
     start_idx = None
@@ -314,7 +315,7 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             if r_nxt.curr is not None and r_nxt.total is not None:
                 if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or 
                         (fwd_last_c == fwd_last_t and r_nxt.curr == 1)):
-                    cost_fwd += 1.0
+                    cost_fwd += clash_boundary_pen
         
         if gap_start > 0:
             r_prev = reads[gap_start - 1]
@@ -322,7 +323,7 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             if r_prev.curr is not None and r_prev.total is not None:
                 if not ((r_prev.total == bwd_first_t and r_prev.curr == bwd_first_c - 1) or
                         (r_prev.curr == r_prev.total and bwd_first_c == 1)):
-                    cost_bwd += 1.0
+                    cost_bwd += clash_boundary_pen
 
         if cost_fwd <= cost_bwd:
             best_hyp = hyp_fwd
@@ -381,7 +382,16 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
         if not consistent:
             r.confidence = min(r.confidence, xval_cap)
 
-    # ── Phase 4: Obsolte (Removed) ───────────────────────────────────
+    # ── Phase 4: Fallback for unresolved failures ─────────────────────
+    phase4_conf = params.get("phase4_conf", 0.0)
+    if phase4_conf > 0.0:
+        for i, r in enumerate(reads):
+            if r.method == "failed":
+                lt, hom = _local_total(i)
+                r.curr   = 1
+                r.total  = lt
+                r.method = "inferred"
+                r.confidence = phase4_conf
 
     # ── Phase 5: D-S post-validation ─────────────────────────────────
     # Does NOT change curr/total — only boosts confidence when

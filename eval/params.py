@@ -33,6 +33,8 @@ PARAM_SPACE: dict[str, list] = {
     "anomaly_dropout":      [0.0, 0.35, 0.50, 0.65],
     "clash_w_local":    [0.5, 1.0, 2.0],
     "clash_w_period":   [0.5, 1.0, 2.0],
+    "phase4_conf":       [0.0, 0.15, 0.20, 0.25],
+    "clash_boundary_pen":[1.0, 2.0, 5.0, 8.0],
     # Global
     "window":           [3, 5, 7],
     "hom_threshold":    [0.83, 0.85, 0.88],
@@ -55,6 +57,8 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "anomaly_dropout":    0.0,
     "clash_w_local":      0.5,
     "clash_w_period":     1.0,
+    "phase4_conf":        0.0,
+    "clash_boundary_pen": 5.0,
     "window":           7,
     "hom_threshold":    0.88,
 }

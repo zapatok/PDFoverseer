@@ -17,6 +17,8 @@ BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
 MIN_CONF_FOR_NEW_DOC = 0.55
 ANOMALY_DROPOUT      = 0.0
+PHASE4_FALLBACK_CONF = 0.0   # 0.0 = off; 0.15-0.25 re-enables as low-conf fallback
+CLASH_BOUNDARY_PEN   = 5.0   # penalty when gap boundary doesn't align with neighbour
 INFERENCE_ENGINE_VERSION = "soft-alignment-v3-fix"
 
 # ============================================================================

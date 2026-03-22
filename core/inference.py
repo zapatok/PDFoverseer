@@ -5,7 +5,7 @@ from typing import Optional
 from collections import Counter
 import numpy as np
 
-from core.utils import Document, _PageRead, MIN_CONF_FOR_NEW_DOC, ANOMALY_DROPOUT
+from core.utils import Document, _PageRead, MIN_CONF_FOR_NEW_DOC, ANOMALY_DROPOUT, PHASE4_FALLBACK_CONF, CLASH_BOUNDARY_PEN
 
 # ── Period Detection ─────────────────────────────────────────────────────────
 
@@ -296,7 +296,7 @@ def _infer_missing(
             if r_nxt.curr is not None and r_nxt.total is not None:
                 if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or 
                         (fwd_last_c == fwd_last_t and r_nxt.curr == 1)):
-                    cost_fwd += 5.0
+                    cost_fwd += CLASH_BOUNDARY_PEN
         
         if gap_start > 0:
             r_prev = reads[gap_start - 1]
@@ -304,7 +304,7 @@ def _infer_missing(
             if r_prev.curr is not None and r_prev.total is not None:
                 if not ((r_prev.total == bwd_first_t and r_prev.curr == bwd_first_c - 1) or
                         (r_prev.curr == r_prev.total and bwd_first_c == 1)):
-                    cost_bwd += 5.0
+                    cost_bwd += CLASH_BOUNDARY_PEN
 
         if cost_fwd <= cost_bwd:
             best_hyp = hyp_fwd
@@ -358,6 +358,19 @@ def _infer_missing(
                     consistent = False
         if not consistent:
             r.confidence = min(r.confidence, 0.40)
+
+    # ── Phase 4: Fallback for unresolved failures ────────────────────
+    # Catches pages still marked "failed" after the bidirectional gap solver —
+    # typically gaps at the very start/end of the PDF with no neighbours.
+    # Disabled by default (PHASE4_FALLBACK_CONF = 0.0).
+    if PHASE4_FALLBACK_CONF > 0.0:
+        for i, r in enumerate(reads):
+            if r.method == "failed":
+                lt, hom = _local_total(i)
+                r.curr   = 1
+                r.total  = lt
+                r.method = "inferred"
+                r.confidence = PHASE4_FALLBACK_CONF
 
     # ── Phase 5: D-S post-validation for uncertain pages (≤0.60) ──
     if period is not None and period_conf > 0.3:
