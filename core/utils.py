@@ -19,7 +19,7 @@ MIN_CONF_FOR_NEW_DOC = 0.65   # sweep winner (was 0.55)
 ANOMALY_DROPOUT      = 0.0
 PHASE4_FALLBACK_CONF = 0.0   # 0.0 = off; 0.15-0.25 re-enables as low-conf fallback
 CLASH_BOUNDARY_PEN   = 2.0   # sweep winner (was 5.0)
-INFERENCE_ENGINE_VERSION = "soft-alignment-v3-fix"
+INFERENCE_ENGINE_VERSION = "soft-alignment-v3-sweep1"
 
 # ============================================================================
 # Page Number Patterns & Normalization
