@@ -1,19 +1,28 @@
 import { IMPACT_LABELS } from '../lib/constants';
+import { useStore } from '../store/useStore';
 
-export const IssueInbox = ({ 
-  filteredIssuesList, 
-  selectedIssue, 
-  setSelectedIssue, 
-  showAllIssues, 
-  setShowAllIssues,
-  cascadeToast,
-  metrics,
-  pdfs,
-  selectedPdfFilter,
-  selectedPdfPath,
-  fileProg,
-  issues
-}) => {
+export const IssueInbox = () => {
+  const issues = useStore(s => s.issues);
+  const selectedIssue = useStore(s => s.selectedIssue);
+  const showAllIssues = useStore(s => s.showAllIssues);
+  const cascadeToast = useStore(s => s.cascadeToast);
+  const metrics = useStore(s => s.metrics);
+  const pdfs = useStore(s => s.pdfs);
+  const selectedPdfFilter = useStore(s => s.selectedPdfFilter);
+  const selectedPdfPath = useStore(s => s.selectedPdfPath);
+  const fileProg = useStore(s => s.fileProg);
+
+  const setSelectedIssue = useStore(s => s.setSelectedIssue);
+  const setShowAllIssues = useStore(s => s.setShowAllIssues);
+
+  const filteredIssuesList = (selectedPdfPath ? issues.filter(i => i.pdf_path === selectedPdfPath) : issues)
+    .filter(i => showAllIssues || (i.impact || 'internal') !== 'internal')
+    .sort((a, b) => {
+      const p1 = a.impact === 'ph5b' ? 1 : a.impact === 'ph5-merge' ? 2 : a.impact === 'boundary' ? 3 : a.impact === 'sequence' ? 4 : a.impact === 'orphan' ? 5 : 6;
+      const p2 = b.impact === 'ph5b' ? 1 : b.impact === 'ph5-merge' ? 2 : b.impact === 'boundary' ? 3 : b.impact === 'sequence' ? 4 : b.impact === 'orphan' ? 5 : 6;
+      return p1 - p2;
+    });
+
   return (
     <div className="flex-1 overflow-y-auto px-12 py-8 custom-scroll">
       <div className="flex items-center justify-between mb-5 border-b border-white/10 pb-5">

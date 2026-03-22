@@ -1,16 +1,26 @@
+import { useRef, useEffect } from 'react';
 import { SPINNER } from '../lib/constants';
+import { useStore } from '../store/useStore';
 
-export const Terminal = ({ 
-  showTerminal, 
-  setShowTerminal, 
-  aiLogMode, 
-  setAiLogMode, 
-  logs, 
-  aiLogs, 
-  scanLine, 
-  spinFrame, 
-  logsEndRef 
-}) => {
+export const Terminal = () => {
+  const showTerminal = useStore(s => s.showTerminal);
+  const aiLogMode = useStore(s => s.aiLogMode);
+  const logs = useStore(s => s.logs);
+  const aiLogs = useStore(s => s.aiLogs);
+  const scanLine = useStore(s => s.scanLine);
+  const spinFrame = useStore(s => s.spinFrame);
+  
+  const setShowTerminal = useStore(s => s.setShowTerminal);
+  const setAiLogMode = useStore(s => s.setAiLogMode);
+
+  const logsEndRef = useRef(null);
+
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, aiLogs, aiLogMode]);
+
   const handleCopyLogs = () => {
     const filtered = aiLogMode ? aiLogs : logs;
     const text = filtered.map(l => l.msg).join('\n');

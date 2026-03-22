@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from core import INFERENCE_ENGINE_VERSION
-from api.state import state
+import api.websocket as ws
 from api.websocket import router as ws_router
 from api.routes import files, sessions, pipeline
 
@@ -23,7 +23,7 @@ logger = logging.getLogger("pdfoverserver")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Capture the main asyncio loop so background threads can broadcast
-    state.loop = asyncio.get_running_loop()
+    ws.global_loop = asyncio.get_running_loop()
     yield
 
 app = FastAPI(title="PDFoverseer V3 API", lifespan=lifespan)

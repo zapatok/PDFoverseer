@@ -3,10 +3,11 @@ import time
 import re
 from pathlib import Path
 from datetime import datetime
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from api.state import state
+from api.state import get_session, SessionState
+from api.database import get_reads, clear_session
 
 router = APIRouter()
 
@@ -14,50 +15,51 @@ class DeleteSessionRequest(BaseModel):
     timestamp: str
 
 @router.get("/state")
-def api_get_state():
+def api_get_state(s: SessionState = Depends(get_session)):
     """Returns the current backend state so React can survive an F5 refresh."""
     pdf_list_state = []
-    for p in state.pdf_list:
+    for p in s.pdf_list:
         p_str = str(p)
-        st = "done" if p_str in state.pdf_reads else ("skipped" if p_str in state.skipped_pdfs else "pending")
+        st = "done" if len(get_reads(s.session_id, p_str)) > 0 else ("skipped" if p_str in s.skipped_pdfs else "pending")
         pdf_list_state.append({"name": p.name, "path": p_str, "status": st})
 
     return {
-        "running": state.running,
+        "running": s.running,
         "pdf_list": pdf_list_state,
-        "issues": state.issues,
+        "issues": s.issues,
         "metrics": {
-            "docs": state.total_docs,
-            "complete": state.total_complete,
-            "incomplete": state.total_incomplete,
-            "inferred": state.total_inferred,
-            "confidences": state.confidences
+            "docs": s.total_docs,
+            "complete": s.total_complete,
+            "incomplete": s.total_incomplete,
+            "inferred": s.total_inferred,
+            "confidences": s.confidences,
+            "individual": s.individual_metrics
         },
-        "globalProg": {"done": state.global_done_pages, "total": state.global_total_pages}
+        "globalProg": {"done": s.global_done_pages, "total": s.global_total_pages}
     }
 
 @router.post("/reset")
-def api_reset():
+def api_reset(s: SessionState = Depends(get_session)):
     """Hard wipe of the backend state to start a new session."""
-    state.pdf_list = []
-    state.skipped_pdfs.clear()
-    state.pdf_reads = {}
-    state.issues = []
-    state.total_docs = 0
-    state.total_complete = 0
-    state.total_incomplete = 0
-    state.total_inferred = 0
-    state.global_total_pages = 0
-    state.global_done_pages = 0
-    state.running = False
-    state.start_time = 0.0
+    s.pdf_list = []
+    s.skipped_pdfs.clear()
+    clear_session(s.session_id)
+    s.issues = []
+    s.total_docs = 0
+    s.total_complete = 0
+    s.total_incomplete = 0
+    s.total_inferred = 0
+    s.global_total_pages = 0
+    s.global_done_pages = 0
+    s.running = False
+    s.start_time = 0.0
+    s.confidences = {}
+    s.individual_metrics = {}
     return {"success": True}
 
 @router.post("/save_session")
-def api_save_session():
+def api_save_session(s: SessionState = Depends(get_session)):
     """Saves the current final metrics and issues to a local JSON history file."""
-    # Note: data directory should probably be at the project root now
-    # We are in api/routes/sessions.py -> parent of parent is root
     sessions_dir = Path(__file__).parent.parent.parent / "data" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
     
@@ -67,14 +69,14 @@ def api_save_session():
     data = {
         "timestamp": timestamp,
         "metrics": {
-            "docs": state.total_docs,
-            "complete": state.total_complete,
-            "incomplete": state.total_incomplete,
-            "inferred": state.total_inferred,
-            "total_time": time.time() - state.start_time if state.start_time > 0 else 0.0
+            "docs": s.total_docs,
+            "complete": s.total_complete,
+            "incomplete": s.total_incomplete,
+            "inferred": s.total_inferred,
+            "total_time": time.time() - s.start_time if s.start_time > 0 else 0.0
         },
-        "issues_count": len(state.issues),
-        "files_processed": len(state.pdf_list)
+        "issues_count": len(s.issues),
+        "files_processed": len(s.pdf_list)
     }
     
     try:

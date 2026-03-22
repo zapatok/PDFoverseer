@@ -1,5 +1,15 @@
-export const ConfirmModal = ({ config, onClose }) => {
+import { useStore } from '../store/useStore';
+
+export const ConfirmModal = () => {
+  const config = useStore(s => s.confirmModal);
+  const setConfirmModal = useStore(s => s.setConfirmModal);
+
+  const onClose = () => {
+    setConfirmModal({ ...config, isOpen: false });
+  };
+
   if (!config.isOpen) return null;
+  
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-[#1e1e2e] border border-[#313244] rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4 relative overflow-hidden">

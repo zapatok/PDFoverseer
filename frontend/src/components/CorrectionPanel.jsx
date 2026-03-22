@@ -1,18 +1,19 @@
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { API_BASE } from '../lib/constants';
+import { useStore } from '../store/useStore';
 
-export const CorrectionPanel = ({
-  selectedIssue,
-  setSelectedIssue,
-  correctCurr,
-  setCorrectCurr,
-  correctTot,
-  setCorrectTot,
-  handleExclude,
-  handleCorrect,
-  handleOpenNativePdf,
-  navigateIssue
-}) => {
+export const CorrectionPanel = ({ api }) => {
+  const selectedIssue = useStore(s => s.selectedIssue);
+  const correctCurr = useStore(s => s.correctCurr);
+  const correctTot = useStore(s => s.correctTot);
+  const sessionId = useStore(s => s.sessionId);
+
+  const setSelectedIssue = useStore(s => s.setSelectedIssue);
+  const setCorrectCurr = useStore(s => s.setCorrectCurr);
+  const setCorrectTot = useStore(s => s.setCorrectTot);
+
+  const { handleExclude, handleCorrect, handleOpenNativePdf, navigateIssue } = api;
+
   if (!selectedIssue) return null;
 
   return (
@@ -43,7 +44,7 @@ export const CorrectionPanel = ({
         <TransformWrapper initialScale={1} minScale={0.5} maxScale={4} centerOnInit>
           <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%", display: "flex", justifyContent: "center", alignItems: "center" }}>
             <img
-              src={`${API_BASE}/preview?pdf_path=${encodeURIComponent(selectedIssue.pdf_path)}&page=${selectedIssue.page}`}
+              src={`${API_BASE}/preview?pdf_path=${encodeURIComponent(selectedIssue.pdf_path)}&page=${selectedIssue.page}&session_id=${sessionId}`}
               alt="Preview"
               className="max-w-full max-h-full object-contain shadow-2xl rounded"
               draggable="false"

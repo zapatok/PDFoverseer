@@ -1,15 +1,18 @@
-export const Sidebar = ({ 
-  pdfs, 
-  fileProg, 
-  metrics, 
-  status, 
-  selectedPdfFilter, 
-  selectedPdfPath, 
-  setSelectedPdfFilter, 
-  setSelectedPdfPath, 
-  handleRemovePdf, 
-  handleOpenAnyPdf 
-}) => {
+import { useStore } from '../store/useStore';
+
+export const Sidebar = ({ api }) => {
+  const pdfs = useStore(s => s.pdfs);
+  const fileProg = useStore(s => s.fileProg);
+  const metrics = useStore(s => s.metrics);
+  const status = useStore(s => s.status);
+  const selectedPdfFilter = useStore(s => s.selectedPdfFilter);
+  const selectedPdfPath = useStore(s => s.selectedPdfPath);
+  
+  const setSelectedPdfFilter = useStore(s => s.setSelectedPdfFilter);
+  const setSelectedPdfPath = useStore(s => s.setSelectedPdfPath);
+
+  const { handleRemovePdf, handleOpenAnyPdf } = api;
+
   return (
     <div className="w-80 bg-surface/40 backdrop-blur-lg border-r border-white/5 flex flex-col shadow-2xl shrink-0">
       <div className="px-5 py-4 font-bold text-gray-300 uppercase tracking-widest text-xs border-b border-white/5 bg-black/20 flex items-center justify-between">

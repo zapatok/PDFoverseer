@@ -17,7 +17,7 @@ BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
 MIN_CONF_FOR_NEW_DOC = 0.55
 ANOMALY_DROPOUT      = 0.0
-INFERENCE_ENGINE_VERSION = "soft-alignment-v3-closure"
+INFERENCE_ENGINE_VERSION = "soft-alignment-v3-fix"
 
 # ============================================================================
 # Page Number Patterns & Normalization

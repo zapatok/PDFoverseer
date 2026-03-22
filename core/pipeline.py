@@ -29,6 +29,19 @@ _CUDA_HASH = hashlib.md5(("CUDA-GPU-V4-Producer-Consumer").encode()).hexdigest()
 _CORE_HASH = "2e436564"  # Commit from the last test that was shown to the user
 
 
+# ── Process Pool Worker (Top-Level for Pickling) ──────────────────────────────
+
+def _process_page_worker(pdf_path: str, page_idx: int) -> _PageRead:
+    """Stateless worker function for true multiprocessing."""
+    import fitz
+    import core.ocr as ocr
+    doc = fitz.open(pdf_path)
+    try:
+        return ocr._process_page(doc, page_idx)
+    finally:
+        doc.close()
+
+
 # ── AI Telemetry ─────────────────────────────────────────────────────────────
 
 def _emit_ai_telemetry(
@@ -74,7 +87,7 @@ def _emit_ai_telemetry(
     success_pct = f"{docs_ok/n_docs:.0%}" if n_docs else "n/a"
 
     on_log(
-        f"[AI:{_CORE_HASH}] [MOD:v2] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
+        f"[AI:{_CORE_HASH}] [MOD:v3.1-fix] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
         f" | W{PARALLEL_WORKERS}+GPU | INF:{INFERENCE_ENGINE_VERSION}\n"
         f"PRE5≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
         f"OCR: {mstr}\n"
@@ -199,25 +212,14 @@ def analyze_pdf(
     gpu_thread = threading.Thread(target=_gpu_consumer, daemon=True, name="gpu-consumer")
     gpu_thread.start()
 
-    _doc_pool: queue.Queue[fitz.Document] = queue.Queue()
-    for _ in range(PARALLEL_WORKERS):
-        _doc_pool.put(fitz.open(pdf_path))
+    from concurrent.futures import ProcessPoolExecutor
 
-    def _submit_page(page_idx: int) -> _PageRead:
-        doc = _doc_pool.get()
-        try:
-            return ocr._process_page(doc, page_idx)
-        finally:
-            _doc_pool.put(doc)
-
-    with ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as pool:
+    with ProcessPoolExecutor(max_workers=PARALLEL_WORKERS) as pool:
         for batch_start in range(0, total_pages, BATCH_SIZE):
             if cancel_event is not None and cancel_event.is_set():
                 on_log("Analisis abortado a peticion del usuario.", "warn")
                 gpu_queue.put(None)
                 gpu_thread.join(timeout=5)
-                while not _doc_pool.empty():
-                    _doc_pool.get_nowait().close()
                 return [], []
 
             if pause_event is not None:
@@ -226,7 +228,7 @@ def analyze_pdf(
             batch_end = min(batch_start + BATCH_SIZE, total_pages)
 
             future_to_idx = {
-                pool.submit(_submit_page, i): i
+                pool.submit(_process_page_worker, pdf_path, i): i
                 for i in range(batch_start, batch_end)
             }
 
@@ -255,9 +257,6 @@ def analyze_pdf(
 
                 if on_progress:
                     on_progress(pdf_page, total_pages)
-
-    while not _doc_pool.empty():
-        _doc_pool.get_nowait().close()
 
     gpu_queue.put(None)
     gpu_thread.join()

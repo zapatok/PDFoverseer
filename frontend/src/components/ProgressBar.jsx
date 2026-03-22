@@ -1,6 +1,11 @@
 import { formatTime } from '../lib/constants';
+import { useStore } from '../store/useStore';
 
-export const ProgressBar = ({ status, globalProg, fileProg }) => {
+export const ProgressBar = () => {
+  const status = useStore(s => s.status);
+  const globalProg = useStore(s => s.globalProg);
+  const fileProg = useStore(s => s.fileProg);
+
   return (
     <div className="w-full bg-surface/80 backdrop-blur-md border-b border-white/5 shadow-md flex flex-col shrink-0 z-20">
       <div className="flex justify-between items-center text-xs px-8 py-2.5 text-gray-300 font-medium h-[42px]">

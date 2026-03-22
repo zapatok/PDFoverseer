@@ -1,22 +1,30 @@
-export const HeaderBar = ({ onAddFolder, onAddFiles, onNewSession, onSave, onHistory, controls }) => {
-  const { status, globalProg, pdfs, handleStart, handlePause, handleResume, handleStop, handleSkip, setConfirmModal } = controls;
+import { useStore } from '../store/useStore';
+
+export const HeaderBar = ({ api }) => {
+  const status = useStore(s => s.status);
+  const globalProg = useStore(s => s.globalProg);
+  const pdfs = useStore(s => s.pdfs);
+  const setConfirmModal = useStore(s => s.setConfirmModal);
+
+  const { handleAddFolder, handleAddFiles, handleNewSession, handleSaveSession, handleViewHistory, handleStart, handlePause, handleResume, handleStop, handleSkip } = api;
+
   return (
     <div className="h-16 bg-surface/80 backdrop-blur-xl border-b border-white/5 px-6 flex items-center justify-between shadow-lg z-20">
       <div className="flex items-center space-x-3">
-        <button onClick={onAddFolder} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+        <button onClick={handleAddFolder} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
           Abrir Carpeta
         </button>
-        <button onClick={onAddFiles} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+        <button onClick={handleAddFiles} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
           Abrir Archivos
         </button>
         <div className="w-px h-6 bg-gray-700 mx-1"></div>
-        <button onClick={onNewSession} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+        <button onClick={handleNewSession} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
           Nueva Sesión
         </button>
-        <button onClick={onSave} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+        <button onClick={handleSaveSession} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
           Guardar
         </button>
-        <button onClick={onHistory} className="bg-panel/40 border-accent/30 hover:bg-accent/20 hover:border-accent text-accent font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border">
+        <button onClick={handleViewHistory} className="bg-panel/40 border-accent/30 hover:bg-accent/20 hover:border-accent text-accent font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border">
           Historial
         </button>
       </div>

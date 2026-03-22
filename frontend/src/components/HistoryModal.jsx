@@ -1,6 +1,13 @@
 import { formatTime } from '../lib/constants';
+import { useStore } from '../store/useStore';
 
-export const HistoryModal = ({ sessions, show, onClose, onDelete }) => {
+export const HistoryModal = ({ api }) => {
+  const show = useStore(s => s.showHistory);
+  const sessions = useStore(s => s.historySessions);
+  const setShowHistory = useStore(s => s.setShowHistory);
+  
+  const { handleDeleteSession } = api;
+
   if (!show) return null;
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center">
@@ -8,7 +15,7 @@ export const HistoryModal = ({ sessions, show, onClose, onDelete }) => {
         <div className="p-6 border-b border-white/10 flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-100">Historial de Sesiones Guardadas</h2>
           <button 
-            onClick={onClose} 
+            onClick={() => setShowHistory(false)} 
             className="bg-transparent border-none outline-none text-gray-500 hover:text-error transition-colors flex items-center justify-center p-2 rounded-lg"
             title="Cerrar Historial"
           >
@@ -22,7 +29,7 @@ export const HistoryModal = ({ sessions, show, onClose, onDelete }) => {
             sessions.map((s, idx) => (
               <div key={idx} className="bg-white/5 border border-white/5 rounded-xl p-5 flex justify-between items-center hover:bg-black/60 transition-colors relative group">
                 <button
-                  onClick={() => onDelete(s.timestamp)}
+                  onClick={() => handleDeleteSession(s.timestamp)}
                   className="absolute top-3 right-3 text-[#dc3545] opacity-50 hover:opacity-100 hover:text-red-400 p-1 rounded flex items-center justify-center transition-all bg-transparent border-none outline-none"
                   title="Eliminar sesión"
                 >
