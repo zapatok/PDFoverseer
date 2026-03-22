@@ -192,7 +192,7 @@ def _infer_missing(
         tc = Counter(local)
         mode_val, mode_freq = tc.most_common(1)[0]
         homogeneity = mode_freq / len(local)
-        if homogeneity >= 0.88:
+        if homogeneity >= 0.83:
             return mode_val, homogeneity
         return best_total, homogeneity
 
@@ -203,7 +203,7 @@ def _infer_missing(
             if r.method in ("failed", "inferred", "excluded") or r.total is None:
                 continue
             lt, hom = _local_total(i)
-            if r.total == 1 and hom >= 0.88 and lt > 1:
+            if r.total == 1 and hom >= 0.83 and lt > 1:
                 r.confidence -= hom
                 if r.confidence < ANOMALY_DROPOUT:
                     r.method = "failed"
@@ -278,12 +278,12 @@ def _infer_missing(
                 idx = gap_start + offset
                 lt_val, _ = _local_total(idx)
                 if t != lt_val:
-                    cost += hom * 0.5
+                    cost += hom * 1.0
                 if c == 1 and period_info and period_info.get("period"):
                     p_conf = period_info.get("confidence", 0.0)
                     ex_t = period_info.get("expected_total", period_info["period"])
                     if p_conf > 0.3 and t != ex_t:
-                        cost += p_conf * 1.0
+                        cost += p_conf * 2.0
             return cost
         
         cost_fwd = seq_cost(hyp_fwd)
@@ -318,17 +318,17 @@ def _infer_missing(
             r.curr = c
             r.total = t
             if best_hyp is hyp_bwd:
-                r.confidence = 0.90
+                r.confidence = 0.88
             else:
                 if offset == 0 and gap_start > 0:
                     rp = reads[gap_start - 1]
                     if rp.curr == rp.total:
-                        r.confidence = 0.55 + hom * 0.25
+                        r.confidence = 0.65 + hom * 0.30
                         continue
                 if c == 1:
-                    r.confidence = 0.55 + hom * 0.25
+                    r.confidence = 0.65 + hom * 0.30
                 else:
-                    r.confidence = 0.97
+                    r.confidence = 0.99
 
     # ── Phase 1b: Orphan candidate marking ──────────────────────────
     for i in range(n - 1):
@@ -357,7 +357,7 @@ def _infer_missing(
                         (r.curr == r.total and nxt.curr == 1)):
                     consistent = False
         if not consistent:
-            r.confidence = min(r.confidence, 0.40)
+            r.confidence = min(r.confidence, 0.45)
 
     # ── Phase 4: Fallback for unresolved failures ────────────────────
     # Catches pages still marked "failed" after the bidirectional gap solver —
@@ -403,8 +403,8 @@ def _infer_missing(
             prior_support = prior.get(r.total, 0.0)
 
             if support > 0.2 or neighbors_agree == 2:
-                boost = min(support * 0.08 + neighbors_agree * 0.12
-                            + prior_support * 0.05, 0.23)
+                boost = min(support * 0.12 + neighbors_agree * 0.10
+                            + prior_support * 0.07, 0.20)
                 r.confidence = min(r.confidence + boost, 0.75)
 
     # ── Phase 5b: Period-contradiction correction ─────────────────────────────
