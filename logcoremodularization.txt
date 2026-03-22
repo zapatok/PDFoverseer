@@ -1,0 +1,432 @@
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH DIARIA -BSM(18).pdf | 36p 3.4s 95ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:18 COM:16(89%) INC:2 INF:0
+OCR: direct:36
+DOCS: 18total → 16ok+2bad(seq:1 under:1) | dist: 2p×16 3p×2
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:18 P:P=2 conf=96% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CH DIARIA -BSM(18).pdf DOC:18 COM:16 INC:2 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] Ch Diaria Castro Pinochet (15).pdf | 15p 2.5s 166ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:15 COM:0(0%) INC:15 INF:0
+OCR: direct:15
+DOCS: 15total → 0ok+15bad(seq:0 under:15) | dist: 2p×15
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:15 P:P=1 conf=45% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Ch Diaria Castro Pinochet (15).pdf DOC:15 COM:0 INC:15 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH Diaria P saez 0(05).pdf | 17p 2.3s 133ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:9 COM:8(89%) INC:1 INF:0
+OCR: direct:17
+DOCS: 9total → 8ok+1bad(seq:0 under:1) | dist: 2p×9
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:9 P:P=2 conf=86% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CH Diaria P saez 0(05).pdf DOC:9 COM:8 INC:1 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH Diaria Raco - (25).pdf | 43p 4.4s 103ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:25 COM:10(40%) INC:15 INF:0
+OCR: direct:42,SR:1
+DOCS: 25total → 10ok+15bad(seq:0 under:15) | dist: 2p×10 3p×15
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:25 P:P=2 conf=48% expect=3
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CH Diaria Raco - (25).pdf DOC:25 COM:10 INC:15 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] Ch diria - Alumnio 2000 (18).pdf | 36p 3.8s 107ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:19 COM:6(32%) INC:13 INF:0
+OCR: direct:36
+DOCS: 19total → 6ok+13bad(seq:1 under:12) | dist: 2p×6 3p×13
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:19 P:P=2 conf=61% expect=3
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Ch diria - Alumnio 2000 (18).pdf DOC:19 COM:6 INC:13 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] Charla diaria Aluminio 2000(01).pdf | 2p 2.1s 1045ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:1 COM:0(0%) INC:1 INF:0
+OCR: direct:1,easyocr:1
+DOCS: 1total → 0ok+1bad(seq:0 under:1) | dist: 3p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:1 P:none
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla diaria Aluminio 2000(01).pdf DOC:1 COM:0 INC:1 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] Charla Diaria Castro Pinochet (05).pdf | 5p 1.5s 308ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:5 COM:0(0%) INC:5 INF:0
+OCR: direct:5
+DOCS: 5total → 0ok+5bad(seq:0 under:5) | dist: 2p×5
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:5 P:P=1 conf=45% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla Diaria Castro Pinochet (05).pdf DOC:5 COM:0 INC:5 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] Charla Diaria Insap (20).pdf | 31p 5.7s 184ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:19 COM:4(21%) INC:15 INF:1
+OCR: direct:27,failed:1,SR:1,easyocr:2
+DOCS: 19total → 4ok+15bad(seq:1 under:14) | dist: 2p×13 3p×6
+INF: 1total(low:0 mid:0 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:19 P:P=2 conf=53% expect=2
+INF:1 x̄=97% 1✓0~0✗
+✓12:2/3d>3/3@97>1/3d
+~-
+✗-
+[UI:2e436564] Charla Diaria Insap (20).pdf DOC:19 COM:4 INC:15 INF:1
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] Charla Diaria Joga (19).pdf | 38p 3.5s 92ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:19 COM:4(21%) INC:15 INF:0
+OCR: direct:38
+DOCS: 19total → 4ok+15bad(seq:0 under:15) | dist: 2p×4 3p×15
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:19 P:P=2 conf=69% expect=3
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla Diaria Joga (19).pdf DOC:19 COM:4 INC:15 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] Charla Diaria P. Saez(11).pdf | 24p 2.7s 115ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:14 COM:10(71%) INC:4 INF:0
+OCR: direct:24
+DOCS: 14total → 10ok+4bad(seq:0 under:4) | dist: 2p×14
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:14 P:P=2 conf=78% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla Diaria P. Saez(11).pdf DOC:14 COM:10 INC:4 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] Charla Diaria Quevedo (02).pdf | 4p 1.4s 351ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:2 COM:1(50%) INC:1 INF:0
+OCR: direct:4
+DOCS: 2total → 1ok+1bad(seq:0 under:1) | dist: 2p×1 3p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:2 P:P=2 conf=60% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla Diaria Quevedo (02).pdf DOC:2 COM:1 INC:1 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] Charla diaria Quevedo (13).pdf | 26p 3.6s 137ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:13 COM:8(62%) INC:5 INF:0
+OCR: direct:25,SR:1
+DOCS: 13total → 8ok+5bad(seq:1 under:4) | dist: 2p×8 3p×5
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:13 P:P=2 conf=87% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla diaria Quevedo (13).pdf DOC:13 COM:8 INC:5 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CHARLA DIARIA QUEVEDO 01.pdf | 2p 1.2s 621ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:1 COM:0(0%) INC:1 INF:0
+OCR: direct:2
+DOCS: 1total → 0ok+1bad(seq:0 under:1) | dist: 3p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:1 P:none
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CHARLA DIARIA QUEVEDO 01.pdf DOC:1 COM:0 INC:1 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] Charlas (17).PDF | 17p 3.0s 176ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:17 COM:7(41%) INC:10 INF:0
+OCR: direct:14,SR:3
+DOCS: 17total → 7ok+10bad(seq:0 under:10) | dist: 1p×7 2p×9 4p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:17 P:P=1 conf=45% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charlas (17).PDF DOC:17 COM:7 INC:10 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] charlas 02 al 27 feb 2026 26.pdf | 53p 6.7s 127ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:25 COM:12(48%) INC:13 INF:2
+OCR: direct:49,failed:2,SR:1,easyocr:1
+DOCS: 25total → 12ok+13bad(seq:2 under:11) | dist: 1p×2 2p×10 3p×2 4p×10 5p×1
+INF: 2total(low:0 mid:0 hi:2) | LOW: none
+FAIL: none
+[DS:2e436564] D:25 P:P=2 conf=64% expect=2
+INF:2 x̄=82% 1✓1~0✗
+✓53:1/3d>2/3@97>-
+~13:1/1d>1/1@67>1/3d
+✗-
+[UI:2e436564] charlas 02 al 27 feb 2026 26.pdf DOC:25 COM:12 INC:13 INF:2
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CRS CH-DIARIA(09).pdf | 19p 2.7s 141ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:9 COM:8(89%) INC:1 INF:0
+OCR: direct:19
+DOCS: 9total → 8ok+1bad(seq:0 under:1) | dist: 2p×7 3p×2
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:9 P:P=2 conf=79% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CRS CH-DIARIA(09).pdf DOC:9 COM:8 INC:1 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH_9docs.pdf | 17p 2.2s 130ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:9 COM:8(89%) INC:1 INF:0
+OCR: direct:17
+DOCS: 9total → 8ok+1bad(seq:0 under:1) | dist: 2p×9
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:9 P:P=2 conf=86% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CH_9docs.pdf DOC:9 COM:8 INC:1 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH_39docs.pdf | 78p 6.8s 88ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:39 COM:39(100%) INC:0 INF:6
+OCR: direct:75,SR:2,failed:1
+DOCS: 39total → 39ok+0bad | dist: 2p×39
+INF: 6total(low:0 mid:5 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:39 P:P=2 conf=96% expect=2
+INF:6 x̄=54% 0✓6~0✗
+✓-
+~27:2/2d>1/2@50>2/2i,28:1/2i>2/2@50>1/2d,59:2/2d>1/2@50>2/2i,60:1/2i>2/2@50>1/2d,63:2/2d>1/2@50>2/2i,64:1/2i>2/2@74>1/2d
+✗-
+[UI:2e436564] CH_39docs.pdf DOC:39 COM:39 INC:0 INF:6
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH_51docs.pdf | 102p 7.5s 73ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:51 COM:44(86%) INC:7 INF:1
+OCR: direct:101,failed:1
+DOCS: 51total → 44ok+7bad(seq:1 under:6) | dist: 1p×2 2p×42 3p×7
+INF: 1total(low:0 mid:0 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:51 P:P=2 conf=92% expect=2
+INF:1 x̄=71% 0✓1~0✗
+✓-
+~32:1/1d>1/1@71>1/2d
+✗-
+[UI:2e436564] CH_51docs.pdf DOC:51 COM:44 INC:7 INF:1
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH_74docs.pdf | 150p 11.0s 74ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:76 COM:62(82%) INC:14 INF:2
+OCR: direct:146,failed:2,SR:2
+DOCS: 76total → 62ok+14bad(seq:0 under:14) | dist: 1p×4 2p×56 3p×16
+INF: 2total(low:0 mid:0 hi:2) | LOW: none
+FAIL: none
+[DS:2e436564] D:76 P:P=2 conf=86% expect=2
+INF:2 x̄=72% 0✓2~0✗
+✓-
+~4:1/1d>1/1@70>1/3d,131:1/1d>1/1@74>1/2d
+✗-
+[UI:2e436564] CH_74docs.pdf DOC:76 COM:62 INC:14 INF:2
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] HLL_363docs.pdf | 538p 46.0s 86ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:370 COM:220(59%) INC:150 INF:30
+OCR: SR:34,direct:471,failed:30,easyocr:3
+DOCS: 370total → 220ok+150bad(seq:7 under:143) | dist: 1p×71 2p×296 4p×2 11p×1
+INF: 30total(low:4 mid:0 hi:26) | LOW: p15=2/2(40%) p137=2/2(40%) p172=2/2(40%) p493=2/2(40%)
+FAIL: none
+[DS:2e436564] D:370 P:P=2 conf=43% expect=2
+INF:30 x̄=73% 2✓24~4✗
+✓351:1/2d>2/2@97>1/2d,384:1/2d>2/2@97>1/2d
+~14:2/2d>1/2@80>2/2i,29:1/1d>1/1@78>1/2d,115:1/1?>1/1@70>1/1d,117:1/1d>1/1@72>1/1d,119:1/1d>1/1@74>1/1d,121:1/1d>1/1@80>1/1d,123:1/1d>1/1@80>1/1d,125:1/1d>1/1@80>1/1d,127:1/1d>1/1@80>1/1d,129:1/1d>1/1@76>1/1d,131:1/1d>1/1@76>1/1d,133:1/1d>1/1@76>1/1d,135:1/1d>1/1@76>1/4d,139:1/1d>1/1@74>1/1d,141:1/1d>1/1@75>1/1?,143:1/1?>1/1@73>1/2d,155:2/2d>1/2@76>2/2d,170:1/1d>1/1@73>1/4?,176:1/1d>1/1@75>1/1?,246:2/2d>1/2@80>2/2d,260:2/2d>1/1@80>1/2d,359:2/2d>1/2@80>2/2d,449:2/2?>1/2@80>2/2d,505:2/2d>1/2@78>2/2d
+✗15:1/2i>2/2@40>2/2d,137:1/4d>2/2@40>1/1d,172:1/4?>2/2@40>1/1?,493:1/2d>2/2@40>2/2d
+[UI:2e436564] HLL_363docs.pdf DOC:370 COM:220 INC:150 INF:30
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] INS_31.pdf.pdf | 31p 4.8s 153ms/p | W6+GPU | INF:soft-alignment-v3-fix
+PRE5≡ DOC:31 COM:31(100%) INC:0 INF:3
+OCR: direct:26,SR:4,failed:1
+DOCS: 31total → 31ok+0bad | dist: 1p×31
+INF: 3total(low:0 mid:2 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:31 P:P=1 conf=71% expect=1
+INF:3 x̄=59% 0✓3~0✗
+✓-
+~11:1/1d>1/1@50>1/1d,27:1/1d>1/1@77>1/1d,30:1/1d>1/1@50>1/1?
+✗-
+[UI:2e436564] INS_31.pdf.pdf DOC:31 COM:31 INC:0 INF:3
+
+2026-03-22 16:36:03,812 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+←[32mINFO←[0m:     Will watch for changes in these directories: ['A:\\PROJECTS\\PDFoverseer']
+←[32mINFO←[0m:     Uvicorn running on ←[1mhttp://0.0.0.0:8000←[0m (Press CTRL+C to quit)
+←[32mINFO←[0m:     Started reloader process [←[36m←[1m12232←[0m] using ←[36m←[1mWatchFiles←[0m
+2026-03-22 16:36:08,062 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:36:08,218 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+←[32mINFO←[0m:     Started server process [←[36m13556←[0m]
+←[32mINFO←[0m:     Waiting for application startup.
+←[32mINFO←[0m:     Application startup complete.
+←[32mINFO←[0m:     127.0.0.1:50713 - "←[1mGET /ui/ HTTP/1.1←[0m" ←[33m304 Not Modified←[0m
+←[32mINFO←[0m:     127.0.0.1:50713 - "←[1mGET /ui/assets/index-9UMJPeh5.js HTTP/1.1←[0m" ←[33m304 Not Modified←[0m
+←[32mINFO←[0m:     127.0.0.1:50713 - "←[1mGET /ui/assets/index-BYR_d3Mh.css HTTP/1.1←[0m" ←[33m304 Not Modified←[0m
+WS Attempt from session_id: 576db0b0-ab19-4ce1-9396-5884f6783645
+←[32mINFO←[0m:     127.0.0.1:54106 - "WebSocket /ws?session_id=576db0b0-ab19-4ce1-9396-5884f6783645" [accepted]
+WS Connected!
+←[32mINFO←[0m:     connection open
+←[32mINFO←[0m:     127.0.0.1:58551 - "←[1mOPTIONS /api/state HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58551 - "←[1mGET /api/state HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58551 - "←[1mOPTIONS /api/add_files HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58551 - "←[1mGET /api/add_files HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58551 - "←[1mGET /api/add_files HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58551 - "←[1mOPTIONS /api/start HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58551 - "←[1mPOST /api/start HTTP/1.1←[0m" ←[32m200 OK←[0m
+2026-03-22 16:37:03,457 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:03,466 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:03,467 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:03,470 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:03,477 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:03,480 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:05,825 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:07,025 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:07,027 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:07,031 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:07,031 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:07,045 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:07,047 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:08,295 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:09,317 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:09,321 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:09,323 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:09,333 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:09,341 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:09,349 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:10,568 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:11,570 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:11,571 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:11,574 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:11,585 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:11,587 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:11,591 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:15,005 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:16,090 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:16,093 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:16,094 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:16,095 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:16,103 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:16,128 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:18,849 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:19,708 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:19,716 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:20,966 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:21,875 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:21,881 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:21,883 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:21,889 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:21,894 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:22,487 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:23,780 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:23,783 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:23,785 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:23,786 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:23,799 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:23,807 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:28,232 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:29,319 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:29,328 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:29,332 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:29,333 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:29,334 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:29,339 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:31,712 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:32,771 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:32,774 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:32,778 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:32,780 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:32,797 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:32,800 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:34,482 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:35,340 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:35,342 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:35,350 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:35,353 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:35,903 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:36,914 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:36,919 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:36,924 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:36,925 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:36,929 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:36,932 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:39,488 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:40,233 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:40,233 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:40,750 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:41,722 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:41,723 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:41,727 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:41,727 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:41,737 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:41,745 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:43,743 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:44,779 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:44,784 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:44,790 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:44,795 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:44,796 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:44,805 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:50,474 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:51,600 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:51,601 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:51,601 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:51,604 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:51,606 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:51,607 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:53,147 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:54,158 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:54,164 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:54,166 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:54,167 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:54,169 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:54,174 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:55,381 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:37:56,384 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:56,389 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:56,390 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:56,390 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:56,400 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:37:56,403 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:02,209 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:38:03,259 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:03,269 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:03,269 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:03,274 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:03,277 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:03,285 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:09,690 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:38:10,698 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:10,705 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:10,709 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:10,713 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:10,716 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:10,722 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:20,754 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:38:21,797 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:21,803 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:21,805 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:21,810 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:21,813 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:38:21,816 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:39:06,793 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:39:07,840 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:39:07,845 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:39:07,853 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:39:07,855 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:39:07,866 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:39:07,890 [INFO] pdfoverserver: Inference engine loaded: soft-alignment-v3-fix
+2026-03-22 16:39:11,554 [INFO] watchfiles.main: 3 changes detected
+2026-03-22 16:39:13,427 [INFO] watchfiles.main: 1 change detected

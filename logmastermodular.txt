@@ -1,0 +1,493 @@
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] CH DIARIA -BSM(18).pdf | 36p 3.2s 89ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:18 COM:16(89%) INC:2 INF:0
+OCR: direct:36
+DOCS: 18total → 16ok+2bad(seq:1 under:1) | dist: 2p×16 3p×2
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:18 P:P=2 conf=96% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CH DIARIA -BSM(18).pdf DOC:18 COM:16 INC:2 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] Ch Diaria Castro Pinochet (15).pdf | 15p 2.2s 149ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:15 COM:0(0%) INC:15 INF:0
+OCR: direct:15
+DOCS: 15total → 0ok+15bad(seq:0 under:15) | dist: 2p×15
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:15 P:P=1 conf=45% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Ch Diaria Castro Pinochet (15).pdf DOC:15 COM:0 INC:15 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] CH Diaria P saez 0(05).pdf | 17p 2.2s 131ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:9 COM:8(89%) INC:1 INF:0
+OCR: direct:17
+DOCS: 9total → 8ok+1bad(seq:0 under:1) | dist: 2p×9
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:9 P:P=2 conf=86% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CH Diaria P saez 0(05).pdf DOC:9 COM:8 INC:1 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] CH Diaria Raco - (25).pdf | 43p 4.4s 103ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:25 COM:10(40%) INC:15 INF:0
+OCR: direct:42,SR:1
+DOCS: 25total → 10ok+15bad(seq:0 under:15) | dist: 2p×10 3p×15
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:25 P:P=2 conf=48% expect=3
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CH Diaria Raco - (25).pdf DOC:25 COM:10 INC:15 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] Ch diria - Alumnio 2000 (18).pdf | 36p 3.7s 103ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:19 COM:6(32%) INC:13 INF:0
+OCR: direct:36
+DOCS: 19total → 6ok+13bad(seq:1 under:12) | dist: 2p×6 3p×13
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:19 P:P=2 conf=61% expect=3
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Ch diria - Alumnio 2000 (18).pdf DOC:19 COM:6 INC:13 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] Charla diaria Aluminio 2000(01).pdf | 2p 2.4s 1184ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:1 COM:0(0%) INC:1 INF:0
+OCR: direct:1,easyocr:1
+DOCS: 1total → 0ok+1bad(seq:0 under:1) | dist: 3p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:1 P:none
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla diaria Aluminio 2000(01).pdf DOC:1 COM:0 INC:1 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] Charla Diaria Castro Pinochet (05).pdf | 5p 1.7s 347ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:5 COM:0(0%) INC:5 INF:0
+OCR: direct:5
+DOCS: 5total → 0ok+5bad(seq:0 under:5) | dist: 2p×5
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:5 P:P=1 conf=45% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla Diaria Castro Pinochet (05).pdf DOC:5 COM:0 INC:5 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] Charla Diaria Insap (20).pdf | 31p 5.7s 185ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:19 COM:4(21%) INC:15 INF:1
+OCR: direct:27,failed:1,SR:1,easyocr:2
+DOCS: 19total → 4ok+15bad(seq:1 under:14) | dist: 2p×13 3p×6
+INF: 1total(low:0 mid:0 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:19 P:P=2 conf=53% expect=2
+INF:1 x̄=95% 1✓0~0✗
+✓12:2/3d>3/3@95>1/3d
+~-
+✗-
+[UI:2e436564] Charla Diaria Insap (20).pdf DOC:19 COM:4 INC:15 INF:1
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] Charla Diaria Joga (19).pdf | 38p 3.9s 103ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:19 COM:4(21%) INC:15 INF:0
+OCR: direct:38
+DOCS: 19total → 4ok+15bad(seq:0 under:15) | dist: 2p×4 3p×15
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:19 P:P=2 conf=69% expect=3
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla Diaria Joga (19).pdf DOC:19 COM:4 INC:15 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] Charla Diaria P. Saez(11).pdf | 24p 3.1s 128ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:14 COM:10(71%) INC:4 INF:0
+OCR: direct:24
+DOCS: 14total → 10ok+4bad(seq:0 under:4) | dist: 2p×14
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:14 P:P=2 conf=78% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla Diaria P. Saez(11).pdf DOC:14 COM:10 INC:4 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] Charla Diaria Quevedo (02).pdf | 4p 1.6s 394ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:2 COM:1(50%) INC:1 INF:0
+OCR: direct:4
+DOCS: 2total → 1ok+1bad(seq:0 under:1) | dist: 2p×1 3p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:2 P:P=2 conf=60% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla Diaria Quevedo (02).pdf DOC:2 COM:1 INC:1 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] Charla diaria Quevedo (13).pdf | 26p 3.9s 151ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:13 COM:8(62%) INC:5 INF:0
+OCR: direct:25,SR:1
+DOCS: 13total → 8ok+5bad(seq:1 under:4) | dist: 2p×8 3p×5
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:13 P:P=2 conf=87% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charla diaria Quevedo (13).pdf DOC:13 COM:8 INC:5 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] CHARLA DIARIA QUEVEDO 01.pdf | 2p 1.4s 675ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:1 COM:0(0%) INC:1 INF:0
+OCR: direct:2
+DOCS: 1total → 0ok+1bad(seq:0 under:1) | dist: 3p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:1 P:none
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CHARLA DIARIA QUEVEDO 01.pdf DOC:1 COM:0 INC:1 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] Charlas (17).PDF | 17p 3.5s 204ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:17 COM:7(41%) INC:10 INF:0
+OCR: direct:14,SR:3
+DOCS: 17total → 7ok+10bad(seq:0 under:10) | dist: 1p×7 2p×9 4p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:17 P:P=1 conf=45% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] Charlas (17).PDF DOC:17 COM:7 INC:10 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] charlas 02 al 27 feb 2026 26.pdf | 53p 7.6s 143ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:25 COM:11(44%) INC:14 INF:2
+OCR: direct:49,failed:2,SR:1,easyocr:1
+DOCS: 25total → 11ok+14bad(seq:2 under:12) | dist: 1p×1 2p×11 3p×2 4p×10 5p×1
+INF: 2total(low:0 mid:1 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:25 P:P=2 conf=64% expect=2
+INF:2 x̄=72% 1✓1~0✗
+✓53:1/3d>2/3@95>-
+~13:1/1d>1/2@50>1/3d
+✗-
+[UI:2e436564] charlas 02 al 27 feb 2026 26.pdf DOC:25 COM:11 INC:14 INF:2
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] CRS CH-DIARIA(09).pdf | 19p 2.8s 146ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:9 COM:8(89%) INC:1 INF:0
+OCR: direct:19
+DOCS: 9total → 8ok+1bad(seq:0 under:1) | dist: 2p×7 3p×2
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:9 P:P=2 conf=79% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CRS CH-DIARIA(09).pdf DOC:9 COM:8 INC:1 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] CH_9docs.pdf | 17p 2.3s 136ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:9 COM:8(89%) INC:1 INF:0
+OCR: direct:17
+DOCS: 9total → 8ok+1bad(seq:0 under:1) | dist: 2p×9
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:9 P:P=2 conf=86% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CH_9docs.pdf DOC:9 COM:8 INC:1 INF:0
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] CH_39docs.pdf | 78p 6.7s 85ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:39 COM:39(100%) INC:0 INF:6
+OCR: direct:75,SR:2,failed:1
+DOCS: 39total → 39ok+0bad | dist: 2p×39
+INF: 6total(low:0 mid:6 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:39 P:P=2 conf=96% expect=2
+INF:6 x̄=50% 0✓6~0✗
+✓-
+~27:2/2d>1/2@50>2/2i,28:1/2i>2/2@50>1/2d,59:2/2d>1/2@50>2/2i,60:1/2i>2/2@50>1/2d,63:2/2d>1/2@50>2/2i,64:1/2i>2/2@50>1/2d
+✗-
+[UI:2e436564] CH_39docs.pdf DOC:39 COM:39 INC:0 INF:6
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] CH_51docs.pdf | 102p 7.5s 73ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:51 COM:43(84%) INC:8 INF:1
+OCR: direct:101,failed:1
+DOCS: 51total → 43ok+8bad(seq:1 under:7) | dist: 1p×1 2p×43 3p×7
+INF: 1total(low:0 mid:1 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:51 P:P=2 conf=92% expect=2
+INF:1 x̄=50% 0✓1~0✗
+✓-
+~32:1/1d>1/2@50>1/2d
+✗-
+[UI:2e436564] CH_51docs.pdf DOC:51 COM:43 INC:8 INF:1
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] CH_74docs.pdf | 150p 10.9s 73ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:76 COM:60(79%) INC:16 INF:2
+OCR: direct:146,failed:2,SR:2
+DOCS: 76total → 60ok+16bad(seq:0 under:16) | dist: 1p×2 2p×58 3p×16
+INF: 2total(low:0 mid:2 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:76 P:P=2 conf=86% expect=2
+INF:2 x̄=50% 0✓2~0✗
+✓-
+~4:1/1d>1/2@50>1/3d,131:1/1d>1/2@50>1/2d
+✗-
+[UI:2e436564] CH_74docs.pdf DOC:76 COM:60 INC:16 INF:2
+[AI:2e436564] [MOD:master-port] [CUDA:e4391a88] INS_31.pdf.pdf | 31p 4.8s 155ms/p | W6+GPU | INF:master-6ph-t2-modular
+PRE5≡ DOC:31 COM:31(100%) INC:0 INF:3
+OCR: direct:26,SR:4,failed:1
+DOCS: 31total → 31ok+0bad | dist: 1p×31
+INF: 3total(low:0 mid:2 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:31 P:P=1 conf=71% expect=1
+INF:3 x̄=66% 1✓2~0✗
+✓27:1/1d>1/1@96>1/1d
+~11:1/1d>1/1@50>1/1d,30:1/1d>1/1@50>1/1?
+✗-
+[UI:2e436564] INS_31.pdf.pdf DOC:31 COM:31 INC:0 INF:3
+
+
+2026-03-22 16:15:32,329 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+←[32mINFO←[0m:     Will watch for changes in these directories: ['A:\\PROJECTS\\PDFoverseer']
+←[32mINFO←[0m:     Uvicorn running on ←[1mhttp://0.0.0.0:8000←[0m (Press CTRL+C to quit)
+←[32mINFO←[0m:     Started reloader process [←[36m←[1m21252←[0m] using ←[36m←[1mWatchFiles←[0m
+2026-03-22 16:15:36,653 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:15:36,776 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+←[32mINFO←[0m:     Started server process [←[36m12048←[0m]
+←[32mINFO←[0m:     Waiting for application startup.
+←[32mINFO←[0m:     Application startup complete.
+WS Attempt from session_id: f77fe050-aab0-40f5-8189-dc983e72b4fb
+←[32mINFO←[0m:     127.0.0.1:60836 - "WebSocket /ws?session_id=f77fe050-aab0-40f5-8189-dc983e72b4fb" [accepted]
+WS Connected!
+←[32mINFO←[0m:     connection open
+←[32mINFO←[0m:     127.0.0.1:64622 - "←[1mGET /api/state HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:60218 - "←[1mGET /ui/ HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     connection closed
+←[32mINFO←[0m:     127.0.0.1:60218 - "←[1mGET /ui/assets/index-9UMJPeh5.js HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:60218 - "←[1mGET /ui/assets/index-BYR_d3Mh.css HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:64622 - "←[1mOPTIONS /api/state HTTP/1.1←[0m" ←[32m200 OK←[0m
+WS Attempt from session_id: 5b2a4afb-a9d4-433c-88bb-13bd277025fc
+←[32mINFO←[0m:     127.0.0.1:60520 - "WebSocket /ws?session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc" [accepted]
+WS Connected!
+←[32mINFO←[0m:     connection open
+←[32mINFO←[0m:     127.0.0.1:64622 - "←[1mGET /api/state HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:60218 - "←[1mGET /ui/vite.svg HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:64622 - "←[1mGET /api/add_files HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:64622 - "←[1mGET /api/add_files HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:64622 - "←[1mPOST /api/start HTTP/1.1←[0m" ←[32m200 OK←[0m
+2026-03-22 16:16:10,188 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:10,194 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:10,212 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:10,212 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:10,212 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:10,214 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:12,396 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:13,399 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:13,403 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:13,403 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:13,407 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:13,415 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:13,429 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:14,670 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:15,673 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:15,674 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:15,677 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:15,692 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:15,700 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:15,703 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:16,886 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:17,916 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:17,919 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:17,925 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:17,927 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:17,929 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:17,932 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:21,329 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:22,533 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:22,535 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:22,536 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:22,537 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:22,541 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:22,553 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:25,068 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:26,048 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:26,051 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:27,444 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:28,457 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:28,470 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:28,475 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:28,497 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:28,505 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:29,222 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:30,326 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:30,333 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:30,336 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:30,337 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:30,345 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:30,345 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:34,972 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:36,083 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:36,097 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:36,097 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:36,104 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:36,107 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:36,113 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:38,901 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:40,042 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:40,050 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:40,057 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:40,088 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:40,103 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:40,126 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:41,981 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:42,898 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:42,898 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:42,903 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:42,905 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:43,546 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:44,631 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:44,635 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:44,646 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:44,646 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:44,650 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:44,670 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:47,489 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:48,308 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:48,309 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:48,859 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:49,921 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:49,941 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:49,945 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:49,946 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:49,954 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:49,962 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:52,308 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:16:53,451 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:53,464 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:53,467 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:53,476 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:53,477 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:53,489 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:16:59,901 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:17:01,086 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:01,089 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:01,089 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:01,091 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:01,097 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:01,118 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:02,685 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:17:03,741 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:03,742 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:03,749 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:03,758 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:03,759 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:03,763 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:05,017 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:17:06,031 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:06,036 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:06,043 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:06,050 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:06,054 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:06,058 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:11,648 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:17:12,699 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:12,721 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:12,728 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:12,732 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:12,734 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:12,739 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:19,132 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:17:20,222 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:20,227 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:20,233 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:20,234 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:20,245 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:20,251 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:30,057 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:17:31,039 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:31,040 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:31,041 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:31,041 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:31,045 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:31,047 [INFO] pdfoverserver: Inference engine loaded: master-6ph-t2-modular
+2026-03-22 16:17:34,862 [INFO] watchfiles.main: 3 changes detected
+2026-03-22 16:17:36,424 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:52729 - "[1mOPTIONS /api/open_pdf?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5Ccharlas%2002%20al%2027%20feb%202026%2026.pdf&page=1 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:52729 - "[1mGET /api/open_pdf?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5Ccharlas%2002%20al%2027%20feb%202026%2026.pdf&page=1 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:57775 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCH%20DIARIA%20-BSM(18).pdf&page=8&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:59800 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCH%20DIARIA%20-BSM(18).pdf&page=24&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:52023 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20Diaria%20Castro%20Pinochet%20(15).pdf&page=1&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:64524 - "[1mOPTIONS /api/open_pdf?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=1 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:64524 - "[1mGET /api/open_pdf?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=1 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:53671 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=6&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:52490 - "[1mOPTIONS /api/correct HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:52490 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:22,016 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:51398 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=8&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:23,279 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:63962 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:28,922 [INFO] watchfiles.main: 3 changes detected
+2026-03-22 16:19:29,984 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:63962 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:32,402 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:59773 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=10&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:35,125 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:63962 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:37,204 [INFO] watchfiles.main: 3 changes detected
+2026-03-22 16:19:40,228 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:63350 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=12&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:61531 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:47,745 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:49186 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=14&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:48,955 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:61531 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:51,130 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:61531 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:53,150 [INFO] watchfiles.main: 4 changes detected
+[32mINFO[0m:     127.0.0.1:56526 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=20&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:54,219 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:61531 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:55,076 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:61531 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:56526 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=22&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:56,889 [INFO] watchfiles.main: 4 changes detected
+[32mINFO[0m:     127.0.0.1:61531 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:58,461 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:19:59,325 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:61531 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:19:59,980 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:56526 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=24&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:61531 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:01,843 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:20:04,467 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:50683 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=26&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:58152 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:08,100 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:50683 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=28&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:09,564 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:58152 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:11,541 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:58152 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:14,207 [INFO] watchfiles.main: 4 changes detected
+[32mINFO[0m:     127.0.0.1:56578 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=31&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:14,664 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:58152 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:17,734 [INFO] watchfiles.main: 3 changes detected
+2026-03-22 16:20:19,805 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:58152 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:20,267 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:51301 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=32&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:58152 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:21,741 [INFO] watchfiles.main: 4 changes detected
+[32mINFO[0m:     127.0.0.1:58152 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:23,461 [INFO] watchfiles.main: 4 changes detected
+2026-03-22 16:20:24,923 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:51961 - "[1mGET /api/preview?pdf_path=A%3A%5Cinforme%20mensual%5CRESUMEN%20EJECUTIVO%20AIF%5C4.-%20Charlas%20Generales%5CCh%20diria%20-%20Alumnio%202000%20(18).pdf&page=36&session_id=5b2a4afb-a9d4-433c-88bb-13bd277025fc HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:57907 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-22 16:20:30,877 [INFO] watchfiles.main: 3 changes detected
+2026-03-22 16:20:32,039 [INFO] watchfiles.main: 1 change detected
