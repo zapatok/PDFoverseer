@@ -1,61 +1,73 @@
 # PDFoverseer
 
-Supervisor de documentos en archivos PDF. Selecciona una carpeta y analiza todos los PDFs que contiene, contando los documentos internos mediante OCR.
+**PDF document analyzer** that counts internal documents in lecture PDFs using an OCR + AI inference engine. Process folders of PDFs with real-time progress, pause/resume, and per-document error reporting.
 
-## Requisitos
+## Features
+
+- 📁 **Folder browsing** with native OS dialogs (Windows file picker + tkinter)
+- 📄 **Batch PDF processing** with pause/resume and per-document progress
+- 🔍 **Dual-tier OCR** pipeline: Tesseract (CPU) + EasyOCR fallback (GPU optional)
+- 🧠 **Multi-phase inference engine** (soft-alignment-v3-sweep1): period detection + Dempster-Shafer evidence fusion
+- ⚡ **Real-time updates** via WebSocket, no page refresh
+- 📊 **Session history** with persistent database (SQLite)
+- 🎯 **Per-issue correction UI** for manual validation and retraining feedback
+
+## Quick Start
+
+```bash
+# Install Python dependencies
+pip install -r requirements.txt  # CPU-only
+# OR
+pip install -r requirements-gpu.txt  # GPU (EasyOCR + PyTorch CUDA)
+
+# Backend (FastAPI)
+source .venv-cuda/Scripts/activate  # or: .\.venv-cuda\Scripts\activate (Windows)
+python server.py                     # → http://localhost:8000
+
+# Frontend (React + Vite)
+cd frontend && npm install
+npm run dev                          # → http://localhost:5173
+```
+
+Then open http://localhost:5173 in your browser.
+
+## Requirements
 
 - **Python 3.10+**
-- **Tesseract OCR** instalado en el sistema
-  - Windows: [Descargar Tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
-  - La ruta por defecto es `C:\Program Files\Tesseract-OCR\tesseract.exe`
+- **Node.js 18+** (for frontend)
+- **Tesseract OCR** (system PATH or `TESSERACT_CMD` env var)
+  - Windows: [Descargar](https://github.com/UB-Mannheim/tesseract/wiki)
+  - Ubuntu: `sudo apt install tesseract-ocr`
+- **Ghostscript** (for PyMuPDF)
+- *Optional:* **CUDA 12.1+** for GPU EasyOCR (see requirements-gpu.txt)
 
-## Instalación
+## Architecture
 
-```bash
-git clone https://github.com/zapatok/PDFoverseer.git
-cd PDFoverseer
-pip install -r requirements.txt
+### V4 OCR Pipeline (Producer-Consumer)
+
+1. **Producers** (6 parallel workers): PyMuPDF render + Tesseract Tier 1 (standard crop) + Tier 2 (super-resolution 4x)
+2. **GPU Consumer** (1 thread): EasyOCR fallback on failed pages
+3. **Post-scan**: Period detection (autocorrelation) + D-S evidence fusion + confidence calibration
+
+### Inference Engine (soft-alignment-v3-sweep1)
+
+- **Phase 1–2:** Forward/backward propagation of OCR reads
+- **Phase 3:** Cross-validation of inferred boundaries
+- **Phase 4:** Gap solver for missing detections
+- **Phase 5:** Dempster-Shafer post-validation with neighbor evidence
+- **Phase 5b:** Period-aware boundary correction
+- **Multi-period (MP):** Local sliding-window correction for repeated doc patterns
+
+**Key parameters** (eval-tuned):
+- `MIN_CONF_FOR_NEW_DOC = 0.65` — confidence threshold for new boundaries
+- `CLASH_BOUNDARY_PEN = 2.0` — gap-solver penalty
+- `PH5B_CONF_MIN = 0.60` — period confidence floor
+
+## Page Number Pattern
+
+Spanish-centric regex (adaptable):
+```regex
+P.{0,2}[gq](?:ina?)?\.?\s*(\d{1,3})\s*\.?\s*de\s*(\d{1,3})
 ```
 
-## Uso
-
-```bash
-# Backend
-source .venv-cuda/Scripts/activate
-python server.py          # FastAPI en http://localhost:8000
-
-# Frontend (desarrollo)
-cd frontend && npm run dev  # Vite en http://localhost:5173
-```
-
-1. Abre `http://localhost:5173` en el navegador
-2. Introduce la ruta de la carpeta de PDFs y haz clic en **Agregar**
-3. Usa el botón **▶ Iniciar** para lanzar el análisis
-4. Usa **⏸ Pausar** / **⏹ Detener** en cualquier momento
-5. Los resultados se muestran en tiempo real vía WebSocket
-
-## Funcionalidades
-
-- 📁 **Selección de carpeta** con escaneo recursivo de PDFs
-- 🔍 **Análisis OCR** de cada página para detectar numeración "Página X de N"
-- ⏸ **Pausa/Reanudación** del proceso en cualquier momento
-- 📊 **Doble barra de progreso** (global por PDFs + individual por páginas)
-- 📋 **Panel de PDFs** con estado visual (pendiente/procesando/completado/error)
-- 📝 **Log detallado** del análisis de cada archivo
-
-## Algoritmo de detección (Pipeline V4)
-
-**Fase OCR — Patrón productor-consumidor:**
-
-1. **Productores** (6 workers paralelos): PyMuPDF renderiza páginas → Tesseract Tier 1 (crop estándar) → Tier 2 con super-resolución 4x (FSRCNN)
-2. **Consumidor GPU** (1 hilo dedicado): EasyOCR en páginas que fallaron con Tesseract
-
-El patrón buscado es `Página N de M` (regex español) en la esquina superior derecha del PDF.
-
-**Fase de inferencia (multi-fase):**
-
-1. Detección de período por autocorrelación
-2. Fusión de evidencias (Dempster-Shafer)
-3. Relleno de huecos por vecindad y propagación
-4. Corrección de contradicciones (Phase 5b)
-5. Supresión de páginas huérfanas de baja confianza
+Matches: "Página 1 de 10", "Pag 1 de 10", "page 1 of 10", etc.
