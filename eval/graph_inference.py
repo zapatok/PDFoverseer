@@ -236,3 +236,93 @@ def viterbi_decode(reads: list[PageRead], params: dict) -> list:
         path_idx[t] = int(backptr[t + 1, path_idx[t + 1]])
 
     return [states[i] for i in path_idx]
+
+
+def extract_documents(reads: list[PageRead], path: list) -> list[Document]:
+    """Extract Document objects from Viterbi-decoded state path.
+
+    A new document starts when:
+    - total changes between consecutive pages
+    - curr resets (curr_i+1 <= curr_i, unless it's a valid skip)
+    - curr_i+1 == 1
+
+    Pages where the OCR reading was None/failed but the state was assigned
+    are marked as inferred.
+    """
+    if not path:
+        return []
+
+    docs: list[Document] = []
+    doc_start = 0
+
+    for i in range(1, len(path)):
+        prev_state = path[i - 1]
+        curr_state = path[i]
+
+        # NULL states are boundaries
+        if prev_state is None or curr_state is None:
+            if prev_state is not None:
+                docs.append(_make_doc(len(docs), reads, path, doc_start, i))
+            doc_start = i
+            continue
+
+        c_prev, t_prev = prev_state
+        c_curr, t_curr = curr_state
+
+        # New document boundary
+        is_new_doc = (
+            t_curr != t_prev           # total changed
+            or c_curr == 1             # explicit restart
+            or c_curr <= c_prev        # regression (not a skip forward)
+        )
+
+        if is_new_doc and not (t_curr == t_prev and c_curr == c_prev + 1):
+            # But don't split on valid continuation
+            docs.append(_make_doc(len(docs), reads, path, doc_start, i))
+            doc_start = i
+
+    # Last document
+    if doc_start < len(path) and path[doc_start] is not None:
+        docs.append(_make_doc(len(docs), reads, path, doc_start, len(path)))
+
+    return docs
+
+
+def _make_doc(index: int, reads: list[PageRead], path: list,
+              start: int, end: int) -> Document:
+    """Build a Document from a segment of the decoded path."""
+    segment_states = path[start:end]
+    segment_reads = reads[start:end]
+
+    # Declared total = total from the state (should be consistent)
+    totals = [s[1] for s in segment_states if s is not None]
+    declared_total = Counter(totals).most_common(1)[0][0] if totals else 1
+
+    pages = []
+    inferred_pages = []
+    currs_seen = []
+
+    for j, (rd, st) in enumerate(zip(segment_reads, segment_states)):
+        pdf_page = rd.pdf_page
+        if rd.curr is not None and rd.method not in ("failed", "excluded"):
+            pages.append(pdf_page)
+        else:
+            inferred_pages.append(pdf_page)
+        if st is not None:
+            currs_seen.append(st[0])
+
+    # Check sequence continuity
+    sequence_ok = True
+    for j in range(1, len(currs_seen)):
+        if currs_seen[j] != currs_seen[j - 1] + 1:
+            sequence_ok = False
+            break
+
+    return Document(
+        index=index,
+        start_pdf_page=reads[start].pdf_page,
+        declared_total=declared_total,
+        pages=pages,
+        inferred_pages=inferred_pages,
+        sequence_ok=sequence_ok,
+    )

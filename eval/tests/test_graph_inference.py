@@ -102,7 +102,7 @@ def test_trans_period_prior():
     assert log_to_modal > log_to_other
 
 
-from eval.graph_inference import viterbi_decode
+from eval.graph_inference import viterbi_decode, extract_documents
 
 
 def test_viterbi_clean_two_docs():
@@ -144,3 +144,48 @@ def test_viterbi_missing_middle():
     assert path[0] == (1, 3)
     assert path[1] == (2, 3)  # inferred from context
     assert path[2] == (3, 3)
+
+
+def test_extract_two_complete_docs():
+    """Two 2-page docs from Viterbi path."""
+    reads = [
+        PageRead(0, 1, 2, "direct", 0.95),
+        PageRead(1, 2, 2, "direct", 0.92),
+        PageRead(2, 1, 2, "direct", 0.91),
+        PageRead(3, 2, 2, "direct", 0.90),
+    ]
+    path = [(1, 2), (2, 2), (1, 2), (2, 2)]
+    docs = extract_documents(reads, path)
+    assert len(docs) == 2
+    assert docs[0].declared_total == 2
+    assert docs[0].is_complete
+    assert docs[1].start_pdf_page == 2
+
+
+def test_extract_with_inferred_page():
+    """3-page doc where middle page was failed → inferred."""
+    reads = [
+        PageRead(0, 1, 3, "direct", 0.95),
+        PageRead(1, None, None, "failed", 0.0),
+        PageRead(2, 3, 3, "direct", 0.90),
+    ]
+    path = [(1, 3), (2, 3), (3, 3)]
+    docs = extract_documents(reads, path)
+    assert len(docs) == 1
+    assert docs[0].declared_total == 3
+    assert len(docs[0].pages) == 2        # pages 0 and 2 had OCR
+    assert len(docs[0].inferred_pages) == 1  # page 1 was inferred
+    assert docs[0].is_complete
+
+
+def test_extract_with_skip():
+    """Doc with a skip: (1,3) → (3,3) — page 2 missing from observations."""
+    reads = [
+        PageRead(0, 1, 3, "direct", 0.95),
+        PageRead(1, 3, 3, "direct", 0.90),
+    ]
+    path = [(1, 3), (3, 3)]
+    docs = extract_documents(reads, path)
+    assert len(docs) == 1
+    assert docs[0].declared_total == 3
+    assert not docs[0].sequence_ok  # gap in sequence
