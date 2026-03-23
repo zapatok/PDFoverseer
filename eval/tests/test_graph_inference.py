@@ -189,3 +189,60 @@ def test_extract_with_skip():
     assert len(docs) == 1
     assert docs[0].declared_total == 3
     assert not docs[0].sequence_ok  # gap in sequence
+
+
+# Task 6: run_pipeline integration + end-to-end tests
+
+from eval.graph_inference import run_pipeline
+
+BASIC_PARAMS = {
+    "trans_continue": 0.85, "trans_new_doc": 0.10, "trans_skip": 0.03,
+    "emit_match": 0.90, "emit_conf_scale": 1.0, "emit_partial": 0.10,
+    "emit_null": 0.3, "max_total": 10, "boundary_bonus": 2.0,
+    "period_prior": 0.0,
+}
+
+
+def test_e2e_simple_two_docs():
+    """End-to-end: two clean 2-page docs."""
+    reads = [
+        PageRead(0, 1, 2, "direct", 0.95), PageRead(1, 2, 2, "direct", 0.92),
+        PageRead(2, 1, 2, "direct", 0.91), PageRead(3, 2, 2, "direct", 0.90),
+    ]
+    docs = run_pipeline(reads, BASIC_PARAMS)
+    assert len(docs) == 2
+    assert all(d.is_complete for d in docs)
+
+
+def test_e2e_infer_missing():
+    """End-to-end: infer missing middle page."""
+    reads = [
+        PageRead(0, 1, 3, "direct", 0.95),
+        PageRead(1, None, None, "failed", 0.0),
+        PageRead(2, 3, 3, "direct", 0.90),
+    ]
+    docs = run_pipeline(reads, BASIC_PARAMS)
+    assert len(docs) == 1
+    assert docs[0].declared_total == 3
+    assert docs[0].found_total == 3
+
+
+def test_e2e_mixed_sizes():
+    """End-to-end: mixed 1-page and 3-page docs."""
+    reads = [
+        PageRead(0, 1, 1, "direct", 0.90),
+        PageRead(1, 1, 3, "direct", 0.88),
+        PageRead(2, 2, 3, "direct", 0.85),
+        PageRead(3, 3, 3, "direct", 0.87),
+        PageRead(4, 1, 1, "direct", 0.91),
+    ]
+    docs = run_pipeline(reads, BASIC_PARAMS)
+    assert len(docs) == 3  # 1-page + 3-page + 1-page
+
+
+def test_e2e_does_not_mutate_input():
+    """run_pipeline must not mutate the input reads list."""
+    reads = [PageRead(0, 1, 2, "direct", 0.95), PageRead(1, 2, 2, "direct", 0.92)]
+    original_conf = reads[0].confidence
+    run_pipeline(reads, BASIC_PARAMS)
+    assert reads[0].confidence == original_conf

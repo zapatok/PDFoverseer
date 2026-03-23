@@ -326,3 +326,19 @@ def _make_doc(index: int, reads: list[PageRead], path: list,
         inferred_pages=inferred_pages,
         sequence_ok=sequence_ok,
     )
+
+
+def run_pipeline(reads: list[PageRead], params: dict) -> list[Document]:
+    """Full graph inference pipeline: deepcopy → Viterbi → extract documents.
+
+    Args:
+        reads: list of PageRead from OCR engine
+        params: dict with all HMM parameters (see module docstring)
+
+    Returns:
+        list of Document objects, compatible with eval/sweep scoring
+    """
+    reads = copy.deepcopy(reads)
+    path = viterbi_decode(reads, params)
+    docs = extract_documents(reads, path)
+    return docs
