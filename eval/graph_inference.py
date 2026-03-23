@@ -107,3 +107,62 @@ def compute_log_emission(read: PageRead, state, params: dict) -> float:
     residual = max(1.0 - params["emit_match"] - params["emit_partial"], 0.01)
     n_other_totals = max(params["max_total"] - 1, 1)
     return math.log(max(residual / n_other_totals * scaled_conf, 1e-15))
+
+
+def _raw_transition_weight(state_from, state_to, params: dict,
+                            modal_total: int | None) -> float:
+    """Compute unnormalized transition weight (will be row-normalized later).
+
+    Transition types:
+    - Continue:  (c, t) → (c+1, t)          — trans_continue
+    - Skip:      (c, t) → (c+k, t), k>1     — trans_skip / (t - c - 1)
+    - New doc:   any → (1, t')               — trans_new_doc / max_total
+    - Complete→New: (t, t) → (1, t')         — boosted by boundary_bonus
+    - Period prior: → (1, modal_total)       — boosted by period_prior
+    - NULL transitions: near-zero weight
+    """
+    # Transitions involving NULL
+    if state_from is None or state_to is None:
+        return 1e-10
+
+    c_from, t_from = state_from
+    c_to, t_to = state_to
+
+    max_total = params["max_total"]
+
+    # Continue in same document: (c, t) → (c+1, t)
+    if t_to == t_from and c_to == c_from + 1:
+        return params["trans_continue"]
+
+    # Skip within same document: (c, t) → (c+k, t), k > 1
+    if t_to == t_from and c_to > c_from + 1:
+        remaining = t_from - c_from - 1  # possible skip positions
+        if remaining <= 0:
+            return 1e-10
+        return params["trans_skip"] / remaining
+
+    # New document: any → (1, t')
+    if c_to == 1:
+        base = params["trans_new_doc"] / max_total
+
+        # Boundary bonus: complete doc → new doc
+        if c_from == t_from:
+            base *= params["boundary_bonus"]
+
+        # Period prior: boost if target total matches modal total
+        if modal_total is not None and t_to == modal_total:
+            base = base * (1.0 - params["period_prior"]) + params["period_prior"]
+
+        return max(base, 1e-15)
+
+    # All other transitions (invalid — e.g., total change without curr=1)
+    return 1e-10
+
+
+def compute_log_transition(state_from, state_to, params: dict,
+                           modal_total: int | None) -> float:
+    """Log transition weight (unnormalized — for unit tests only).
+    The actual Viterbi uses the row-normalized matrix from _build_log_transition_matrix.
+    """
+    w = _raw_transition_weight(state_from, state_to, params, modal_total)
+    return math.log(max(w, 1e-15))

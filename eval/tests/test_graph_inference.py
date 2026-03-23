@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.graph_inference import build_state_space, PageRead, Document, compute_log_emission
+from eval.graph_inference import build_state_space, PageRead, Document, compute_log_emission, compute_log_transition
 import math
 
 
@@ -61,3 +61,42 @@ def test_emit_null_state():
     read = PageRead(0, curr=2, total=3, method="direct", confidence=0.95)
     log_p = compute_log_emission(read, None, params)
     assert math.isfinite(log_p)
+
+
+def test_trans_continue_highest():
+    """(1,3) → (2,3) should have highest probability (continue doc)."""
+    params = {
+        "trans_continue": 0.85, "trans_new_doc": 0.10, "trans_skip": 0.03,
+        "max_total": 5, "boundary_bonus": 2.0, "period_prior": 0.0,
+    }
+    states, idx = build_state_space(5)
+    modal_total = None
+    log_cont = compute_log_transition((1, 3), (2, 3), params, modal_total)
+    log_new = compute_log_transition((1, 3), (1, 2), params, modal_total)
+    assert log_cont > log_new
+
+
+def test_trans_complete_doc_bonus():
+    """After complete doc (3,3), transition to (1,t') gets boundary_bonus."""
+    params = {
+        "trans_continue": 0.85, "trans_new_doc": 0.10, "trans_skip": 0.03,
+        "max_total": 5, "boundary_bonus": 3.0, "period_prior": 0.0,
+    }
+    modal_total = None
+    # From (3,3) — document complete → new doc should be boosted
+    log_new_after_complete = compute_log_transition((3, 3), (1, 2), params, modal_total)
+    # From (1,3) — mid-document → new doc should NOT be boosted
+    log_new_mid_doc = compute_log_transition((1, 3), (1, 2), params, modal_total)
+    assert log_new_after_complete > log_new_mid_doc
+
+
+def test_trans_period_prior():
+    """When modal_total is known, new docs with that total get boosted."""
+    params = {
+        "trans_continue": 0.85, "trans_new_doc": 0.10, "trans_skip": 0.03,
+        "max_total": 5, "boundary_bonus": 2.0, "period_prior": 0.4,
+    }
+    modal_total = 3
+    log_to_modal = compute_log_transition((2, 2), (1, 3), params, modal_total)
+    log_to_other = compute_log_transition((2, 2), (1, 5), params, modal_total)
+    assert log_to_modal > log_to_other
