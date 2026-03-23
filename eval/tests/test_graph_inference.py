@@ -4,6 +4,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from eval.graph_inference import build_state_space, PageRead, Document, compute_log_emission, compute_log_transition
 import math
+import json
 
 
 def test_state_space_max_total_3():
@@ -246,3 +247,40 @@ def test_e2e_does_not_mutate_input():
     original_conf = reads[0].confidence
     run_pipeline(reads, BASIC_PARAMS)
     assert reads[0].confidence == original_conf
+
+
+# Task 9: Smoke tests with real + synthetic fixtures
+
+
+def test_real_fixture_no_crash():
+    """Smoke test: graph engine runs on a real fixture without errors."""
+    fixture_path = Path("eval/fixtures/real/CH_9.json")
+    if not fixture_path.exists():
+        import pytest
+        pytest.skip("CH_9.json fixture not found")
+
+    data = json.loads(fixture_path.read_text())
+    reads = [PageRead(**r) for r in data["reads"]]
+    docs = run_pipeline(reads, BASIC_PARAMS)
+
+    assert len(docs) >= 1
+    assert all(isinstance(d, Document) for d in docs)
+    # Every page should be assigned to exactly one document
+    all_pages = set()
+    for d in docs:
+        for p in d.pages + d.inferred_pages:
+            assert p not in all_pages, f"Page {p} assigned to multiple docs"
+            all_pages.add(p)
+
+
+def test_synthetic_fixture_no_crash():
+    """Smoke test: graph engine runs on a synthetic fixture."""
+    fixture_path = Path("eval/fixtures/synthetic/clean_period2.json")
+    if not fixture_path.exists():
+        import pytest
+        pytest.skip("clean_period2.json fixture not found")
+
+    data = json.loads(fixture_path.read_text())
+    reads = [PageRead(**r) for r in data["reads"]]
+    docs = run_pipeline(reads, BASIC_PARAMS)
+    assert len(docs) >= 1
