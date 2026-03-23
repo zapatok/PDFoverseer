@@ -177,16 +177,28 @@ def _detect_modal_total(reads: list[PageRead]) -> int | None:
     return Counter(totals).most_common(1)[0][0]
 
 
-def viterbi_decode(reads: list[PageRead], params: dict) -> list:
-    """Run Viterbi algorithm on the HMM.
+def _build_log_transition_matrix(states: list, params: dict,
+                                  modal_total: int | None) -> np.ndarray:
+    """Precompute S×S log-transition matrix with row normalization.
 
-    Args:
-        reads: list of PageRead observations (one per PDF page)
-        params: dict with all HMM parameters
-
-    Returns:
-        path: list of states, one per page. Each state is (curr, total) or None.
+    Raw weights are computed per-pair, then each row is normalized to sum to 1.0
+    before taking the log. This ensures a proper probability distribution.
     """
+    S = len(states)
+    raw = np.zeros((S, S), dtype=np.float64)
+    for i in range(S):
+        for j in range(S):
+            raw[i, j] = _raw_transition_weight(
+                states[i], states[j], params, modal_total)
+    # Row-normalize
+    row_sums = raw.sum(axis=1, keepdims=True)
+    row_sums = np.maximum(row_sums, 1e-15)  # avoid division by zero
+    raw /= row_sums
+    return np.log(np.maximum(raw, 1e-15))
+
+
+def viterbi_decode(reads: list[PageRead], params: dict) -> list:
+    """Viterbi with precomputed transition matrix + vectorized numpy ops."""
     n = len(reads)
     if n == 0:
         return []
@@ -196,38 +208,28 @@ def viterbi_decode(reads: list[PageRead], params: dict) -> list:
     S = len(states)
     modal_total = _detect_modal_total(reads)
 
-    # Log-probability matrices
-    # V[t, s] = log P(best path ending in state s at time t)
+    # Precompute transition matrix (S×S)
+    log_trans = _build_log_transition_matrix(states, params, modal_total)
+
+    # V[t, s] = best log-prob ending in state s at time t
     V = np.full((n, S), -np.inf, dtype=np.float64)
     backptr = np.zeros((n, S), dtype=np.int32)
 
-    # Initialization (t=0): uniform prior over non-NULL states, weighted by emission
-    log_prior = math.log(1.0 / (S - 1))  # exclude NULL
-    for s in range(1, S):  # skip NULL for init
-        V[0, s] = log_prior + compute_log_emission(reads[0], states[s], params)
-    V[0, 0] = _LOG_FLOOR + compute_log_emission(reads[0], None, params)
+    # Init
+    log_prior = math.log(1.0 / (S - 1))
+    log_emit_0 = np.array([compute_log_emission(reads[0], states[s], params)
+                           for s in range(S)])
+    V[0, 1:] = log_prior + log_emit_0[1:]
+    V[0, 0] = _LOG_FLOOR + log_emit_0[0]
 
-    # Recursion
+    # Recursion — vectorized inner loop
     for t in range(1, n):
-        obs = reads[t]
-        # Precompute emissions for all states at time t
-        log_emit = np.array([compute_log_emission(obs, states[s], params)
-                             for s in range(S)])
-
-        for s_to in range(S):
-            best_score = -np.inf
-            best_prev = 0
-            state_to = states[s_to]
-            for s_from in range(S):
-                state_from = states[s_from]
-                log_tr = compute_log_transition(state_from, state_to, params,
-                                                modal_total)
-                score = V[t - 1, s_from] + log_tr
-                if score > best_score:
-                    best_score = score
-                    best_prev = s_from
-            V[t, s_to] = best_score + log_emit[s_to]
-            backptr[t, s_to] = best_prev
+        log_emit_t = np.array([compute_log_emission(reads[t], states[s], params)
+                               for s in range(S)])
+        # scores[i, j] = V[t-1, i] + log_trans[i, j]
+        scores = V[t - 1, :, np.newaxis] + log_trans  # shape (S, S)
+        backptr[t] = np.argmax(scores, axis=0)         # best prev for each state
+        V[t] = np.max(scores, axis=0) + log_emit_t
 
     # Backtrace
     path_idx = [0] * n
