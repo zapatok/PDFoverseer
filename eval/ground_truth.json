@@ -11,17 +11,17 @@
   },
   "CH_51": {
     "doc_count": 51,
-    "complete_count": 43,
+    "complete_count": 42,
     "inferred_count": 1
   },
   "CH_74": {
     "doc_count": 74,
-    "complete_count": 59,
+    "complete_count": 54,
     "inferred_count": 5
   },
   "HLL": {
     "doc_count": 363,
-    "complete_count": 223,
+    "complete_count": 205,
     "inferred_count": 35
   },
   "INS_31": {

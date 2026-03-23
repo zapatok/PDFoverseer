@@ -56,7 +56,7 @@ def load_ground_truth() -> dict[str, dict]:
 def score_config(params: dict, fixtures: list[dict], gt: dict[str, dict],
                  baseline_passes: set[str]) -> dict:
     doc_exact = complete_exact = inf_delta = regressions = 0
-    real_doc_delta = syn_doc_delta = 0   # kept separate; composite weights differ
+    real_doc_delta = real_comp_delta = syn_doc_delta = 0
     fixture_results = {}
 
     for fx in fixtures:
@@ -74,12 +74,17 @@ def score_config(params: dict, fixtures: list[dict], gt: dict[str, dict],
         d_doc = abs(got_docs - truth["doc_count"])
 
         if is_real:
-            # Real fixtures: doc count only, heavier weights
+            # Real fixtures: doc count (heavy) + complete count (moderate)
             passed = (d_doc == 0)
             if d_doc == 0:
                 doc_exact += 5
             else:
-                real_doc_delta += d_doc          # raw; multiplied in composite
+                real_doc_delta += d_doc
+            # Reward meeting/exceeding raw OCR complete count
+            if got_complete >= truth["complete_count"]:
+                complete_exact += 2
+            else:
+                real_comp_delta += truth["complete_count"] - got_complete
         else:
             # Synthetic fixtures: original behavior
             d_comp = (got_docs == truth["doc_count"]
@@ -99,14 +104,16 @@ def score_config(params: dict, fixtures: list[dict], gt: dict[str, dict],
         fixture_results[name] = "pass" if passed else "fail"
 
     composite = (doc_exact + complete_exact
-                 - real_doc_delta * 3    # heavier penalty for real fixtures
+                 - real_doc_delta * 3    # heavier penalty for wrong doc count (real)
+                 - real_comp_delta       # moderate penalty for under-completing (real)
                  - syn_doc_delta         # original penalty for synthetic
                  - inf_delta
                  - regressions * 5)
     return {
         "doc_count_exact":      doc_exact,
-        "doc_count_delta":      real_doc_delta + syn_doc_delta,  # raw total for display
+        "doc_count_delta":      real_doc_delta + syn_doc_delta,
         "complete_count_exact": complete_exact,
+        "real_complete_delta":  real_comp_delta,
         "inferred_delta":       inf_delta,
         "regression_count":     regressions,
         "composite_score":      composite,
