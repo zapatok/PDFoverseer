@@ -65,3 +65,45 @@ def build_state_space(max_total: int) -> tuple[list, dict]:
             idx[(c, t)] = len(states)
             states.append((c, t))
     return states, idx
+
+
+_LOG_FLOOR = -20.0  # log-probability floor (≈ e^-20 ≈ 2e-9)
+
+
+def compute_log_emission(read: PageRead, state, params: dict) -> float:
+    """Compute log P(observation | hidden state).
+
+    Cases:
+    - NULL state: low flat probability
+    - NULL observation (failed read): uniform across all states
+    - Exact match: emit_match * confidence^emit_conf_scale
+    - Partial match (same total): emit_partial
+    - Contradiction (different total): residual
+    """
+    # NULL hidden state — low probability regardless of observation
+    if state is None:
+        return _LOG_FLOOR
+
+    c_state, t_state = state
+    c_obs, t_obs = read.curr, read.total
+    conf = read.confidence
+
+    # No observation — uninformative, uniform
+    if c_obs is None or t_obs is None:
+        return math.log(params["emit_null"])
+
+    emit_conf_scale = params["emit_conf_scale"]
+    scaled_conf = max(conf, 0.01) ** emit_conf_scale
+
+    # Exact match
+    if c_obs == c_state and t_obs == t_state:
+        return math.log(max(params["emit_match"] * scaled_conf, 1e-15))
+
+    # Partial match — same total, different curr (OCR misread curr digit)
+    if t_obs == t_state:
+        return math.log(max(params["emit_partial"] * scaled_conf, 1e-15))
+
+    # Contradiction — different total entirely
+    residual = max(1.0 - params["emit_match"] - params["emit_partial"], 0.01)
+    n_other_totals = max(params["max_total"] - 1, 1)
+    return math.log(max(residual / n_other_totals * scaled_conf, 1e-15))
