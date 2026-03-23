@@ -15,12 +15,12 @@ params keys (all required):
 """
 from __future__ import annotations
 
-import copy
-import math
-from collections import Counter
+import copy           # used in run_pipeline (Task 6)
+import math           # used in emission/transition/Viterbi (Tasks 2-4)
+from collections import Counter  # used in modal total detection (Task 4)
 from dataclasses import dataclass, field
 
-import numpy as np
+import numpy as np    # used in Viterbi decoder (Tasks 4, 10)
 
 
 @dataclass
