@@ -28,19 +28,19 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import fitz  # PyMuPDF
 
-from core.analyzer import (
+from core.utils import (
     PARALLEL_WORKERS,
     BATCH_SIZE,
-    EASYOCR_DPI,
     _PageRead,
-    _process_page,
-    _render_clip,
     _parse,
+)
+from core.ocr import (
+    EASYOCR_DPI,
+    _process_page,
     _setup_sr,
     _init_easyocr,
-    _easyocr_reader,
-    _easyocr_lock,
 )
+from core.image import _render_clip
 
 # ── PDF paths ──────────────────────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ PDF_PATHS: dict[str, str] = {
     "CH_51":  r"a:/PROJECTS/PDFoverseer/CH_51docs.pdf",
     "CH_74":  r"a:/PROJECTS/PDFoverseer/CH_74docs.pdf",
     "HLL":    r"a:/PROJECTS/PDFoverseer/HLL_363docs.pdf",
-    "INS_31": r"a:/PROJECTS/PDFoverseer/INS_31docs.pdf",
+    "INS_31": r"a:/PROJECTS/PDFoverseer/INS_31.pdf.pdf",
 }
 
 OUT_DIR = PROJECT_ROOT / "eval" / "fixtures" / "real"
@@ -74,8 +74,8 @@ def extract_reads(pdf_path: str, name: str) -> list[_PageRead]:
     reads: list[_PageRead | None] = [None] * total_pages
 
     # ── GPU consumer (mirrors analyze_pdf) ────────────────────────────────
-    import core.analyzer as _core
-    has_gpu = _core._easyocr_reader is not None
+    import core.ocr as _ocr
+    has_gpu = _ocr._easyocr_reader is not None
     gpu_queue: queue.Queue[int | None] = queue.Queue()
     gpu_recovered = [0]
 
@@ -94,8 +94,8 @@ def extract_reads(pdf_path: str, name: str) -> list[_PageRead]:
                 bgr = _render_clip(doc[idx], dpi=EASYOCR_DPI)
                 import cv2
                 gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-                with _easyocr_lock:
-                    results = _core._easyocr_reader.readtext(gray, detail=0, paragraph=True)
+                with _ocr._easyocr_lock:
+                    results = _ocr._easyocr_reader.readtext(gray, detail=0, paragraph=True)
                 text = " ".join(results) if results else ""
                 c, t = _parse(text)
                 if c:

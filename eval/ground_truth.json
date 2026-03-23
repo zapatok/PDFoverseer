@@ -1,27 +1,152 @@
 {
-  "ART":    {"doc_count": 674, "complete_count": 615, "inferred_count": 1156},
-  "CH_9":   {"doc_count": 9,   "complete_count": 8,   "inferred_count": 0},
-  "CH_39":  {"doc_count": 39,  "complete_count": 37,  "inferred_count": 1},
-  "CH_51":  {"doc_count": 51,  "complete_count": 43,  "inferred_count": 0},
-  "CH_74":  {"doc_count": 74,  "complete_count": 58,  "inferred_count": 5},
-  "HLL":    {"doc_count": 363, "complete_count": 221, "inferred_count": 42},
-  "INS_31": {"doc_count": 31,  "complete_count": 29,  "inferred_count": 7},
-  "ins31_gap":       {"doc_count": 2, "complete_count": 2, "inferred_count": 1},
-  "undercount_chain":{"doc_count": 1, "complete_count": 1, "inferred_count": 1},
-  "ambiguous_start": {"doc_count": 3, "complete_count": 2, "inferred_count": 2},
-  "noisy_period":    {"doc_count": 1, "complete_count": 0, "inferred_count": 0},
-  "seq_break":       {"doc_count": 1, "complete_count": 1, "inferred_count": 1},
-  "ds_conflict":     {"doc_count": 1, "complete_count": 0, "inferred_count": 3},
-  "dense_1page_failures":  {"doc_count": 10, "complete_count": 10, "inferred_count": 2},
-  "many_1page_stream":     {"doc_count": 50, "complete_count": 50, "inferred_count": 20},
-  "period1_then_multipage":{"doc_count": 29, "complete_count": 28, "inferred_count": 0},
-  "mixed_1_and_2page":     {"doc_count": 10, "complete_count": 9,  "inferred_count": 2},
-  "high_failure_period2":  {"doc_count": 10, "complete_count": 10, "inferred_count": 12},
-  "clean_period2":         {"doc_count": 10, "complete_count": 10, "inferred_count": 0},
-  "clean_period4":         {"doc_count": 5,  "complete_count": 5,  "inferred_count": 0},
-  "all_1page_clean":       {"doc_count": 20, "complete_count": 20, "inferred_count": 0},
-  "variable_doc_sizes":    {"doc_count": 10, "complete_count": 10, "inferred_count": 0},
-  "single_long_doc":       {"doc_count": 1,  "complete_count": 1,  "inferred_count": 3},
-  "two_zones_diff_period": {"doc_count": 15, "complete_count": 15, "inferred_count": 0},
-  "sparse_reads":          {"doc_count": 10, "complete_count": 10, "inferred_count": 8}
+  "CH_9": {
+    "doc_count": 9,
+    "complete_count": 8,
+    "inferred_count": 0
+  },
+  "CH_39": {
+    "doc_count": 39,
+    "complete_count": 36,
+    "inferred_count": 1
+  },
+  "CH_51": {
+    "doc_count": 51,
+    "complete_count": 43,
+    "inferred_count": 1
+  },
+  "CH_74": {
+    "doc_count": 74,
+    "complete_count": 59,
+    "inferred_count": 5
+  },
+  "HLL": {
+    "doc_count": 363,
+    "complete_count": 223,
+    "inferred_count": 35
+  },
+  "INS_31": {
+    "doc_count": 31,
+    "complete_count": 29,
+    "inferred_count": 7
+  },
+  "ins31_gap": {
+    "doc_count": 2,
+    "complete_count": 2,
+    "inferred_count": 1
+  },
+  "undercount_chain": {
+    "doc_count": 1,
+    "complete_count": 1,
+    "inferred_count": 1
+  },
+  "ambiguous_start": {
+    "doc_count": 3,
+    "complete_count": 2,
+    "inferred_count": 2
+  },
+  "noisy_period": {
+    "doc_count": 1,
+    "complete_count": 0,
+    "inferred_count": 0
+  },
+  "seq_break": {
+    "doc_count": 1,
+    "complete_count": 1,
+    "inferred_count": 1
+  },
+  "ds_conflict": {
+    "doc_count": 1,
+    "complete_count": 0,
+    "inferred_count": 3
+  },
+  "dense_1page_failures": {
+    "doc_count": 10,
+    "complete_count": 10,
+    "inferred_count": 2
+  },
+  "many_1page_stream": {
+    "doc_count": 50,
+    "complete_count": 50,
+    "inferred_count": 20
+  },
+  "period1_then_multipage": {
+    "doc_count": 29,
+    "complete_count": 28,
+    "inferred_count": 0
+  },
+  "mixed_1_and_2page": {
+    "doc_count": 10,
+    "complete_count": 9,
+    "inferred_count": 2
+  },
+  "high_failure_period2": {
+    "doc_count": 10,
+    "complete_count": 10,
+    "inferred_count": 12
+  },
+  "clean_period2": {
+    "doc_count": 10,
+    "complete_count": 10,
+    "inferred_count": 0
+  },
+  "clean_period4": {
+    "doc_count": 5,
+    "complete_count": 5,
+    "inferred_count": 0
+  },
+  "all_1page_clean": {
+    "doc_count": 20,
+    "complete_count": 20,
+    "inferred_count": 0
+  },
+  "variable_doc_sizes": {
+    "doc_count": 10,
+    "complete_count": 10,
+    "inferred_count": 0
+  },
+  "single_long_doc": {
+    "doc_count": 1,
+    "complete_count": 1,
+    "inferred_count": 3
+  },
+  "two_zones_diff_period": {
+    "doc_count": 15,
+    "complete_count": 15,
+    "inferred_count": 0
+  },
+  "sparse_reads": {
+    "doc_count": 10,
+    "complete_count": 10,
+    "inferred_count": 8
+  },
+  "period2_low_conf": {
+    "doc_count": 20,
+    "complete_count": 16,
+    "inferred_count": 0
+  },
+  "period2_noisy_splits": {
+    "doc_count": 15,
+    "complete_count": 12,
+    "inferred_count": 0
+  },
+  "mixed_1_2_dense": {
+    "doc_count": 30,
+    "complete_count": 30,
+    "inferred_count": 0
+  },
+  "period2_boundary_fp": {
+    "doc_count": 10,
+    "complete_count": 7,
+    "inferred_count": 0
+  },
+  "art_like_high_failure": {
+    "doc_count": 15,
+    "complete_count": 15,
+    "inferred_count": 10
+  },
+  "hll_recon_period2": {
+    "doc_count": 20,
+    "complete_count": 20,
+    "inferred_count": 2
+  }
 }

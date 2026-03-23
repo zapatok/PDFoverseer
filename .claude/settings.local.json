@@ -92,7 +92,12 @@
       "Bash(git worktree:*)",
       "Bash(source .venv-cuda/Scripts/activate)",
       "Bash(python -c \"from server import _recalculate_metrics; print\\(''''import ok''''\\)\")",
-      "Bash(pytest tests/test_tray_issues.py -v)"
+      "Bash(pytest tests/test_tray_issues.py -v)",
+      "Bash(python -m pytest eval/tests/test_inference.py::test_hll_recon_period2_loads -v)",
+      "Bash(python -c \"import json; data = json.loads\\(open\\(''eval/ground_truth.json''\\).read\\(\\)\\); print\\(''hll_recon_period2'' in data\\); print\\(json.dumps\\(data[''hll_recon_period2''], indent=2\\)\\)\")",
+      "Bash(python -m pytest eval/tests/test_inference.py -x -q)",
+      "Bash(python -m pytest eval/tests/test_inference.py -q)",
+      "Bash(python eval/sweep.py)"
     ]
   }
 }

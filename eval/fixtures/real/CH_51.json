@@ -230,7 +230,7 @@
       "pdf_page": 33,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -510,7 +510,7 @@
       "pdf_page": 73,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {

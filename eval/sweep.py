@@ -39,6 +39,8 @@ RANDOM_SEED = 42
 def load_fixtures() -> list[dict]:
     fixtures = []
     for path in sorted(FIXTURES_DIR.rglob("*.json")):
+        if "archived" in path.parts:
+            continue
         data = json.loads(path.read_text())
         data["reads"] = [PageRead(**r) for r in data["reads"]]
         fixtures.append(data)

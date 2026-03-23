@@ -186,10 +186,10 @@
     },
     {
       "pdf_page": 27,
-      "curr": null,
-      "total": null,
-      "method": "failed",
-      "confidence": 0.0
+      "curr": 1,
+      "total": 2,
+      "method": "direct",
+      "confidence": 1.0
     },
     {
       "pdf_page": 28,
@@ -314,7 +314,7 @@
       "pdf_page": 45,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -776,7 +776,7 @@
       "pdf_page": 111,
       "curr": 2,
       "total": 2,
-      "method": "SR",
+      "method": "direct",
       "confidence": 1.0
     },
     {
@@ -1007,7 +1007,7 @@
       "pdf_page": 144,
       "curr": 1,
       "total": 2,
-      "method": "SR",
+      "method": "easyocr",
       "confidence": 1.0
     },
     {

@@ -1,0 +1,420 @@
+{
+  "run_at": "2026-03-15T19:56:49.383591",
+  "fixtures_count": 13,
+  "total_configs_tested": 901,
+  "baseline": {
+    "doc_count_exact": 13,
+    "doc_count_delta": 0,
+    "complete_count_exact": 13,
+    "inferred_delta": 0,
+    "regression_count": 0,
+    "composite_score": 65,
+    "fixture_breakdown": {
+      "ART": "pass",
+      "CH_39": "pass",
+      "CH_51": "pass",
+      "CH_74": "pass",
+      "CH_9": "pass",
+      "HLL": "pass",
+      "INS_31": "pass",
+      "ambiguous_start": "pass",
+      "ds_conflict": "pass",
+      "ins31_gap": "pass",
+      "noisy_period": "pass",
+      "seq_break": "pass",
+      "undercount_chain": "pass"
+    }
+  },
+  "top_configs": [
+    {
+      "rank": 1,
+      "params": {
+        "fwd_conf": 0.9,
+        "new_doc_base": 0.6,
+        "new_doc_hom_mul": 0.4,
+        "back_conf": 0.9,
+        "xval_cap": 0.5,
+        "fallback_base": 0.4,
+        "fallback_hom_base": 0.3,
+        "fallback_hom_mul": 0.15,
+        "ds_boost_max": 0.25,
+        "window": 5,
+        "hom_threshold": 0.85
+      },
+      "scores": {
+        "doc_count_exact": 13,
+        "doc_count_delta": 0,
+        "complete_count_exact": 13,
+        "inferred_delta": 0,
+        "regression_count": 0,
+        "composite_score": 65
+      },
+      "fixture_breakdown": {
+        "ART": "pass",
+        "CH_39": "pass",
+        "CH_51": "pass",
+        "CH_74": "pass",
+        "CH_9": "pass",
+        "HLL": "pass",
+        "INS_31": "pass",
+        "ambiguous_start": "pass",
+        "ds_conflict": "pass",
+        "ins31_gap": "pass",
+        "noisy_period": "pass",
+        "seq_break": "pass",
+        "undercount_chain": "pass"
+      }
+    },
+    {
+      "rank": 2,
+      "params": {
+        "fwd_conf": 0.9,
+        "new_doc_base": 0.5,
+        "new_doc_hom_mul": 0.2,
+        "back_conf": 0.95,
+        "xval_cap": 0.5,
+        "fallback_base": 0.4,
+        "fallback_hom_base": 0.3,
+        "fallback_hom_mul": 0.25,
+        "ds_boost_max": 0.2,
+        "window": 5,
+        "hom_threshold": 0.85
+      },
+      "scores": {
+        "doc_count_exact": 13,
+        "doc_count_delta": 0,
+        "complete_count_exact": 13,
+        "inferred_delta": 0,
+        "regression_count": 0,
+        "composite_score": 65
+      },
+      "fixture_breakdown": {
+        "ART": "pass",
+        "CH_39": "pass",
+        "CH_51": "pass",
+        "CH_74": "pass",
+        "CH_9": "pass",
+        "HLL": "pass",
+        "INS_31": "pass",
+        "ambiguous_start": "pass",
+        "ds_conflict": "pass",
+        "ins31_gap": "pass",
+        "noisy_period": "pass",
+        "seq_break": "pass",
+        "undercount_chain": "pass"
+      }
+    },
+    {
+      "rank": 3,
+      "params": {
+        "fwd_conf": 0.93,
+        "new_doc_base": 0.5,
+        "new_doc_hom_mul": 0.4,
+        "back_conf": 0.9,
+        "xval_cap": 0.6,
+        "fallback_base": 0.5,
+        "fallback_hom_base": 0.4,
+        "fallback_hom_mul": 0.2,
+        "ds_boost_max": 0.3,
+        "window": 5,
+        "hom_threshold": 0.85
+      },
+      "scores": {
+        "doc_count_exact": 13,
+        "doc_count_delta": 0,
+        "complete_count_exact": 13,
+        "inferred_delta": 0,
+        "regression_count": 0,
+        "composite_score": 65
+      },
+      "fixture_breakdown": {
+        "ART": "pass",
+        "CH_39": "pass",
+        "CH_51": "pass",
+        "CH_74": "pass",
+        "CH_9": "pass",
+        "HLL": "pass",
+        "INS_31": "pass",
+        "ambiguous_start": "pass",
+        "ds_conflict": "pass",
+        "ins31_gap": "pass",
+        "noisy_period": "pass",
+        "seq_break": "pass",
+        "undercount_chain": "pass"
+      }
+    },
+    {
+      "rank": 4,
+      "params": {
+        "fwd_conf": 0.95,
+        "new_doc_base": 0.7,
+        "new_doc_hom_mul": 0.2,
+        "back_conf": 0.95,
+        "xval_cap": 0.4,
+        "fallback_base": 0.3,
+        "fallback_hom_base": 0.4,
+        "fallback_hom_mul": 0.2,
+        "ds_boost_max": 0.3,
+        "window": 5,
+        "hom_threshold": 0.85
+      },
+      "scores": {
+        "doc_count_exact": 13,
+        "doc_count_delta": 0,
+        "complete_count_exact": 13,
+        "inferred_delta": 0,
+        "regression_count": 0,
+        "composite_score": 65
+      },
+      "fixture_breakdown": {
+        "ART": "pass",
+        "CH_39": "pass",
+        "CH_51": "pass",
+        "CH_74": "pass",
+        "CH_9": "pass",
+        "HLL": "pass",
+        "INS_31": "pass",
+        "ambiguous_start": "pass",
+        "ds_conflict": "pass",
+        "ins31_gap": "pass",
+        "noisy_period": "pass",
+        "seq_break": "pass",
+        "undercount_chain": "pass"
+      }
+    },
+    {
+      "rank": 5,
+      "params": {
+        "fwd_conf": 0.93,
+        "new_doc_base": 0.6,
+        "new_doc_hom_mul": 0.4,
+        "back_conf": 0.95,
+        "xval_cap": 0.6,
+        "fallback_base": 0.5,
+        "fallback_hom_base": 0.2,
+        "fallback_hom_mul": 0.2,
+        "ds_boost_max": 0.25,
+        "window": 5,
+        "hom_threshold": 0.85
+      },
+      "scores": {
+        "doc_count_exact": 13,
+        "doc_count_delta": 0,
+        "complete_count_exact": 13,
+        "inferred_delta": 0,
+        "regression_count": 0,
+        "composite_score": 65
+      },
+      "fixture_breakdown": {
+        "ART": "pass",
+        "CH_39": "pass",
+        "CH_51": "pass",
+        "CH_74": "pass",
+        "CH_9": "pass",
+        "HLL": "pass",
+        "INS_31": "pass",
+        "ambiguous_start": "pass",
+        "ds_conflict": "pass",
+        "ins31_gap": "pass",
+        "noisy_period": "pass",
+        "seq_break": "pass",
+        "undercount_chain": "pass"
+      }
+    },
+    {
+      "rank": 6,
+      "params": {
+        "fwd_conf": 0.9,
+        "new_doc_base": 0.5,
+        "new_doc_hom_mul": 0.3,
+        "back_conf": 0.9,
+        "xval_cap": 0.6,
+        "fallback_base": 0.3,
+        "fallback_hom_base": 0.2,
+        "fallback_hom_mul": 0.2,
+        "ds_boost_max": 0.2,
+        "window": 5,
+        "hom_threshold": 0.85
+      },
+      "scores": {
+        "doc_count_exact": 13,
+        "doc_count_delta": 0,
+        "complete_count_exact": 13,
+        "inferred_delta": 0,
+        "regression_count": 0,
+        "composite_score": 65
+      },
+      "fixture_breakdown": {
+        "ART": "pass",
+        "CH_39": "pass",
+        "CH_51": "pass",
+        "CH_74": "pass",
+        "CH_9": "pass",
+        "HLL": "pass",
+        "INS_31": "pass",
+        "ambiguous_start": "pass",
+        "ds_conflict": "pass",
+        "ins31_gap": "pass",
+        "noisy_period": "pass",
+        "seq_break": "pass",
+        "undercount_chain": "pass"
+      }
+    },
+    {
+      "rank": 7,
+      "params": {
+        "fwd_conf": 0.95,
+        "new_doc_base": 0.5,
+        "new_doc_hom_mul": 0.3,
+        "back_conf": 0.85,
+        "xval_cap": 0.4,
+        "fallback_base": 0.5,
+        "fallback_hom_base": 0.4,
+        "fallback_hom_mul": 0.25,
+        "ds_boost_max": 0.2,
+        "window": 5,
+        "hom_threshold": 0.85
+      },
+      "scores": {
+        "doc_count_exact": 13,
+        "doc_count_delta": 0,
+        "complete_count_exact": 13,
+        "inferred_delta": 0,
+        "regression_count": 0,
+        "composite_score": 65
+      },
+      "fixture_breakdown": {
+        "ART": "pass",
+        "CH_39": "pass",
+        "CH_51": "pass",
+        "CH_74": "pass",
+        "CH_9": "pass",
+        "HLL": "pass",
+        "INS_31": "pass",
+        "ambiguous_start": "pass",
+        "ds_conflict": "pass",
+        "ins31_gap": "pass",
+        "noisy_period": "pass",
+        "seq_break": "pass",
+        "undercount_chain": "pass"
+      }
+    },
+    {
+      "rank": 8,
+      "params": {
+        "fwd_conf": 0.93,
+        "new_doc_base": 0.5,
+        "new_doc_hom_mul": 0.4,
+        "back_conf": 0.95,
+        "xval_cap": 0.5,
+        "fallback_base": 0.5,
+        "fallback_hom_base": 0.2,
+        "fallback_hom_mul": 0.2,
+        "ds_boost_max": 0.25,
+        "window": 5,
+        "hom_threshold": 0.85
+      },
+      "scores": {
+        "doc_count_exact": 13,
+        "doc_count_delta": 0,
+        "complete_count_exact": 13,
+        "inferred_delta": 0,
+        "regression_count": 0,
+        "composite_score": 65
+      },
+      "fixture_breakdown": {
+        "ART": "pass",
+        "CH_39": "pass",
+        "CH_51": "pass",
+        "CH_74": "pass",
+        "CH_9": "pass",
+        "HLL": "pass",
+        "INS_31": "pass",
+        "ambiguous_start": "pass",
+        "ds_conflict": "pass",
+        "ins31_gap": "pass",
+        "noisy_period": "pass",
+        "seq_break": "pass",
+        "undercount_chain": "pass"
+      }
+    },
+    {
+      "rank": 9,
+      "params": {
+        "fwd_conf": 0.97,
+        "new_doc_base": 0.6,
+        "new_doc_hom_mul": 0.3,
+        "back_conf": 0.85,
+        "xval_cap": 0.5,
+        "fallback_base": 0.5,
+        "fallback_hom_base": 0.4,
+        "fallback_hom_mul": 0.25,
+        "ds_boost_max": 0.25,
+        "window": 5,
+        "hom_threshold": 0.85
+      },
+      "scores": {
+        "doc_count_exact": 13,
+        "doc_count_delta": 0,
+        "complete_count_exact": 13,
+        "inferred_delta": 0,
+        "regression_count": 0,
+        "composite_score": 65
+      },
+      "fixture_breakdown": {
+        "ART": "pass",
+        "CH_39": "pass",
+        "CH_51": "pass",
+        "CH_74": "pass",
+        "CH_9": "pass",
+        "HLL": "pass",
+        "INS_31": "pass",
+        "ambiguous_start": "pass",
+        "ds_conflict": "pass",
+        "ins31_gap": "pass",
+        "noisy_period": "pass",
+        "seq_break": "pass",
+        "undercount_chain": "pass"
+      }
+    },
+    {
+      "rank": 10,
+      "params": {
+        "fwd_conf": 0.93,
+        "new_doc_base": 0.5,
+        "new_doc_hom_mul": 0.4,
+        "back_conf": 0.9,
+        "xval_cap": 0.6,
+        "fallback_base": 0.5,
+        "fallback_hom_base": 0.4,
+        "fallback_hom_mul": 0.15,
+        "ds_boost_max": 0.25,
+        "window": 5,
+        "hom_threshold": 0.85
+      },
+      "scores": {
+        "doc_count_exact": 13,
+        "doc_count_delta": 0,
+        "complete_count_exact": 13,
+        "inferred_delta": 0,
+        "regression_count": 0,
+        "composite_score": 65
+      },
+      "fixture_breakdown": {
+        "ART": "pass",
+        "CH_39": "pass",
+        "CH_51": "pass",
+        "CH_74": "pass",
+        "CH_9": "pass",
+        "HLL": "pass",
+        "INS_31": "pass",
+        "ambiguous_start": "pass",
+        "ds_conflict": "pass",
+        "ins31_gap": "pass",
+        "noisy_period": "pass",
+        "seq_break": "pass",
+        "undercount_chain": "pass"
+      }
+    }
+  ]
+}

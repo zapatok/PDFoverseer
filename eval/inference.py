@@ -10,7 +10,6 @@ params keys (all required):
     fwd_conf, new_doc_base, new_doc_hom_mul  — Phase 1
     back_conf                                 — Phase 2
     xval_cap                                  — Phase 3
-    fallback_base, fallback_hom_base, fallback_hom_mul  — Phase 4
     ds_period_weight, ds_neighbor_weight,     — Phase 5 (D-S evidence weights)
       ds_prior_weight, ds_boost_max
     ph5b_conf_min, ph5b_ratio_min            — Phase 5b (period-contradiction)
@@ -166,7 +165,7 @@ def _period_evidence(
                 if r.curr is not None and r.method not in ("failed", "excluded"):
                     h = (r.curr, r.total)
                     dist_w = 1.0 / mult
-                    method_w = (1.0 if r.method in ("direct", "SR", "easyocr", "manual")
+                    method_w = (1.0 if r.method in ("direct", "super_resolution", "easyocr", "manual")
                                 else 0.5)
                     candidates[h] = candidates.get(h, 0) + dist_w * method_w
 
@@ -189,9 +188,6 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
     new_doc_hom_mul  = params["new_doc_hom_mul"]
     back_conf        = params["back_conf"]
     xval_cap         = params["xval_cap"]
-    fallback_base    = params["fallback_base"]
-    fallback_hom_base = params["fallback_hom_base"]
-    fallback_hom_mul  = params["fallback_hom_mul"]
     ds_period_weight   = params["ds_period_weight"]
     ds_neighbor_weight = params["ds_neighbor_weight"]
     ds_prior_weight    = params["ds_prior_weight"]
@@ -220,40 +216,137 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             return mode_val, hom
         return best_total, hom
 
-    # ── Phase 1: Forward propagation ────────────────────────────────
-    for i in range(n):
-        r = reads[i]
-        if r.method != "failed":
-            continue
-        if i > 0:
-            prev = reads[i - 1]
-            if prev.curr is not None and prev.total is not None:
-                if prev.curr < prev.total:
-                    r.curr, r.total = prev.curr + 1, prev.total
-                    r.method, r.confidence = "inferred", fwd_conf
-                elif prev.curr == prev.total:
-                    lt, hom = _local_total(i)
-                    r.curr, r.total = 1, lt
-                    r.method = "inferred"
-                    r.confidence = new_doc_base + hom * new_doc_hom_mul
+    # ── Phase 0: Anomaly Downgrade (Soft Dropout) ───────────────────
+    anomaly_dropout = params.get("anomaly_dropout", 0.0)
+    if anomaly_dropout > 0.0:
+        for i in range(n):
+            r = reads[i]
+            if r.method in ("failed", "inferred", "excluded") or r.total is None:
+                continue
+            lt, hom = _local_total(i)
+            if r.total == 1 and hom >= hom_threshold and lt > 1:
+                r.confidence -= hom
+                if r.confidence < anomaly_dropout:
+                    r.method = "failed"
+                    r.curr = None
+                    r.total = None
 
-    # ── Phase 2: Backward propagation ───────────────────────────────
-    for i in range(n - 2, -1, -1):
-        r = reads[i]
-        if r.method != "failed":
-            continue
-        if i < n - 1:
-            nxt = reads[i + 1]
+    # ── Phase 1 & 2: Bidirectional Soft Clash Resolution ────────────
+    clash_w_local = params.get("clash_w_local", 1.0)
+    clash_w_period = params.get("clash_w_period", 1.0)
+    clash_boundary_pen = params.get("clash_boundary_pen", 5.0)
+
+    gaps = []
+    start_idx = None
+    for i in range(n):
+        if reads[i].method == "failed":
+            if start_idx is None:
+                start_idx = i
+        else:
+            if start_idx is not None:
+                gaps.append((start_idx, i))
+                start_idx = None
+    if start_idx is not None:
+        gaps.append((start_idx, n))
+
+    for gap_start, gap_end in gaps:
+        # Generate hyp_fwd
+        hyp_fwd = []
+        prev_c, prev_t = None, None
+        if gap_start > 0:
+            prev = reads[gap_start - 1]
+            if prev.curr is not None and prev.total is not None:
+                prev_c, prev_t = prev.curr, prev.total
+        
+        for i in range(gap_start, gap_end):
+            lt, hom = _local_total(i)
+            if prev_c is not None and prev_t is not None:
+                if prev_c < prev_t:
+                    c, t = prev_c + 1, prev_t
+                else:
+                    c, t = 1, lt
+            else:
+                c, t = 1, lt
+            hyp_fwd.append((c, t, hom))
+            prev_c, prev_t = c, t
+
+        # Generate hyp_bwd
+        hyp_bwd = []
+        nxt_c, nxt_t = None, None
+        if gap_end < n:
+            nxt = reads[gap_end]
             if nxt.curr is not None and nxt.total is not None:
-                if nxt.curr > 1:
-                    r.curr, r.total = nxt.curr - 1, nxt.total
-                    r.method, r.confidence = "inferred", back_conf
-                elif nxt.curr == 1 and i > 0:
-                    prev = reads[i - 1]
-                    if (prev.curr is not None and prev.total is not None
-                            and prev.curr < prev.total):
-                        r.curr, r.total = prev.curr + 1, prev.total
-                        r.method, r.confidence = "inferred", back_conf
+                nxt_c, nxt_t = nxt.curr, nxt.total
+        
+        for i in range(gap_end - 1, gap_start - 1, -1):
+            lt, hom = _local_total(i)
+            if nxt_c is not None and nxt_t is not None:
+                if nxt_c > 1:
+                    c, t = nxt_c - 1, nxt_t
+                else:
+                    c, t = lt, lt
+            else:
+                c, t = lt, lt
+            hyp_bwd.insert(0, (c, t, hom))
+            nxt_c, nxt_t = c, t
+
+        # Score hypotheses
+        def seq_cost(seq):
+            cost = 0.0
+            for offset, (c, t, hom) in enumerate(seq):
+                idx = gap_start + offset
+                lt_val, _ = _local_total(idx)
+                if t != lt_val:
+                    cost += hom * clash_w_local
+                if c == 1 and period_info and period_info.get("period"):
+                    p_conf = period_info.get("confidence", 0.0)
+                    ex_t = period_info.get("expected_total", period_info["period"])
+                    if p_conf > 0.3 and t != ex_t:
+                        cost += p_conf * clash_w_period
+            return cost
+        
+        cost_fwd = seq_cost(hyp_fwd)
+        cost_bwd = seq_cost(hyp_bwd)
+
+        # Boundary divergence penalty
+        if gap_end < n:
+            r_nxt = reads[gap_end]
+            fwd_last_c, fwd_last_t, _ = hyp_fwd[-1]
+            if r_nxt.curr is not None and r_nxt.total is not None:
+                if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or 
+                        (fwd_last_c == fwd_last_t and r_nxt.curr == 1)):
+                    cost_fwd += clash_boundary_pen
+        
+        if gap_start > 0:
+            r_prev = reads[gap_start - 1]
+            bwd_first_c, bwd_first_t, _ = hyp_bwd[0]
+            if r_prev.curr is not None and r_prev.total is not None:
+                if not ((r_prev.total == bwd_first_t and r_prev.curr == bwd_first_c - 1) or
+                        (r_prev.curr == r_prev.total and bwd_first_c == 1)):
+                    cost_bwd += clash_boundary_pen
+
+        if cost_fwd <= cost_bwd:
+            best_hyp = hyp_fwd
+        else:
+            best_hyp = hyp_bwd
+
+        # Apply
+        for offset, (c, t, hom) in enumerate(best_hyp):
+            r = reads[gap_start + offset]
+            r.method = "inferred"
+            r.curr, r.total = c, t
+            if best_hyp is hyp_bwd:
+                r.confidence = back_conf
+            else:
+                if offset == 0 and gap_start > 0:
+                    rp = reads[gap_start - 1]
+                    if rp.curr == rp.total:
+                        r.confidence = new_doc_base + hom * new_doc_hom_mul
+                        continue
+                if c == 1:
+                    r.confidence = new_doc_base + hom * new_doc_hom_mul
+                else:
+                    r.confidence = fwd_conf
 
     # ── Phase 1b: Orphan candidate marking ──────────────────────────
     # An inferred curr==1 page whose immediate next page is also curr==1
@@ -289,14 +382,16 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
         if not consistent:
             r.confidence = min(r.confidence, xval_cap)
 
-    # ── Phase 4: Fallback for remaining failures ─────────────────────
-    for i, r in enumerate(reads):
-        if r.method == "failed":
-            lt, hom = _local_total(i)
-            r.curr, r.total = 1, lt
-            r.method = "inferred"
-            r.confidence = (fallback_base if hom < hom_threshold
-                            else fallback_hom_base + hom * fallback_hom_mul)
+    # ── Phase 4: Fallback for unresolved failures ─────────────────────
+    phase4_conf = params.get("phase4_conf", 0.0)
+    if phase4_conf > 0.0:
+        for i, r in enumerate(reads):
+            if r.method == "failed":
+                lt, hom = _local_total(i)
+                r.curr   = 1
+                r.total  = lt
+                r.method = "inferred"
+                r.confidence = phase4_conf
 
     # ── Phase 5: D-S post-validation ─────────────────────────────────
     # Does NOT change curr/total — only boosts confidence when

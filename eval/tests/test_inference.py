@@ -77,8 +77,8 @@ def test_ph5b_ins31_scenario():
     specs.append((30, 2, 4, "direct", 0.85))  # OCR misread
     reads = make_reads(specs)
 
-    # Without Phase 5b (production defaults: disabled)
-    docs_no_5b = run_pipeline(reads, PROD_PARAMS)
+    # Without Phase 5b (explicitly disabled)
+    docs_no_5b = run_pipeline(reads, {**PROD_PARAMS, "ph5b_conf_min": 0.0})
     assert len(docs_no_5b) == 30, f"Without 5b expected 30 docs, got {len(docs_no_5b)}"
 
     # With Phase 5b enabled
@@ -107,9 +107,9 @@ def test_ph5b_no_correction_when_mixed():
     assert len(docs_5b) == len(docs_no_5b)
 
 
-def test_ph5b_disabled_by_default():
-    """PRODUCTION_PARAMS has ph5b_conf_min=0.0, so Phase 5b is disabled."""
-    assert PROD_PARAMS["ph5b_conf_min"] == 0.0
+def test_ph5b_enabled_by_default():
+    """PRODUCTION_PARAMS enables Phase 5b via soft clash resolution validation."""
+    assert PROD_PARAMS["ph5b_conf_min"] > 0.0
 
 
 def test_ph5b_respects_conf_threshold():
