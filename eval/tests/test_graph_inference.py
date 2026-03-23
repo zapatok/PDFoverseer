@@ -100,3 +100,47 @@ def test_trans_period_prior():
     log_to_modal = compute_log_transition((2, 2), (1, 3), params, modal_total)
     log_to_other = compute_log_transition((2, 2), (1, 5), params, modal_total)
     assert log_to_modal > log_to_other
+
+
+from eval.graph_inference import viterbi_decode
+
+
+def test_viterbi_clean_two_docs():
+    """Two clean 2-page docs → Viterbi should decode perfectly."""
+    reads = [
+        PageRead(0, 1, 2, "direct", 0.95),
+        PageRead(1, 2, 2, "direct", 0.92),
+        PageRead(2, 1, 2, "direct", 0.91),
+        PageRead(3, 2, 2, "direct", 0.90),
+    ]
+    params = {
+        "trans_continue": 0.85, "trans_new_doc": 0.10, "trans_skip": 0.03,
+        "emit_match": 0.90, "emit_conf_scale": 1.0, "emit_partial": 0.10,
+        "emit_null": 0.3, "max_total": 5, "boundary_bonus": 2.0,
+        "period_prior": 0.0,
+    }
+    path = viterbi_decode(reads, params)
+    assert len(path) == 4
+    assert path[0] == (1, 2)
+    assert path[1] == (2, 2)
+    assert path[2] == (1, 2)
+    assert path[3] == (2, 2)
+
+
+def test_viterbi_missing_middle():
+    """3-page doc with failed middle read → should infer (2, 3)."""
+    reads = [
+        PageRead(0, 1, 3, "direct", 0.95),
+        PageRead(1, None, None, "failed", 0.0),
+        PageRead(2, 3, 3, "direct", 0.90),
+    ]
+    params = {
+        "trans_continue": 0.85, "trans_new_doc": 0.10, "trans_skip": 0.03,
+        "emit_match": 0.90, "emit_conf_scale": 1.0, "emit_partial": 0.10,
+        "emit_null": 0.3, "max_total": 5, "boundary_bonus": 2.0,
+        "period_prior": 0.0,
+    }
+    path = viterbi_decode(reads, params)
+    assert path[0] == (1, 3)
+    assert path[1] == (2, 3)  # inferred from context
+    assert path[2] == (3, 3)

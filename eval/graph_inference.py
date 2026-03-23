@@ -166,3 +166,73 @@ def compute_log_transition(state_from, state_to, params: dict,
     """
     w = _raw_transition_weight(state_from, state_to, params, modal_total)
     return math.log(max(w, 1e-15))
+
+
+def _detect_modal_total(reads: list[PageRead]) -> int | None:
+    """Find most common declared total from confirmed reads."""
+    totals = [r.total for r in reads
+              if r.total is not None and r.method not in ("failed", "excluded")]
+    if not totals:
+        return None
+    return Counter(totals).most_common(1)[0][0]
+
+
+def viterbi_decode(reads: list[PageRead], params: dict) -> list:
+    """Run Viterbi algorithm on the HMM.
+
+    Args:
+        reads: list of PageRead observations (one per PDF page)
+        params: dict with all HMM parameters
+
+    Returns:
+        path: list of states, one per page. Each state is (curr, total) or None.
+    """
+    n = len(reads)
+    if n == 0:
+        return []
+
+    max_total = int(params["max_total"])
+    states, state_idx = build_state_space(max_total)
+    S = len(states)
+    modal_total = _detect_modal_total(reads)
+
+    # Log-probability matrices
+    # V[t, s] = log P(best path ending in state s at time t)
+    V = np.full((n, S), -np.inf, dtype=np.float64)
+    backptr = np.zeros((n, S), dtype=np.int32)
+
+    # Initialization (t=0): uniform prior over non-NULL states, weighted by emission
+    log_prior = math.log(1.0 / (S - 1))  # exclude NULL
+    for s in range(1, S):  # skip NULL for init
+        V[0, s] = log_prior + compute_log_emission(reads[0], states[s], params)
+    V[0, 0] = _LOG_FLOOR + compute_log_emission(reads[0], None, params)
+
+    # Recursion
+    for t in range(1, n):
+        obs = reads[t]
+        # Precompute emissions for all states at time t
+        log_emit = np.array([compute_log_emission(obs, states[s], params)
+                             for s in range(S)])
+
+        for s_to in range(S):
+            best_score = -np.inf
+            best_prev = 0
+            state_to = states[s_to]
+            for s_from in range(S):
+                state_from = states[s_from]
+                log_tr = compute_log_transition(state_from, state_to, params,
+                                                modal_total)
+                score = V[t - 1, s_from] + log_tr
+                if score > best_score:
+                    best_score = score
+                    best_prev = s_from
+            V[t, s_to] = best_score + log_emit[s_to]
+            backptr[t, s_to] = best_prev
+
+    # Backtrace
+    path_idx = [0] * n
+    path_idx[n - 1] = int(np.argmax(V[n - 1]))
+    for t in range(n - 2, -1, -1):
+        path_idx[t] = int(backptr[t + 1, path_idx[t + 1]])
+
+    return [states[i] for i in path_idx]
