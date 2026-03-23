@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from eval.graph_inference import build_state_space, PageRead, Document, compute_log_emission, compute_log_transition
 import math
 import json
+import time
 
 
 def test_state_space_max_total_3():
@@ -284,3 +285,50 @@ def test_synthetic_fixture_no_crash():
     reads = [PageRead(**r) for r in data["reads"]]
     docs = run_pipeline(reads, BASIC_PARAMS)
     assert len(docs) >= 1
+
+
+def test_e2e_single_page():
+    """Single-page PDF → one document."""
+    reads = [PageRead(0, 1, 1, "direct", 0.90)]
+    docs = run_pipeline(reads, BASIC_PARAMS)
+    assert len(docs) == 1
+    assert docs[0].declared_total == 1
+
+
+def test_e2e_all_failed():
+    """All OCR failed → should still return without error."""
+    reads = [
+        PageRead(i, None, None, "failed", 0.0)
+        for i in range(5)
+    ]
+    docs = run_pipeline(reads, BASIC_PARAMS)
+    # Should not crash; exact doc count depends on model behavior
+    assert isinstance(docs, list)
+
+
+def test_e2e_empty_input():
+    """Empty reads → empty docs."""
+    docs = run_pipeline([], BASIC_PARAMS)
+    assert docs == []
+
+
+def test_performance_200_pages():
+    """Spec constraint: must handle 200 pages in <30s (conservative)."""
+    reads = []
+    # 40 documents of 5 pages each = 200 pages
+    for doc_idx in range(40):
+        for page in range(5):
+            pdf_page = doc_idx * 5 + page
+            # 80% have good reads, 20% failed
+            if pdf_page % 5 != 3:
+                reads.append(PageRead(pdf_page, page + 1, 5, "direct", 0.85))
+            else:
+                reads.append(PageRead(pdf_page, None, None, "failed", 0.0))
+
+    params = {**BASIC_PARAMS, "max_total": 20}
+    t0 = time.perf_counter()
+    docs = run_pipeline(reads, params)
+    elapsed = time.perf_counter() - t0
+
+    assert len(docs) >= 1
+    assert elapsed < 30.0, f"200-page Viterbi took {elapsed:.1f}s, must be <30s"
