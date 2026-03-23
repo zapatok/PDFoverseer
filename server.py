@@ -24,7 +24,18 @@ logger = logging.getLogger("pdfoverserver")
 async def lifespan(app: FastAPI):
     # Capture the main asyncio loop so background threads can broadcast
     ws.global_loop = asyncio.get_running_loop()
+
+    async def _eviction_loop():
+        while True:
+            await asyncio.sleep(300)  # every 5 minutes
+            from api.state import session_manager
+            evicted = session_manager.evict_stale()
+            if evicted:
+                logger.info("Evicted %d stale sessions", evicted)
+
+    task = asyncio.create_task(_eviction_loop())
     yield
+    task.cancel()
 
 app = FastAPI(title="PDFoverseer V3 API", lifespan=lifespan)
 logger.info(f"Inference engine loaded: {INFERENCE_ENGINE_VERSION}")
@@ -67,7 +78,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run(
         "server:app",
-        host="0.0.0.0",
+        host=os.getenv("HOST", "127.0.0.1"),
         port=port,
         reload=True,
         reload_excludes=[

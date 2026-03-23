@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from api.state import get_session, SessionState
-from api.database import get_reads, clear_session
+from api.database import get_reads, clear_session, has_reads
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ def api_get_state(s: SessionState = Depends(get_session)):
     pdf_list_state = []
     for p in s.pdf_list:
         p_str = str(p)
-        st = "done" if len(get_reads(s.session_id, p_str)) > 0 else ("skipped" if p_str in s.skipped_pdfs else "pending")
+        st = "done" if has_reads(s.session_id, p_str) else ("skipped" if p_str in s.skipped_pdfs else "pending")
         pdf_list_state.append({"name": p.name, "path": p_str, "status": st})
 
     return {

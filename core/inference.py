@@ -1,11 +1,17 @@
-"""Inference engine: period detection, Dempster-Shafer fusion, phases 1-6."""
+"""
+Inference engine: period detection, Dempster-Shafer fusion, phases 0-6.
+
+Confidence thresholds (MIN_CONF_FOR_NEW_DOC, PH5B_CONF_MIN, CLASH_BOUNDARY_PEN,
+etc.) were tuned via eval/sweep.py — a Latin Hypercube Sample followed by a
+fine grid search over 7 real PDF fixtures. See eval/sweep.py for sweep design.
+"""
 from __future__ import annotations
 
 from typing import Optional
 from collections import Counter
 import numpy as np
 
-from core.utils import Document, _PageRead, MIN_CONF_FOR_NEW_DOC, ANOMALY_DROPOUT, PHASE4_FALLBACK_CONF, CLASH_BOUNDARY_PEN
+from core.utils import Document, _PageRead, MIN_CONF_FOR_NEW_DOC, ANOMALY_DROPOUT, PHASE4_FALLBACK_CONF, CLASH_BOUNDARY_PEN, PH5B_CONF_MIN, PH5B_RATIO_MIN
 
 # ── Period Detection ─────────────────────────────────────────────────────────
 
@@ -139,7 +145,7 @@ def _period_evidence(
                 if r.curr is not None and r.method not in ("failed", "excluded"):
                     h = (r.curr, r.total)
                     dist_w = 1.0 / mult
-                    method_w = (1.0 if r.method in ("direct", "SR", "easyocr", "manual")
+                    method_w = (1.0 if r.method in ("direct", "super_resolution", "easyocr", "manual")
                                 else 0.5)
                     candidates[h] = candidates.get(h, 0) + dist_w * method_w
 
@@ -179,24 +185,33 @@ def _infer_missing(
     period = period_info.get("period") if period_info else None
     period_conf = period_info.get("confidence", 0.0) if period_info else 0.0
 
+    _lt_cache: dict[int, tuple[int, float]] = {}
+
     def _local_total(idx: int, window: int = 7) -> tuple[int, float]:
         """Return (most_common_total, homogeneity) from ±window confirmed reads.
         Only overrides best_total when local region is highly homogeneous (≥85%).
         Mixed regions fall back to best_total to avoid bias."""
+        if idx in _lt_cache:
+            return _lt_cache[idx]
         lo, hi = max(0, idx - window), min(n, idx + window + 1)
         local = [reads[j].total for j in range(lo, hi)
                  if reads[j].total is not None
                  and reads[j].method not in ("failed", "inferred")]
         if not local:
-            return best_total, 0.0
-        tc = Counter(local)
-        mode_val, mode_freq = tc.most_common(1)[0]
-        homogeneity = mode_freq / len(local)
-        if homogeneity >= 0.83:
-            return mode_val, homogeneity
-        return best_total, homogeneity
+            result = (best_total, 0.0)
+        else:
+            tc = Counter(local)
+            mode_val, mode_freq = tc.most_common(1)[0]
+            homogeneity = mode_freq / len(local)
+            result = (mode_val, homogeneity) if homogeneity >= 0.83 else (best_total, homogeneity)
+        _lt_cache[idx] = result
+        return result
 
     # ── Phase 0: Anomaly Downgrade (Soft Dropout) ───────────────────
+    # Reduces confidence for reads whose declared total conflicts with the local
+    # majority total (e.g., a stray curr=1/total=1 page in a 3-page document).
+    # Disabled by default (ANOMALY_DROPOUT=0.0) — only useful when OCR quality
+    # is so poor that single-page "documents" appear as noise.
     if ANOMALY_DROPOUT > 0.0:
         for i in range(n):
             r = reads[i]
@@ -211,6 +226,11 @@ def _infer_missing(
                     r.total = None
 
     # ── Phase 1 & 2: Bidirectional Soft Clash Resolution ────────────
+    # Fills contiguous runs of "failed" pages by generating two hypotheses:
+    # forward (left→right propagation) and backward (right→left). Each hypothesis
+    # is scored by how well it fits the local total and period alignment; the
+    # lower-cost hypothesis wins. CLASH_BOUNDARY_PEN penalizes hypotheses that
+    # produce a discontinuity at the boundary with the next known read.
     gaps = []
     start_idx = None
     for i in range(n):
@@ -331,6 +351,8 @@ def _infer_missing(
                     r.confidence = 0.99
 
     # ── Phase 1b: Orphan candidate marking ──────────────────────────
+    # Marks inferred curr=1 pages that are immediately followed by another curr=1
+    # as orphan candidates. These are reviewed in Phase 6 for suppression.
     for i in range(n - 1):
         r = reads[i]
         if r.method == "inferred" and r.curr == 1:
@@ -339,6 +361,10 @@ def _infer_missing(
                 r._ph1_orphan_candidate = True
 
     # ── Phase 3: Cross-validation ───────────────────────────────────
+    # Checks each inferred page against its immediate neighbors. If neither
+    # left nor right neighbor is sequentially consistent, confidence is capped
+    # at 0.45. Known failure mode: edge pages with only one neighbor and an
+    # unrelated adjacent document may be downgraded unnecessarily.
     for i in range(n):
         r = reads[i]
         if r.method != "inferred":
@@ -372,7 +398,12 @@ def _infer_missing(
                 r.method = "inferred"
                 r.confidence = PHASE4_FALLBACK_CONF
 
-    # ── Phase 5: D-S post-validation for uncertain pages (≤0.60) ──
+    # ── Phase 5: Dempster-Shafer post-validation for uncertain pages (≤0.60) ──
+    # Boosts confidence of low-confidence inferred pages using two evidence
+    # sources: period alignment (autocorrelation score × period confidence) and
+    # neighbor agreement (each agreeing neighbor contributes +0.10). Also adds
+    # a small prior-probability boost based on the global total distribution.
+    # Threshold 0.3 for period_conf prevents noise from weak periods.
     if period is not None and period_conf > 0.3:
         for i in range(n):
             r = reads[i]
@@ -408,8 +439,10 @@ def _infer_missing(
                 r.confidence = min(r.confidence + boost, 0.75)
 
     # ── Phase 5b: Period-contradiction correction ─────────────────────────────
-    PH5B_CONF_MIN  = 0.60
-    PH5B_RATIO_MIN = 0.93
+    # When ≥93% of OCR-confirmed reads agree on expected_total (the period's
+    # typical page count), reads with a different total are corrected to match.
+    # Requires period_conf ≥ PH5B_CONF_MIN (0.60) to avoid false corrections.
+    # Sweep results validated these thresholds (see eval/sweep.py for details).
     if period is not None and period_conf >= PH5B_CONF_MIN:
         expected_total = period_info.get("expected_total")
         if expected_total is not None:
@@ -460,6 +493,11 @@ def _infer_missing(
                                 j += 1
 
     # ── Phase 6: Orphan suppression ─────────────────────────────────
+    # Excludes inferred curr=1 pages that were flagged as orphan candidates in
+    # Phase 1b and whose confidence is below MIN_CONF_FOR_NEW_DOC (0.65). These
+    # are likely false document boundaries caused by a failed page right before
+    # a new document starts. Excluded pages are kept in the reads list with
+    # method="excluded" so they remain visible in the UI but don't affect counts.
     if MIN_CONF_FOR_NEW_DOC > 0.0:
         for r in reads:
             if (r.method == "inferred" and r.curr == 1
@@ -521,7 +559,7 @@ def _build_documents(
             if current is None:
                 orphans.append(pdf_page)
                 on_log(f"  -> pag {pdf_page}: huerfana curr={curr} sin doc activo", "warn")
-                on_issue(pdf_page, "huerfana", f"curr={curr} sin doc activo")
+                if on_issue: on_issue(pdf_page, "huerfana", f"curr={curr} sin doc activo")
             else:
                 expected = current.found_total + 1
                 if is_inferred:

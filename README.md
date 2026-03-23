@@ -8,8 +8,6 @@ Supervisor de documentos en archivos PDF. Selecciona una carpeta y analiza todos
 - **Tesseract OCR** instalado en el sistema
   - Windows: [Descargar Tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
   - La ruta por defecto es `C:\Program Files\Tesseract-OCR\tesseract.exe`
-- **Poppler** para `pdf2image`
-  - Windows: [Descargar Poppler](https://github.com/oschwartz10612/poppler-windows/releases/)
 
 ## Instalación
 
@@ -22,13 +20,19 @@ pip install -r requirements.txt
 ## Uso
 
 ```bash
-python app.py
+# Backend
+source .venv-cuda/Scripts/activate
+python server.py          # FastAPI en http://localhost:8000
+
+# Frontend (desarrollo)
+cd frontend && npm run dev  # Vite en http://localhost:5173
 ```
 
-1. Haz clic en **📁 Seleccionar Carpeta** y elige una carpeta que contenga archivos PDF
-2. La aplicación escaneará recursivamente todos los PDFs y los procesará en orden
-3. Usa el botón **⏸ Pausar** para pausar/reanudar el análisis en cualquier momento
-4. Los resultados se muestran en tiempo real en el log y en los contadores superiores
+1. Abre `http://localhost:5173` en el navegador
+2. Introduce la ruta de la carpeta de PDFs y haz clic en **Agregar**
+3. Usa el botón **▶ Iniciar** para lanzar el análisis
+4. Usa **⏸ Pausar** / **⏹ Detener** en cualquier momento
+5. Los resultados se muestran en tiempo real vía WebSocket
 
 ## Funcionalidades
 
@@ -39,14 +43,19 @@ python app.py
 - 📋 **Panel de PDFs** con estado visual (pendiente/procesando/completado/error)
 - 📝 **Log detallado** del análisis de cada archivo
 
-## Algoritmo de detección
+## Algoritmo de detección (Pipeline V4)
 
-El motor OCR utiliza una cascada de preprocesamiento de imágenes:
+**Fase OCR — Patrón productor-consumidor:**
 
-1. Baseline: escala de grises + Otsu
-2. Eliminación de tinta coloreada
-3. Canal rojo (para tinta azul)
-4. Inpainting sobre zonas coloreadas
-5. Crop amplio / ancho completo (fallback)
+1. **Productores** (6 workers paralelos): PyMuPDF renderiza páginas → Tesseract Tier 1 (crop estándar) → Tier 2 con super-resolución 4x (FSRCNN)
+2. **Consumidor GPU** (1 hilo dedicado): EasyOCR en páginas que fallaron con Tesseract
 
-La máquina de estados detecta documentos nuevos cuando encuentra "Página 1 de N", y maneja páginas con OCR fallido mediante inferencia contextual.
+El patrón buscado es `Página N de M` (regex español) en la esquina superior derecha del PDF.
+
+**Fase de inferencia (multi-fase):**
+
+1. Detección de período por autocorrelación
+2. Fusión de evidencias (Dempster-Shafer)
+3. Relleno de huecos por vecindad y propagación
+4. Corrección de contradicciones (Phase 5b)
+5. Supresión de páginas huérfanas de baja confianza

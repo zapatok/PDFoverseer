@@ -54,7 +54,27 @@ def _emit_ai_telemetry(
     total_pages: int,
     method_tally: dict,
 ) -> None:
-    """Emit [AI:] and [DS:] compact telemetry blocks to the log."""
+    """Emit [AI:] and [DS:] compact telemetry blocks to the log.
+
+    The [AI:] block (log level "ai") format:
+        [AI:<core_hash>] [MOD:<version>] [CUDA:<hash>] <filename> | <pages>p <elapsed>s <ms/p>ms/p | W<workers>+GPU | INF:<engine_version>
+        PRE5≡ DOC:<n_docs> COM:<complete>(<pct>) INC:<incomplete> INF:<inferred_count>
+        OCR: direct:<n>,super_resolution:<n>,easyocr:<n>,...
+        DOCS: <total>total → <ok>ok+<bad_summary> | dist: <Np×count> ...
+        INF: <total>total(low:<n> mid:<n> hi:<n>) | LOW: <page>=<curr>/<total>(<conf>)...
+        FAIL: <n>pp:<page>,<page>,...
+
+    The [DS:] block (log level "ai_inf") format:
+        [DS:<core_hash>] D:<n_docs> P:P=<period> conf=<pct> expect=<total>
+        INF:<n> x̄=<avg_conf> <consistent>✓<uncertain>~<conflicting>✗
+        ✓<XVAL ok entries>    — format: <pdf_page>:<left_neighbor>><curr>/<total>@<conf%>><right_neighbor>
+        ~<XVAL uncertain entries>
+        ✗<XVAL bad entries>
+
+    XVAL entry format: <pdf_page>:<left>><curr>/<total>@<conf%>><right>
+        where left/right = "<curr>/<total><method_char>" and method chars are:
+        d=direct, s=super_resolution, e=easyocr, i=inferred, f=failed, ?=unknown
+    """
     fname = Path(pdf_path).name
     mstr = ",".join(f"{k}:{v}" for k, v in method_tally.items() if v)
 
@@ -196,16 +216,20 @@ def analyze_pdf(
                 if item is None:
                     break
                 idx = item
-                bgr = image._render_clip(doc[idx], dpi=ocr.EASYOCR_DPI)
-                gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-                with ocr._easyocr_lock:
-                    results = ocr._easyocr_reader.readtext(gray, detail=0, paragraph=True)
-                text = " ".join(results) if results else ""
-                c, t = _parse(text)
-                if c:
-                    reads[idx] = _PageRead(idx + 1, c, t, "easyocr", 1.0)
-                    on_log(f"  Pag {idx + 1:>4}: {c}/{t}  [easyocr-gpu]", "page_ok")
-                    gpu_recovered[0] += 1
+                try:
+                    bgr = image._render_clip(doc[idx], dpi=ocr.EASYOCR_DPI)
+                    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+                    with ocr._easyocr_lock:
+                        results = ocr._easyocr_reader.readtext(gray, detail=0, paragraph=True)
+                    text = " ".join(results) if results else ""
+                    c, t = _parse(text)
+                    if c:
+                        reads[idx] = _PageRead(idx + 1, c, t, "easyocr", 1.0)
+                        on_log(f"  Pag {idx + 1:>4}: {c}/{t}  [easyocr-gpu]", "page_ok")
+                        gpu_recovered[0] += 1
+                except Exception as e:
+                    on_log(f"GPU consumer error on page {idx + 1}: {e}", "error")
+                    break
         finally:
             doc.close()
 
@@ -319,9 +343,9 @@ def analyze_pdf(
             )
             if has_confirmed_start:
                 continue
+            # Intentional mutation: correcting undercount by merging next-doc pages into current-doc
             for pp in next_pages:
-                rv = {r.pdf_page: r for r in reads_clean}
-                r = rv.get(pp)
+                r = reads_by_page.get(pp)
                 if r and r.method == "inferred":
                     r.curr = d.found_total + 1
                     r.total = d.declared_total

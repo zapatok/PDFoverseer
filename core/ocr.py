@@ -155,6 +155,6 @@ def _process_page(doc: fitz.Document, page_idx: int) -> _PageRead:
     text_sr = _tess_ocr(bgr_sr)
     c, t = _parse(text_sr)
     if c:
-        return _PageRead(pdf_page, c, t, "SR", 1.0)
+        return _PageRead(pdf_page, c, t, "super_resolution", 1.0)
 
     return _PageRead(pdf_page, None, None, "failed", 0.0)

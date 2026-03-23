@@ -6,16 +6,13 @@ export const HeaderBar = ({ api }) => {
   const pdfs = useStore(s => s.pdfs);
   const setConfirmModal = useStore(s => s.setConfirmModal);
 
-  const { handleAddFolder, handleAddFiles, handleNewSession, handleSaveSession, handleViewHistory, handleStart, handlePause, handleResume, handleStop, handleSkip } = api;
+  const { handleBrowse, handleNewSession, handleSaveSession, handleViewHistory, handleStart, handlePause, handleResume, handleStop, handleSkip } = api;
 
   return (
     <div className="h-16 bg-surface/80 backdrop-blur-xl border-b border-white/5 px-6 flex items-center justify-between shadow-lg z-20">
       <div className="flex items-center space-x-3">
-        <button onClick={handleAddFolder} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
-          Abrir Carpeta
-        </button>
-        <button onClick={handleAddFiles} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
-          Abrir Archivos
+        <button onClick={handleBrowse} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+          Abrir
         </button>
         <div className="w-px h-6 bg-gray-700 mx-1"></div>
         <button onClick={handleNewSession} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">

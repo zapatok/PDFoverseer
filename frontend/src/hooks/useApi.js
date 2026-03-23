@@ -39,9 +39,24 @@ export const useApi = (refs) => {
       .catch((e) => console.warn('Could not recover state (normal during cold boot).', e));
   }, []);
 
-  const handleAddFolder = async () => {
+  const handleBrowse = async () => {
     try {
-      const res = await authFetch(`${API_BASE}/add_folder`);
+      const res = await authFetch(`${API_BASE}/browse`);
+      const data = await res.json();
+      if (data.success && data.pdfs) {
+        useStore.getState().setPdfs(data.pdfs);
+        useStore.getState().setStatus('idle');
+      }
+    } catch (e) { handleApiErr(e, 'Abrir'); }
+  };
+
+  const handleAddFolder = async (path) => {
+    try {
+      const res = await authFetch(`${API_BASE}/add_folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
       const data = await res.json();
       if (data.success && data.pdfs) {
         useStore.getState().setPdfs(data.pdfs);
@@ -50,9 +65,13 @@ export const useApi = (refs) => {
     } catch (e) { handleApiErr(e, 'Añadir Carpeta'); }
   };
 
-  const handleAddFiles = async () => {
+  const handleAddFiles = async (paths) => {
     try {
-      const res = await authFetch(`${API_BASE}/add_files`);
+      const res = await authFetch(`${API_BASE}/add_files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths }),
+      });
       const data = await res.json();
       if (data.success && data.pdfs) {
         useStore.getState().setPdfs(data.pdfs);
@@ -355,6 +374,7 @@ export const useApi = (refs) => {
   };
 
   return {
+    handleBrowse,
     handleAddFolder,
     handleAddFiles,
     handleRemovePdf,

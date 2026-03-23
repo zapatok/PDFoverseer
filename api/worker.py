@@ -5,7 +5,7 @@ from pathlib import Path
 
 from api.state import session_manager
 from api.websocket import _emit
-from api.database import save_reads, get_reads
+from api.database import save_reads, get_reads, has_reads
 from core import analyze_pdf, _build_documents, _CORE_HASH
 
 logger = logging.getLogger("pdfoverserver")
@@ -52,15 +52,18 @@ def _process_pdfs(session_id: str, start_index: int = 0):
         for i, pdf_path in enumerate(s.pdf_list):
             p_str = str(pdf_path)
             
-            if len(get_reads(session_id, p_str)) > 0:
+            if has_reads(session_id, p_str):
                 continue
-                
-            doc = fitz.open(p_str)
-            num_pages = len(doc)
+
+            num_pages = s.page_counts.get(p_str)
+            if num_pages is None:
+                doc = fitz.open(p_str)
+                num_pages = len(doc)
+                s.page_counts[p_str] = num_pages
+                doc.close()
             total_pages += num_pages
             if i < start_index:
                 done_pages += num_pages
-            doc.close()
             
         s.global_total_pages = total_pages
         s.global_done_pages = done_pages
@@ -79,7 +82,7 @@ def _process_pdfs(session_id: str, start_index: int = 0):
         pdf_path = s.pdf_list[idx]
         p_str = str(pdf_path)
         
-        if len(get_reads(session_id, p_str)) > 0:
+        if has_reads(session_id, p_str):
             _emit(session_id, "log", {"msg": f"\n⏭ Omitiendo {pdf_path.name} (Ya procesado al 100%).", "level": "warn"})
             _emit(session_id, "status_update", {"idx": idx, "status": "done"})
             continue
@@ -122,8 +125,9 @@ def _process_pdfs(session_id: str, start_index: int = 0):
             
             nonlocal last_metrics_refresh
             now = time.time()
-            if now - last_metrics_refresh > 1.0:
+            if now - last_metrics_refresh > 1.0 and s._metrics_dirty:
                 _recalculate_metrics(session_id)
+                s._metrics_dirty = False
                 last_metrics_refresh = now
             
         def on_log(msg, level="info"):
@@ -190,6 +194,7 @@ def _process_pdfs(session_id: str, start_index: int = 0):
                 "inferred_hi": inf_docs,
                 "inferred_lo": 0
             }
+            s._metrics_dirty = True
 
             _recalculate_metrics(session_id)
 

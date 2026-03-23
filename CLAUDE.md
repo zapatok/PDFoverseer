@@ -16,6 +16,16 @@ cd frontend && npm run dev           # Vite on http://localhost:5173
 pytest
 ```
 
+## Installation
+
+```bash
+# CPU-only (Tesseract + PyMuPDF, no EasyOCR)
+pip install -r requirements.txt
+
+# GPU (adds EasyOCR + PyTorch CUDA)
+pip install -r requirements-gpu.txt
+```
+
 ## Tech Stack
 
 - **Backend:** Python 3.10+ with CUDA GPU, FastAPI, PyMuPDF, Tesseract, EasyOCR
@@ -27,33 +37,57 @@ pytest
 
 ```
 ├── core/
-│   ├── analyzer.py           # V4 Pipeline: Tesseract + SR + EasyOCR GPU
+│   ├── pipeline.py           # V4 Pipeline: producer-consumer scan + telemetry
+│   ├── ocr.py                # Tesseract tiers, EasyOCR reader, SR upsampling
+│   ├── inference.py          # Multi-phase document boundary inference
+│   ├── image.py              # Image preprocessing (render, crop, Otsu, etc.)
+│   ├── utils.py              # _PageRead, _parse(), shared constants
 │   └── __init__.py
+├── api/
+│   ├── state.py              # SessionState + SessionManager
+│   ├── websocket.py          # WebSocket connection manager + _emit()
+│   ├── worker.py             # Background scan thread + callbacks
+│   ├── database.py           # SQLite read/write (page_reads table)
+│   └── routes/
+│       ├── files.py          # /api/browse (tkinter dialog), /api/add_folder, /api/add_files, /api/preview
+│       ├── sessions.py       # /api/sessions, /api/reset, /api/correct, etc.
+│       └── pipeline.py       # /api/start, /api/stop, /api/state
 ├── eval/                     # Evaluation harness (parameter sweep)
-│   ├── inference.py          # Parameterized copy of 5-phase pipeline
+│   ├── inference.py          # Parameterized copy of inference pipeline
 │   ├── sweep.py              # LHS sample → fine grid → beam search
 │   ├── report.py             # Ranked results table
 │   ├── extract_fixtures.py   # One-time fixture extraction
+│   ├── params.py             # Sweep parameter space + production values
 │   ├── fixtures/
 │   │   ├── real/             # 7 real PDFs (charlas CRS)
 │   │   └── synthetic/        # 6 synthetic test cases
+│   ├── tests/
+│   │   ├── test_inference.py # Inference unit tests (eval harness)
+│   │   └── test_sweep_scoring.py
 │   └── results/              # Sweep results (ignored)
+├── tests/                    # Integration + unit tests
+│   ├── test_api.py           # FastAPI TestClient tests (no real OCR)
+│   ├── test_database.py
+│   ├── test_inference.py
+│   ├── test_tray_issues.py
+│   └── test_utils.py
 ├── frontend/                 # React UI
 │   ├── src/
 │   ├── package.json
 │   └── vite.config.js
 ├── models/                   # FSRCNN_x4.pb (super-resolution)
 ├── data/
-│   └── sessions/             # Session history (ignored)
-├── server.py                 # FastAPI backend
-├── app.py                    # GUI entry point
-├── history.py                # Session logging
-└── requirements.txt          # Python dependencies
+│   └── sessions.db           # SQLite database (ignored)
+├── server.py                 # FastAPI entry point
+├── test_ws.py                # WebSocket smoke test (manual)
+├── old_analyzer.py           # Reference: pre-modularization monolith
+├── old_server.py             # Reference: pre-modularization server
+└── requirements.txt          # Python dependencies (pinned exact versions)
 ```
 
 ## Architecture
 
-### V4 Pipeline (core/analyzer.py)
+### V4 Pipeline (core/pipeline.py)
 
 **Producer-Consumer Pattern:**
 1. **Producers** (6 parallel workers): PyMuPDF rendering + Tesseract (Tier 1 + Tier 2 w/ SR)
@@ -72,6 +106,14 @@ CROP_X_START     = 0.70                   # rightmost 30%
 CROP_Y_END       = 0.22                   # top 22%
 PARALLEL_WORKERS = 6                      # Tesseract concurrency
 BATCH_SIZE       = 12                     # Pages per pause checkpoint
+
+# Inference parameters (sweep-tuned: soft-alignment-v3-sweep1)
+MIN_CONF_FOR_NEW_DOC = 0.65   # min confidence to open a new document boundary
+CLASH_BOUNDARY_PEN   = 2.0    # gap-solver penalty for clash at boundaries
+PHASE4_FALLBACK_CONF = 0.0    # 0.0 = disabled; 0.15–0.25 re-enables low-conf fallback
+PH5B_CONF_MIN        = 0.60   # min period confidence to apply phase 5b correction
+PH5B_RATIO_MIN       = 0.93   # min ratio of reads with expected total to correct
+ANOMALY_DROPOUT      = 0.0    # anomaly suppression (disabled)
 ```
 
 ### Page Number Pattern
@@ -102,16 +144,58 @@ python eval/sweep.py
 python eval/report.py
 ```
 
+### Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `HOST` | `127.0.0.1` | Server bind address (`server.py`) |
+| `PORT` | `8000` | Server port |
+| `TESSERACT_CMD` | system PATH | Override Tesseract binary path |
+| `PDF_ROOT` | _(required)_ | Allowed root dir for PDF path validation |
+| `SESSION_TTL` | `3600` | Session TTL in seconds before eviction |
+
 ### Key Commands
 
 | Command | Purpose |
 |---------|---------|
 | `python server.py` | Start FastAPI backend + WebSocket |
 | `cd frontend && npm run dev` | Start React dev server |
-| `python app.py` | Legacy GUI (Tkinter) |
 | `pytest` | Run test suite |
 
 ## Important Notes
+
+### Telemetry Log Format
+
+After each PDF scan, `core/pipeline.py` emits two machine-dense log blocks:
+
+**`[AI:]` block** (log level `"ai"`) — scan summary:
+```
+[AI:<core_hash>] [MOD:v3.1-fix] [CUDA:<hash>] file.pdf | 45p 3.2s 71ms/p | W6+GPU | INF:soft-alignment-v3-sweep1
+PRE5≡ DOC:5 COM:4(80%) INC:1 INF:3
+OCR: direct:40,super_resolution:3,easyocr:2
+DOCS: 5total → 4ok+1bad(seq:0 under:1) | dist: 3p×2 5p×3
+INF: 3total(low:1 mid:1 hi:1) | LOW: p12=2/3(42%)
+FAIL: 2pp:7,23
+```
+
+**`[DS:]` block** (log level `"ai_inf"`) — inference cross-validation:
+```
+[DS:<core_hash>] D:5 P:P=3 conf=85% expect=3
+INF:3 x̄=72% 1✓1~1✗
+✓12:2/3d>3/3@91%>1/3d
+~15:3/3s>1/3@55%>2/3d
+✗7:->=/>1/3@38%>2/3d
+```
+
+XVAL entry format: `<pdf_page>:<left_neighbor>><curr>/<total>@<conf%>><right_neighbor>`
+Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr, `i`=inferred, `f`=failed
+
+### Security
+
+- **Path validation:** `api/routes/files.py` validates all submitted paths against `PDF_ROOT` to prevent directory traversal
+- **subprocess.call** in `api_open_pdf` uses list form `[opener, str(path)]` — no shell injection possible; path is pre-validated against `pdf_list`
+- **Session IDs:** validated as UUID4 format before use; invalid IDs rejected with HTTP 400 / WS close 4003
+- **Server bind:** defaults to `127.0.0.1` — set `HOST=0.0.0.0` explicitly to expose on network
 
 ### OCR Assumptions
 
@@ -127,7 +211,8 @@ python eval/report.py
 
 ### Inference Engine
 
-- **Phase 1–5:** OCR results → period detection → evidence fusion
+- **Version:** `soft-alignment-v3-sweep1` (see `INFERENCE_ENGINE_VERSION` in `core/utils.py`)
+- **Phases 1–5 + MP + 5b:** OCR results → forward/backward propagation → cross-validation → gap-solver → D-S post-validation → multi-period correction
 - **Confidence scores:** 0.0–1.0; <0.60 flagged as uncertain
 - **Period inference:** Autocorrelation + Dempster-Shafer + neighbor evidence
 
@@ -143,7 +228,7 @@ python eval/report.py
 ## Links
 
 - **Main branch:** `master`
-- **Active branch:** `feature/inference-engine`
+- **Active branch:** `feature/core-modularization`
 - **Eval spec:** `docs/superpowers/specs/2026-03-15-eval-harness-design.md`
 - **Eval plan:** `docs/superpowers/plans/2026-03-15-eval-harness.md`
 - **Memory:** `C:\Users\Daniel\.claude\projects\a--PROJECTS-PDFoverseer\memory\`
@@ -151,4 +236,5 @@ python eval/report.py
 ## Pending Work
 
 - **INS_31:** Last-page inference gap + tray UX improvements to reduce human intervention
-- **Eval harness:** Complete parameter sweep implementation and tuning report
+- **Eval sweep2:** Refined grid around sweep1 winners is ready in `eval/params.py`; next run pending
+- **Browse UX:** `/api/browse` opens a server-side tkinter chooser (Archivos/Carpeta) — works only when server is on local machine with a display

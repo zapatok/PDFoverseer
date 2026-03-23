@@ -24,6 +24,7 @@ def _init_db():
 _init_db()
 
 def save_reads(session_id: str, pdf_path: str, reads: list[_PageRead]):
+    # with conn: provides atomic transaction (auto-rollback on exception)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("DELETE FROM page_reads WHERE session_id=? AND pdf_path=?", (session_id, pdf_path))
         data = [
@@ -34,6 +35,14 @@ def save_reads(session_id: str, pdf_path: str, reads: list[_PageRead]):
             "INSERT INTO page_reads VALUES (?, ?, ?, ?, ?, ?, ?)",
             data
         )
+
+def has_reads(session_id: str, pdf_path: str) -> bool:
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute(
+            "SELECT 1 FROM page_reads WHERE session_id=? AND pdf_path=? LIMIT 1",
+            (session_id, pdf_path)
+        )
+        return cur.fetchone() is not None
 
 def get_reads(session_id: str, pdf_path: str) -> list[_PageRead]:
     with sqlite3.connect(DB_PATH) as conn:

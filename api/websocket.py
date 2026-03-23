@@ -1,5 +1,11 @@
 import asyncio
+import logging
+import re as _re
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter, Query
+
+_UUID_RE = _re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+
+logger = logging.getLogger("pdfoverserver")
 
 # Note: We removed the global state loop here, so broadcast requires loop from uvicorn directly
 # Use asyncio.get_running_loop() or explicit passing.
@@ -42,12 +48,15 @@ def _emit(session_id: str, event_type: str, payload: dict):
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
-    print(f"WS Attempt from session_id: {session_id}")
+    logger.debug("WS attempt from session_id: %s", session_id)
+    if not _UUID_RE.match(session_id or ""):
+        await websocket.close(code=4003, reason="Invalid session ID")
+        return
     try:
         await manager.connect(websocket, session_id)
-        print("WS Connected!")
+        logger.debug("WS connected")
     except Exception as e:
-        print(f"WS Connect Error: {e}")
+        logger.warning("WS connect error: %s", e)
         return
     try:
         while True:

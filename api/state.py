@@ -1,8 +1,14 @@
+import os
+import re as _re
 import threading
 from pathlib import Path
 import uuid
 import time
-from fastapi import Header, Depends
+from fastapi import Header, Query, HTTPException
+
+SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL", "3600"))
+
+_UUID_RE = _re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
 
 class SessionState:
     def __init__(self, session_id: str):
@@ -17,10 +23,8 @@ class SessionState:
         self.cancel_event = threading.Event()
 
         self.pdf_list: list[Path] = []
-        
+
         # Disk-buffered via database.py
-        # self.pdf_reads is GONE
-        
         self.global_total_pages: int = 0
         self.global_done_pages: int = 0
         self.total_docs: int = 0
@@ -34,14 +38,25 @@ class SessionState:
         self.total_paused_time: float = 0.0
         self.confidences: dict[str, float] = {}
         self.individual_metrics: dict[str, dict] = {}
-        
+        self.page_counts: dict[str, int] = {}
+        self._metrics_dirty: bool = False
+
         self.last_accessed = time.time()
 
 class SessionManager:
     def __init__(self):
         self._sessions: dict[str, SessionState] = {}
         self._lock = threading.Lock()
-        
+
+    def evict_stale(self) -> int:
+        now = time.time()
+        with self._lock:
+            stale = [sid for sid, s in self._sessions.items()
+                     if not s.running and (now - s.last_accessed) > SESSION_TTL_SECONDS]
+            for sid in stale:
+                del self._sessions[sid]
+        return len(stale)
+
     def get_or_create(self, session_id: str = None) -> SessionState:
         if not session_id:
             session_id = str(uuid.uuid4())
@@ -53,10 +68,11 @@ class SessionManager:
 
 session_manager = SessionManager()
 
-from fastapi import Header, Query
-
 async def get_session(
     x_session_id: str = Header(None),
     session_id: str = Query(None)
 ) -> SessionState:
-    return session_manager.get_or_create(x_session_id or session_id)
+    sid = x_session_id or session_id
+    if sid and not _UUID_RE.match(sid):
+        raise HTTPException(400, "Invalid session ID format")
+    return session_manager.get_or_create(sid)

@@ -4,76 +4,135 @@ import subprocess
 import tkinter as tk
 from tkinter import filedialog
 from pathlib import Path
-from fastapi import APIRouter, Response, Depends
+from fastapi import APIRouter, Response, Depends, HTTPException
+from pydantic import BaseModel
 import fitz
 
 from api.state import get_session, SessionState
 from api.worker import _recalculate_metrics
-from api.database import get_reads
+from api.database import get_reads, has_reads
 
 router = APIRouter()
 
-@router.get("/add_folder")
-def api_add_folder(s: SessionState = Depends(get_session)):
-    """Opens a native Tkinter folder dialog and appends PDFs to the list."""
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    folder = filedialog.askdirectory(title="Seleccionar carpeta de PDFs")
-    root.destroy()
-    
-    if not folder:
-        return {"success": False, "pdfs": []}
-    
-    path = Path(folder)
-    pdfs = [p for p in path.rglob("*.[pP][dD][fF]") if not p.name.startswith("~$")]
-    
-    existing = set(s.pdf_list)
-    new_pdfs = [p for p in pdfs if p not in existing]
-    s.pdf_list.extend(new_pdfs)
-    
-    pdf_list_state = []
+PDF_ROOT = os.getenv("PDF_ROOT", "")
+
+
+def _validate_path(path_str: str) -> Path:
+    if not PDF_ROOT:
+        raise HTTPException(400, "PDF_ROOT environment variable not set")
+    p = Path(path_str).resolve()
+    root = Path(PDF_ROOT).resolve()
+    if not str(p).startswith(str(root)):
+        raise HTTPException(400, "Path outside allowed root")
+    return p
+
+
+def _pdf_list_state(s: SessionState) -> list[dict]:
+    result = []
     for p in s.pdf_list:
         p_str = str(p)
-        st = "done" if len(get_reads(s.session_id, p_str)) > 0 else ("skipped" if p_str in s.skipped_pdfs else "pending")
-        pdf_list_state.append({"name": p.name, "path": p_str, "status": st})
-    
-    return {
-        "success": True, 
-        "pdfs": pdf_list_state,
-        "session_id": s.session_id
-    }
+        st = "done" if has_reads(s.session_id, p_str) else ("skipped" if p_str in s.skipped_pdfs else "pending")
+        result.append({"name": p.name, "path": p_str, "status": st})
+    return result
 
-@router.get("/add_files")
-def api_add_files(s: SessionState = Depends(get_session)):
-    """Opens a native Tkinter file dialog and appends paths."""
+
+class AddFolderRequest(BaseModel):
+    path: str
+
+
+class AddFilesRequest(BaseModel):
+    paths: list[str]
+
+
+def _open_file_dialog():
+    """Opens a native tkinter file dialog for selecting PDFs."""
     root = tk.Tk()
     root.withdraw()
     root.attributes('-topmost', True)
     file_paths = filedialog.askopenfilenames(
         title="Seleccionar archivos PDF",
-        filetypes=[("PDF", "*.pdf")]
+        filetypes=[("PDF", "*.pdf")],
     )
     root.destroy()
-    
+    return list(file_paths)
+
+
+@router.get("/browse")
+def api_browse(s: SessionState = Depends(get_session)):
+    """Opens native file dialog and adds selected PDFs to the session."""
+    file_paths = _open_file_dialog()
     if not file_paths:
-        return {"success": False, "pdfs": []}
-    
+        return {"success": True, "pdfs": _pdf_list_state(s)}
+
+    new_paths = [Path(p) for p in file_paths]
     existing = set(s.pdf_list)
-    new_pdfs = [Path(p) for p in file_paths if Path(p) not in existing]
+    new_pdfs = [p for p in new_paths if p not in existing]
     s.pdf_list.extend(new_pdfs)
-    
-    pdf_list_state = []
-    for p in s.pdf_list:
+
+    for p in new_pdfs:
         p_str = str(p)
-        st = "done" if len(get_reads(s.session_id, p_str)) > 0 else ("skipped" if p_str in s.skipped_pdfs else "pending")
-        pdf_list_state.append({"name": p.name, "path": p_str, "status": st})
-        
+        if p_str not in s.page_counts:
+            try:
+                doc = fitz.open(p_str)
+                s.page_counts[p_str] = len(doc)
+                doc.close()
+            except Exception:
+                pass
+
+    return {"success": True, "pdfs": _pdf_list_state(s)}
+
+
+@router.post("/add_folder")
+def api_add_folder(body: AddFolderRequest, s: SessionState = Depends(get_session)):
+    """Appends all PDFs found recursively under the given folder path."""
+    folder = _validate_path(body.path)
+    if not folder.is_dir():
+        raise HTTPException(400, "Path is not a directory")
+
+    pdfs = [p for p in folder.rglob("*.[pP][dD][fF]") if not p.name.startswith("~$")]
+    existing = set(s.pdf_list)
+    new_pdfs = [p for p in pdfs if p not in existing]
+    s.pdf_list.extend(new_pdfs)
+    for p in new_pdfs:
+        p_str = str(p)
+        if p_str not in s.page_counts:
+            try:
+                doc = fitz.open(p_str)
+                s.page_counts[p_str] = len(doc)
+                doc.close()
+            except Exception:
+                pass
+
     return {
-        "success": True, 
-        "pdfs": pdf_list_state,
-        "session_id": s.session_id
+        "success": True,
+        "pdfs": _pdf_list_state(s),
+        "session_id": s.session_id,
     }
+
+
+@router.post("/add_files")
+def api_add_files(body: AddFilesRequest, s: SessionState = Depends(get_session)):
+    """Appends specific PDF file paths to the list."""
+    validated = [_validate_path(p) for p in body.paths]
+    existing = set(s.pdf_list)
+    new_pdfs = [p for p in validated if p not in existing]
+    s.pdf_list.extend(new_pdfs)
+    for p in new_pdfs:
+        p_str = str(p)
+        if p_str not in s.page_counts:
+            try:
+                doc = fitz.open(p_str)
+                s.page_counts[p_str] = len(doc)
+                doc.close()
+            except Exception:
+                pass
+
+    return {
+        "success": True,
+        "pdfs": _pdf_list_state(s),
+        "session_id": s.session_id,
+    }
+
 
 @router.post("/remove_pdf")
 def api_remove_pdf(pdf_path: str, s: SessionState = Depends(get_session)):
@@ -84,7 +143,7 @@ def api_remove_pdf(pdf_path: str, s: SessionState = Depends(get_session)):
             removed_path = str(p)
         else:
             new_list.append(p)
-            
+
     if removed_path:
         s.pdf_list = new_list
         s.skipped_pdfs.discard(removed_path)
@@ -92,26 +151,12 @@ def api_remove_pdf(pdf_path: str, s: SessionState = Depends(get_session)):
         s.individual_metrics.pop(removed_path, None)
         with s._lock:
             s.issues = [i for i in s.issues if i["pdf_path"] != removed_path]
-        
+
         # NOTE: If we want to fully clean the database we should do it here, but no big deal.
         _recalculate_metrics(s.session_id)
-        
-    pdf_list_state = []
-    for p in s.pdf_list:
-        p_str = str(p)
-        st = "done" if len(get_reads(s.session_id, p_str)) > 0 else ("skipped" if p_str in s.skipped_pdfs else "pending")
-        pdf_list_state.append({"name": p.name, "path": p_str, "status": st})
-        
-    return {"success": True, "pdfs": pdf_list_state}
 
-@router.get("/debug_add")
-def api_debug_add(path: str, s: SessionState = Depends(get_session)):
-    p = Path(path)
-    if p.suffix.lower() != ".pdf":
-        return {"success": False, "msg": "Not a PDF file"}
-    if p not in s.pdf_list:
-        s.pdf_list.append(p)
-    return {"success": True, "pdfs": [{"name": p.name, "path": str(p), "status": "pending"} for p in s.pdf_list]}
+    return {"success": True, "pdfs": _pdf_list_state(s)}
+
 
 @router.get("/open_pdf")
 def api_open_pdf(pdf_path: str, page: int = 1, s: SessionState = Depends(get_session)):
@@ -130,12 +175,14 @@ def api_open_pdf(pdf_path: str, page: int = 1, s: SessionState = Depends(get_ses
         if os.name == 'nt':
             os.startfile(str(path))
         else:
+            # SECURITY: subprocess.call uses list form, no shell injection; path validated against pdf_list
             opener = "open" if sys.platform == "darwin" else "xdg-open"
             subprocess.call([opener, str(path)])
 
         return {"success": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
 
 @router.get("/preview")
 def api_preview(pdf_path: str, page: int, s: SessionState = Depends(get_session)):
