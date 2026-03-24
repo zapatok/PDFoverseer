@@ -7,8 +7,8 @@ Phase B: test top-N configs against successful pages (regression check).
 
 Usage:
     cd a:/PROJECTS/PDFoverseer
-    python eval/ocr_sweep.py
-    # -> writes eval/results/ocr_sweep_YYYYMMDD_HHMMSS.json
+    python eval/ocr_sweep.py              # fast mode (default)
+    python eval/ocr_sweep.py --full       # full sweep (all pages × all configs)
 """
 from __future__ import annotations
 
@@ -37,6 +37,8 @@ DATA_DIR    = _ROOT / "data" / "ocr_all"
 INDEX_CSV   = DATA_DIR / "all_index.csv"
 RESULTS_DIR = Path(__file__).parent / "results"
 WORKERS     = 6
+PRESCREEN_SAMPLE = 50   # failed pages for fast-mode pre-screening
+TOP_K_PRESCREEN  = 50   # configs promoted from pre-screen to full eval
 
 
 # ── Data types ──────────────────────────────────────────────────────────────
@@ -242,9 +244,138 @@ def run_sweep() -> dict:
     }
 
 
+def run_fast_sweep() -> dict:
+    """Pre-screen on sample, then full eval on top configs only."""
+    failed, success = load_pages()
+    configs = enumerate_configs()
+    print(f"Loaded {len(failed)} failed + {len(success)} success pages")
+    print(f"Generated {len(configs)} unique configs")
+
+    # Baseline
+    print("\nScoring baseline (production params)...")
+    baseline = score_on_pages(OCR_PRODUCTION_PARAMS, failed)
+    print(f"  Baseline: rescued={baseline['rescued']}, "
+          f"still_failed={baseline['still_failed']}")
+
+    # Pre-screen: all configs against a small sample of failed pages
+    rng = random.Random(42)
+    sample_size = min(PRESCREEN_SAMPLE, len(failed))
+    failed_sample = rng.sample(failed, sample_size)
+
+    print(f"\nPre-screen: {len(configs)} configs × {sample_size} failed pages "
+          f"({len(configs) * sample_size:,} OCR calls)...")
+    results_pre: list[tuple[dict, dict]] = []
+    t0 = time.time()
+
+    with ProcessPoolExecutor(max_workers=WORKERS) as pool:
+        futures = {
+            pool.submit(_score_config_worker, (i, cfg, failed_sample)): i
+            for i, cfg in enumerate(configs)
+        }
+        done = 0
+        for future in as_completed(futures):
+            idx, scores = future.result()
+            results_pre.append((configs[idx], scores))
+            done += 1
+            if done % 50 == 0 or done == len(configs):
+                elapsed = time.time() - t0
+                rate = done / elapsed if elapsed > 0 else 0
+                eta = (len(configs) - done) / rate if rate > 0 else 0
+                print(f"  Pre-screen: {done}/{len(configs)} "
+                      f"({elapsed:.0f}s, ~{eta:.0f}s remaining)", end="\r")
+
+    print(f"\n  Pre-screen done in {time.time() - t0:.0f}s")
+
+    # Rank and take top-K
+    results_pre.sort(key=lambda x: (-x[1]["rescued"], x[1]["still_failed"]))
+    top_k = results_pre[:TOP_K_PRESCREEN]
+
+    print(f"\n  Top-{TOP_K_PRESCREEN} pre-screen (rescued on {sample_size} pages):")
+    for i, (cfg, sc) in enumerate(top_k[:10], 1):
+        diff = {k: v for k, v in cfg.items() if v != OCR_PRODUCTION_PARAMS.get(k)}
+        print(f"    #{i}: rescued={sc['rescued']}/{sample_size} | diff={diff}")
+    if len(top_k) > 10:
+        print(f"    ... and {len(top_k) - 10} more")
+
+    # Phase A: top-K configs against ALL failed pages
+    print(f"\nPhase A: {len(top_k)} configs × {len(failed)} failed pages "
+          f"({len(top_k) * len(failed):,} OCR calls)...")
+    results_a: list[tuple[dict, dict]] = []
+    t0 = time.time()
+
+    with ProcessPoolExecutor(max_workers=WORKERS) as pool:
+        futures = {
+            pool.submit(_score_config_worker, (i, cfg, failed)): i
+            for i, (cfg, _) in enumerate(top_k)
+        }
+        done = 0
+        for future in as_completed(futures):
+            idx, scores = future.result()
+            results_a.append((top_k[idx][0], scores))
+            done += 1
+            if done % 5 == 0 or done == len(top_k):
+                elapsed = time.time() - t0
+                rate = done / elapsed if elapsed > 0 else 0
+                eta = (len(top_k) - done) / rate if rate > 0 else 0
+                print(f"  Phase A: {done}/{len(top_k)} "
+                      f"({elapsed:.0f}s, ~{eta:.0f}s remaining)", end="\r")
+
+    print(f"\n  Phase A done in {time.time() - t0:.0f}s")
+
+    # Rank by rescue count
+    results_a.sort(key=lambda x: (-x[1]["rescued"], x[1]["still_failed"]))
+    top10 = results_a[:10]
+
+    print("\n  Top-10 Phase A results:")
+    for i, (cfg, sc) in enumerate(top10, 1):
+        diff = {k: v for k, v in cfg.items() if v != OCR_PRODUCTION_PARAMS.get(k)}
+        print(f"    #{i}: rescued={sc['rescued']}/{len(failed)} | diff={diff}")
+
+    # Phase B: regression check on top-10 against success sample
+    success_sample_size = min(200, len(success))
+    success_sample = rng.sample(success, success_sample_size)
+
+    print(f"\nPhase B: regression check on {success_sample_size} success pages...")
+    results_b = []
+    for i, (cfg, sc_a) in enumerate(top10, 1):
+        sc_b = score_on_pages(cfg, success_sample)
+        combined = {
+            "params": cfg,
+            "phase_a": {k: v for k, v in sc_a.items() if k != "rescued_pages"},
+            "phase_b": {k: v for k, v in sc_b.items() if k != "rescued_pages"},
+            "net_gain": sc_a["rescued"] - sc_b["regressed"] * 3,
+            "rescued_pages": sc_a["rescued_pages"],
+        }
+        results_b.append(combined)
+        print(f"  Config #{i}: rescued={sc_a['rescued']}, "
+              f"regressed={sc_b['regressed']}/{success_sample_size}, "
+              f"net_gain={combined['net_gain']}")
+
+    # Final ranking by net_gain
+    results_b.sort(key=lambda x: -x["net_gain"])
+
+    # Baseline regression check
+    baseline_b = score_on_pages(OCR_PRODUCTION_PARAMS, success_sample)
+
+    return {
+        "run_at": datetime.now().isoformat(),
+        "mode": "fast",
+        "prescreen_sample": sample_size,
+        "top_k_promoted": len(top_k),
+        "total_failed_pages": len(failed),
+        "total_success_pages": len(success),
+        "success_sample_size": success_sample_size,
+        "configs_tested": len(configs),
+        "baseline_failed": {k: v for k, v in baseline.items() if k != "rescued_pages"},
+        "baseline_success": {k: v for k, v in baseline_b.items() if k != "rescued_pages"},
+        "top_configs": results_b,
+    }
+
+
 def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    result = run_sweep()
+    full_mode = "--full" in sys.argv
+    result = run_sweep() if full_mode else run_fast_sweep()
     out_path = RESULTS_DIR / f"ocr_sweep_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     out_path.write_text(json.dumps(result, indent=2))
     print(f"\nResults saved to {out_path}")
