@@ -12,9 +12,9 @@ _PATTERNS: list[re.Pattern] = [
     # "3 out of 10"
     re.compile(r"(\d{1,3})\s+out\s+of\s+(\d{1,3})", re.IGNORECASE),
     # "3 de 10" (bare, no prefix)
-    re.compile(r"(\d{1,3})\s+de\s+(\d{1,3})(?!\d)"),
+    re.compile(r"(?<!\d)(\d{1,3})\s+de\s+(\d{1,3})(?!\d)"),
     # "3/10" (direct format)
-    re.compile(r"(\d{1,3})/(\d{1,3})(?!\d)"),
+    re.compile(r"(?<!\d)(\d{1,3})/(\d{1,3})(?!\d)"),
 ]
 
 
