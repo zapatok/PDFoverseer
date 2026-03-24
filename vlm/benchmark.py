@@ -99,15 +99,16 @@ def run(config: dict | None = None, failures_only: bool = True,
             cv2.imwrite(tmp.name, img)
             tmp_file = Path(tmp.name)
 
-        resp = query(
-            str(tmp_file),
-            prompt=cfg["prompt"],
-            temperature=cfg["temperature"],
-            top_p=cfg["top_p"],
-            seed=cfg["seed"],
-        )
-
-        tmp_file.unlink(missing_ok=True)
+        try:
+            resp = query(
+                str(tmp_file),
+                prompt=cfg["prompt"],
+                temperature=cfg["temperature"],
+                top_p=cfg["top_p"],
+                seed=cfg["seed"],
+            )
+        finally:
+            tmp_file.unlink(missing_ok=True)
 
         parsed = parse(resp["raw_text"]) if not resp["error"] else None
         gt_val = gt.get((entry.pdf_nickname, entry.page_num))

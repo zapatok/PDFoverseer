@@ -30,12 +30,14 @@ BEAM_TOP_N = 3
 RANDOM_SEED = 42
 
 
-def lhs_sample(n: int, seed: int = RANDOM_SEED) -> list[dict]:
+def lhs_sample(n: int, seed: int = RANDOM_SEED,
+               param_space: dict | None = None) -> list[dict]:
     """Latin Hypercube Sample from parameter space."""
+    space = param_space or PARAM_SPACE
     rng = random.Random(seed)
-    keys = list(PARAM_SPACE.keys())
+    keys = list(space.keys())
     indices_per_param: dict[str, list[int]] = {}
-    for k, vals in PARAM_SPACE.items():
+    for k, vals in space.items():
         m = len(vals)
         slots = [rng.randint(0, m - 1) for _ in range(n)]
         rng.shuffle(slots)
@@ -43,15 +45,16 @@ def lhs_sample(n: int, seed: int = RANDOM_SEED) -> list[dict]:
 
     configs = []
     for i in range(n):
-        cfg = {k: PARAM_SPACE[k][indices_per_param[k][i]] for k in keys}
+        cfg = {k: space[k][indices_per_param[k][i]] for k in keys}
         configs.append(cfg)
     return configs
 
 
-def adjacent_configs(base: dict) -> list[dict]:
+def adjacent_configs(base: dict, param_space: dict | None = None) -> list[dict]:
     """Generate configs with one parameter shifted +/-1 index."""
+    space = param_space or PARAM_SPACE
     configs = []
-    for k, vals in PARAM_SPACE.items():
+    for k, vals in space.items():
         try:
             idx = vals.index(base[k])
         except ValueError:
@@ -116,16 +119,14 @@ def run_sweep(sample_n: int | None = None) -> dict:
         seed_results.append(r["metrics"]["exact_match"])
     if len(set(seed_results)) == 1:
         log.info("  Seeds are stable at temp=0 — dropping seed from sweep space.")
-        # Use a reduced space without seed variation
-        global PARAM_SPACE_ACTIVE
-        PARAM_SPACE_ACTIVE = {k: v for k, v in PARAM_SPACE.items() if k != "seed"}
+        active_space = {k: v for k, v in PARAM_SPACE.items() if k != "seed"}
     else:
         log.info("  Seeds vary (results: %s) — keeping seed in sweep.", seed_results)
-        PARAM_SPACE_ACTIVE = PARAM_SPACE
+        active_space = PARAM_SPACE
 
     # Pass 1: LHS
     log.info("Pass 1: Latin Hypercube Sample (%d configs)...", LHS_SAMPLES)
-    p1 = run_configs(lhs_sample(LHS_SAMPLES), "P1")
+    p1 = run_configs(lhs_sample(LHS_SAMPLES, param_space=active_space), "P1")
     all_results.extend(p1)
     top10 = top_k(all_results, PASS2_TOP_N)
 
@@ -134,7 +135,7 @@ def run_sweep(sample_n: int | None = None) -> dict:
     p2_configs: list[dict] = []
     seen = set()
     for cfg, _ in top10:
-        for adj in adjacent_configs(cfg):
+        for adj in adjacent_configs(cfg, param_space=active_space):
             key = tuple(sorted(adj.items()))
             if key not in seen:
                 seen.add(key)
@@ -148,7 +149,7 @@ def run_sweep(sample_n: int | None = None) -> dict:
     p3_configs: list[dict] = []
     seen3 = set()
     for cfg, _ in top3:
-        for adj in adjacent_configs(cfg):
+        for adj in adjacent_configs(cfg, param_space=active_space):
             key = tuple(sorted(adj.items()))
             if key not in seen3:
                 seen3.add(key)
