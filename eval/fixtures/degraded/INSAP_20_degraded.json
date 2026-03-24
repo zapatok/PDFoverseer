@@ -1,6 +1,16 @@
 {
-  "name": "two_zones_diff_period",
-  "source": "synthetic",
+  "name": "INSAP_20_degraded",
+  "source": "degraded",
+  "description": "Degraded copy of INSAP_20: 6/31 pages (19%) set to failed (2 boundary + 4 interior). Tests inference recovery against real-world document structure.",
+  "base_fixture": "INSAP_20",
+  "degraded_pages": [
+    4,
+    6,
+    8,
+    16,
+    19,
+    24
+  ],
   "reads": [
     {
       "pdf_page": 1,
@@ -25,24 +35,24 @@
     },
     {
       "pdf_page": 4,
-      "curr": 2,
-      "total": 2,
-      "method": "direct",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 5,
       "curr": 1,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 6,
-      "curr": 2,
-      "total": 2,
-      "method": "direct",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 7,
@@ -53,66 +63,66 @@
     },
     {
       "pdf_page": 8,
-      "curr": 2,
-      "total": 2,
-      "method": "direct",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 9,
       "curr": 1,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 10,
       "curr": 2,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 11,
       "curr": 1,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 12,
       "curr": 2,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 13,
       "curr": 1,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 14,
       "curr": 2,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 15,
       "curr": 1,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 16,
-      "curr": 2,
-      "total": 2,
-      "method": "direct",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 17,
@@ -130,155 +140,92 @@
     },
     {
       "pdf_page": 19,
-      "curr": 1,
-      "total": 2,
-      "method": "direct",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 20,
-      "curr": 2,
-      "total": 2,
+      "curr": 1,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 21,
-      "curr": 1,
-      "total": 4,
+      "curr": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 22,
-      "curr": 2,
-      "total": 4,
+      "curr": 1,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 23,
-      "curr": 3,
-      "total": 4,
+      "curr": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 24,
-      "curr": 4,
-      "total": 4,
-      "method": "direct",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 25,
       "curr": 1,
-      "total": 4,
+      "total": 2,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 26,
-      "curr": 2,
-      "total": 4,
+      "curr": 1,
+      "total": 2,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 27,
-      "curr": 3,
-      "total": 4,
+      "curr": 1,
+      "total": 2,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 28,
-      "curr": 4,
-      "total": 4,
+      "curr": 1,
+      "total": 2,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 29,
       "curr": 1,
-      "total": 4,
+      "total": 2,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 30,
-      "curr": 2,
-      "total": 4,
+      "curr": 1,
+      "total": 2,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 31,
-      "curr": 3,
-      "total": 4,
-      "method": "direct",
-      "confidence": 1.0
-    },
-    {
-      "pdf_page": 32,
-      "curr": 4,
-      "total": 4,
-      "method": "direct",
-      "confidence": 1.0
-    },
-    {
-      "pdf_page": 33,
       "curr": 1,
-      "total": 4,
-      "method": "direct",
-      "confidence": 1.0
-    },
-    {
-      "pdf_page": 34,
-      "curr": 2,
-      "total": 4,
-      "method": "direct",
-      "confidence": 1.0
-    },
-    {
-      "pdf_page": 35,
-      "curr": 3,
-      "total": 4,
-      "method": "direct",
-      "confidence": 1.0
-    },
-    {
-      "pdf_page": 36,
-      "curr": 4,
-      "total": 4,
-      "method": "direct",
-      "confidence": 1.0
-    },
-    {
-      "pdf_page": 37,
-      "curr": 1,
-      "total": 4,
-      "method": "direct",
-      "confidence": 1.0
-    },
-    {
-      "pdf_page": 38,
-      "curr": 2,
-      "total": 4,
-      "method": "direct",
-      "confidence": 1.0
-    },
-    {
-      "pdf_page": 39,
-      "curr": 3,
-      "total": 4,
-      "method": "direct",
-      "confidence": 1.0
-    },
-    {
-      "pdf_page": 40,
-      "curr": 4,
-      "total": 4,
+      "total": 2,
       "method": "direct",
       "confidence": 1.0
     }

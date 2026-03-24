@@ -187,7 +187,7 @@ def _infer_missing(
 
     _lt_cache: dict[int, tuple[int, float]] = {}
 
-    def _local_total(idx: int, window: int = 7) -> tuple[int, float]:
+    def _local_total(idx: int, window: int = 5) -> tuple[int, float]:
         """Return (most_common_total, homogeneity) from ±window confirmed reads.
         Only overrides best_total when local region is highly homogeneous (≥85%).
         Mixed regions fall back to best_total to avoid bias."""
@@ -203,7 +203,7 @@ def _infer_missing(
             tc = Counter(local)
             mode_val, mode_freq = tc.most_common(1)[0]
             homogeneity = mode_freq / len(local)
-            result = (mode_val, homogeneity) if homogeneity >= 0.83 else (best_total, homogeneity)
+            result = (mode_val, homogeneity) if homogeneity >= 0.85 else (best_total, homogeneity)
         _lt_cache[idx] = result
         return result
 
@@ -218,7 +218,7 @@ def _infer_missing(
             if r.method in ("failed", "inferred", "excluded") or r.total is None:
                 continue
             lt, hom = _local_total(i)
-            if r.total == 1 and hom >= 0.83 and lt > 1:
+            if r.total == 1 and hom >= 0.85 and lt > 1:
                 r.confidence -= hom
                 if r.confidence < ANOMALY_DROPOUT:
                     r.method = "failed"
@@ -298,12 +298,12 @@ def _infer_missing(
                 idx = gap_start + offset
                 lt_val, _ = _local_total(idx)
                 if t != lt_val:
-                    cost += hom * 1.0
+                    cost += hom * 0.75
                 if c == 1 and period_info and period_info.get("period"):
                     p_conf = period_info.get("confidence", 0.0)
                     ex_t = period_info.get("expected_total", period_info["period"])
                     if p_conf > 0.3 and t != ex_t:
-                        cost += p_conf * 2.0
+                        cost += p_conf * 2.5
             return cost
         
         cost_fwd = seq_cost(hyp_fwd)
@@ -326,10 +326,20 @@ def _infer_missing(
                         (r_prev.curr == r_prev.total and bwd_first_c == 1)):
                     cost_bwd += CLASH_BOUNDARY_PEN
 
-        if cost_fwd <= cost_bwd:
+        if cost_fwd < cost_bwd:
             best_hyp = hyp_fwd
-        else:
+        elif cost_bwd < cost_fwd:
             best_hyp = hyp_bwd
+        else:
+            # Tie-break: prefer the hypothesis that creates a document boundary
+            # (curr=1). False boundaries can be removed later (Phase 6, undercount
+            # recovery) but false continuations cannot be split.
+            bwd_has_boundary = any(c == 1 for c, t, h in hyp_bwd)
+            fwd_has_boundary = any(c == 1 for c, t, h in hyp_fwd)
+            if bwd_has_boundary and not fwd_has_boundary:
+                best_hyp = hyp_bwd
+            else:
+                best_hyp = hyp_fwd
 
         # Apply
         for offset, (c, t, hom) in enumerate(best_hyp):
@@ -338,15 +348,15 @@ def _infer_missing(
             r.curr = c
             r.total = t
             if best_hyp is hyp_bwd:
-                r.confidence = 0.88
+                r.confidence = 0.85
             else:
                 if offset == 0 and gap_start > 0:
                     rp = reads[gap_start - 1]
                     if rp.curr == rp.total:
-                        r.confidence = 0.65 + hom * 0.30
+                        r.confidence = 0.60 + hom * 0.30
                         continue
                 if c == 1:
-                    r.confidence = 0.65 + hom * 0.30
+                    r.confidence = 0.60 + hom * 0.30
                 else:
                     r.confidence = 0.99
 
@@ -383,7 +393,7 @@ def _infer_missing(
                         (r.curr == r.total and nxt.curr == 1)):
                     consistent = False
         if not consistent:
-            r.confidence = min(r.confidence, 0.45)
+            r.confidence = min(r.confidence, 0.50)
 
     # ── Phase 4: Fallback for unresolved failures ────────────────────
     # Catches pages still marked "failed" after the bidirectional gap solver —
@@ -434,15 +444,15 @@ def _infer_missing(
             prior_support = prior.get(r.total, 0.0)
 
             if support > 0.2 or neighbors_agree == 2:
-                boost = min(support * 0.12 + neighbors_agree * 0.10
-                            + prior_support * 0.07, 0.20)
+                boost = min(support * 0.10 + neighbors_agree * 0.10
+                            + prior_support * 0.07, 0.18)
                 r.confidence = min(r.confidence + boost, 0.75)
 
     # ── Phase 5b: Period-contradiction correction ─────────────────────────────
-    # When ≥93% of OCR-confirmed reads agree on expected_total (the period's
+    # When ≥95% of OCR-confirmed reads agree on expected_total (the period's
     # typical page count), reads with a different total are corrected to match.
-    # Requires period_conf ≥ PH5B_CONF_MIN (0.60) to avoid false corrections.
-    # Sweep results validated these thresholds (see eval/sweep.py for details).
+    # Requires period_conf ≥ PH5B_CONF_MIN (0.50) to avoid false corrections.
+    # sweep2 raised ratio from 0.93→0.95 to avoid over-correcting mixed-period PDFs.
     if period is not None and period_conf >= PH5B_CONF_MIN:
         expected_total = period_info.get("expected_total")
         if expected_total is not None:

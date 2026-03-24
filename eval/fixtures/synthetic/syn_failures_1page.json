@@ -1,0 +1,19 @@
+{
+  "name": "syn_failures_1page",
+  "source": "synthetic",
+  "description": "12 standalone 1-page docs, 3 with unreadable stamps. Inference must fill p3, p6, p10 as 1/1.",
+  "reads": [
+    {"pdf_page":  1, "curr": 1,    "total": 1,    "method": "direct", "confidence": 1.0},
+    {"pdf_page":  2, "curr": 1,    "total": 1,    "method": "direct", "confidence": 1.0},
+    {"pdf_page":  3, "curr": null, "total": null, "method": "failed", "confidence": 0.0},
+    {"pdf_page":  4, "curr": 1,    "total": 1,    "method": "direct", "confidence": 1.0},
+    {"pdf_page":  5, "curr": 1,    "total": 1,    "method": "direct", "confidence": 1.0},
+    {"pdf_page":  6, "curr": null, "total": null, "method": "failed", "confidence": 0.0},
+    {"pdf_page":  7, "curr": 1,    "total": 1,    "method": "direct", "confidence": 1.0},
+    {"pdf_page":  8, "curr": 1,    "total": 1,    "method": "direct", "confidence": 1.0},
+    {"pdf_page":  9, "curr": 1,    "total": 1,    "method": "direct", "confidence": 1.0},
+    {"pdf_page": 10, "curr": null, "total": null, "method": "failed", "confidence": 0.0},
+    {"pdf_page": 11, "curr": 1,    "total": 1,    "method": "direct", "confidence": 1.0},
+    {"pdf_page": 12, "curr": 1,    "total": 1,    "method": "direct", "confidence": 1.0}
+  ]
+}

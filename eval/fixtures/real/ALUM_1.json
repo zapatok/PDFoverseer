@@ -1,0 +1,20 @@
+{
+  "name": "ALUM_1",
+  "source": "real",
+  "reads": [
+    {
+      "pdf_page": 1,
+      "curr": 1,
+      "total": 3,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 2,
+      "curr": 2,
+      "total": 3,
+      "method": "direct",
+      "confidence": 1.0
+    }
+  ]
+}

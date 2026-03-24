@@ -27,9 +27,12 @@ Gestiona exclusivamente los llamados a los intérpretes de reconocimiento óptic
 
 ### 4. `inference.py` (Inteligencia Lógica sin Estado)
 Corazón de las deducciones, totalmente purificado para prescindir de estado mutacional, garantizando que el diseño de *Human-In-The-Loop* nunca se entrelace con estados sucios.
+*   **Versión:** `soft-alignment-v3-sweep2` — parámetros optimizados vía sweep sobre 40 fixtures (21 reales + 13 sintéticos + 6 degradados).
 *   **Teoría de Dempster-Shafer:** `_ds_combine()` ejecuta la fusión algorítmica.
 *   **Detecciones Cíclicas:** `_detect_period()` revisa la recurrencia algorítmica de los números curr.
-*   **Generador y Ensamblador:** Realiza deducciones faltantes puras (`_infer_missing()`), agrupa las entidades en colecciones ordenadas limitadas (`_build_documents()`), y estima la clasificación global o fiabilidad iterando inferencias (`classify_doc()`).
+*   **Gap Solver Bidireccional:** Fases 1-2 generan hipótesis forward/backward para páginas fallidas; tie-breaker prefiere hipótesis que crean fronteras de documento (reversibles) sobre continuaciones (irreversibles).
+*   **Fases 0-6 + 5b:** Phase 0 (anomaly dropout), Phase 1-2 (gap solver), Phase 1b (orphan marking), Phase 3 (cross-validation), Phase 4 (fallback, conf=0.15), Phase 5 (D-S post-validation), Phase 5b (period-contradiction, ratio≥0.95), Phase 6 (orphan suppression, conf≥0.55).
+*   **Generador y Ensamblador:** `_infer_missing()`, `_build_documents()`, `classify_doc()`.
 
 ### 5. `pipeline.py` (Orquestación del Productor-Consumidor)
 Implementa los procesos multihilos, la coordinación de operaciones largas asíncronas de I/O y la telemetría en tiempo real.

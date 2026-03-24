@@ -15,12 +15,12 @@ TESS_CONFIG      = "--psm 6 --oem 1"
 PARALLEL_WORKERS = 6      # concurrent Tesseract subprocesses
 BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
-MIN_CONF_FOR_NEW_DOC = 0.65   # sweep winner (was 0.55)
+MIN_CONF_FOR_NEW_DOC = 0.55   # sweep2 (2026-03-24, 40 fixtures incl. degraded)
 ANOMALY_DROPOUT      = 0.0
-PHASE4_FALLBACK_CONF = 0.0   # 0.0 = off; 0.15-0.25 re-enables as low-conf fallback
-CLASH_BOUNDARY_PEN   = 2.0   # sweep winner (was 5.0)
-PH5B_CONF_MIN        = 0.60  # minimum period confidence to apply phase 5b
-PH5B_RATIO_MIN       = 0.93  # minimum ratio of reads with expected total to correct
+PHASE4_FALLBACK_CONF = 0.15  # re-enabled: recovers pages the gap solver missed
+CLASH_BOUNDARY_PEN   = 1.5   # sweep2
+PH5B_CONF_MIN        = 0.50  # sweep2
+PH5B_RATIO_MIN       = 0.95  # sweep2 (more conservative to avoid over-correcting mixed-period PDFs)
 INFERENCE_ENGINE_VERSION = "soft-alignment-v3-sweep2"
 
 # ============================================================================

@@ -1,0 +1,25 @@
+{
+  "name": "syn_clean_3page",
+  "source": "synthetic",
+  "description": "6 complete 3-page docs, all direct reads. Tests period-3 detection.",
+  "reads": [
+    {"pdf_page":  1, "curr": 1, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  2, "curr": 2, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  3, "curr": 3, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  4, "curr": 1, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  5, "curr": 2, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  6, "curr": 3, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  7, "curr": 1, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  8, "curr": 2, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  9, "curr": 3, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 10, "curr": 1, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 11, "curr": 2, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 12, "curr": 3, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 13, "curr": 1, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 14, "curr": 2, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 15, "curr": 3, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 16, "curr": 1, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 17, "curr": 2, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 18, "curr": 3, "total": 3, "method": "direct", "confidence": 1.0}
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "syn_incomplete_3page",
+  "source": "synthetic",
+  "description": "4 docs declared as 3-page but only pages 1/3 and 2/3 present (page 3 always missing). Models QUEVEDO_13 incomplete-doc pattern.",
+  "reads": [
+    {"pdf_page":  1, "curr": 1, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  2, "curr": 2, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  3, "curr": 1, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  4, "curr": 2, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  5, "curr": 1, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  6, "curr": 2, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  7, "curr": 1, "total": 3, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  8, "curr": 2, "total": 3, "method": "direct", "confidence": 1.0}
+  ]
+}

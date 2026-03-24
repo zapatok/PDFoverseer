@@ -59,8 +59,9 @@ pip install -r requirements-gpu.txt
 │   ├── extract_fixtures.py   # One-time fixture extraction
 │   ├── params.py             # Sweep parameter space + production values
 │   ├── fixtures/
-│   │   ├── real/             # 7 real PDFs (charlas CRS)
-│   │   └── synthetic/        # 6 synthetic test cases
+│   │   ├── real/             # 21 real PDFs (charlas CRS)
+│   │   ├── synthetic/        # 13 synthetic test cases
+│   │   └── degraded/         # 6 degraded copies of real fixtures (~15-20% failed)
 │   ├── tests/
 │   │   ├── test_inference.py # Inference unit tests (eval harness)
 │   │   └── test_sweep_scoring.py
@@ -107,12 +108,12 @@ CROP_Y_END       = 0.22                   # top 22%
 PARALLEL_WORKERS = 6                      # Tesseract concurrency
 BATCH_SIZE       = 12                     # Pages per pause checkpoint
 
-# Inference parameters (sweep-tuned: soft-alignment-v3-sweep1)
-MIN_CONF_FOR_NEW_DOC = 0.65   # min confidence to open a new document boundary
-CLASH_BOUNDARY_PEN   = 2.0    # gap-solver penalty for clash at boundaries
-PHASE4_FALLBACK_CONF = 0.0    # 0.0 = disabled; 0.15–0.25 re-enables low-conf fallback
-PH5B_CONF_MIN        = 0.60   # min period confidence to apply phase 5b correction
-PH5B_RATIO_MIN       = 0.93   # min ratio of reads with expected total to correct
+# Inference parameters (sweep2: 2026-03-24, 40 fixtures incl. degraded)
+MIN_CONF_FOR_NEW_DOC = 0.55   # min confidence to open a new document boundary
+CLASH_BOUNDARY_PEN   = 1.5    # gap-solver penalty for clash at boundaries
+PHASE4_FALLBACK_CONF = 0.15   # re-enabled: recovers pages the gap solver missed
+PH5B_CONF_MIN        = 0.50   # min period confidence to apply phase 5b correction
+PH5B_RATIO_MIN       = 0.95   # min ratio of reads with expected total to correct
 ANOMALY_DROPOUT      = 0.0    # anomaly suppression (disabled)
 ```
 
@@ -211,7 +212,7 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr, `i`=inferred, `f`=f
 
 ### Inference Engine
 
-- **Version:** `soft-alignment-v3-sweep1` (see `INFERENCE_ENGINE_VERSION` in `core/utils.py`)
+- **Version:** `soft-alignment-v3-sweep2` (see `INFERENCE_ENGINE_VERSION` in `core/utils.py`)
 - **Phases 1–5 + MP + 5b:** OCR results → forward/backward propagation → cross-validation → gap-solver → D-S post-validation → multi-period correction
 - **Confidence scores:** 0.0–1.0; <0.60 flagged as uncertain
 - **Period inference:** Autocorrelation + Dempster-Shafer + neighbor evidence

@@ -1,6 +1,15 @@
 {
-  "name": "clean_period2",
-  "source": "synthetic",
+  "name": "QUEVEDO_13_degraded",
+  "source": "degraded",
+  "description": "Degraded copy of QUEVEDO_13: 5/26 pages (19%) set to failed (2 boundary + 3 interior). Tests inference recovery against real-world document structure.",
+  "base_fixture": "QUEVEDO_13",
+  "degraded_pages": [
+    8,
+    12,
+    15,
+    17,
+    26
+  ],
   "reads": [
     {
       "pdf_page": 1,
@@ -47,79 +56,79 @@
     {
       "pdf_page": 7,
       "curr": 1,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 8,
-      "curr": 2,
-      "total": 2,
-      "method": "direct",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 9,
       "curr": 1,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 10,
       "curr": 2,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 11,
       "curr": 1,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 12,
-      "curr": 2,
-      "total": 2,
-      "method": "direct",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 13,
       "curr": 1,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 14,
       "curr": 2,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 15,
-      "curr": 1,
-      "total": 2,
-      "method": "direct",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 16,
       "curr": 2,
-      "total": 2,
+      "total": 3,
       "method": "direct",
       "confidence": 1.0
     },
     {
       "pdf_page": 17,
-      "curr": 1,
-      "total": 2,
-      "method": "direct",
-      "confidence": 1.0
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     },
     {
       "pdf_page": 18,
@@ -141,6 +150,48 @@
       "total": 2,
       "method": "direct",
       "confidence": 1.0
+    },
+    {
+      "pdf_page": 21,
+      "curr": 1,
+      "total": 2,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 22,
+      "curr": 2,
+      "total": 2,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 23,
+      "curr": 1,
+      "total": 2,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 24,
+      "curr": 2,
+      "total": 2,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 25,
+      "curr": 1,
+      "total": 2,
+      "method": "direct",
+      "confidence": 1.0
+    },
+    {
+      "pdf_page": 26,
+      "curr": null,
+      "total": null,
+      "method": "failed",
+      "confidence": 0.0
     }
   ]
 }

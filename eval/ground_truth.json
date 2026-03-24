@@ -1,152 +1,43 @@
 {
-  "CH_9": {
-    "doc_count": 9,
-    "complete_count": 8,
-    "inferred_count": 0
-  },
-  "CH_39": {
-    "doc_count": 39,
-    "complete_count": 36,
-    "inferred_count": 1
-  },
-  "CH_51": {
-    "doc_count": 51,
-    "complete_count": 42,
-    "inferred_count": 1
-  },
-  "CH_74": {
-    "doc_count": 74,
-    "complete_count": 54,
-    "inferred_count": 5
-  },
-  "HLL": {
-    "doc_count": 363,
-    "complete_count": 205,
-    "inferred_count": 35
-  },
-  "INS_31": {
-    "doc_count": 31,
-    "complete_count": 29,
-    "inferred_count": 7
-  },
-  "ins31_gap": {
-    "doc_count": 2,
-    "complete_count": 2,
-    "inferred_count": 1
-  },
-  "undercount_chain": {
-    "doc_count": 1,
-    "complete_count": 1,
-    "inferred_count": 1
-  },
-  "ambiguous_start": {
-    "doc_count": 3,
-    "complete_count": 2,
-    "inferred_count": 2
-  },
-  "noisy_period": {
-    "doc_count": 1,
-    "complete_count": 0,
-    "inferred_count": 0
-  },
-  "seq_break": {
-    "doc_count": 1,
-    "complete_count": 1,
-    "inferred_count": 1
-  },
-  "ds_conflict": {
-    "doc_count": 1,
-    "complete_count": 0,
-    "inferred_count": 3
-  },
-  "dense_1page_failures": {
-    "doc_count": 10,
-    "complete_count": 10,
-    "inferred_count": 2
-  },
-  "many_1page_stream": {
-    "doc_count": 50,
-    "complete_count": 50,
-    "inferred_count": 20
-  },
-  "period1_then_multipage": {
-    "doc_count": 29,
-    "complete_count": 28,
-    "inferred_count": 0
-  },
-  "mixed_1_and_2page": {
-    "doc_count": 10,
-    "complete_count": 9,
-    "inferred_count": 2
-  },
-  "high_failure_period2": {
-    "doc_count": 10,
-    "complete_count": 10,
-    "inferred_count": 12
-  },
-  "clean_period2": {
-    "doc_count": 10,
-    "complete_count": 10,
-    "inferred_count": 0
-  },
-  "clean_period4": {
-    "doc_count": 5,
-    "complete_count": 5,
-    "inferred_count": 0
-  },
-  "all_1page_clean": {
-    "doc_count": 20,
-    "complete_count": 20,
-    "inferred_count": 0
-  },
-  "variable_doc_sizes": {
-    "doc_count": 10,
-    "complete_count": 10,
-    "inferred_count": 0
-  },
-  "single_long_doc": {
-    "doc_count": 1,
-    "complete_count": 1,
-    "inferred_count": 3
-  },
-  "two_zones_diff_period": {
-    "doc_count": 15,
-    "complete_count": 15,
-    "inferred_count": 0
-  },
-  "sparse_reads": {
-    "doc_count": 10,
-    "complete_count": 10,
-    "inferred_count": 8
-  },
-  "period2_low_conf": {
-    "doc_count": 20,
-    "complete_count": 16,
-    "inferred_count": 0
-  },
-  "period2_noisy_splits": {
-    "doc_count": 15,
-    "complete_count": 12,
-    "inferred_count": 0
-  },
-  "mixed_1_2_dense": {
-    "doc_count": 30,
-    "complete_count": 30,
-    "inferred_count": 0
-  },
-  "period2_boundary_fp": {
-    "doc_count": 10,
-    "complete_count": 7,
-    "inferred_count": 0
-  },
-  "art_like_high_failure": {
-    "doc_count": 15,
-    "complete_count": 15,
-    "inferred_count": 10
-  },
-  "hll_recon_period2": {
-    "doc_count": 20,
-    "complete_count": 20,
-    "inferred_count": 2
-  }
+  "ALUM_1":    {"doc_count":  1, "complete_count":  0, "inferred_count": 0},
+  "ALUM_19":   {"doc_count": 19, "complete_count":  6, "inferred_count": 0},
+  "CASTRO_5":  {"doc_count":  5, "complete_count":  0, "inferred_count": 0},
+  "CASTRO_15": {"doc_count": 15, "complete_count":  0, "inferred_count": 0},
+  "CHAR_17":   {"doc_count": 17, "complete_count":  8, "inferred_count": 0},
+  "CHAR_25":   {"doc_count": 25, "complete_count": 11, "inferred_count": 0},
+  "CH_9":      {"doc_count":  9, "complete_count":  8, "inferred_count": 0},
+  "CH_39":     {"doc_count": 39, "complete_count": 36, "inferred_count": 0},
+  "CH_51":     {"doc_count": 51, "complete_count": 44, "inferred_count": 0},
+  "CH_74":     {"doc_count": 74, "complete_count": 58, "inferred_count": 0},
+  "CH_BSM_18": {"doc_count": 18, "complete_count": 16, "inferred_count": 0},
+  "CRS_9":     {"doc_count":  9, "complete_count":  8, "inferred_count": 0},
+  "INS_31":    {"doc_count": 31, "complete_count": 31, "inferred_count": 0},
+  "INSAP_20":  {"doc_count": 20, "complete_count":  4, "inferred_count": 0},
+  "JOGA_19":   {"doc_count": 19, "complete_count":  4, "inferred_count": 0},
+  "QUEVEDO_1": {"doc_count":  1, "complete_count":  0, "inferred_count": 0},
+  "QUEVEDO_2": {"doc_count":  2, "complete_count":  1, "inferred_count": 0},
+  "QUEVEDO_13":{"doc_count": 13, "complete_count":  8, "inferred_count": 0},
+  "RACO_25":   {"doc_count": 25, "complete_count": 10, "inferred_count": 0},
+  "SAEZ_14":   {"doc_count": 14, "complete_count": 10, "inferred_count": 0},
+
+  "syn_clean_1page":        {"doc_count": 15, "complete_count": 15, "inferred_count": 0},
+  "syn_clean_2page":        {"doc_count":  8, "complete_count":  8, "inferred_count": 0},
+  "syn_clean_3page":        {"doc_count":  6, "complete_count":  6, "inferred_count": 0},
+  "syn_clean_4page":        {"doc_count":  5, "complete_count":  5, "inferred_count": 0},
+  "syn_orphaned_tail":      {"doc_count":  8, "complete_count":  4, "inferred_count": 0},
+  "syn_orphaned_scattered": {"doc_count":  7, "complete_count":  3, "inferred_count": 0},
+  "syn_consecutive_starts": {"doc_count": 12, "complete_count":  8, "inferred_count": 0},
+  "syn_failures_2page":     {"doc_count":  6, "complete_count":  6, "inferred_count": 2},
+  "syn_failures_1page":     {"doc_count": 12, "complete_count": 12, "inferred_count": 3},
+  "syn_mixed_2_3":          {"doc_count":  8, "complete_count":  8, "inferred_count": 0},
+  "syn_incomplete_3page":   {"doc_count":  4, "complete_count":  0, "inferred_count": 0},
+  "syn_two_zones":          {"doc_count": 10, "complete_count": 10, "inferred_count": 0},
+  "syn_high_failure_2page": {"doc_count": 10, "complete_count": 10, "inferred_count": 4},
+
+  "CH_74_degraded":     {"doc_count": 74, "complete_count": 58, "inferred_count": 20},
+  "CH_39_degraded":     {"doc_count": 39, "complete_count": 36, "inferred_count": 13},
+  "INSAP_20_degraded":  {"doc_count": 20, "complete_count":  4, "inferred_count":  6},
+  "RACO_25_degraded":   {"doc_count": 25, "complete_count": 10, "inferred_count":  7},
+  "QUEVEDO_13_degraded":{"doc_count": 13, "complete_count":  8, "inferred_count":  5},
+  "JOGA_19_degraded":   {"doc_count": 19, "complete_count":  4, "inferred_count":  7}
 }

@@ -1,0 +1,19 @@
+{
+  "name": "syn_orphaned_tail",
+  "source": "synthetic",
+  "description": "4 complete 2-page docs followed by 4 orphaned first pages. Models INSAP_20 tail pattern.",
+  "reads": [
+    {"pdf_page":  1, "curr": 1, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  2, "curr": 2, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  3, "curr": 1, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  4, "curr": 2, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  5, "curr": 1, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  6, "curr": 2, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  7, "curr": 1, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  8, "curr": 2, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page":  9, "curr": 1, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 10, "curr": 1, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 11, "curr": 1, "total": 2, "method": "direct", "confidence": 1.0},
+    {"pdf_page": 12, "curr": 1, "total": 2, "method": "direct", "confidence": 1.0}
+  ]
+}

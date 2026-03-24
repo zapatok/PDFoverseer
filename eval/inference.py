@@ -325,10 +325,20 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
                         (r_prev.curr == r_prev.total and bwd_first_c == 1)):
                     cost_bwd += clash_boundary_pen
 
-        if cost_fwd <= cost_bwd:
+        if cost_fwd < cost_bwd:
             best_hyp = hyp_fwd
-        else:
+        elif cost_bwd < cost_fwd:
             best_hyp = hyp_bwd
+        else:
+            # Tie-break: prefer the hypothesis that creates a document boundary
+            # (curr=1). False boundaries can be removed later (Phase 6, undercount
+            # recovery) but false continuations cannot be split.
+            bwd_has_boundary = any(c == 1 for c, t, h in hyp_bwd)
+            fwd_has_boundary = any(c == 1 for c, t, h in hyp_fwd)
+            if bwd_has_boundary and not fwd_has_boundary:
+                best_hyp = hyp_bwd
+            else:
+                best_hyp = hyp_fwd
 
         # Apply
         for offset, (c, t, hom) in enumerate(best_hyp):

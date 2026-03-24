@@ -34,11 +34,11 @@ def _syn_fx(name, n_pages, curr=1, total=1):
     }
 
 
-def test_real_exact_scores_5():
-    """Real fixture with exact doc count earns +5."""
+def test_real_exact_scores_7():
+    """Real fixture with exact doc+complete count earns +5 doc + +2 complete = 7."""
     gt = {"r_ok": {"doc_count": 1, "complete_count": 1, "inferred_count": 0}}
     result = score_config(PRODUCTION_PARAMS, [_real_fx("r_ok", 1)], gt, set())
-    assert result["composite_score"] == 5
+    assert result["composite_score"] == 7
 
 
 def test_synthetic_exact_scores_5():
@@ -49,27 +49,28 @@ def test_synthetic_exact_scores_5():
 
 
 def test_real_delta_penalizes_3_per_doc():
-    """Real fixture off by 2 docs → penalty = 2 × 3 = -6."""
+    """Real fixture off by 2 docs → -6 doc penalty + 2 complete bonus = -4."""
     # 3 pages each 1/1 → 3 docs; GT says 1 → delta = 2
+    # got_complete=3 >= truth=1 → complete_exact=+2
     gt = {"r_bad": {"doc_count": 1, "complete_count": 1, "inferred_count": 0}}
     result = score_config(PRODUCTION_PARAMS, [_real_fx("r_bad", 3)], gt, set())
-    assert result["composite_score"] == -6
+    assert result["composite_score"] == -4
 
 
 def test_synthetic_delta_penalizes_1_per_doc():
     """Synthetic fixture off by 2 docs → penalty = 2 × 1 = -2."""
     gt = {"s_bad": {"doc_count": 1, "complete_count": 1, "inferred_count": 0}}
     result = score_config(PRODUCTION_PARAMS, [_syn_fx("s_bad", 3)], gt, set())
-    # doc_delta=2: -2; complete_exact: 0 (doc count wrong); inf_delta: 0
+    # doc_delta=2: -2; complete_exact: 0 (doc count wrong → d_comp False); inf_delta: 0
     assert result["composite_score"] == -2
 
 
-def test_real_wrong_complete_count_not_penalized():
-    """Real fixture: wrong complete_count in GT does not affect score."""
+def test_real_under_complete_penalized():
+    """Real fixture: got_complete < truth → real_comp_delta penalty."""
     gt = {"r_comp": {"doc_count": 1, "complete_count": 999, "inferred_count": 0}}
     result = score_config(PRODUCTION_PARAMS, [_real_fx("r_comp", 1)], gt, set())
-    # Only doc_exact +5 — complete_count irrelevant for real fixtures
-    assert result["composite_score"] == 5
+    # doc_exact=+5, complete: 1 < 999 → real_comp_delta=998 → -998
+    assert result["composite_score"] == 5 - 998
 
 
 def test_regression_penalizes_5():
@@ -77,5 +78,5 @@ def test_regression_penalizes_5():
     gt = {"r_reg": {"doc_count": 1, "complete_count": 1, "inferred_count": 0}}
     fx = [_real_fx("r_reg", 3)]  # 3 docs, GT=1 → fails
     result = score_config(PRODUCTION_PARAMS, fx, gt, baseline_passes={"r_reg"})
-    # delta penalty + regression: -6 - 5 = -11
-    assert result["composite_score"] == -11
+    # delta -6 + complete +2 + regression -5 = -9
+    assert result["composite_score"] == -9
