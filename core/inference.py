@@ -553,7 +553,7 @@ def _build_documents(
                             msg = "Páginas desordenadas o duplicadas"
                         if on_issue:
                             on_issue(current.pages[-1] if current.pages else current.start_pdf_page, "sequence", msg)
-                    elif period_info and period_info.get("period", 1) > 1 and current.declared_total == 1:
+                    elif period_info and (period_info.get("period") or 1) > 1 and current.declared_total == 1:
                         if on_issue:
                             on_issue(current.start_pdf_page, "boundary", f"Anomalía: Doc de 1 página en lote P={period_info.get('period')}")
                 documents.append(current)
@@ -589,7 +589,7 @@ def _build_documents(
                     msg = "Páginas desordenadas o duplicadas"
                 if on_issue:
                     on_issue(current.pages[-1] if current.pages else current.start_pdf_page, "sequence", msg)
-            elif period_info and period_info.get("period", 1) > 1 and current.declared_total == 1:
+            elif period_info and (period_info.get("period") or 1) > 1 and current.declared_total == 1:
                 if on_issue:
                     on_issue(current.start_pdf_page, "boundary", f"Anomalía: Doc de 1 página en lote P={period_info.get('period')}")
         documents.append(current)
