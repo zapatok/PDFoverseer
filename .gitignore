@@ -49,3 +49,6 @@ package-lock.json
 
 # Eval sweep results
 eval/results/
+
+# VLM sweep results
+vlm/results/*.json
