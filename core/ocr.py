@@ -11,7 +11,7 @@ import pytesseract
 import fitz
 
 from core.utils import TESS_CONFIG, _parse, _PageRead
-from core.image import _render_clip
+from core.image import _render_clip, _deskew
 
 # ── Configuración ─────────────────────────────────────────────────────────────
 
@@ -143,6 +143,7 @@ def _process_page(doc: fitz.Document, page_idx: int) -> _PageRead:
     """
     pdf_page = page_idx + 1
     bgr = _render_clip(doc[page_idx])
+    bgr = _deskew(bgr)   # correct scan skew; Tier 2 inherits via bgr_sr = _upsample_4x(bgr)
 
     # Tier 1: Tesseract direct (passing BGR so _tess_ocr can filter colors)
     text = _tess_ocr(bgr)
