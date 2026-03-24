@@ -21,7 +21,7 @@ PHASE4_FALLBACK_CONF = 0.15  # re-enabled: recovers pages the gap solver missed
 CLASH_BOUNDARY_PEN   = 1.5   # sweep2
 PH5B_CONF_MIN        = 0.50  # sweep2
 PH5B_RATIO_MIN       = 0.95  # sweep2 (more conservative to avoid over-correcting mixed-period PDFs)
-INFERENCE_ENGINE_VERSION = "soft-alignment-v3-sweep2"
+INFERENCE_ENGINE_VERSION = "s2t-helena"
 
 # ============================================================================
 # Page Number Patterns & Normalization

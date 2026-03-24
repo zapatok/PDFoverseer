@@ -27,7 +27,7 @@ Gestiona exclusivamente los llamados a los intérpretes de reconocimiento óptic
 
 ### 4. `inference.py` (Inteligencia Lógica sin Estado)
 Corazón de las deducciones, totalmente purificado para prescindir de estado mutacional, garantizando que el diseño de *Human-In-The-Loop* nunca se entrelace con estados sucios.
-*   **Versión:** `soft-alignment-v3-sweep2` — parámetros optimizados vía sweep sobre 40 fixtures (21 reales + 13 sintéticos + 6 degradados).
+*   **Versión:** `s2t-helena` — parámetros optimizados vía sweep2 sobre 40 fixtures (21 reales + 13 sintéticos + 6 degradados). Nombrado por *Muraena helena* (morena mediterránea).
 *   **Teoría de Dempster-Shafer:** `_ds_combine()` ejecuta la fusión algorítmica.
 *   **Detecciones Cíclicas:** `_detect_period()` revisa la recurrencia algorítmica de los números curr.
 *   **Gap Solver Bidireccional:** Fases 1-2 generan hipótesis forward/backward para páginas fallidas; tie-breaker prefiere hipótesis que crean fronteras de documento (reversibles) sobre continuaciones (irreversibles).

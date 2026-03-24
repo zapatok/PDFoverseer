@@ -212,7 +212,7 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr, `i`=inferred, `f`=f
 
 ### Inference Engine
 
-- **Version:** `soft-alignment-v3-sweep2` (see `INFERENCE_ENGINE_VERSION` in `core/utils.py`)
+- **Version:** `s2t-helena` (see `INFERENCE_ENGINE_VERSION` in `core/utils.py`)
 - **Phases 1–5 + MP + 5b:** OCR results → forward/backward propagation → cross-validation → gap-solver → D-S post-validation → multi-period correction
 - **Confidence scores:** 0.0–1.0; <0.60 flagged as uncertain
 - **Period inference:** Autocorrelation + Dempster-Shafer + neighbor evidence
