@@ -54,11 +54,14 @@ def query(image_path: str, prompt: str, model: str = "gemma3:4b",
 ```
 
 - HTTP POST to `http://localhost:11434/api/chat` (Ollama vision endpoint)
-- Request body: `{"model": "gemma3:4b", "messages": [{"role": "user", "content": prompt, "images": [base64]}], "stream": false, "options": {"temperature": t, "top_p": p}}`
+- Request body: `{"model": "gemma3:4b", "messages": [{"role": "user", "content": prompt, "images": [base64]}], "stream": false, "options": {"temperature": t, "top_p": p, "num_predict": 50, "seed": s}}`
 - Response text from `response["message"]["content"]`
-- Timeout: 10 seconds per image (normal requests)
-- Warmup: first request uses 60s timeout (model loading into VRAM)
+- Timeout: 10 seconds per image
+- **Warmup:** before benchmarking, send an empty preload request to `/api/generate` with `{"model": "gemma3:4b"}` to load weights into VRAM (documented Ollama method). This avoids penalizing the first real request.
+- **`num_predict: 50`** — limit response to 50 tokens (we only need "N/M", prevents rambling)
+- **`seed: 42`** — fixed seed for reproducibility across sweep runs (varied in sweep params for robustness testing)
 - Single retry on connection error
+- **Latency from Ollama response:** use `total_duration` field (nanoseconds) from the API response instead of Python-side timing — more accurate, excludes HTTP overhead
 - Returns `{"raw_text": str, "latency_ms": float, "error": str | None}`
 
 ### parser.py — Response Parser
@@ -131,8 +134,12 @@ PARAM_SPACE = {
     "top_p": [0.5, 0.9, 1.0],
     "preprocess": ["none", "grayscale", "otsu", "contrast"],
     "upscale": [1.0, 1.5, 2.0],
+    "seed": [42, 123, 7],
 }
-# Total: 4 x 4 x 3 x 4 x 3 = 576 combinations
+# Total: 4 x 4 x 3 x 4 x 3 x 3 = 1,728 combinations
+# Note: seed tests reproducibility — if results are identical across seeds
+# at temperature=0, we can drop seed from the space (reducing to 576).
+
 ```
 
 ### sweep.py — Parameter Sweep
@@ -148,6 +155,8 @@ Each config runs `benchmark.run(config, failures_only=True)`.
 Results saved as JSON **per config** (not per pass) in `vlm/results/` for crash resilience. Progress logged to console: `"config 15/80, exact_match=0.68, ETA 5h 20m"`.
 
 **Wall-clock estimate:** 697 images × ~500ms/image = ~6 min/config. Pass 1 (80 configs) ≈ 8 hours. The sweep can use `--sample N` to run on a subset for faster iteration.
+
+**First run optimization:** Before pass 1, run a quick seed-stability check (3 seeds × 1 prompt × temp=0 × 20 images). If results are identical across seeds at temp=0, drop `seed` from the sweep space (1,728 → 576 combinations).
 
 ### report.py — Results Report
 
@@ -186,6 +195,8 @@ Applied before sending to Ollama:
 | `contrast` | CLAHE adaptive contrast enhancement |
 
 Upscale (1.0x / 1.5x / 2.0x) applied after preprocessing via `cv2.resize` with `INTER_CUBIC`.
+
+**Note on Gemma 3 image handling:** The model normalizes all input images to **896×896 pixels**, encoded to **256 tokens** (per Google model card). Our crops are ~372×367px, so the model upscales internally. The `upscale` parameter tests whether upscaling *before* sending (with a better interpolation method) improves results vs letting the model's internal resize handle it. If sweep shows no difference, this parameter can be dropped.
 
 ## Dependencies
 
