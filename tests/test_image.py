@@ -1,7 +1,6 @@
 """Unit tests for core/image.py."""
 import numpy as np
 import cv2
-import pytest
 from core.image import _deskew
 
 
@@ -40,7 +39,7 @@ def test_deskew_tilted_image_corrected():
     )
 
 
-def test_deskew_large_angle_guard():
+def test_deskew_out_of_range_angle_unchanged():
     """Skew beyond ±10° must not be corrected (large-angle guard returns original)."""
     img = _make_lined_bgr(tilt_deg=15.0)
     result = _deskew(img)
