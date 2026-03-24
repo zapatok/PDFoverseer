@@ -1,28 +1,26 @@
-# eval/sweep.py
+# eval/graph_sweep.py
 """
-3-pass parameter sweep for the inference engine.
+Parameter sweep for the graph inference engine (HMM + Viterbi).
 
-Pass 1: Latin Hypercube Sample — 500 configs
-Pass 2: Fine grid around top-20 from Pass 1 — adjacent index +/-1 per param
-Pass 3: Beam search from top-5 of Pass 2
+Reuses the 3-pass sweep structure and scoring from eval/sweep.py,
+but runs eval/graph_inference.run_pipeline instead.
 
 Usage:
     cd a:/PROJECTS/PDFoverseer
-    python eval/sweep.py
-    # -> writes eval/results/sweep_YYYYMMDD_HHMMSS.json
+    python eval/graph_sweep.py
+    # -> writes eval/results/graph_sweep_YYYYMMDD_HHMMSS.json
 """
 from __future__ import annotations
 import json
 import random
 import sys
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from eval.inference import run_pipeline, PageRead
-from eval.params import PARAM_SPACE, PRODUCTION_PARAMS
+from eval.graph_inference import run_pipeline, PageRead
+from eval.graph_params import GRAPH_PARAM_SPACE, GRAPH_DEFAULT_PARAMS
 
 FIXTURES_DIR = Path("eval/fixtures")
 GROUND_TRUTH_PATH = Path("eval/ground_truth.json")
@@ -51,12 +49,12 @@ def load_ground_truth() -> dict[str, dict]:
     return json.loads(GROUND_TRUTH_PATH.read_text())
 
 
-# -- Scoring ------------------------------------------------------------------
+# -- Scoring (mirrored from sweep.py, uses graph run_pipeline) ----------------
 
 def score_config(params: dict, fixtures: list[dict], gt: dict[str, dict],
                  baseline_passes: set[str]) -> dict:
     doc_exact = complete_exact = inf_delta = regressions = 0
-    real_doc_delta = real_comp_delta = syn_doc_delta = 0
+    real_doc_delta = syn_doc_delta = 0
     fixture_results = {}
 
     for fx in fixtures:
@@ -74,19 +72,12 @@ def score_config(params: dict, fixtures: list[dict], gt: dict[str, dict],
         d_doc = abs(got_docs - truth["doc_count"])
 
         if is_real:
-            # Real fixtures: doc count (heavy) + complete count (moderate)
             passed = (d_doc == 0)
             if d_doc == 0:
                 doc_exact += 5
             else:
                 real_doc_delta += d_doc
-            # Reward meeting/exceeding raw OCR complete count
-            if got_complete >= truth["complete_count"]:
-                complete_exact += 2
-            else:
-                real_comp_delta += truth["complete_count"] - got_complete
         else:
-            # Synthetic fixtures: original behavior
             d_comp = (got_docs == truth["doc_count"]
                       and got_complete == truth["complete_count"])
             d_inf = abs(got_inferred - truth["inferred_count"])
@@ -104,16 +95,14 @@ def score_config(params: dict, fixtures: list[dict], gt: dict[str, dict],
         fixture_results[name] = "pass" if passed else "fail"
 
     composite = (doc_exact + complete_exact
-                 - real_doc_delta * 3    # heavier penalty for wrong doc count (real)
-                 - real_comp_delta       # moderate penalty for under-completing (real)
-                 - syn_doc_delta         # original penalty for synthetic
+                 - real_doc_delta * 3
+                 - syn_doc_delta
                  - inf_delta
                  - regressions * 5)
     return {
         "doc_count_exact":      doc_exact,
         "doc_count_delta":      real_doc_delta + syn_doc_delta,
         "complete_count_exact": complete_exact,
-        "real_complete_delta":  real_comp_delta,
         "inferred_delta":       inf_delta,
         "regression_count":     regressions,
         "composite_score":      composite,
@@ -125,17 +114,16 @@ def score_config(params: dict, fixtures: list[dict], gt: dict[str, dict],
 
 def lhs_sample(n: int, seed: int = RANDOM_SEED) -> list[dict]:
     rng = random.Random(seed)
-    keys = list(PARAM_SPACE.keys())
+    keys = list(GRAPH_PARAM_SPACE.keys())
     indices_per_param: dict[str, list[int]] = {}
-    for k, vals in PARAM_SPACE.items():
+    for k, vals in GRAPH_PARAM_SPACE.items():
         m = len(vals)
         slots = [rng.randint(0, m - 1) for _ in range(n)]
         rng.shuffle(slots)
         indices_per_param[k] = slots
-
     configs = []
     for i in range(n):
-        cfg = {k: PARAM_SPACE[k][indices_per_param[k][i]] for k in keys}
+        cfg = {k: GRAPH_PARAM_SPACE[k][indices_per_param[k][i]] for k in keys}
         configs.append(cfg)
     return configs
 
@@ -144,7 +132,7 @@ def lhs_sample(n: int, seed: int = RANDOM_SEED) -> list[dict]:
 
 def adjacent_configs(base: dict) -> list[dict]:
     configs = []
-    for k, vals in PARAM_SPACE.items():
+    for k, vals in GRAPH_PARAM_SPACE.items():
         idx = vals.index(base[k])
         for new_idx in [idx - 1, idx + 1]:
             if 0 <= new_idx < len(vals):
@@ -157,21 +145,14 @@ def adjacent_configs(base: dict) -> list[dict]:
 # -- Sweep runner -------------------------------------------------------------
 
 def run_sweep(fixtures: list[dict], gt: dict) -> dict:
-    # Skip fixtures with all-zero ground truth (placeholders)
-    active_gt = {k: v for k, v in gt.items()
-                 if not (v["doc_count"] == 0 and v["complete_count"] == 0 and v["inferred_count"] == 0)
-                 or k.startswith("ins31") or k in ("seq_break", "ds_conflict", "noisy_period", "ambiguous_start", "undercount_chain")}
-    # Simpler: skip only if doc_count==0 AND source is real (not synthetic)
-    # Synthetic fixtures with 0 values are valid (e.g. noisy_period complete=0)
-    # Real fixtures with 0 are placeholders. We identify them by name not starting with known synthetic names.
-    SYNTHETIC_NAMES = {"ins31_gap", "undercount_chain", "ambiguous_start", "noisy_period", "seq_break", "ds_conflict"}
+    SYNTHETIC_NAMES = {"ins31_gap", "undercount_chain", "ambiguous_start",
+                       "noisy_period", "seq_break", "ds_conflict"}
     active_gt = {k: v for k, v in gt.items()
                  if k in SYNTHETIC_NAMES or v["doc_count"] > 0}
-
     active_fixtures = [fx for fx in fixtures if fx["name"] in active_gt]
 
-    print("Scoring baseline (production params)...")
-    baseline_result = score_config(PRODUCTION_PARAMS, active_fixtures, active_gt, set())
+    print("Scoring baseline (graph default params)...")
+    baseline_result = score_config(GRAPH_DEFAULT_PARAMS, active_fixtures, active_gt, set())
     baseline_passes = {
         name for name, res in baseline_result["_fixture_results"].items()
         if res == "pass"
@@ -185,7 +166,7 @@ def run_sweep(fixtures: list[dict], gt: dict) -> dict:
         for i, cfg in enumerate(configs):
             s = score_config(cfg, active_fixtures, active_gt, baseline_passes)
             results.append((cfg, s))
-            if (i + 1) % 100 == 0:
+            if (i + 1) % 50 == 0:
                 print(f"  {label}: {i+1}/{len(configs)}", end="\r")
         print(f"  {label}: {len(configs)}/{len(configs)} done")
         return results
@@ -243,6 +224,7 @@ def run_sweep(fixtures: list[dict], gt: dict) -> dict:
     baseline_summary["fixture_breakdown"] = baseline_result["_fixture_results"]
 
     return {
+        "engine": "graph-hmm-viterbi",
         "run_at": datetime.now().isoformat(),
         "fixtures_count": len(active_fixtures),
         "total_configs_tested": len(all_results),
@@ -259,7 +241,7 @@ def main():
 
     result = run_sweep(fixtures, gt)
 
-    out_path = RESULTS_DIR / f"sweep_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    out_path = RESULTS_DIR / f"graph_sweep_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     out_path.write_text(json.dumps(result, indent=2))
     print(f"\nResults saved to {out_path}")
     if result["top_configs"]:

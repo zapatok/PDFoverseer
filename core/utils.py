@@ -21,7 +21,7 @@ PHASE4_FALLBACK_CONF = 0.0   # 0.0 = off; 0.15-0.25 re-enables as low-conf fallb
 CLASH_BOUNDARY_PEN   = 2.0   # sweep winner (was 5.0)
 PH5B_CONF_MIN        = 0.60  # minimum period confidence to apply phase 5b
 PH5B_RATIO_MIN       = 0.93  # minimum ratio of reads with expected total to correct
-INFERENCE_ENGINE_VERSION = "soft-alignment-v3-sweep1"
+INFERENCE_ENGINE_VERSION = "soft-alignment-v3-sweep2"
 
 # ============================================================================
 # Page Number Patterns & Normalization

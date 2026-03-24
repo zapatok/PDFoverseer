@@ -26,7 +26,7 @@ PARAM_SPACE: dict[str, list] = {
     "ph5b_ratio_min":     [0.90, 0.93, 0.95],
     # Phase 6 — Orphan suppression
     "min_conf_for_new_doc": [0.55, 0.60, 0.65, 0.70],
-    "anomaly_dropout":      [0.0, 0.20, 0.35],
+    "anomaly_dropout":      [0.0, 0.10, 0.20, 0.30],
     # Gap solver
     "clash_w_local":    [0.75, 1.0, 1.5, 2.0],
     "clash_w_period":   [1.5, 2.0, 2.5, 3.0],
