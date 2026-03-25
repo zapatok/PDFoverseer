@@ -55,3 +55,7 @@ vlm/results/*.json
 
 # OCR image corpus (large)
 data/ocr_all/
+
+# OCR benchmark output
+data/benchmark_results.json
+data/benchmark_run.log
