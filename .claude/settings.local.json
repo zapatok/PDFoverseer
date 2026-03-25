@@ -97,7 +97,12 @@
       "Bash(python -c \"import json; data = json.loads\\(open\\(''eval/ground_truth.json''\\).read\\(\\)\\); print\\(''hll_recon_period2'' in data\\); print\\(json.dumps\\(data[''hll_recon_period2''], indent=2\\)\\)\")",
       "Bash(python -m pytest eval/tests/test_inference.py -x -q)",
       "Bash(python -m pytest eval/tests/test_inference.py -q)",
-      "Bash(python eval/sweep.py)"
+      "Bash(python eval/sweep.py)",
+      "Read(//c/Users/Daniel/.claude/projects/a--PROJECTS-PDFoverseer/memory/**)",
+      "Bash(curl -s \"https://dev.to/squadbase/3-python-libraries-tips-for-enhancing-ocr-accuracy-in-llm-apis-54nh\")",
+      "Bash(grep -n \"save\\\\|imwrite\\\\|imsave\\\\|Image.save\" /a/PROJECTS/PDFoverseer/eval/*.py)",
+      "Bash(identify /a/PROJECTS/PDFoverseer/data/ocr_all/ALUM_1/p001.png)",
+      "Bash(wc -l /a/PROJECTS/PDFoverseer/eval/*.py)"
     ]
   }
 }

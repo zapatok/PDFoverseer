@@ -52,3 +52,6 @@ eval/results/
 
 # VLM sweep results
 vlm/results/*.json
+
+# OCR image corpus (large)
+data/ocr_all/

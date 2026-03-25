@@ -24,7 +24,7 @@ from vlm.params import PARAM_SPACE
 log = logging.getLogger(__name__)
 RESULTS_DIR = Path("vlm/results")
 
-LHS_SAMPLES = 80
+LHS_SAMPLES = 30
 PASS2_TOP_N = 10
 BEAM_TOP_N = 3
 RANDOM_SEED = 42

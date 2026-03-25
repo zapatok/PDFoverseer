@@ -28,6 +28,7 @@ DEFAULT_CONFIG = {
     "seed": 42,
     "preprocess": "none",
     "upscale": 1.0,
+    "model": "gemma3:4b",
 }
 
 
@@ -77,8 +78,8 @@ def run(config: dict | None = None, failures_only: bool = True,
     gt = load_ground_truth()
     corpus = load_corpus(failures_only=failures_only, sample_n=sample_n)
 
-    log.info("Benchmark: %d images, failures_only=%s", len(corpus), failures_only)
-    warmup()
+    log.info("Benchmark: %d images, failures_only=%s, model=%s", len(corpus), failures_only, cfg["model"])
+    warmup(model=cfg["model"])
 
     results = []
     for i, entry in enumerate(corpus):
@@ -103,6 +104,7 @@ def run(config: dict | None = None, failures_only: bool = True,
             resp = query(
                 str(tmp_file),
                 prompt=cfg["prompt"],
+                model=cfg["model"],
                 temperature=cfg["temperature"],
                 top_p=cfg["top_p"],
                 seed=cfg["seed"],
@@ -146,6 +148,7 @@ def main():
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--preprocess", type=str, default=None)
     parser.add_argument("--upscale", type=float, default=None)
+    parser.add_argument("--model", type=str, default=None, help="Ollama model name (e.g. gemma3:4b, minicpm-v)")
     args = parser.parse_args()
 
     cfg = {}
@@ -155,6 +158,7 @@ def main():
     if args.seed is not None: cfg["seed"] = args.seed
     if args.preprocess is not None: cfg["preprocess"] = args.preprocess
     if args.upscale is not None: cfg["upscale"] = args.upscale
+    if args.model is not None: cfg["model"] = args.model
 
     result = run(config=cfg, failures_only=not args.full, sample_n=args.sample)
 
