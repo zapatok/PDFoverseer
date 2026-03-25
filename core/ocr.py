@@ -128,36 +128,27 @@ def _tess_ocr(bgr: np.ndarray) -> str:
 
 # ── Tesseract-only page processor (runs in thread pool) ─────────────────────
 
-def _process_page(doc: fitz.Document, page_idx: int) -> tuple[_PageRead, np.ndarray | None]:
+def _process_page(doc: fitz.Document, page_idx: int) -> _PageRead:
     """
-    Render one page clip and run Tesseract OCR (3 tiers: T1→T2-SR→T2b-DPI300).
-    Returns (PageRead, bgr_300_or_None).
-    bgr_300 is the deskewed DPI-300 image, returned when T2b runs (success or fail)
-    so the GPU consumer can reuse it for EasyOCR without re-rendering.
+    Render one page clip and run Tesseract OCR (2 tiers).
+    Receives a pre-opened fitz.Document from the caller's doc pool (one per thread).
+    pytesseract launches tesseract.exe as subprocess → releases GIL → real parallelism.
     """
     pdf_page = page_idx + 1
     bgr = _render_clip(doc[page_idx])
-    bgr = _deskew(bgr)
+    bgr = _deskew(bgr)   # correct scan skew; Tier 2 inherits via bgr_sr = _upsample_4x(bgr)
 
-    # Tier 1: Tesseract @ DPI 150
+    # Tier 1: Tesseract direct (passing BGR so _tess_ocr can filter colors)
     text = _tess_ocr(bgr)
     c, t = _parse(text)
     if c:
-        return _PageRead(pdf_page, c, t, "direct", 1.0), None
+        return _PageRead(pdf_page, c, t, "direct", 1.0)
 
-    # Tier 2: 4x upscale of DPI-150 image + Tesseract
+    # Tier 2: 4x upscale (GPU bicubic ~1ms or FSRCNN CPU ~150ms) + Tesseract
     bgr_sr = _upsample_4x(bgr)
     text_sr = _tess_ocr(bgr_sr)
     c, t = _parse(text_sr)
     if c:
-        return _PageRead(pdf_page, c, t, "super_resolution", 1.0), None
+        return _PageRead(pdf_page, c, t, "super_resolution", 1.0)
 
-    # Tier 2b: Tesseract @ DPI 300 — SR fallback (sweep: +14 pages only-DPI300 recovers)
-    bgr_300 = _render_clip(doc[page_idx], dpi=EASYOCR_DPI)
-    bgr_300 = _deskew(bgr_300)
-    text_300 = _tess_ocr(bgr_300)
-    c, t = _parse(text_300)
-    if c:
-        return _PageRead(pdf_page, c, t, "dpi300", 1.0), bgr_300
-
-    return _PageRead(pdf_page, None, None, "failed", 0.0), bgr_300
+    return _PageRead(pdf_page, None, None, "failed", 0.0)

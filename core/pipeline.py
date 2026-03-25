@@ -10,7 +10,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
-import numpy as np
 import fitz
 
 from core.utils import (
@@ -32,11 +31,8 @@ _CORE_HASH = "2e436564"  # Commit from the last test that was shown to the user
 
 # ── Process Pool Worker (Top-Level for Pickling) ──────────────────────────────
 
-def _process_page_worker(pdf_path: str, page_idx: int) -> tuple[_PageRead, np.ndarray | None]:
-    """Stateless worker function for true multiprocessing.
-    Returns (PageRead, bgr_300_or_None) — bgr_300 is the deskewed DPI-300 image
-    for failed pages, so the GPU consumer can skip re-rendering.
-    """
+def _process_page_worker(pdf_path: str, page_idx: int) -> _PageRead:
+    """Stateless worker function for true multiprocessing."""
     import fitz
     import core.ocr as ocr
     doc = fitz.open(pdf_path)
@@ -111,7 +107,7 @@ def _emit_ai_telemetry(
     success_pct = f"{docs_ok/n_docs:.0%}" if n_docs else "n/a"
 
     on_log(
-        f"[AI:{_CORE_HASH}] [MOD:v5-mt-t2b] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
+        f"[AI:{_CORE_HASH}] [MOD:v5-max-total] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
         f" | W{PARALLEL_WORKERS}+GPU | INF:{INFERENCE_ENGINE_VERSION}\n"
         f"PRE5≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
         f"OCR: {mstr}\n"
@@ -130,7 +126,7 @@ def _emit_ai_telemetry(
     n_consistent  = sum(1 for r in inf_reads if r.confidence >= 0.90)
     n_conflicting = sum(1 for r in inf_reads if r.confidence < 0.45)
 
-    _M = {"direct": "d", "super_resolution": "s", "easyocr": "e", "inferred": "i", "failed": "f", "dpi300": "3"}
+    _M = {"direct": "d", "super_resolution": "s", "easyocr": "e", "inferred": "i", "failed": "f"}
     _rc = reads_clean
 
     def _nb(idx: int) -> str:
@@ -204,7 +200,7 @@ def analyze_pdf(
     method_tally: dict[str, int] = {}
     t0 = time.time()
 
-    gpu_queue: queue.Queue[tuple[int, np.ndarray] | None] = queue.Queue()
+    gpu_queue: queue.Queue[int | None] = queue.Queue()
     gpu_recovered = [0]
 
     def _gpu_consumer():
@@ -213,24 +209,29 @@ def analyze_pdf(
                 pass
             return
 
-        while True:
-            item = gpu_queue.get()
-            if item is None:
-                break
-            idx, bgr_300 = item
-            try:
-                gray = cv2.cvtColor(bgr_300, cv2.COLOR_BGR2GRAY)
-                with ocr._easyocr_lock:
-                    results = ocr._easyocr_reader.readtext(gray, detail=0, paragraph=True)
-                text = " ".join(results) if results else ""
-                c, t = _parse(text)
-                if c:
-                    reads[idx] = _PageRead(idx + 1, c, t, "easyocr", 1.0)
-                    on_log(f"  Pag {idx + 1:>4}: {c}/{t}  [easyocr-gpu]", "page_ok")
-                    gpu_recovered[0] += 1
-            except Exception as e:
-                on_log(f"GPU consumer error on page {idx + 1}: {e}", "error")
-                break
+        doc = fitz.open(pdf_path)
+        try:
+            while True:
+                item = gpu_queue.get()
+                if item is None:
+                    break
+                idx = item
+                try:
+                    bgr = image._render_clip(doc[idx], dpi=ocr.EASYOCR_DPI)
+                    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+                    with ocr._easyocr_lock:
+                        results = ocr._easyocr_reader.readtext(gray, detail=0, paragraph=True)
+                    text = " ".join(results) if results else ""
+                    c, t = _parse(text)
+                    if c:
+                        reads[idx] = _PageRead(idx + 1, c, t, "easyocr", 1.0)
+                        on_log(f"  Pag {idx + 1:>4}: {c}/{t}  [easyocr-gpu]", "page_ok")
+                        gpu_recovered[0] += 1
+                except Exception as e:
+                    on_log(f"GPU consumer error on page {idx + 1}: {e}", "error")
+                    break
+        finally:
+            doc.close()
 
     gpu_thread = threading.Thread(target=_gpu_consumer, daemon=True, name="gpu-consumer")
     gpu_thread.start()
@@ -255,28 +256,26 @@ def analyze_pdf(
                 for i in range(batch_start, batch_end)
             }
 
-            batch_results: dict[int, tuple[_PageRead, np.ndarray | None]] = {}
+            batch_results: dict[int, _PageRead] = {}
             for future, i in future_to_idx.items():
                 try:
                     batch_results[i] = future.result()
                 except Exception as e:
                     pdf_page = i + 1
                     on_log(f"  Pag {pdf_page:>4}: error de procesamiento: {e}", "error")
-                    batch_results[i] = (_PageRead(pdf_page, None, None, "failed", 0.0), None)
+                    batch_results[i] = _PageRead(pdf_page, None, None, "failed", 0.0)
 
             for i in range(batch_start, batch_end):
-                r, bgr_300 = batch_results[i]
+                r = batch_results[i]
                 reads[i] = r
                 method_tally[r.method] = method_tally.get(r.method, 0) + 1
 
                 pdf_page = i + 1
                 if r.curr is not None:
                     on_log(f"  Pag {pdf_page:>4}: {r.curr}/{r.total}  [{r.method}]", "page_ok")
-                elif r.method == "failed" and bgr_300 is not None:
-                    on_log(f"  Pag {pdf_page:>4}: ???  → GPU queue", "page_warn")
-                    gpu_queue.put((i, bgr_300))
                 elif r.method == "failed":
-                    on_log(f"  Pag {pdf_page:>4}: ???  [no image for GPU]", "page_warn")
+                    on_log(f"  Pag {pdf_page:>4}: ???  → GPU queue", "page_warn")
+                    gpu_queue.put(i)
                 else:
                     on_log(f"  Pag {pdf_page:>4}: ???  [{r.method}]", "page_warn")
 
