@@ -233,25 +233,189 @@ def run_paddleocr(
     return results
 
 
+# ── Scoring ───────────────────────────────────────────────────────────────────
+
+def score_results(
+    engine_results: list[dict],
+    ground_truth: dict[int, tuple[int, int, str]],
+) -> dict:
+    """
+    Score engine results against ground truth.
+
+    Returns a dict with per-category counts and per-page details.
+
+    Categories:
+      direct: GT exists with method="direct" (Tesseract baseline pages)
+      vlm:    GT exists with method in (vlm_claude, vlm_opus) (hard pages)
+      no_gt:  No GT — engine output tracked as potential recoveries
+    """
+    cats = {
+        "direct": {"hits": 0, "misses": 0, "nones": 0},
+        "vlm":    {"hits": 0, "misses": 0, "nones": 0},
+    }
+    no_gt_found = []   # (pdf_page, curr, total) — engine found something
+    no_gt_none  = 0    # engine found nothing, no GT
+
+    _key = {"hit": "hits", "miss": "misses", "none": "nones"}
+
+    for r in engine_results:
+        page = r["pdf_page"]
+        curr, total = r["curr"], r["total"]
+
+        if page in ground_truth:
+            gt_curr, gt_total, method = ground_truth[page]
+            cat = "direct" if method == "direct" else "vlm"
+            outcome = score_page(curr, total, gt_curr, gt_total)
+            cats[cat][_key[outcome]] += 1
+        else:
+            if curr is not None:
+                no_gt_found.append({"pdf_page": page, "curr": curr, "total": total})
+            else:
+                no_gt_none += 1
+
+    return {
+        "direct": cats["direct"],
+        "vlm":    cats["vlm"],
+        "no_gt_found": no_gt_found,
+        "no_gt_none":  no_gt_none,
+    }
+
+
+def avg_ms(results: list[dict]) -> float:
+    """Average ms per page. Skips first result to reduce cold-cache noise."""
+    times = [r["ms"] for r in results[1:] if r["ms"] > 0]
+    return round(sum(times) / len(times), 1) if times else 0.0
+
+
+def print_report(
+    easy_results: list[dict],
+    paddle_results: list[dict],
+    easy_score: dict,
+    paddle_score: dict,
+) -> None:
+    """Print benchmark summary to console."""
+
+    def pct(hits, total):
+        return f"{hits}/{total} ({round(100*hits/total)}%)" if total else "0/0"
+
+    e_d = easy_score["direct"]
+    e_v = easy_score["vlm"]
+    p_d = paddle_score["direct"]
+    p_v = paddle_score["vlm"]
+
+    e_d_total = e_d["hits"] + e_d["misses"] + e_d["nones"]
+    e_v_total = e_v["hits"] + e_v["misses"] + e_v["nones"]
+    p_d_total = p_d["hits"] + p_d["misses"] + p_d["nones"]
+    p_v_total = p_v["hits"] + p_v["misses"] + p_v["nones"]
+
+    print("\n" + "="*70)
+    print("ART_670 OCR Benchmark Results")
+    print("="*70)
+    print(f"\n{'Category':<25} {'EasyOCR':>20} {'PaddleOCR':>20}")
+    print("-"*65)
+    print(f"{'direct (n=' + str(e_d_total) + ')':<25} {pct(e_d['hits'], e_d_total):>20} {pct(p_d['hits'], p_d_total):>20}")
+    print(f"{'vlm/hard (n=' + str(e_v_total) + ')':<25} {pct(e_v['hits'], e_v_total):>20} {pct(p_v['hits'], p_v_total):>20}")
+
+    e_gt_total = e_d_total + e_v_total
+    p_gt_total = p_d_total + p_v_total
+    e_gt_hits  = e_d["hits"] + e_v["hits"]
+    p_gt_hits  = p_d["hits"] + p_v["hits"]
+    print(f"{'ALL GT (n=' + str(e_gt_total) + ')':<25} {pct(e_gt_hits, e_gt_total):>20} {pct(p_gt_hits, p_gt_total):>20}")
+
+    print(f"\n{'Potential recoveries':<25} {len(easy_score['no_gt_found']):>20} {len(paddle_score['no_gt_found']):>20}")
+    print(f"{'  (no GT, parsed something)'}")
+    print(f"{'Complete failures':<25} {easy_score['no_gt_none']:>20} {paddle_score['no_gt_none']:>20}")
+    print(f"{'  (no GT, parse = None)'}")
+
+    print(f"\n{'Timing (ms/page)':<25} {avg_ms(easy_results):>20.1f} {avg_ms(paddle_results):>20.1f}")
+    print("="*70)
+
+    # Show sample recoveries (first 10 from PaddleOCR)
+    paddle_recoveries = paddle_score["no_gt_found"]
+    if paddle_recoveries:
+        print(f"\nPaddleOCR potential recoveries (first 10 of {len(paddle_recoveries)}):")
+        for r in paddle_recoveries[:10]:
+            print(f"  p{r['pdf_page']:04d}: {r['curr']}/{r['total']}")
+
+    easy_recoveries = easy_score["no_gt_found"]
+    if easy_recoveries:
+        print(f"\nEasyOCR potential recoveries (first 10 of {len(easy_recoveries)}):")
+        for r in easy_recoveries[:10]:
+            print(f"  p{r['pdf_page']:04d}: {r['curr']}/{r['total']}")
+
+
+def save_json(
+    easy_results: list[dict],
+    paddle_results: list[dict],
+    easy_score: dict,
+    paddle_score: dict,
+    path: Path,
+) -> None:
+    """Save full per-page results and summary to JSON."""
+    # Build a page-indexed dict for easy lookup
+    easy_by_page   = {r["pdf_page"]: r for r in easy_results}
+    paddle_by_page = {r["pdf_page"]: r for r in paddle_results}
+
+    pages = []
+    for page in range(1, TOTAL_PAGES + 1):
+        e = easy_by_page.get(page, {})
+        p = paddle_by_page.get(page, {})
+        pages.append({
+            "pdf_page":  page,
+            "easyocr":   {"curr": e.get("curr"), "total": e.get("total"), "ms": e.get("ms")},
+            "paddleocr": {"curr": p.get("curr"), "total": p.get("total"), "ms": p.get("ms")},
+        })
+
+    output = {
+        "fixture":   "eval/fixtures/real/ART_670.json",
+        "images_dir": str(IMAGES_DIR),
+        "summary": {
+            "easyocr":   {
+                "direct":  easy_score["direct"],
+                "vlm":     easy_score["vlm"],
+                "no_gt_found_count": len(easy_score["no_gt_found"]),
+                "no_gt_none_count":  easy_score["no_gt_none"],
+                "avg_ms":  avg_ms(easy_results),
+            },
+            "paddleocr": {
+                "direct":  paddle_score["direct"],
+                "vlm":     paddle_score["vlm"],
+                "no_gt_found_count": len(paddle_score["no_gt_found"]),
+                "no_gt_none_count":  paddle_score["no_gt_none"],
+                "avg_ms":  avg_ms(paddle_results),
+            },
+        },
+        "pages": pages,
+    }
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(output, f, indent=2)
+    print(f"\nResults saved to {path}")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    print("Loading images...", flush=True)
+    ground_truth = load_fixture(FIXTURE_PATH)
+    print(f"Fixture loaded: {len(ground_truth)} GT pages")
+
+    print("\nLoading images...", flush=True)
     images = load_images()
     print(f"Loaded {len(images)} images", flush=True)
 
     print("\n--- EasyOCR pass ---")
     easy_results = run_easyocr(images)
-    easy_found = sum(1 for r in easy_results if r["curr"] is not None)
-    print(f"EasyOCR: parsed {easy_found}/{len(images)} pages")
 
     print("\n--- PaddleOCR pass ---")
     paddle_results = run_paddleocr(images)
-    paddle_found = sum(1 for r in paddle_results if r["curr"] is not None)
-    print(f"PaddleOCR: parsed {paddle_found}/{len(images)} pages")
 
-    # Placeholder for scoring and output (added in Chunk 4)
-    print("\n[Chunk 3 complete — scoring and output pending]")
+    print("\n--- Scoring ---")
+    easy_score   = score_results(easy_results, ground_truth)
+    paddle_score = score_results(paddle_results, ground_truth)
+
+    print_report(easy_results, paddle_results, easy_score, paddle_score)
+    save_json(easy_results, paddle_results, easy_score, paddle_score, OUTPUT_PATH)
 
 
 if __name__ == "__main__":
