@@ -109,31 +109,22 @@ def _setup_sr(on_log: callable) -> None:
 # ── OCR helpers ───────────────────────────────────────────────────────────────
 
 def _tess_ocr(bgr: np.ndarray) -> str:
-    # If image is already grayscale, skip HSV filtering
+    """OCR a page-number strip via Tesseract."""
     if len(bgr.shape) == 2 or bgr.shape[2] == 1:
         gray = bgr
     else:
-        # Convert to HSV to detect specific ink colors
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-
-        # Define typical Hue ranges for Blue ink (often 90 to 150)
         lower_blue = np.array([90, 50, 50])
         upper_blue = np.array([150, 255, 255])
         mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
-
-        # Inpaint removes the masked pixels and interpolates the background
-        # preserving the black boundaries of printed text underneath the ink.
         bgr_clean = cv2.inpaint(bgr, mask_blue, 3, cv2.INPAINT_NS)
-
         gray = cv2.cvtColor(bgr_clean, cv2.COLOR_BGR2GRAY)
 
-    # Unsharp mask: sharpen blurred text (sweep-tuned: sigma=1.0, strength=0.3)
+    # Unsharp mask (sweep-tuned: sigma=1.0, strength=0.3)
     blurred = cv2.GaussianBlur(gray, (0, 0), 1.0)
     gray = cv2.addWeighted(gray, 1.3, blurred, -0.3, 0)
 
-    # Pass grayscale directly to Tesseract — skip external Otsu binarization.
-    # Tesseract LSTM uses gradient info at character edges that Otsu destroys.
-    return pytesseract.image_to_string(gray, lang="eng", config=TESS_CONFIG)
+    return pytesseract.image_to_string(gray, lang="eng", config=TESS_CONFIG).strip()
 
 # ── Tesseract-only page processor (runs in thread pool) ─────────────────────
 

@@ -52,7 +52,7 @@ def _parse(text: str) -> tuple[int | None, int | None]:
         m = pat.search(t)
         if m:
             c, tot = _to_int(m.group(1)), _to_int(m.group(2))
-            if 0 < c <= tot <= 99:
+            if 0 < c <= tot <= 10:
                 return c, tot
 
     return None, None

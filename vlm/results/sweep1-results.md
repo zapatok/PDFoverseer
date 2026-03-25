@@ -89,10 +89,40 @@ All models tested with winning config: Spanish prompt, temp=0.3, upscale=1.5.
 1. **Claude Haiku 4.5 is the best model** — 100% parse rate (vs 95% Gemma), 2x faster, perfect accuracy. Cost: ~$0.70 for full 697-image corpus.
 2. **Gemma 3 4B is the best local model** — already at max quantization (Q4_K_M), no smaller vision model works.
 3. **Most Ollama vision models fail** — MiniCPM-V returns empty responses, Moondream can't extract page numbers, Qwen2.5-VL lacks GPU acceleration.
-4. **Full 697-image validation with Claude Haiku pending** — estimated 14 minutes, ~$0.70.
+
+## Full Validation — Claude Haiku 4.5 (697 images)
+
+**Date:** 2026-03-25
+**Config:** Spanish prompt, temp=0.3, top_p=1.0, upscale=1.5, preprocess=none
+
+| Metric | Gemma 3 4B | Claude Haiku 4.5 | Delta |
+|--------|-----------|-------------------|-------|
+| **exact_match** | 79.5% | **88.6%** | **+9.1pp** |
+| **curr_match** | 79.5% | **95.5%** | **+16.0pp** |
+| **parse_rate** | 81.6% | **96.3%** | **+14.7pp** |
+| **mean_latency** | 2499ms | **1337ms** | **-1162ms (1.9x faster)** |
+| **p95_latency** | 2688ms | **2031ms** | **-657ms** |
+| **Cost** | $0 (local GPU) | ~$0.93 | — |
+
+### GT mismatch analysis (5/44 GT points)
+
+All 5 mismatches verified as GT-correct via neighbor context:
+- p10: claude=2/6, gt=2/4 — wrong total
+- p11: claude=4/4, gt=3/4 — wrong curr
+- p14: claude=2/6, gt=2/4 — wrong total
+- p16: claude=1/4, gt=4/4 — wrong curr
+- p27: claude=3/8, gt=3/4 — wrong total
+
+### Fixture enrichment
+
+Claude high-confidence reads (total=4) used to enrich ART_670 fixture:
+- 516 new `vlm_claude` reads added (conf=0.95)
+- 130 remaining pages read manually with Claude Opus (conf=1.0)
+- Fixture grew from 150 → 796 reads (100% failure-page coverage)
 
 ## Files
 
 - Baseline: `benchmark_20260324_222315.json`
-- Winner validation: `benchmark_20260325_002658.json`
+- Winner validation (Gemma): `benchmark_20260325_002658.json`
+- Full validation (Claude): `benchmark_20260325_105313.json`
 - Sweep configs: `sweep_20260324_223456_config_0001..0032.json` (30 P1 + 2 P2 before stopped)
