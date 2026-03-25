@@ -109,3 +109,77 @@ def load_images() -> list[tuple[int, np.ndarray]]:
             continue
         images.append((i, img))
     return images
+
+
+# ── Engine: EasyOCR ───────────────────────────────────────────────────────────
+
+def run_easyocr(
+    images: list[tuple[int, np.ndarray]],
+) -> list[dict]:
+    """
+    Run EasyOCR on all images sequentially.
+
+    Uses grayscale input to match production pipeline behavior
+    (core/pipeline.py converts BGR to gray before calling readtext).
+
+    Warm-up: runs first image before timing begins.
+    Timing: covers readtext() call only, not _parse().
+
+    Returns:
+        List of {pdf_page, curr, total, ms} dicts.
+        curr/total are None if _parse() found nothing.
+    """
+    import easyocr
+    import torch
+
+    print("EasyOCR: initializing...", flush=True)
+    reader = easyocr.Reader(["es", "en"], gpu=True, verbose=False)
+    print("EasyOCR: ready", flush=True)
+
+    # Warm-up (excluded from timing)
+    _, bgr0 = images[0]
+    gray0 = cv2.cvtColor(bgr0, cv2.COLOR_BGR2GRAY)
+    reader.readtext(gray0, detail=0, paragraph=True)
+    print("EasyOCR: warm-up done, starting timed run...", flush=True)
+
+    results = []
+    for i, (pdf_page, bgr) in enumerate(images):
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+        t0 = time.perf_counter()
+        texts = reader.readtext(gray, detail=0, paragraph=True)
+        ms = (time.perf_counter() - t0) * 1000
+
+        text = " ".join(texts)
+        curr, total = _parse(text)
+        results.append({"pdf_page": pdf_page, "curr": curr, "total": total, "ms": round(ms, 1)})
+
+        if (i + 1) % 200 == 0:
+            print(f"  EasyOCR: {i + 1}/{len(images)} pages", flush=True)
+
+    del reader
+    torch.cuda.empty_cache()
+    print("EasyOCR: done, GPU memory released", flush=True)
+    return results
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main():
+    print("Loading images...", flush=True)
+    images = load_images()
+    print(f"Loaded {len(images)} images", flush=True)
+
+    print("\n--- EasyOCR pass ---")
+    easy_results = run_easyocr(images)
+
+    # Minimal progress report
+    easy_found = sum(1 for r in easy_results if r["curr"] is not None)
+    print(f"EasyOCR: parsed {easy_found}/{len(images)} pages")
+
+    # Placeholder for PaddleOCR and scoring (added in Chunk 3 and 4)
+    print("\n[Chunk 2 complete — PaddleOCR and scoring pending]")
+
+
+if __name__ == "__main__":
+    main()
