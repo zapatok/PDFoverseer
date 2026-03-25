@@ -52,5 +52,47 @@ from core import (
 )
 ```
 
-**Nota para los Desarrolladores:** 
+---
+
+## Changelog de Versiones (MOD Tags)
+
+### `[MOD:v5-max-total]` (2026-03-25)
+
+**Problema:** Regresión de OCR ghost-zero — Tesseract appends stray `0` to single-digit totals (e.g., `total=4` → `total=40`), causando que `_parse()` acepte lecturas corruptas. En ART_670 esto generó 124/139 errores (89% de los fallos), creando 21 documentos fantasma de `40p` y bajando COM de 90% (613) a 74% (484).
+
+**Fix:** Validación `max_total=10` en `_parse()` (`core/utils.py:55`):
+```python
+if 0 < c <= tot <= 10:  # was: tot <= 99
+```
+Justificación: los 21 fixtures reales tienen `max_total ≤ 5`. El límite de 10 deja margen amplio sin permitir ghost-zeros.
+
+**Resultados (ART_670, 796 páginas):**
+
+| Métrica | v4-post-otsu | v5-max-total | Delta |
+|---------|-------------|-------------|-------|
+| COM (documentos completos) | 484 (74%) | 603 (90%) | +119 |
+| Distribución | 4p×646, **40p×21** | 4p×665, 2p×1, 5p×1 | limpio |
+| D-S confianza | 83% | 85% | +2pp |
+| OCR: direct | 434 | 305 | -129 |
+| OCR: super_resolution | 169 | 278 | +109 |
+| OCR: easyocr | 0 | 20 | +20 |
+| OCR: failed | 193 | 193 | = |
+
+**Recuperación:** 119/129 documentos perdidos = 92.2%.
+
+**Gap residual:** 603 vs 613 (pre-regresión). 10 docs short, atribuido a cambios en el mix de tiers OCR por el preprocesamiento post-Otsu, no al fix de max_total.
+
+**Tests:** `tests/test_max_total.py` — 7 tests unitarios para validación de max_total.
+
+### `[MOD:v4-post-otsu]` (2026-03-24)
+
+Eliminación de binarización Otsu externa en `_tess_ocr()`. Tesseract LSTM usa gradientes internos; Otsu destruye bordes de caracteres (Tesseract issue #1780). Preprocesamiento: blue ink removal (HSV) → grayscale → unsharp mask (sigma=1.0, strength=0.3).
+
+### `[MOD:v3.1-fix]` — `[MOD:v1]`
+
+Versiones anteriores del pipeline. Ver historial git para detalles.
+
+---
+
+**Nota para los Desarrolladores:**
 No se debe volver a reintroducir `fitz` ni `cv2` dentro de `inference.py`; del mismo modo, mantengan los bloques mutables fuera de este último. Todas las optimizaciones deben respetar este nuevo _sandbox_ establecido.
