@@ -107,5 +107,35 @@ Most small PDFs (<100 pages) showed 0-2 dpi300 reads with no visible regression,
 
 ## Future Considerations
 
-- **VLM-based OCR** (see `docs/superpowers/specs/2026-03-25-vlm-resolver-design.md`) may be more promising for failed pages, as vision-language models can understand context beyond regex matching.
-- If DPI 300 Tesseract is revisited, it should only be used with a **cross-validation gate**: accept the read only if it agrees with at least one other tier, or if no other tier produced a read.
+- **VLM-based OCR** (see `docs/superpowers/specs/2026-03-25-vlm-resolver-design.md`) is the more promising path for failed pages. Vision-language models understand context beyond regex matching, which attacks the root problem: Tesseract's `_parse()` can't distinguish a correct read from a plausible-but-wrong one.
+
+### Deferred: Agreement Test
+
+If DPI 300 Tesseract is ever revisited, the first step would be an **agreement test** against ground truth on the SR-readable population (~621 pages on ART_670). This was the missing validation that would have caught the regression before production:
+
+```python
+# For each page where SR parses successfully:
+#   1. Run DPI 300 Tesseract on the same page
+#   2. Compare result vs GT fixture (not vs SR — SR can also be wrong)
+#
+# Three outcomes per page:
+#   agree:    DPI 300 == GT  → safe to intercept SR
+#   disagree: DPI 300 != GT  → would introduce wrong read (the dangerous case)
+#   silent:   DPI 300 fails  → harmless, SR takes over
+```
+
+Cost: ~27 seconds (621 pages × 260ms / 6 workers). Could be added as `--mode agreement` to `tools/preprocess_sweep.py`.
+
+This test is not worth running today because there's no actionable follow-up — Tesseract has no "precision dial" to tune. But it would be a prerequisite for any future tier insertion.
+
+### Deferred: Cross-Validation Gate
+
+A more sophisticated approach: accept a DPI 300 read **only** if it agrees with at least one other tier, or if no other tier produced a read. This would eliminate the "wrong read with conf 1.0" problem:
+
+```
+T1 fails → T2 (SR) fails → T2b (DPI 300) reads X/Y → accept (only reader)
+T1 fails → T2 (SR) reads X/Y → T2b (DPI 300) reads X/Y → accept (agree)
+T1 fails → T2 (SR) reads X/Y → T2b (DPI 300) reads A/B → reject T2b, use SR
+```
+
+Downside: requires running both SR and DPI 300 on every failed page (extra ~260ms), and the gate logic adds complexity to `_process_page` for marginal gain. Not worth pursuing unless the agreement test shows a high agree rate (>95%) on the SR-readable population.
