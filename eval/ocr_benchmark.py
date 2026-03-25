@@ -50,18 +50,27 @@ def load_fixture(path: str | Path) -> dict[int, tuple[int, int, str]]:
 
 def extract_paddle_text(result) -> str:
     """
-    Flatten PaddleOCR nested result into a single string.
+    Flatten PaddleOCR result into a single string.
 
-    PaddleOCR returns: [[  [bbox, (text, conf)], ... ]]
-    The outer list is per-image (always 1 image here), the inner list is
-    per-detected-region.
+    PaddleOCR 3.x returns a list of OCRResult objects (one per image).
+    Each result has a 'rec_texts' key with a list of recognized strings.
+
+    Falls back to the 2.x nested-list format for compatibility:
+    [[  [bbox, (text, conf)], ... ]]
     """
     if not result:
         return ""
-    # result is a list with one element per image
-    lines = result[0] if result else []
-    if not lines:
-        return ""
+    first = result[0]
+    # PaddleOCR 3.x: OCRResult dict-like with rec_texts
+    if hasattr(first, "__getitem__"):
+        try:
+            texts = first["rec_texts"]
+            if isinstance(texts, list):
+                return " ".join(str(t) for t in texts)
+        except (KeyError, TypeError):
+            pass
+    # PaddleOCR 2.x fallback: list of [bbox, (text, conf)]
+    lines = first if first else []
     parts = []
     for item in lines:
         if item and len(item) >= 2:
@@ -163,6 +172,67 @@ def run_easyocr(
     return results
 
 
+# ── Engine: PaddleOCR ─────────────────────────────────────────────────────────
+
+def run_paddleocr(
+    images: list[tuple[int, np.ndarray]],
+) -> list[dict]:
+    """
+    Run PaddleOCR on all images sequentially.
+
+    Uses BGR input (PaddleOCR accepts numpy BGR arrays directly).
+    use_angle_cls=False: skip orientation classifier (not needed for fixed-crop pages).
+    lang="en": English model; handles mixed Spanish/English well enough for digit patterns.
+
+    Warm-up: runs first image before timing begins.
+    Timing: covers ocr() call only, not extract_paddle_text() or _parse().
+
+    Returns:
+        List of {pdf_page, curr, total, ms} dicts.
+        curr/total are None if _parse() found nothing.
+    """
+    from paddleocr import PaddleOCR as _PaddleOCR
+
+    print("PaddleOCR: initializing...", flush=True)
+    # PaddleOCR 3.x API: use_angle_cls/use_gpu removed.
+    # enable_mkldnn=False avoids ConvertPirAttribute2RuntimeAttribute crash on Windows CPU.
+    reader = _PaddleOCR(
+        lang="en",
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
+        use_textline_orientation=False,
+        enable_mkldnn=False,
+    )
+    print("PaddleOCR: ready", flush=True)
+
+    # Warm-up (excluded from timing)
+    _, bgr0 = images[0]
+    reader.ocr(bgr0)
+    print("PaddleOCR: warm-up done, starting timed run...", flush=True)
+
+    results = []
+    for i, (pdf_page, bgr) in enumerate(images):
+        t0 = time.perf_counter()
+        raw = reader.ocr(bgr)
+        ms = (time.perf_counter() - t0) * 1000
+
+        text = extract_paddle_text(raw)
+        curr, total = _parse(text)
+        results.append({"pdf_page": pdf_page, "curr": curr, "total": total, "ms": round(ms, 1)})
+
+        if (i + 1) % 200 == 0:
+            print(f"  PaddleOCR: {i + 1}/{len(images)} pages", flush=True)
+
+    del reader
+    try:
+        import paddle
+        paddle.device.cuda.empty_cache()
+    except Exception:
+        pass
+    print("PaddleOCR: done, GPU memory released", flush=True)
+    return results
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -172,13 +242,16 @@ def main():
 
     print("\n--- EasyOCR pass ---")
     easy_results = run_easyocr(images)
-
-    # Minimal progress report
     easy_found = sum(1 for r in easy_results if r["curr"] is not None)
     print(f"EasyOCR: parsed {easy_found}/{len(images)} pages")
 
-    # Placeholder for PaddleOCR and scoring (added in Chunk 3 and 4)
-    print("\n[Chunk 2 complete — PaddleOCR and scoring pending]")
+    print("\n--- PaddleOCR pass ---")
+    paddle_results = run_paddleocr(images)
+    paddle_found = sum(1 for r in paddle_results if r["curr"] is not None)
+    print(f"PaddleOCR: parsed {paddle_found}/{len(images)} pages")
+
+    # Placeholder for scoring and output (added in Chunk 4)
+    print("\n[Chunk 3 complete — scoring and output pending]")
 
 
 if __name__ == "__main__":
