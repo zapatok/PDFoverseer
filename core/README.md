@@ -22,8 +22,9 @@ Aísla las dependencias que manejan OpenCV y la manipulación de imágenes a niv
 
 ### 3. `ocr.py` (Motor de Reconocimiento)
 Gestiona exclusivamente los llamados a los intérpretes de reconocimiento óptico de caracteres y restringe el cargado de la GPU.
-*   **Fases del OCR:** Implementación de Tier 1 (Tesseract Básico) y Tier 2 (Tesseract c/ Super Resolución) encapsulado dentro del manejador central `_process_page()`.
-*   **EasyOCR (Tier 3):** Implementación de inicialización (`_init_easyocr()`), encerramiento de su respectivo _thread local_ de Torch y manejo del candado seguro (`_easyocr_lock`), logrando que el estado de los modelos de AI no bloquee flujos secundarios.
+*   **Preprocesamiento Tier 1/2 (`_tess_ocr`):** Blue ink removal (HSV mask + inpainting) → grayscale (luminance) → unsharp mask (sigma=1.0, strength=0.3) → Tesseract LSTM. No se aplica binarización externa — el LSTM usa gradientes en bordes de caracteres que Otsu destruye (Tesseract issue #1780). Parámetros validados por OCR preprocessing sweep (tag `POST-OTSU`): 149/697 rescates, 42/200 regresiones vs 83/200 de producción anterior.
+*   **Fases del OCR:** Tier 1 (Tesseract directo) y Tier 2 (Tesseract + Super Resolución 4x) encapsulados en `_process_page()`.
+*   **EasyOCR (Tier 3):** Inicialización lazy (`_init_easyocr()`), thread-local Torch con candado seguro (`_easyocr_lock`).
 
 ### 4. `inference.py` (Inteligencia Lógica sin Estado)
 Corazón de las deducciones, totalmente purificado para prescindir de estado mutacional, garantizando que el diseño de *Human-In-The-Loop* nunca se entrelace con estados sucios.
