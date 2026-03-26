@@ -1,34 +1,94 @@
 """
-OCR Benchmark: EasyOCR vs PaddleOCR on ART_670 pre-captured images.
+OCR Benchmark: EasyOCR vs PaddleOCR on ART_670.
 
-Loads 2719 images from data/ocr_all/ART_670/, runs each engine sequentially,
-scores against 796 VLM-verified ground truth entries.
+Renders 2719 pages from data/samples/ART_670.pdf at 300 DPI (matching the
+production GPU fallback in core/pipeline.py _gpu_consumer), then runs each
+OCR engine and scores against 796 VLM-verified ground truth entries.
+
+Each engine runs in a subprocess to isolate CUDA DLL state (paddle and torch
+bundle conflicting versions of cuDNN that cannot coexist in one process).
 
 Usage:
     source .venv-cuda/Scripts/activate
-    python eval/ocr_benchmark.py
+    python eval/ocr_benchmark.py              # full benchmark (spawns subprocesses)
+    python eval/ocr_benchmark.py --engine easy    # EasyOCR only (subprocess worker)
+    python eval/ocr_benchmark.py --engine paddle  # PaddleOCR only (subprocess worker)
 """
 from __future__ import annotations
 
+import argparse
 import json
+import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Optional
 
+import re
+
 import cv2
 import numpy as np
 
-# Add project root so eval/ocr_benchmark.py can import core.utils
+# Add project root so eval/ocr_benchmark.py can import core.utils / core.image
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.utils import _parse
+from core.image import _render_clip
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
 FIXTURE_PATH = Path("eval/fixtures/real/ART_670.json")
-IMAGES_DIR   = Path("data/ocr_all/ART_670")
+PDF_PATH     = Path("data/samples/ART_670.pdf")
 OUTPUT_PATH  = Path("data/benchmark_results.json")
 TOTAL_PAGES  = 2719
+
+# Production GPU fallback renders at this DPI (core/ocr.py EASYOCR_DPI = 300)
+RENDER_DPI = 300
+
+
+# ── Lenient parser for OCR garbling ───────────────────────────────────────────
+
+# Matches "d<digit>" where EasyOCR merged "de " + total into one token (e.g. "d2" = "de 2")
+_DE_DIGIT_MERGE_RE = re.compile(r'\b([dD])([1-9]\d{0,2})\b')
+
+def _parse_lenient(text: str) -> tuple[Optional[int], Optional[int]]:
+    """
+    Lenient page number parser for OCR benchmark only (not production).
+
+    Handles common EasyOCR character-substitution garbling of 'de':
+      'd2'  → 'de 2'   (total digit absorbed into 'de' token)
+      'dE'  → 'de'     (capital E substitution)
+      'dc'  → 'de'     (c/e confusion)
+      'dlo' → 'de'     (multi-char garble)
+
+    Tries standard _parse() first; only applies lenient rules on failure.
+    """
+    # 1. Standard parse (fast path, no mutation)
+    curr, total = _parse(text)
+    if curr is not None:
+        return curr, total
+
+    # 2. Fix merged "d<digit>" tokens: "d2" → "de 2"
+    step2 = _DE_DIGIT_MERGE_RE.sub(r'\1e \2', text)
+    if step2 != text:
+        curr, total = _parse(step2)
+        if curr is not None:
+            return curr, total
+
+    # 3. Substitute other isolated garbled 'de' variants (up to 3 chars to handle 'dlo')
+    step3 = re.sub(r'\b[dD][eEcClLoO]{1,3}\b', 'de', step2)
+    if step3 != step2:
+        curr, total = _parse(step3)
+        if curr is not None:
+            return curr, total
+
+    # 4. Bare numeric pattern — garbled P-word like "Papina"/"Paglna" won't match
+    #    the production regex P.{0,2}[gq], so look for \d+ de \d+ anywhere in text.
+    m = re.search(r'\b(\d{1,3})\s+de\s+(\d{1,3})\b', step3)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+
+    return None, None
 
 
 # ── Helper functions ──────────────────────────────────────────────────────────
@@ -101,22 +161,30 @@ def score_page(
     return "miss"
 
 
-def load_images() -> list[tuple[int, np.ndarray]]:
+def render_images(dpi: int = RENDER_DPI) -> list[tuple[int, np.ndarray]]:
     """
-    Load all 2719 ART_670 page images.
+    Render all ART_670 pages from the PDF at the given DPI.
+
+    Replicates core/pipeline.py _gpu_consumer(): renders the top-right crop
+    of each page via _render_clip(), matching production EasyOCR input exactly.
 
     Returns:
-        List of (pdf_page, bgr_image) sorted by page number.
-        Images are loaded as BGR (cv2 default).
+        List of (pdf_page, bgr_image) sorted by page number (1-based).
     """
+    import fitz  # PyMuPDF
+
+    if not PDF_PATH.exists():
+        raise FileNotFoundError(
+            f"PDF not found: {PDF_PATH}  — ensure data/samples/ART_670.pdf exists"
+        )
+
     images = []
-    for i in range(1, TOTAL_PAGES + 1):
-        path = IMAGES_DIR / f"p{i:03d}.png"
-        img = cv2.imread(str(path))
-        if img is None:
-            print(f"  WARNING: missing image {path}", flush=True)
-            continue
-        images.append((i, img))
+    doc = fitz.open(str(PDF_PATH))
+    n = len(doc)
+    for i in range(n):
+        bgr = _render_clip(doc[i], dpi=dpi)
+        images.append((i + 1, bgr))   # 1-based pdf_page
+    doc.close()
     return images
 
 
@@ -124,6 +192,7 @@ def load_images() -> list[tuple[int, np.ndarray]]:
 
 def run_easyocr(
     images: list[tuple[int, np.ndarray]],
+    diagnose: int = 0,
 ) -> list[dict]:
     """
     Run EasyOCR on all images sequentially.
@@ -160,7 +229,9 @@ def run_easyocr(
         ms = (time.perf_counter() - t0) * 1000
 
         text = " ".join(texts)
-        curr, total = _parse(text)
+        if diagnose > 0 and i < diagnose:
+            print(f"  [diagnose] p{pdf_page:04d} raw={repr(text[:120])}", flush=True)
+        curr, total = _parse_lenient(text)
         results.append({"pdf_page": pdf_page, "curr": curr, "total": total, "ms": round(ms, 1)})
 
         if (i + 1) % 200 == 0:
@@ -176,28 +247,65 @@ def run_easyocr(
 
 def run_paddleocr(
     images: list[tuple[int, np.ndarray]],
+    diagnose: int = 0,
 ) -> list[dict]:
     """
     Run PaddleOCR on all images sequentially.
 
     Uses BGR input (PaddleOCR accepts numpy BGR arrays directly).
-    use_angle_cls=False: skip orientation classifier (not needed for fixed-crop pages).
-    lang="en": English model; handles mixed Spanish/English well enough for digit patterns.
+    ocr_version="PP-OCRv4": uses PP-OCRv4_mobile_det + en_PP-OCRv4_mobile_rec.
+    PP-OCRv5_server_det (the v5 default) returns empty dt_polys for all images in
+    this environment — switching to v4 mobile detection resolves this.
+
+    diagnose: if > 0, print raw OCR text for the first N pages (for debugging).
 
     Warm-up: runs first image before timing begins.
-    Timing: covers ocr() call only, not extract_paddle_text() or _parse().
+    Timing: covers predict() call only, not extract_paddle_text() or _parse().
 
     Returns:
         List of {pdf_page, curr, total, ms} dicts.
-        curr/total are None if _parse() found nothing.
+        curr/total are None if _parse_lenient() found nothing.
     """
+    import os as _os
+    import sys as _sys
+    import types as _types
+
+    # Stub modelscope BEFORE importing paddleocr.
+    # paddleocr → paddlex → modelscope → torch, and torch's bundled cuDNN (torch/lib/)
+    # is a different version from paddle's nvidia/cudnn/bin/ cuDNN.  Both need
+    # cudnn64_9.dll by name; whichever loads first poisons the other's sub-libraries
+    # with WinError 127 (procedure not found).  Stubbing modelscope keeps torch out of
+    # this process entirely, so only paddle's CUDA stack loads.
+    if "modelscope" not in _sys.modules:
+        _sys.modules["modelscope"] = _types.ModuleType("modelscope")
+
+    _site = str((Path(_sys.executable).parent.parent / "Lib" / "site-packages").resolve())
+    _dll_dirs = [
+        "nvidia/cudnn/bin",
+        "nvidia/cublas/bin",
+        "nvidia/cuda_runtime/bin",
+        "nvidia/cufft/bin",
+        "nvidia/curand/bin",
+        "nvidia/nvjitlink/bin",
+        "nvidia/cusolver/bin",
+        "nvidia/cusparse/bin",
+        "paddle/libs",
+    ]
+    for _pkg in _dll_dirs:
+        _p = _os.path.join(_site, _pkg.replace("/", _os.sep))
+        if _os.path.exists(_p):
+            _os.add_dll_directory(_p)
+
     from paddleocr import PaddleOCR as _PaddleOCR
 
     print("PaddleOCR: initializing...", flush=True)
-    # PaddleOCR 3.x API: use_angle_cls/use_gpu removed.
-    # enable_mkldnn=False avoids ConvertPirAttribute2RuntimeAttribute crash on Windows CPU.
+    # ocr_version="PP-OCRv4" → PP-OCRv4_mobile_det + en_PP-OCRv4_mobile_rec.
+    # PP-OCRv5_server_det (the v5 default) returns empty dt_polys for all test images
+    # in this environment; v4 mobile detection works correctly.
+    # enable_mkldnn=False avoids ConvertPirAttribute2RuntimeAttribute crash on Windows.
     reader = _PaddleOCR(
         lang="en",
+        ocr_version="PP-OCRv4",
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
         use_textline_orientation=False,
@@ -207,17 +315,37 @@ def run_paddleocr(
 
     # Warm-up (excluded from timing)
     _, bgr0 = images[0]
-    reader.ocr(bgr0)
+    list(reader.predict(bgr0))
     print("PaddleOCR: warm-up done, starting timed run...", flush=True)
 
     results = []
     for i, (pdf_page, bgr) in enumerate(images):
         t0 = time.perf_counter()
-        raw = reader.ocr(bgr)
+        raw = list(reader.predict(bgr))
         ms = (time.perf_counter() - t0) * 1000
 
+        if diagnose > 0 and i < diagnose:
+            print(f"  [diagnose-raw] p{pdf_page:04d} type={type(raw)!r} len={len(raw)}", flush=True)
+            if raw:
+                first = raw[0]
+                print(f"  [diagnose-raw]   first type={type(first)!r}", flush=True)
+                if hasattr(first, "__dict__"):
+                    print(f"  [diagnose-raw]   attrs={list(vars(first).keys())!r}", flush=True)
+                elif hasattr(first, "keys"):
+                    print(f"  [diagnose-raw]   keys={list(first.keys())!r}", flush=True)
+                try:
+                    print(f"  [diagnose-raw]   rec_texts={first['rec_texts']!r}", flush=True)
+                    print(f"  [diagnose-raw]   dt_polys len={len(first['dt_polys'])}", flush=True)
+                except Exception as ex:
+                    print(f"  [diagnose-raw]   getitem err: {ex}", flush=True)
+                try:
+                    print(f"  [diagnose-raw]   repr={repr(first)[:200]}", flush=True)
+                except Exception:
+                    pass
         text = extract_paddle_text(raw)
-        curr, total = _parse(text)
+        if diagnose > 0 and i < diagnose:
+            print(f"  [diagnose] p{pdf_page:04d} text={repr(text[:120])}", flush=True)
+        curr, total = _parse_lenient(text)
         results.append({"pdf_page": pdf_page, "curr": curr, "total": total, "ms": round(ms, 1)})
 
         if (i + 1) % 200 == 0:
@@ -367,8 +495,9 @@ def save_json(
         })
 
     output = {
-        "fixture":   "eval/fixtures/real/ART_670.json",
-        "images_dir": str(IMAGES_DIR),
+        "fixture":    "eval/fixtures/real/ART_670.json",
+        "source_pdf": str(PDF_PATH),
+        "render_dpi": RENDER_DPI,
         "summary": {
             "easyocr":   {
                 "direct":  easy_score["direct"],
@@ -394,24 +523,100 @@ def save_json(
     print(f"\nResults saved to {path}")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Subprocess worker (single-engine mode) ────────────────────────────────────
 
-def main():
+def run_worker(engine: str, out_path: str, sample: int = 0, diagnose: int = 0) -> None:
+    """
+    Worker entry point: runs one engine, writes results JSON to out_path.
+    Called when --engine flag is present (subprocess isolation).
+
+    sample: if > 0, process only the first N pages (for quick validation).
+    diagnose: if > 0, print raw OCR text for the first N pages.
+    """
+    print(f"Rendering pages from PDF at {RENDER_DPI} DPI...", flush=True)
+    images = render_images(dpi=RENDER_DPI)
+    if sample > 0:
+        images = images[:sample]
+        print(f"Sample mode: {len(images)} pages", flush=True)
+    else:
+        print(f"Loaded {len(images)} images", flush=True)
+
+    if engine == "easy":
+        print("\n--- EasyOCR pass ---")
+        results = run_easyocr(images, diagnose=diagnose)
+    elif engine == "paddle":
+        print("\n--- PaddleOCR pass ---")
+        results = run_paddleocr(images, diagnose=diagnose)
+    else:
+        print(f"Unknown engine: {engine}", file=sys.stderr)
+        sys.exit(1)
+
+    with open(out_path, "w") as f:
+        json.dump(results, f)
+    print(f"\nResults written to {out_path}", flush=True)
+
+
+# ── Main (orchestrator) ───────────────────────────────────────────────────────
+
+def main(sample: int = 0, diagnose: int = 0):
     ground_truth = load_fixture(FIXTURE_PATH)
     print(f"Fixture loaded: {len(ground_truth)} GT pages")
 
-    print("\nLoading images...", flush=True)
-    images = load_images()
-    print(f"Loaded {len(images)} images", flush=True)
+    # Run each engine in a separate subprocess to isolate CUDA DLL state.
+    # paddle/paddleocr bundles its own nvidia/* DLL stack; EasyOCR uses torch's
+    # bundled cuDNN. Both load cudnn_cnn64_9.dll from different paths and cannot
+    # coexist in one process — WinError 127 results if either runs second.
+    script = str(Path(__file__).resolve())
+    python = sys.executable
 
-    print("\n--- EasyOCR pass ---")
-    easy_results = run_easyocr(images)
+    extra_args: list[str] = []
+    if sample > 0:
+        extra_args += ["--sample", str(sample)]
+    if diagnose > 0:
+        extra_args += ["--diagnose", str(diagnose)]
 
-    print("\n--- PaddleOCR pass ---")
-    paddle_results = run_paddleocr(images)
+    with tempfile.NamedTemporaryFile(suffix="_paddle.json", delete=False) as tf_p:
+        paddle_tmp = tf_p.name
+    with tempfile.NamedTemporaryFile(suffix="_easy.json", delete=False) as tf_e:
+        easy_tmp = tf_e.name
+
+    print("\n--- PaddleOCR pass (subprocess) ---", flush=True)
+    proc_paddle = subprocess.run(
+        [python, script, "--engine", "paddle", "--out", paddle_tmp] + extra_args,
+        check=False,
+    )
+
+    print("\n--- EasyOCR pass (subprocess) ---", flush=True)
+    proc_easy = subprocess.run(
+        [python, script, "--engine", "easy", "--out", easy_tmp] + extra_args,
+        check=False,
+    )
+
+    # Load results (empty list if subprocess failed)
+    paddle_results: list[dict] = []
+    easy_results:   list[dict] = []
+
+    if proc_paddle.returncode == 0:
+        with open(paddle_tmp) as f:
+            paddle_results = json.load(f)
+    else:
+        print(f"WARNING: PaddleOCR subprocess exited {proc_paddle.returncode} — no paddle results")
+
+    if proc_easy.returncode == 0:
+        with open(easy_tmp) as f:
+            easy_results = json.load(f)
+    else:
+        print(f"WARNING: EasyOCR subprocess exited {proc_easy.returncode} — no easy results")
+
+    # Clean up temp files
+    for p in (paddle_tmp, easy_tmp):
+        try:
+            Path(p).unlink()
+        except OSError:
+            pass
 
     print("\n--- Scoring ---")
-    easy_score   = score_results(easy_results, ground_truth)
+    easy_score   = score_results(easy_results,   ground_truth)
     paddle_score = score_results(paddle_results, ground_truth)
 
     print_report(easy_results, paddle_results, easy_score, paddle_score)
@@ -419,4 +624,20 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="EasyOCR vs PaddleOCR benchmark")
+    parser.add_argument("--engine", choices=["easy", "paddle"],
+                        help="Run a single engine (subprocess worker mode)")
+    parser.add_argument("--out", help="Output JSON path (required with --engine)")
+    parser.add_argument("--sample", type=int, default=0, metavar="N",
+                        help="Process only the first N pages (for quick validation)")
+    parser.add_argument("--diagnose", type=int, default=0, metavar="N",
+                        help="Print raw OCR text for the first N pages")
+    args = parser.parse_args()
+
+    if args.engine:
+        if not args.out:
+            print("--out required when --engine is set", file=sys.stderr)
+            sys.exit(1)
+        run_worker(args.engine, args.out, sample=args.sample, diagnose=args.diagnose)
+    else:
+        main(sample=args.sample, diagnose=args.diagnose)
