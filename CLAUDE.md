@@ -32,6 +32,7 @@ pip install -r requirements-gpu.txt
 - **Frontend:** React + Vite, react-zoom-pan-pinch
 - **OCR Pipeline:** V4 (6 parallel Tesseract workers, Tier 1 direct + Tier 2 SR-GPU)
 - **Inference:** 5-phase engine with Dempster-Shafer post-validation
+- **VLM Module:** Vision-Language Model benchmark/sweep for OCR comparison
 
 ## Project Structure
 
@@ -40,45 +41,103 @@ pip install -r requirements-gpu.txt
 │   ├── pipeline.py           # V4 Pipeline: 6 parallel Tesseract workers + telemetry
 │   ├── ocr.py                # Tesseract tiers (1+2), SR GPU bicubic upsampling
 │   ├── inference.py          # Multi-phase document boundary inference
-│   ├── image.py              # Image preprocessing (render, crop, Otsu, etc.)
-│   ├── utils.py              # _PageRead, _parse(), shared constants
-│   └── __init__.py
+│   ├── image.py              # Image preprocessing (render, crop, deskew)
+│   ├── utils.py              # _PageRead, _parse(), shared constants + config
+│   └── README.md             # Architecture notes (Spanish)
 ├── api/
 │   ├── state.py              # SessionState + SessionManager
 │   ├── websocket.py          # WebSocket connection manager + _emit()
 │   ├── worker.py             # Background scan thread + callbacks
 │   ├── database.py           # SQLite read/write (page_reads table)
 │   └── routes/
-│       ├── files.py          # /api/browse (tkinter dialog), /api/add_folder, /api/add_files, /api/preview
+│       ├── files.py          # /api/browse, /api/add_folder, /api/add_files, /api/preview
 │       ├── sessions.py       # /api/sessions, /api/reset, /api/correct, etc.
 │       └── pipeline.py       # /api/start, /api/stop, /api/state
+├── vlm/                      # Vision-Language Model module
+│   ├── client.py             # VLM API client
+│   ├── parser.py             # VLM response parser
+│   ├── preprocess.py         # Image preprocessing for VLM
+│   ├── benchmark.py          # VLM benchmark runner
+│   ├── ground_truth.py       # Ground truth management
+│   ├── sweep.py              # VLM parameter sweep
+│   ├── params.py             # VLM sweep parameters
+│   ├── report.py             # VLM results reporter
+│   └── results/              # VLM sweep results (ignored)
+├── tools/                    # Standalone analysis utilities
+│   ├── capture_all.py        # Capture all OCR page images
+│   ├── capture_failures.py   # Capture OCR failure images
+│   └── preprocess_sweep.py   # Preprocessing parameter sweep
 ├── eval/                     # Evaluation harness (parameter sweep)
 │   ├── inference.py          # Parameterized copy of inference pipeline
 │   ├── sweep.py              # LHS sample → fine grid → beam search
 │   ├── report.py             # Ranked results table
 │   ├── extract_fixtures.py   # One-time fixture extraction
 │   ├── params.py             # Sweep parameter space + production values
+│   ├── graph_inference.py    # Graph-based inference engine
+│   ├── graph_params.py       # Graph inference parameters
+│   ├── graph_sweep.py        # Graph inference sweep
+│   ├── compare_engines.py    # Compare inference engines
+│   ├── ocr_benchmark.py      # OCR accuracy benchmark
+│   ├── ocr_sweep.py          # OCR preprocessing sweep
+│   ├── ocr_params.py         # OCR sweep parameters
+│   ├── ocr_preprocess.py     # OCR preprocessing for eval
+│   ├── ocr_report.py         # OCR sweep results
+│   ├── hybrid_inference.py   # Hybrid inference approach
+│   ├── ground_truth.json     # Ground truth data
 │   ├── fixtures/
 │   │   ├── real/             # 21 real PDFs (charlas CRS)
 │   │   ├── synthetic/        # 13 synthetic test cases
-│   │   └── degraded/         # 6 degraded copies of real fixtures (~15-20% failed)
+│   │   ├── degraded/         # 6 degraded copies of real fixtures (~15-20% failed)
+│   │   └── archived/         # Archived fixtures
 │   ├── tests/
-│   │   ├── test_inference.py # Inference unit tests (eval harness)
-│   │   └── test_sweep_scoring.py
+│   │   ├── test_inference.py
+│   │   ├── test_sweep_scoring.py
+│   │   ├── test_benchmark.py
+│   │   ├── test_graph_inference.py
+│   │   └── test_ocr_preprocess.py
 │   └── results/              # Sweep results (ignored)
 ├── tests/                    # Integration + unit tests
 │   ├── test_api.py           # FastAPI TestClient tests (no real OCR)
 │   ├── test_database.py
 │   ├── test_inference.py
-│   ├── test_tray_issues.py
-│   └── test_utils.py
+│   ├── test_image.py
+│   ├── test_utils.py
+│   ├── test_max_total.py
+│   ├── test_capture_failures.py
+│   ├── test_preprocess_sweep.py
+│   ├── test_vlm_benchmark.py
+│   ├── test_vlm_client.py
+│   ├── test_vlm_ground_truth.py
+│   ├── test_vlm_parser.py
+│   ├── test_vlm_preprocess.py
+│   └── test_vlm_sweep.py
 ├── frontend/                 # React UI
 │   ├── src/
+│   │   ├── App.jsx
+│   │   ├── components/       # ConfirmModal, CorrectionPanel, HeaderBar, HistoryModal,
+│   │   │                     # IssueInbox, ProgressBar, Sidebar, Terminal
+│   │   ├── hooks/            # useApi.js, useWebSocket.js
+│   │   ├── lib/
+│   │   └── store/
 │   ├── package.json
 │   └── vite.config.js
-├── models/                   # FSRCNN_x4.pb (super-resolution)
+├── models/                   # Super-resolution models
+│   ├── FSRCNN_x4.pb          # Fast SR (default)
+│   └── EDSR_x4.pb            # Enhanced SR (alternative)
 ├── data/
-│   └── sessions.db           # SQLite database (ignored)
+│   ├── sessions.db           # SQLite database (ignored)
+│   ├── benchmark_results.json
+│   ├── ocr_all/              # Full OCR captures
+│   ├── ocr_failures/         # Failed OCR captures
+│   ├── preprocess_sweep/     # Preprocessing sweep data
+│   ├── inspection/           # Debug inspection images
+│   └── samples/              # Sample data
+├── docs/
+│   ├── research/             # Research notes
+│   └── superpowers/
+│       ├── specs/            # Design specs
+│       ├── plans/            # Implementation plans
+│       └── reports/          # Analysis reports
 ├── server.py                 # FastAPI entry point
 ├── test_ws.py                # WebSocket smoke test (manual)
 ├── old_analyzer.py           # Reference: pre-modularization monolith
@@ -100,10 +159,13 @@ pip install -r requirements-gpu.txt
 
 ### Key Configurations
 
+All constants are in `core/utils.py`:
+
 ```python
 DPI              = 150                    # Render DPI
 CROP_X_START     = 0.70                   # rightmost 30%
 CROP_Y_END       = 0.22                   # top 22%
+TESS_CONFIG      = "--psm 6 --oem 1"     # Tesseract config
 PARALLEL_WORKERS = 6                      # Tesseract concurrency
 BATCH_SIZE       = 12                     # Pages per pause checkpoint
 
@@ -112,18 +174,25 @@ MIN_CONF_FOR_NEW_DOC = 0.55   # min confidence to open a new document boundary
 CLASH_BOUNDARY_PEN   = 1.5    # gap-solver penalty for clash at boundaries
 PHASE4_FALLBACK_CONF = 0.15   # re-enabled: recovers pages the gap solver missed
 PH5B_CONF_MIN        = 0.50   # min period confidence to apply phase 5b correction
-PH5B_RATIO_MIN       = 0.95   # min ratio of reads with expected total to correct
+PH5B_RATIO_MIN       = 0.90   # lowered 0.95→0.90 (2026-03-26): fixes INS_31 OCR misreads, zero regressions on 41 fixtures
 ANOMALY_DROPOUT      = 0.0    # anomaly suppression (disabled)
 ```
 
 ### Page Number Pattern
 
-```regex
-P.{0,2}[gq](?:ina?)?\.?\s*(\d{1,3})\s*\.?\s*de\s*(\d{1,3})
+```python
+# In core/utils.py — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
+r"P.{0,6}\s*([0-9OoIilL|zZtT\'\'\'`´]{1,3})\s*\.?\s*d[ea]\s*([0-9OoIilL|zZtT\'\'\'`´]{1,3})"
 ```
-Matches: "Página 1 de 10", "Pag 1 de 10", "page 1 of 10", etc. (Spanish-centric)
+Matches: "Página 1 de 10", "Pag 1 de 10", etc. (Spanish-centric, with OCR digit normalization)
 
 ## Development
+
+### Git Info
+
+- **Main branch:** `master`
+- **Current branch:** `cuda-gpu`
+- **Active worktree:** `.worktrees/pixel-density` → `feature/pixel-density`
 
 ### Worktrees
 
@@ -142,6 +211,25 @@ python eval/sweep.py
 
 # Print ranked results
 python eval/report.py
+
+# Compare inference engines
+python eval/compare_engines.py
+
+# Run OCR benchmark
+python eval/ocr_benchmark.py
+```
+
+### VLM Module
+
+```bash
+# Run VLM as module
+python -m vlm
+
+# Run VLM benchmark
+python vlm/benchmark.py
+
+# Run VLM sweep
+python vlm/sweep.py
 ```
 
 ### Environment Variables
@@ -200,7 +288,8 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records o
 ### OCR Assumptions
 
 - **Spanish-centric regex** for "Página N de M" — adapt if needed for other languages
-- **Image preprocessing cascade:** Otsu → color removal → red channel → inpainting
+- **OCR digit normalization:** `O→0, I/i/l/L→1, z/Z→2, |→1, t/T→1, '→1`
+- **Image preprocessing cascade:** deskew → color removal → red channel → inpainting → unsharp mask
 - **Tesseract config:** `--psm 6 --oem 1` (uniform block text)
 
 ### GPU Pipeline
@@ -226,14 +315,14 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records o
 
 ## Links
 
-- **Main branch:** `master`
-- **Active branch:** `feature/core-modularization`
 - **Eval spec:** `docs/superpowers/specs/2026-03-15-eval-harness-design.md`
 - **Eval plan:** `docs/superpowers/plans/2026-03-15-eval-harness.md`
+- **EasyOCR postmortem:** `docs/superpowers/reports/2026-03-25-easyocr-paddle-postmortem.md`
+- **Core README:** `core/README.md`
 - **Memory:** `C:\Users\Daniel\.claude\projects\a--PROJECTS-PDFoverseer\memory\`
 
 ## Pending Work
 
-- **INS_31:** Last-page inference gap + tray UX improvements to reduce human intervention
-- **Eval sweep2:** Refined grid around sweep1 winners is ready in `eval/params.py`; next run pending
+- **INS_31:** ~~Last-page inference gap~~ FIXED (2026-03-26): ph5b_ratio_min 0.95→0.90, now 31/31 docs. Tray UX improvements still pending.
+- **Eval sweep2:** Refined grid around sweep1 winners is ready in `eval/params.py`; next run pending (ph5b_ratio_min=0.90 is new baseline)
 - **Browse UX:** `/api/browse` opens a server-side tkinter chooser (Archivos/Carpeta) — works only when server is on local machine with a display
