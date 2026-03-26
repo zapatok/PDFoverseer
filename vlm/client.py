@@ -85,7 +85,7 @@ def query(
         resp.raise_for_status()
     except requests.Timeout:
         return {"raw_text": "", "latency_ms": 0.0, "error": "timeout"}
-    except requests.RequestException as e:
+    except requests.RequestException:
         # Single retry on connection error (Ollama may still be loading)
         try:
             resp = requests.post(

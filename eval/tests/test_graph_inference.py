@@ -112,7 +112,7 @@ def test_trans_period_prior():
     assert log_to_modal > log_to_other
 
 
-from eval.graph_inference import extract_documents, viterbi_decode
+from eval.graph_inference import extract_documents, viterbi_decode  # noqa: E402
 
 
 def test_viterbi_clean_two_docs():
@@ -203,7 +203,7 @@ def test_extract_with_skip():
 
 # Task 6: run_pipeline integration + end-to-end tests
 
-from eval.graph_inference import run_pipeline
+from eval.graph_inference import run_pipeline  # noqa: E402
 
 BASIC_PARAMS = {
     "trans_continue": 0.85, "trans_new_doc": 0.10, "trans_skip": 0.03,

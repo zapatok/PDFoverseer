@@ -26,16 +26,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import fitz  # PyMuPDF
+import fitz  # PyMuPDF  # noqa: E402
 
-from core.image import _render_clip
-from core.ocr import (
+from core.image import _render_clip  # noqa: E402
+from core.ocr import (  # noqa: E402
     EASYOCR_DPI,
     _init_easyocr,
     _process_page,
     _setup_sr,
 )
-from core.utils import (
+from core.utils import (  # noqa: E402
     BATCH_SIZE,
     PARALLEL_WORKERS,
     _PageRead,

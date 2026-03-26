@@ -550,7 +550,8 @@ def _build_documents(
             if current is None:
                 orphans.append(pdf_page)
                 on_log(f"  -> pag {pdf_page}: huerfana curr={curr} sin doc activo", "warn")
-                if on_issue: on_issue(pdf_page, "huerfana", f"curr={curr} sin doc activo")
+                if on_issue:
+                    on_issue(pdf_page, "huerfana", f"curr={curr} sin doc activo")
             else:
                 expected = current.found_total + 1
                 if is_inferred:

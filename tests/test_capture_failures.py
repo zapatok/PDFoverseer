@@ -52,11 +52,11 @@ def test_build_csv_row_has_all_columns():
     row = _build_csv_row("x", 1, datetime.now(), "x/p001.png", "", "", "")
     assert list(row.keys()) == CSV_COLUMNS
 
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
-import pytest
+import pytest  # noqa: E402
 
-from tools.capture_failures import capture_pdf
+from tools.capture_failures import capture_pdf  # noqa: E402
 
 FIXTURE_INS31 = Path("eval/fixtures/real/INS_31docs.pdf")
 

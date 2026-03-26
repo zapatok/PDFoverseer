@@ -58,7 +58,6 @@ def test_load_corpus_full():
 
 
 def test_load_corpus_sample():
-    full = load_corpus(failures_only=True)
     sample = load_corpus(failures_only=True, sample_n=20, seed=42)
     assert len(sample) == 20
     # All sampled entries should be from the failures set

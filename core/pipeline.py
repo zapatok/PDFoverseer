@@ -20,7 +20,7 @@ from core.utils import (
     _PageRead,
 )
 
-_CUDA_HASH = hashlib.md5((b"CUDA-GPU-V4-Producer-Consumer")).hexdigest()[:8]
+_CUDA_HASH = hashlib.md5(b"CUDA-GPU-V4-Producer-Consumer").hexdigest()[:8]
 _CORE_HASH = "2e436564"  # Commit from the last test that was shown to the user
 
 

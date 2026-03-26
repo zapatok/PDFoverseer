@@ -33,8 +33,8 @@ _project_root = str(Path(__file__).parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from core.image import _deskew, _render_clip
-from core.utils import TESS_CONFIG, _parse
+from core.image import _deskew, _render_clip  # noqa: E402
+from core.utils import TESS_CONFIG, _parse  # noqa: E402
 
 # ── Tesseract path (match core/ocr.py) ─────────────────────────
 pytesseract.pytesseract.tesseract_cmd = os.getenv(

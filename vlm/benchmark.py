@@ -151,13 +151,20 @@ def main():
     args = parser.parse_args()
 
     cfg = {}
-    if args.prompt is not None: cfg["prompt"] = args.prompt
-    if args.temp is not None: cfg["temperature"] = args.temp
-    if args.top_p is not None: cfg["top_p"] = args.top_p
-    if args.seed is not None: cfg["seed"] = args.seed
-    if args.preprocess is not None: cfg["preprocess"] = args.preprocess
-    if args.upscale is not None: cfg["upscale"] = args.upscale
-    if args.model is not None: cfg["model"] = args.model
+    if args.prompt is not None:
+        cfg["prompt"] = args.prompt
+    if args.temp is not None:
+        cfg["temperature"] = args.temp
+    if args.top_p is not None:
+        cfg["top_p"] = args.top_p
+    if args.seed is not None:
+        cfg["seed"] = args.seed
+    if args.preprocess is not None:
+        cfg["preprocess"] = args.preprocess
+    if args.upscale is not None:
+        cfg["upscale"] = args.upscale
+    if args.model is not None:
+        cfg["model"] = args.model
 
     result = run(config=cfg, failures_only=not args.full, sample_n=args.sample)
 
