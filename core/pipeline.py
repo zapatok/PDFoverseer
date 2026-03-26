@@ -17,6 +17,7 @@ from core.utils import (
     BATCH_SIZE,
     _parse,
     INFERENCE_ENGINE_VERSION,
+    PAGE_PATTERN_VERSION,
 )
 import core.ocr as ocr
 import core.image as image
@@ -55,7 +56,7 @@ def _emit_ai_telemetry(
     """Emit [AI:] and [DS:] compact telemetry blocks to the log.
 
     The [AI:] block (log level "ai") format:
-        [AI:<core_hash>] [MOD:<version>] [CUDA:<hash>] <filename> | <pages>p <elapsed>s <ms/p>ms/p | W<workers> | INF:<engine_version>
+        [AI:<core_hash>] [MOD:<version>] [CUDA:<hash>] [REG:<pattern_version>] <filename> | <pages>p <elapsed>s <ms/p>ms/p | W<workers> | INF:<engine_version>
         PRE5≡ DOC:<n_docs> COM:<complete>(<pct>) INC:<incomplete> INF:<inferred_count>
         OCR: direct:<n>,super_resolution:<n>,...
         DOCS: <total>total → <ok>ok+<bad_summary> | dist: <Np×count> ...
@@ -105,7 +106,7 @@ def _emit_ai_telemetry(
     success_pct = f"{docs_ok/n_docs:.0%}" if n_docs else "n/a"
 
     on_log(
-        f"[AI:{_CORE_HASH}] [MOD:v6-tess-sr] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
+        f"[AI:{_CORE_HASH}] [MOD:v6-tess-sr] [CUDA:{_CUDA_HASH}] [REG:{PAGE_PATTERN_VERSION}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
         f" | W{PARALLEL_WORKERS} | INF:{INFERENCE_ENGINE_VERSION}\n"
         f"PRE5≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
         f"OCR: {mstr}\n"

@@ -121,6 +121,7 @@ pip install -r requirements-gpu.txt
 │   │   └── store/
 │   ├── package.json
 │   └── vite.config.js
+├── manual_test_logs/         # Manual test logs, one file per pipeline version/feature
 ├── models/                   # Super-resolution models
 │   ├── FSRCNN_x4.pb          # Fast SR (default)
 │   └── EDSR_x4.pb            # Enhanced SR (alternative)
@@ -180,11 +181,15 @@ ANOMALY_DROPOUT      = 0.0    # anomaly suppression (disabled)
 
 ### Page Number Pattern
 
-```python
-# In core/utils.py — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
-r"P.{0,6}\s*([0-9OoIilL|zZtT\'\'\'`´]{1,3})\s*\.?\s*d[ea]\s*([0-9OoIilL|zZtT\'\'\'`´]{1,3})"
-```
-Matches: "Página 1 de 10", "Pag 1 de 10", etc. (Spanish-centric, with OCR digit normalization)
+`PAGE_PATTERN_VERSION = "v2-wordNdeM"` — current registry version (see `core/utils.py`)
+
+`_PAGE_PATTERNS` (v2, 2026-03-26):
+1. **Primary** `P.{0,6} N de M` — P-prefix, permissive OCR noise
+2. **Fallback** `\w+ N de M` — any word before N de M; catches OCR-mangled "Página" (P→F/H/R)
+
+Plausibility guard: `0 < curr <= total <= 99` (raised from 10 on 2026-03-26; ART_670 max total=81)
+
+Matches: "Página 1 de 65", "Fagen 2 de 4", etc. (Spanish-centric, with OCR digit normalization)
 
 ## Development
 
@@ -258,7 +263,7 @@ After each PDF scan, `core/pipeline.py` emits two machine-dense log blocks:
 
 **`[AI:]` block** (log level `"ai"`) — scan summary:
 ```
-[AI:<core_hash>] [MOD:v6-tess-sr] [CUDA:<hash>] file.pdf | 45p 3.2s 71ms/p | W6 | INF:s2t-helena
+[AI:<core_hash>] [MOD:v6-tess-sr] [CUDA:<hash>] [REG:<pattern_version>] file.pdf | 45p 3.2s 71ms/p | W6 | INF:s2t-helena
 PRE5≡ DOC:5 COM:4(80%) INC:1 INF:3
 OCR: direct:40,super_resolution:3
 DOCS: 5total → 4ok+1bad(seq:0 under:1) | dist: 3p×2 5p×3
