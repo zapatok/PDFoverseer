@@ -16,7 +16,6 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.image import _deskew
-from core.utils import TESS_CONFIG
 
 # HSV range for blue ink — must match core/ocr.py _tess_ocr()
 _LOWER_BLUE = np.array([90, 50, 50])
@@ -78,10 +77,14 @@ def preprocess(bgr: np.ndarray, params: dict) -> tuple[np.ndarray, str]:
     if not skip_bin:
         _, gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # 7. Tesseract config
-    tess_cfg = TESS_CONFIG
+    # 7. Tesseract config — built from params, not from the production constant
+    psm = params.get("psm", 6)
+    oem = params.get("oem", 1)
+    tess_cfg = f"--psm {psm} --oem {oem}"
     if skip_bin:
         tess_thresh = params.get("tess_threshold", 0)
-        tess_cfg = f"{TESS_CONFIG} -c thresholding_method={tess_thresh}"
+        tess_cfg += f" -c thresholding_method={tess_thresh}"
+    if params.get("preserve_interword_spaces", 0):
+        tess_cfg += " -c preserve_interword_spaces=1"
 
     return gray, tess_cfg

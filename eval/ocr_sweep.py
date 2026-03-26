@@ -7,8 +7,10 @@ Phase B: test top-N configs against successful pages (regression check).
 
 Usage:
     cd a:/PROJECTS/PDFoverseer
-    python eval/ocr_sweep.py              # fast mode (default)
+    python eval/ocr_sweep.py              # fast mode, combined tier1+tier2 baseline
     python eval/ocr_sweep.py --full       # full sweep (all pages × all configs)
+    python eval/ocr_sweep.py --tier1      # tier1-only: Tesseract params (24 combos)
+    python eval/ocr_sweep.py --mini       # mini: PSM11 × best image config (4 combos)
 """
 from __future__ import annotations
 
@@ -29,7 +31,10 @@ import cv2
 import pytesseract
 
 from core.utils import _parse
-from eval.ocr_params import OCR_PARAM_SPACE, OCR_PRODUCTION_PARAMS
+from eval.ocr_params import (
+    OCR_PARAM_SPACE, OCR_PRODUCTION_PARAMS,
+    OCR_TESS_PARAM_SPACE, OCR_TIER1_PARAMS,
+)
 from eval.ocr_preprocess import preprocess
 
 _ROOT       = Path(__file__).parent.parent
@@ -55,7 +60,8 @@ class PageEntry:
 # ── Data loading ────────────────────────────────────────────────────────────
 
 def load_pages() -> tuple[list[PageEntry], list[PageEntry]]:
-    """Load page index, return (failed_pages, success_pages)."""
+    """Load page index, return (failed_pages, success_pages).
+    Success = tier1 OR tier2 parsed (combined baseline)."""
     failed, success = [], []
     with open(INDEX_CSV, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -69,6 +75,27 @@ def load_pages() -> tuple[list[PageEntry], list[PageEntry]]:
                 image_path=row["image_path"],
                 is_success=is_ok,
                 expected=t1 or t2,
+            )
+            (success if is_ok else failed).append(entry)
+    return failed, success
+
+
+def load_pages_tier1() -> tuple[list[PageEntry], list[PageEntry]]:
+    """Load page index using tier1_parsed as the sole success criterion.
+    Pages rescued only by tier2 are counted as failed — they become
+    additional rescue candidates for the tier1 Tesseract param sweep."""
+    failed, success = [], []
+    with open(INDEX_CSV, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            t1 = (row.get("tier1_parsed") or "").strip()
+            is_ok = bool(t1)
+            entry = PageEntry(
+                pdf_nickname=row["pdf_nickname"],
+                page_num=int(row["page_num"]),
+                image_path=row["image_path"],
+                is_success=is_ok,
+                expected=t1,
             )
             (success if is_ok else failed).append(entry)
     return failed, success
@@ -95,6 +122,20 @@ def enumerate_configs() -> list[dict]:
         if key not in seen:
             seen.add(key)
             configs.append(cfg)
+    return configs
+
+
+def enumerate_tier1_configs() -> list[dict]:
+    """Generate configs for the tier1 Tesseract param sweep.
+    Fixes image params at production values and sweeps only OCR_TESS_PARAM_SPACE
+    (psm × oem × preserve_interword_spaces = 24 combos).
+    No prescreen needed — 24 configs runs full in ~20 min."""
+    keys = list(OCR_TESS_PARAM_SPACE.keys())
+    vals = [OCR_TESS_PARAM_SPACE[k] for k in keys]
+    configs = []
+    for combo in product(*vals):
+        cfg = {**OCR_PRODUCTION_PARAMS, **dict(zip(keys, combo))}
+        configs.append(cfg)
     return configs
 
 
@@ -372,11 +413,180 @@ def run_fast_sweep() -> dict:
     }
 
 
+# Best image config from ocr_sweep_20260324_204154.json (net_gain=+23, rescued=149/697)
+_BEST_IMAGE_PARAMS = {
+    **OCR_TIER1_PARAMS,
+    "skip_binarization": True,
+    "unsharp_sigma":     1.0,
+    "unsharp_strength":  0.3,
+}
+
+_MINI_CONFIGS = [
+    ("baseline",       dict(OCR_TIER1_PARAMS)),
+    ("psm11",          {**OCR_TIER1_PARAMS,   "psm": 11}),
+    ("best_img+psm6",  dict(_BEST_IMAGE_PARAMS)),
+    ("best_img+psm11", {**_BEST_IMAGE_PARAMS, "psm": 11}),
+]
+
+
+def run_mini_sweep() -> dict:
+    """Cross PSM 11 with the best image config from the previous image sweep.
+    4 combos × 1967 tier1-failed pages (~3 min)."""
+    failed, success = load_pages_tier1()
+    print(f"[mini] {len(_MINI_CONFIGS)} combos × {len(failed)} tier1-failed pages "
+          f"= {len(_MINI_CONFIGS) * len(failed):,} OCR calls")
+
+    # Phase A: parallel with max_workers=4 (matches config count, avoids idle-worker deadlock)
+    print("\nPhase A: scoring configs on failed pages...")
+    t0 = time.time()
+    phase_a: dict[int, dict] = {}
+    with ProcessPoolExecutor(max_workers=len(_MINI_CONFIGS)) as pool:
+        futures = {
+            pool.submit(_score_config_worker, (i, cfg, failed)): i
+            for i, (_, cfg) in enumerate(_MINI_CONFIGS)
+        }
+        for future in as_completed(futures):
+            idx, scores = future.result()
+            phase_a[idx] = scores
+            label = _MINI_CONFIGS[idx][0]
+            print(f"  done: {label} rescued={scores['rescued']}/{len(failed)}")
+    print(f"  Phase A done in {time.time() - t0:.0f}s")
+
+    # Phase B: regression on success sample (sequential — only 4 configs)
+    rng = random.Random(42)
+    success_sample_size = min(200, len(success))
+    success_sample = rng.sample(success, success_sample_size)
+    print(f"\nPhase B: regression on {success_sample_size} tier1-success pages...")
+
+    results = []
+    for i, (label, cfg) in enumerate(_MINI_CONFIGS):
+        sc_a = phase_a[i]
+        sc_b = score_on_pages(cfg, success_sample)
+        net = sc_a["rescued"] - sc_b["regressed"] * 3
+        combined = {
+            "label":         label,
+            "params":        cfg,
+            "phase_a":       {k: v for k, v in sc_a.items() if k != "rescued_pages"},
+            "phase_b":       {k: v for k, v in sc_b.items() if k != "rescued_pages"},
+            "net_gain":      net,
+            "rescued_pages": sc_a["rescued_pages"],
+        }
+        results.append(combined)
+        print(f"  {label}: rescued={sc_a['rescued']}, "
+              f"regressed={sc_b['regressed']}/{success_sample_size}, net_gain={net}")
+
+    results.sort(key=lambda x: -x["net_gain"])
+    baseline_entry = next(r for r in results if r["label"] == "baseline")
+
+    return {
+        "run_at":              datetime.now().isoformat(),
+        "mode":                "mini",
+        "total_failed_pages":  len(failed),
+        "total_success_pages": len(success),
+        "success_sample_size": success_sample_size,
+        "configs_tested":      len(_MINI_CONFIGS),
+        "baseline_failed":     baseline_entry["phase_a"],
+        "baseline_success":    baseline_entry["phase_b"],
+        "top_configs":         results,
+    }
+
+
+def run_tier1_sweep() -> dict:
+    """Tier1 Tesseract param sweep.
+    24 configs (psm × oem × preserve_interword_spaces) × 1967 tier1-failed pages.
+    No prescreen — small enough to run full in ~20 min."""
+    failed, success = load_pages_tier1()
+    configs = enumerate_tier1_configs()
+    print(f"[tier1] {len(configs)} Tesseract configs × {len(failed)} tier1-failed pages "
+          f"= {len(configs) * len(failed):,} OCR calls")
+
+    print("\nScoring baseline (production tier1 params)...")
+    baseline = score_on_pages(OCR_TIER1_PARAMS, failed)
+    print(f"  Baseline: rescued={baseline['rescued']}, "
+          f"still_failed={baseline['still_failed']}")
+
+    print(f"\nPhase A: all {len(configs)} configs × {len(failed)} pages...")
+    results_a: list[tuple[dict, dict]] = []
+    t0 = time.time()
+    with ProcessPoolExecutor(max_workers=WORKERS) as pool:
+        futures = {
+            pool.submit(_score_config_worker, (i, cfg, failed)): i
+            for i, cfg in enumerate(configs)
+        }
+        done = 0
+        for future in as_completed(futures):
+            idx, scores = future.result()
+            results_a.append((configs[idx], scores))
+            done += 1
+            elapsed = time.time() - t0
+            rate = done / elapsed if elapsed > 0 else 0
+            eta = (len(configs) - done) / rate if rate > 0 else 0
+            print(f"  {done}/{len(configs)} ({elapsed:.0f}s, ~{eta:.0f}s remaining)",
+                  end="\r")
+    print(f"\n  Phase A done in {time.time() - t0:.0f}s")
+
+    results_a.sort(key=lambda x: (-x[1]["rescued"], x[1]["still_failed"]))
+    print("\n  All results (rescued / still_failed | diff from baseline):")
+    for i, (cfg, sc) in enumerate(results_a, 1):
+        diff = {k: v for k, v in cfg.items() if v != OCR_TIER1_PARAMS.get(k)
+                and k in OCR_TESS_PARAM_SPACE}
+        print(f"    #{i:>2}: rescued={sc['rescued']:>4}/{len(failed)} "
+              f"still_failed={sc['still_failed']:>4} | {diff}")
+
+    # Phase B: regression on tier1-success pages
+    rng = random.Random(42)
+    success_sample_size = min(200, len(success))
+    success_sample = rng.sample(success, success_sample_size)
+    top10 = results_a[:10]
+    print(f"\nPhase B: regression check on {success_sample_size} tier1-success pages...")
+    results_b = []
+    for i, (cfg, sc_a) in enumerate(top10, 1):
+        sc_b = score_on_pages(cfg, success_sample)
+        diff = {k: v for k, v in cfg.items() if v != OCR_TIER1_PARAMS.get(k)
+                and k in OCR_TESS_PARAM_SPACE}
+        combined = {
+            "params": cfg,
+            "phase_a": {k: v for k, v in sc_a.items() if k != "rescued_pages"},
+            "phase_b": {k: v for k, v in sc_b.items() if k != "rescued_pages"},
+            "net_gain": sc_a["rescued"] - sc_b["regressed"] * 3,
+            "rescued_pages": sc_a["rescued_pages"],
+        }
+        results_b.append(combined)
+        print(f"  Config #{i} {diff}: rescued={sc_a['rescued']}, "
+              f"regressed={sc_b['regressed']}/{success_sample_size}, "
+              f"net_gain={combined['net_gain']}")
+
+    results_b.sort(key=lambda x: -x["net_gain"])
+    baseline_b = score_on_pages(OCR_TIER1_PARAMS, success_sample)
+
+    return {
+        "run_at": datetime.now().isoformat(),
+        "mode": "tier1",
+        "total_failed_pages": len(failed),
+        "total_success_pages": len(success),
+        "success_sample_size": success_sample_size,
+        "configs_tested": len(configs),
+        "baseline_failed": {k: v for k, v in baseline.items() if k != "rescued_pages"},
+        "baseline_success": {k: v for k, v in baseline_b.items() if k != "rescued_pages"},
+        "top_configs": results_b,
+    }
+
+
 def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    full_mode = "--full" in sys.argv
-    result = run_sweep() if full_mode else run_fast_sweep()
-    out_path = RESULTS_DIR / f"ocr_sweep_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    full_mode  = "--full"  in sys.argv
+    tier1_mode = "--tier1" in sys.argv
+    mini_mode  = "--mini"  in sys.argv
+    if mini_mode:
+        result = run_mini_sweep()
+        tag = "ocr_mini_sweep"
+    elif tier1_mode:
+        result = run_tier1_sweep()
+        tag = "ocr_tier1_sweep"
+    else:
+        result = run_sweep() if full_mode else run_fast_sweep()
+        tag = "ocr_sweep"
+    out_path = RESULTS_DIR / f"{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     out_path.write_text(json.dumps(result, indent=2))
     print(f"\nResults saved to {out_path}")
     if result["top_configs"]:

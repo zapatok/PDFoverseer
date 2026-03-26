@@ -34,6 +34,23 @@ OCR_PARAM_SPACE: dict[str, list] = {
     "deskew":             [True, False],
 }
 
+# Tesseract engine params (separate sweep — see OCR_TESS_PARAM_SPACE)
+OCR_TESS_PARAM_SPACE: dict[str, list] = {
+    # Page segmentation mode
+    #   6 = uniform block of text (production default)
+    #   7 = single text line (best fit for page-number strips)
+    #   11 = sparse text (no layout analysis)
+    #   13 = raw line (no segmentation, forces single line)
+    "psm":                      [6, 7, 11, 13],
+
+    # OCR engine mode
+    #   0 = Legacy only, 1 = LSTM only (production), 2 = Legacy + LSTM
+    "oem":                      [0, 1, 2],
+
+    # Preserve interword spaces — prevents "1 de 10" → "1de10" collapsing
+    "preserve_interword_spaces": [0, 1],
+}
+
 # Current production pipeline equivalent
 OCR_PRODUCTION_PARAMS: dict[str, object] = {
     "blue_inpaint":      True,
@@ -44,4 +61,12 @@ OCR_PRODUCTION_PARAMS: dict[str, object] = {
     "unsharp_sigma":     0.0,
     "unsharp_strength":  0.0,
     "deskew":            False,
+}
+
+# Tier 1 baseline: production image params + explicit Tesseract defaults
+OCR_TIER1_PARAMS: dict[str, object] = {
+    **OCR_PRODUCTION_PARAMS,
+    "psm":                       6,
+    "oem":                       1,
+    "preserve_interword_spaces": 0,
 }
