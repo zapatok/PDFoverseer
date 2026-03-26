@@ -66,7 +66,8 @@ pip install -r requirements-gpu.txt
 ├── tools/                    # Standalone analysis utilities
 │   ├── capture_all.py        # Capture all OCR page images
 │   ├── capture_failures.py   # Capture OCR failure images
-│   └── preprocess_sweep.py   # Preprocessing parameter sweep
+│   ├── preprocess_sweep.py   # Preprocessing parameter sweep
+│   └── regex_pattern_test.py # Compare regex strategies on real OCR text (ART_670)
 ├── eval/                     # Evaluation harness (parameter sweep)
 │   ├── inference.py          # Parameterized copy of inference pipeline
 │   ├── sweep.py              # LHS sample → fine grid → beam search
@@ -202,6 +203,15 @@ Matches: "Página 1 de 65", "Fagen 2 de 4", etc. (Spanish-centric, with OCR digi
 ### Worktrees
 
 **Location:** `.worktrees/` (project-local, hidden)
+
+**Active worktrees:**
+- `.worktrees/pixel-density` → `feature/pixel-density` — pixel density delta clustering research (unmerged, conclusions documented)
+- `.worktrees/crop-selector` → `feature/crop-selector` — UI crop region selector (unmerged, MVP complete)
+- `.worktrees/ocr-matcher` → `feature/ocr-matcher` — fuzzy OCR pattern generator for "Página N de M" variants (unmerged)
+
+**Stale branches (merged, pending deletion):**
+- `feature/core-modularization` — 0 unique commits vs master, fully merged
+- `feature/inference-engine` — merged via "merge: feature/inference-engine into master"
 
 **Setup:** Use `superpowers:using-git-worktrees` skill to create isolated workspaces.
 
