@@ -3,13 +3,11 @@ from __future__ import annotations
 
 import time
 import threading
-import queue
 import hashlib
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import cv2
 import fitz
 
 from core.utils import (
@@ -57,9 +55,9 @@ def _emit_ai_telemetry(
     """Emit [AI:] and [DS:] compact telemetry blocks to the log.
 
     The [AI:] block (log level "ai") format:
-        [AI:<core_hash>] [MOD:<version>] [CUDA:<hash>] <filename> | <pages>p <elapsed>s <ms/p>ms/p | W<workers>+GPU | INF:<engine_version>
+        [AI:<core_hash>] [MOD:<version>] [CUDA:<hash>] <filename> | <pages>p <elapsed>s <ms/p>ms/p | W<workers> | INF:<engine_version>
         PRE5≡ DOC:<n_docs> COM:<complete>(<pct>) INC:<incomplete> INF:<inferred_count>
-        OCR: direct:<n>,super_resolution:<n>,easyocr:<n>,...
+        OCR: direct:<n>,super_resolution:<n>,...
         DOCS: <total>total → <ok>ok+<bad_summary> | dist: <Np×count> ...
         INF: <total>total(low:<n> mid:<n> hi:<n>) | LOW: <page>=<curr>/<total>(<conf>)...
         FAIL: <n>pp:<page>,<page>,...
@@ -107,8 +105,8 @@ def _emit_ai_telemetry(
     success_pct = f"{docs_ok/n_docs:.0%}" if n_docs else "n/a"
 
     on_log(
-        f"[AI:{_CORE_HASH}] [MOD:v5-max-total] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
-        f" | W{PARALLEL_WORKERS}+GPU | INF:{INFERENCE_ENGINE_VERSION}\n"
+        f"[AI:{_CORE_HASH}] [MOD:v6-tess-sr] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
+        f" | W{PARALLEL_WORKERS} | INF:{INFERENCE_ENGINE_VERSION}\n"
         f"PRE5≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
         f"OCR: {mstr}\n"
         f"DOCS: {n_docs}total → {docs_ok}ok+{bad_str} | dist: {dist_str}\n"
@@ -172,7 +170,6 @@ def analyze_pdf(
 ) -> tuple[list[Document], list[_PageRead]]:
     if not ocr._sr_initialized:
         ocr._setup_sr(on_log)
-    ocr._init_easyocr(on_log)
 
     on_log("Leyendo metadatos...", "info")
     try:
@@ -183,12 +180,9 @@ def analyze_pdf(
         on_log(f"Error leyendo PDF: {e}", "error")
         return [], []
 
-    has_gpu = ocr._easyocr_reader is not None
     on_log(f"Total paginas: {total_pages}", "info")
     on_log(
-        f"Pipeline V4: Tesseract x{PARALLEL_WORKERS} producers"
-        f" + {'EasyOCR GPU consumer' if has_gpu else 'no GPU consumer'}"
-        f" (batch={BATCH_SIZE})",
+        f"Pipeline V4: Tesseract x{PARALLEL_WORKERS} producers + SR-GPU Tier 2 (batch={BATCH_SIZE})",
         "info",
     )
 
@@ -200,50 +194,12 @@ def analyze_pdf(
     method_tally: dict[str, int] = {}
     t0 = time.time()
 
-    gpu_queue: queue.Queue[int | None] = queue.Queue()
-    gpu_recovered = [0]
-
-    def _gpu_consumer():
-        if not has_gpu:
-            while gpu_queue.get() is not None:
-                pass
-            return
-
-        doc = fitz.open(pdf_path)
-        try:
-            while True:
-                item = gpu_queue.get()
-                if item is None:
-                    break
-                idx = item
-                try:
-                    bgr = image._render_clip(doc[idx], dpi=ocr.EASYOCR_DPI)
-                    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-                    with ocr._easyocr_lock:
-                        results = ocr._easyocr_reader.readtext(gray, detail=0, paragraph=True)
-                    text = " ".join(results) if results else ""
-                    c, t = _parse(text)
-                    if c:
-                        reads[idx] = _PageRead(idx + 1, c, t, "easyocr", 1.0)
-                        on_log(f"  Pag {idx + 1:>4}: {c}/{t}  [easyocr-gpu]", "page_ok")
-                        gpu_recovered[0] += 1
-                except Exception as e:
-                    on_log(f"GPU consumer error on page {idx + 1}: {e}", "error")
-                    break
-        finally:
-            doc.close()
-
-    gpu_thread = threading.Thread(target=_gpu_consumer, daemon=True, name="gpu-consumer")
-    gpu_thread.start()
-
     from concurrent.futures import ProcessPoolExecutor
 
     with ProcessPoolExecutor(max_workers=PARALLEL_WORKERS) as pool:
         for batch_start in range(0, total_pages, BATCH_SIZE):
             if cancel_event is not None and cancel_event.is_set():
                 on_log("Analisis abortado a peticion del usuario.", "warn")
-                gpu_queue.put(None)
-                gpu_thread.join(timeout=5)
                 return [], []
 
             if pause_event is not None:
@@ -273,22 +229,11 @@ def analyze_pdf(
                 pdf_page = i + 1
                 if r.curr is not None:
                     on_log(f"  Pag {pdf_page:>4}: {r.curr}/{r.total}  [{r.method}]", "page_ok")
-                elif r.method == "failed":
-                    on_log(f"  Pag {pdf_page:>4}: ???  → GPU queue", "page_warn")
-                    gpu_queue.put(i)
                 else:
-                    on_log(f"  Pag {pdf_page:>4}: ???  [{r.method}]", "page_warn")
+                    on_log(f"  Pag {pdf_page:>4}: ???  [failed]", "page_warn")
 
                 if on_progress:
                     on_progress(pdf_page, total_pages)
-
-    gpu_queue.put(None)
-    gpu_thread.join()
-
-    if gpu_recovered[0] > 0:
-        method_tally["easyocr"] = gpu_recovered[0]
-        method_tally["failed"] = method_tally.get("failed", 0) - gpu_recovered[0]
-        on_log(f"EasyOCR GPU consumer: {gpu_recovered[0]} paginas recuperadas en paralelo", "ok")
 
     reads_clean: list[_PageRead] = [r for r in reads if r is not None]
     period_info = inference._detect_period(reads_clean)
@@ -366,7 +311,7 @@ def analyze_pdf(
     on_log(
         f"Tiempo: {elapsed:.1f}s ({total_pages} paginas, "
         f"{elapsed / total_pages * 1000:.0f}ms/pag promedio, "
-        f"{PARALLEL_WORKERS}+1gpu workers)",
+        f"{PARALLEL_WORKERS} workers)",
         "info",
     )
     _emit_ai_telemetry(

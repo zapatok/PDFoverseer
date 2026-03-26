@@ -19,26 +19,26 @@ pytest
 ## Installation
 
 ```bash
-# CPU-only (Tesseract + PyMuPDF, no EasyOCR)
+# CPU-only (Tesseract + PyMuPDF)
 pip install -r requirements.txt
 
-# GPU (adds EasyOCR + PyTorch CUDA)
+# GPU (adds PyTorch CUDA for SR Tier 2 bicubic upscaling)
 pip install -r requirements-gpu.txt
 ```
 
 ## Tech Stack
 
-- **Backend:** Python 3.10+ with CUDA GPU, FastAPI, PyMuPDF, Tesseract, EasyOCR
+- **Backend:** Python 3.10+ with CUDA GPU, FastAPI, PyMuPDF, Tesseract
 - **Frontend:** React + Vite, react-zoom-pan-pinch
-- **OCR Pipeline:** V4 (producer-consumer) with GPU acceleration
+- **OCR Pipeline:** V4 (6 parallel Tesseract workers, Tier 1 direct + Tier 2 SR-GPU)
 - **Inference:** 5-phase engine with Dempster-Shafer post-validation
 
 ## Project Structure
 
 ```
 ├── core/
-│   ├── pipeline.py           # V4 Pipeline: producer-consumer scan + telemetry
-│   ├── ocr.py                # Tesseract tiers, EasyOCR reader, SR upsampling
+│   ├── pipeline.py           # V4 Pipeline: 6 parallel Tesseract workers + telemetry
+│   ├── ocr.py                # Tesseract tiers (1+2), SR GPU bicubic upsampling
 │   ├── inference.py          # Multi-phase document boundary inference
 │   ├── image.py              # Image preprocessing (render, crop, Otsu, etc.)
 │   ├── utils.py              # _PageRead, _parse(), shared constants
@@ -90,10 +90,9 @@ pip install -r requirements-gpu.txt
 
 ### V4 Pipeline (core/pipeline.py)
 
-**Producer-Consumer Pattern:**
-1. **Producers** (6 parallel workers): PyMuPDF rendering + Tesseract (Tier 1 + Tier 2 w/ SR)
-2. **GPU Consumer** (1 dedicated thread): EasyOCR on failed pages
-3. **Post-scan:**
+**V4 Pipeline (Tess-SR only — EasyOCR removed 2026-03-26, see postmortem):**
+1. **Producers** (6 parallel workers): PyMuPDF rendering + Tesseract (Tier 1 direct + Tier 2 w/ 4x SR GPU bicubic)
+2. **Post-scan:**
    - Period detection (autocorrelation)
    - Dempster-Shafer evidence fusion
    - Confidence calibration
@@ -171,9 +170,9 @@ After each PDF scan, `core/pipeline.py` emits two machine-dense log blocks:
 
 **`[AI:]` block** (log level `"ai"`) — scan summary:
 ```
-[AI:<core_hash>] [MOD:v3.1-fix] [CUDA:<hash>] file.pdf | 45p 3.2s 71ms/p | W6+GPU | INF:soft-alignment-v3-sweep1
+[AI:<core_hash>] [MOD:v6-tess-sr] [CUDA:<hash>] file.pdf | 45p 3.2s 71ms/p | W6 | INF:s2t-helena
 PRE5≡ DOC:5 COM:4(80%) INC:1 INF:3
-OCR: direct:40,super_resolution:3,easyocr:2
+OCR: direct:40,super_resolution:3
 DOCS: 5total → 4ok+1bad(seq:0 under:1) | dist: 3p×2 5p×3
 INF: 3total(low:1 mid:1 hi:1) | LOW: p12=2/3(42%)
 FAIL: 2pp:7,23
@@ -189,7 +188,7 @@ INF:3 x̄=72% 1✓1~1✗
 ```
 
 XVAL entry format: `<pdf_page>:<left_neighbor>><curr>/<total>@<conf%>><right_neighbor>`
-Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr, `i`=inferred, `f`=failed
+Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records only), `i`=inferred, `f`=failed
 
 ### Security
 
@@ -206,9 +205,8 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr, `i`=inferred, `f`=f
 
 ### GPU Pipeline
 
-- EasyOCR runs on GPU thread while Tesseract continues (concurrent)
-- Fallback only triggered if Tesseract tiers fail
-- GPU memory managed via single-threaded consumer
+- SR Tier 2: PyTorch GPU bicubic 4x upscale inline in each Tesseract worker (~1ms/page vs ~150ms FSRCNN CPU fallback)
+- No separate GPU consumer thread — EasyOCR removed after benchmark showed 0-1% accuracy on ART_670 GT pages
 
 ### Inference Engine
 
@@ -220,7 +218,7 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr, `i`=inferred, `f`=f
 ## Conventions
 
 - **Commits:** English, format: `type(scope): message`
-  - Examples: `feat(ocr): add EasyOCR fallback`, `fix(inference): D-S calibration`
+  - Examples: `feat(ocr): add SR tier 2`, `fix(inference): D-S calibration`
 - **Branches:** Feature branches from `master`
   - Pattern: `feature/name` or `fix/issue-name`
 - **Tests:** Always pass before merge (no skipped/pending tests)

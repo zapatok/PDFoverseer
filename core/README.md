@@ -23,8 +23,8 @@ Aísla las dependencias que manejan OpenCV y la manipulación de imágenes a niv
 ### 3. `ocr.py` (Motor de Reconocimiento)
 Gestiona exclusivamente los llamados a los intérpretes de reconocimiento óptico de caracteres y restringe el cargado de la GPU.
 *   **Preprocesamiento Tier 1/2 (`_tess_ocr`):** Blue ink removal (HSV mask + inpainting) → grayscale (luminance) → unsharp mask (sigma=1.0, strength=0.3) → Tesseract LSTM. No se aplica binarización externa — el LSTM usa gradientes en bordes de caracteres que Otsu destruye (Tesseract issue #1780). Parámetros validados por OCR preprocessing sweep (tag `POST-OTSU`): 149/697 rescates, 42/200 regresiones vs 83/200 de producción anterior.
-*   **Fases del OCR:** Tier 1 (Tesseract directo) y Tier 2 (Tesseract + Super Resolución 4x) encapsulados en `_process_page()`.
-*   **EasyOCR (Tier 3):** Inicialización lazy (`_init_easyocr()`), thread-local Torch con candado seguro (`_easyocr_lock`).
+*   **Fases del OCR:** Tier 1 (Tesseract directo) y Tier 2 (Tesseract + Super Resolución 4x GPU bicubic) encapsulados en `_process_page()`.
+*   **EasyOCR (Tier 3): eliminado** — benchmark en ART_670 mostró 1% accuracy en GT pages, sin beneficio de velocidad (producer-consumer era concurrente; Tesseract+SR era el bottleneck real). Ver postmortem: `docs/superpowers/reports/2026-03-25-easyocr-paddle-postmortem.md`.
 
 ### 4. `inference.py` (Inteligencia Lógica sin Estado)
 Corazón de las deducciones, totalmente purificado para prescindir de estado mutacional, garantizando que el diseño de *Human-In-The-Loop* nunca se entrelace con estados sucios.
@@ -38,8 +38,8 @@ Corazón de las deducciones, totalmente purificado para prescindir de estado mut
 ### 5. `pipeline.py` (Orquestación del Productor-Consumidor)
 Implementa los procesos multihilos, la coordinación de operaciones largas asíncronas de I/O y la telemetría en tiempo real.
 *   **Entrypoints Directos:** `analyze_pdf()` y el actualizador condicional `re_infer_documents()`.
-*   **Comunicación en Colas:** Balanceo robusto utilizando `ThreadPoolExecutor` para paralelismo, manteniendo la cola de reserva por defecto de la CPU (el productor) empalmada con el consumidor GPU del singleton de EasyOCR.
-*   **Logs y Métricas:** Emisión de eventos progresivos (`on_log`, `on_issue`) y emisor de rastros AI `[MOD:v1]`.
+*   **Productores paralelos:** `ProcessPoolExecutor` con `PARALLEL_WORKERS=6` para Tesseract (Tier 1 + Tier 2). El Tier 2 usa GPU bicubic inline en cada worker. No hay consumer thread separado (EasyOCR eliminado — ver postmortem).
+*   **Logs y Métricas:** Emisión de eventos progresivos (`on_log`, `on_issue`) y emisor de rastros AI `[MOD:v6-tess-sr]`.
 
 ### Punto de Acceso (`__init__.py`)
 A nivel de aplicación superior (como en `server.py` o los scripts bajo `eval/`), la topología modular es **completamente transparente**. Toda importación fluye a través de `core/__init__.py`, que exporta únicamente la superficie del contrato público existente:
@@ -55,6 +55,24 @@ from core import (
 ---
 
 ## Changelog de Versiones (MOD Tags)
+
+### `[MOD:v6-tess-sr]` (2026-03-26)
+
+**Cambio:** Eliminación definitiva de EasyOCR (Tier 3) del pipeline.
+
+**Motivación:** Benchmark exhaustivo en ART_670 (2719 páginas):
+- EasyOCR: 1% accuracy en 796 páginas GT; 2 hits en producción real causaron ruido en inferencia
+- PaddleOCR PP-OCRv5: 0% accuracy — peor que EasyOCR
+- Sin beneficio de velocidad: el consumer GPU era concurrente pero el bottleneck siempre fue Tesseract + SR
+
+**Resultado producción (sin EasyOCR):** COM 606/667 (91%) vs 603/667 (90%) con EasyOCR — 3 documentos más completos.
+
+**Cambios aplicados:**
+- `core/ocr.py`: removidos `_easyocr_reader`, `_easyocr_lock`, `_init_easyocr()`, `EASYOCR_DPI`
+- `core/pipeline.py`: removido GPU consumer thread y queue; telemetría simplificada a `W6`
+- `requirements-gpu.txt`: removido `easyocr==1.7.2`; torch se mantiene para SR GPU
+
+**Ver:** `docs/superpowers/reports/2026-03-25-easyocr-paddle-postmortem.md`
 
 ### `[MOD:v5-max-total]` (2026-03-25)
 

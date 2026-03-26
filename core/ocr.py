@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os as _os
-import threading
+import threading  # kept for SR semaphore
 from pathlib import Path
 
 import cv2
@@ -21,37 +21,6 @@ pytesseract.pytesseract.tesseract_cmd = _os.getenv(
 
 MODELS_DIR  = Path(__file__).parent.parent / "models"
 FSRCNN_PATH = str(MODELS_DIR / "FSRCNN_x4.pb")
-
-EASYOCR_DPI = 300  # EasyOCR needs higher DPI for small text accuracy
-
-# ── EasyOCR GPU (Tier 1.5) ───────────────────────────────────────────────────
-
-_easyocr_reader = None        # singleton, lazy-loaded (not thread-safe — use via queue)
-_easyocr_lock   = threading.Lock()
-
-def _init_easyocr(on_log: callable) -> None:
-    """Lazy-init EasyOCR Reader with GPU support."""
-    global _easyocr_reader
-    if _easyocr_reader is not None:
-        return
-    with _easyocr_lock:
-        if _easyocr_reader is not None:
-            return  # double-check after lock
-        try:
-            import easyocr
-            gpu = False
-            try:
-                import torch
-                gpu = torch.cuda.is_available()
-            except ImportError:
-                pass
-            on_log(f"EasyOCR: inicializando ({'GPU' if gpu else 'CPU'})...", "info")
-            _easyocr_reader = easyocr.Reader(
-                ["es", "en"], gpu=gpu, verbose=False
-            )
-            on_log(f"EasyOCR: listo ({'GPU' if gpu else 'CPU'})", "ok")
-        except Exception as e:
-            on_log(f"EasyOCR: no disponible ({e})", "warn")
 
 # ── Super Resolution (GPU bicubic si disponible, FSRCNN CPU como fallback) ────
 
