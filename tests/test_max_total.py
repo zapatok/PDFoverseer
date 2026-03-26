@@ -1,4 +1,4 @@
-"""Tests for max_total validation in _parse(). Guard: tot <= 20."""
+"""Tests for max_total validation in _parse(). Guard: tot <= 10."""
 import os
 import sys
 
@@ -20,23 +20,18 @@ class TestMaxTotalValidation:
         c, t = _parse("Página 3 de 10")
         assert c == 3 and t == 10
 
-    def test_total_11_accepted(self):
-        """Total of 11 is within max_total=20 — should be accepted."""
+    def test_total_11_rejected(self):
+        """Total of 11 exceeds max_total=10 — should be rejected."""
         c, t = _parse("Página 3 de 11")
-        assert c == 3 and t == 11
+        assert c is None and t is None
 
-    def test_total_20_accepted(self):
-        """Total of 20 is at the boundary — should be accepted."""
+    def test_total_20_rejected(self):
+        """Total of 20 exceeds max_total=10 — should be rejected."""
         c, t = _parse("Página 5 de 20")
-        assert c == 5 and t == 20
-
-    def test_total_21_rejected(self):
-        """Total of 21 exceeds max_total=20 — should be rejected."""
-        c, t = _parse("Página 5 de 21")
         assert c is None and t is None
 
     def test_total_40_rejected(self):
-        """Total of 40 exceeds max_total=20 — should be rejected (was FP source)."""
+        """Total of 40 exceeds max_total=10 — should be rejected (was FP source)."""
         c, t = _parse("Página 2 de 40")
         assert c is None and t is None
 

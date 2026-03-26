@@ -22,7 +22,7 @@ CLASH_BOUNDARY_PEN   = 1.5   # sweep2
 PH5B_CONF_MIN        = 0.50  # sweep2
 PH5B_RATIO_MIN       = 0.90  # lowered from 0.95: zero regressions on 40 fixtures, fixes INS_31 (3 misreads in 31-page all-1-page PDF)
 INFERENCE_ENGINE_VERSION = "s2t-helena"
-PAGE_PATTERN_VERSION     = "v4-tot20"  # v4: guard tot<=99→20 (blocks FP 40/44/51/81; legit max is 13)
+PAGE_PATTERN_VERSION     = "v1-baseline"  # restored baseline: P-prefix only, tot<=10, Unicode quotes intact
 
 # ============================================================================
 # Page Number Patterns & Normalization
@@ -30,9 +30,8 @@ PAGE_PATTERN_VERSION     = "v4-tot20"  # v4: guard tot<=99→20 (blocks FP 40/44
 
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
-    # Primary: P-prefix (permissive OCR noise within word, optional spaces)
     re.compile(
-        r"P.{0,6}\s*([0-9OoIilL|zZtT\’\’\’\`\´]{1,3})\s*\.?\s*d[ea]\s*([0-9OoIilL|zZtT\’\’\’\`\´]{1,3})",
+        r"P.{0,6}\s*([0-9OoIilL|zZtT\'\‘\’\`\´]{1,3})\s*\.?\s*d[ea]\s*([0-9OoIilL|zZtT\'\‘\’\`\´]{1,3})",
         re.IGNORECASE,
     ),
 ]
@@ -54,7 +53,7 @@ def _parse(text: str) -> tuple[int | None, int | None]:
         m = pat.search(t)
         if m:
             c, tot = _to_int(m.group(1)), _to_int(m.group(2))
-            if 0 < c <= tot <= 20:
+            if 0 < c <= tot <= 10:
                 return c, tot
 
     return None, None

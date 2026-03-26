@@ -24,10 +24,10 @@ from core.utils import _parse
     ("Pag 3 de 3",          (3, 3)),    # last page of doc
     ("Pagina 2 de 5",       (2, 5)),    # without accent
     ("PAG 1 DE 10",         (1, 10)),   # all caps
-    # tot > 10 accepted up to 20; > 20 rejected
-    ("Pag 1 de 11",         (1, 11)),   # accepted
-    ("Pag 4 de 20",         (4, 20)),   # boundary: accepted
-    ("Pag 1 de 21",         (None, None)),  # exceeds max_total=20
+    # tot > 10 rejected
+    ("Pag 4 de 10",         (4, 10)),   # boundary: accepted
+    ("Pag 1 de 11",         (None, None)),  # exceeds max_total=10
+    ("Pag 1 de 20",         (None, None)),  # way over
     ("Pag 1 de 100",        (None, None)),  # way over
     ("2 de 4",              (None, None)),  # bare N de M: no P-prefix, not matched
 ])
