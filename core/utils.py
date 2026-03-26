@@ -29,8 +29,14 @@ INFERENCE_ENGINE_VERSION = "s2t-helena"
 
 # Page number pattern — robust to OCR confusion (O↔0, I↔1, Z↔2, etc)
 _PAGE_PATTERNS = [
+    # Primary: P-prefix (permissive OCR noise within word, optional spaces)
     re.compile(
-        r"P.{0,6}\s*([0-9OoIilL|zZtT\'\‘\’\`\´]{1,3})\s*\.?\s*d[ea]\s*([0-9OoIilL|zZtT\'\‘\’\`\´]{1,3})",
+        r"P.{0,6}\s*([0-9OoIilL|zZtT\’\’\’\`\´]{1,3})\s*\.?\s*d[ea]\s*([0-9OoIilL|zZtT\’\’\’\`\´]{1,3})",
+        re.IGNORECASE,
+    ),
+    # Fallback: any word before N de M — catches OCR-mangled "Página" (P→F/H/R/etc.)
+    re.compile(
+        r"\w+\s+([0-9OoIilL|zZtT\’\’\’\`\´]{1,3})\s+d[ea]\s+([0-9OoIilL|zZtT\’\’\’\`\´]{1,3})",
         re.IGNORECASE,
     ),
 ]
@@ -52,7 +58,7 @@ def _parse(text: str) -> tuple[int | None, int | None]:
         m = pat.search(t)
         if m:
             c, tot = _to_int(m.group(1)), _to_int(m.group(2))
-            if 0 < c <= tot <= 10:
+            if 0 < c <= tot <= 99:
                 return c, tot
 
     return None, None

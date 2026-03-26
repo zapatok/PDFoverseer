@@ -22,6 +22,15 @@ from core.utils import _parse
     ("Pag 3 de 3",          (3, 3)),    # last page of doc
     ("Pagina 2 de 5",       (2, 5)),    # without accent
     ("PAG 1 DE 10",         (1, 10)),   # all caps
+    # Defect 1 — tot > 10 should be accepted up to 99
+    ("Pag 1 de 11",         (1, 11)),   # was silently discarded
+    ("Pag 4 de 40",         (4, 40)),   # was silently discarded
+    ("Pag 1 de 99",         (1, 99)),   # boundary: accepted
+    # Defect 2 — word-anchor fallback for mangled "Página"
+    ("Fagen 2 de 4",        (2, 4)),    # P→F
+    ("Higina 3 de 4",       (3, 4)),    # P→H
+    ("Ragmne 2 de 4",       (2, 4)),    # P→R
+    ("2 de 4",              (None, None)),  # bare N de M: no word before, not matched
 ])
 def test_parse(text, expected):
     assert _parse(text) == expected

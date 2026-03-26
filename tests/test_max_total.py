@@ -18,19 +18,24 @@ class TestMaxTotalValidation:
         c, t = _parse("Página 3 de 10")
         assert c == 3 and t == 10
 
-    def test_total_11_rejected(self):
-        """Total of 11 exceeds max_total=10 — should be rejected."""
+    def test_total_11_accepted(self):
+        """Total of 11 is within max_total=99 — should be accepted."""
         c, t = _parse("Página 3 de 11")
-        assert c is None and t is None
+        assert c == 3 and t == 11
 
-    def test_total_40_rejected(self):
-        """The dominant OCR error: 'X de 40' instead of 'X de 4'."""
+    def test_total_40_accepted(self):
+        """Total of 40 is within max_total=99 — should be accepted."""
         c, t = _parse("Página 2 de 40")
-        assert c is None and t is None
+        assert c == 2 and t == 40
 
-    def test_total_99_rejected(self):
-        """Previous max was 99 — should now be rejected."""
+    def test_total_99_accepted(self):
+        """Total of 99 is at the boundary — should be accepted."""
         c, t = _parse("Página 5 de 99")
+        assert c == 5 and t == 99
+
+    def test_total_100_rejected(self):
+        """Total of 100 exceeds max_total=99 — should be rejected."""
+        c, t = _parse("Página 5 de 100")
         assert c is None and t is None
 
     def test_curr_greater_than_total_rejected(self):
