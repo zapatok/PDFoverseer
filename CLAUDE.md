@@ -182,15 +182,18 @@ ANOMALY_DROPOUT      = 0.0    # anomaly suppression (disabled)
 
 ### Page Number Pattern
 
-`PAGE_PATTERN_VERSION = "v2-wordNdeM"` — current registry version (see `core/utils.py`)
+`PAGE_PATTERN_VERSION = "v1-baseline"` — current registry version (see `core/utils.py`)
 
-`_PAGE_PATTERNS` (v2, 2026-03-26):
+`_PAGE_PATTERNS` (v1, baseline):
 1. **Primary** `P.{0,6} N de M` — P-prefix, permissive OCR noise
-2. **Fallback** `\w+ N de M` — any word before N de M; catches OCR-mangled "Página" (P→F/H/R)
 
-Plausibility guard: `0 < curr <= total <= 99` (raised from 10 on 2026-03-26; ART_670 max total=81)
+Plausibility guard: `0 < curr <= total <= 10` (confirmed best after guard sweep 2026-03-26)
 
-Matches: "Página 1 de 65", "Fagen 2 de 4", etc. (Spanish-centric, with OCR digit normalization)
+Matches: "Página 1 de 4", "Pag 2 de 3", etc. (Spanish-centric, with OCR digit normalization)
+
+> **Note:** Word-anchor fallback (`\w+ N de M`) was evaluated and reverted — FP rate too high on ART_670.
+> Guard variants tried: tot<=9 (worse), tot<=20 (worse), tot<=99 (much worse). tot<=10 is optimal.
+> See `docs/superpowers/reports/2026-03-26-regex-guard-sweep.md` for full results.
 
 ## Development
 
@@ -321,12 +324,31 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records o
 
 ## Conventions
 
+### Git & Workflow
 - **Commits:** English, format: `type(scope): message`
   - Examples: `feat(ocr): add SR tier 2`, `fix(inference): D-S calibration`
-- **Branches:** Feature branches from `master`
+- **Branches:** Feature branches from `master` (or `cuda-gpu` when working on GPU features)
   - Pattern: `feature/name` or `fix/issue-name`
 - **Tests:** Always pass before merge (no skipped/pending tests)
 - **DB mocking:** Avoid mocking in tests — use real fixtures where possible
+- **Worktrees:** Use `.worktrees/<name>` for isolated feature work (see `superpowers:using-git-worktrees`)
+
+### Code Quality
+- **Linting:** `ruff check .` must report **0 violations** before committing
+  - Config in `pyproject.toml`; rules: E, F, W, I (isort), UP (pyupgrade)
+  - Intentional late imports (after `sys.path` manipulation): suppress with `# noqa: E402`
+- **Dead code:** Remove unused imports, variables, and unreachable assignments — never commit them
+- **No bare `except:`** — catch specific types (`except ValueError`, `except Exception` at minimum)
+- **No `print()` in library code** — use `logging.getLogger(__name__)`; `print()` only in CLI entry points and standalone tools
+
+### Types & Docstrings
+- **Type annotations:** Use Python 3.10+ syntax: `X | None` not `Optional[X]`, `list[X]` not `List[X]`
+- **Docstrings:** Public entry points (functions callable from outside the module) need Google-style docstrings with `Args:` and `Returns:` sections
+
+### Architecture
+- **Constants:** Magic numbers belong in `core/utils.py` (pipeline/inference config) or at module level — never inline
+- **One responsibility per file:** Each module has a single clear purpose; if a file is doing two things, split it
+- **Module docs:** New packages/modules get a `README.md` explaining their purpose, files, and usage
 
 ## Links
 
