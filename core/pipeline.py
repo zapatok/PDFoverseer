@@ -362,6 +362,25 @@ def re_infer_documents(
     on_issue: callable | None = None,
     exclusions: list[int] | None = None,
 ) -> tuple[list[Document], list[_PageRead]]:
+    """Re-run document inference applying manual corrections and exclusions.
+
+    Used after the user corrects document boundaries in the UI. Mutates
+    the provided reads in-place: corrections override (curr, total) with
+    confidence=1.0; exclusions set method="excluded" and clear curr/total.
+
+    Args:
+        reads:       List[_PageRead] from a previous analyze_pdf() call.
+        corrections: Dict mapping pdf_page → (curr, total) manual override.
+        on_log:      Callback(message, level) — receives all log lines.
+        on_issue:    Callback(page, kind, detail, extra) for new low-confidence
+                     inferences post-correction. Default: None.
+        exclusions:  List of pdf_page numbers to exclude from inference. Default: [].
+
+    Returns:
+        Tuple of (documents, reads):
+        - documents: Re-inferred List[Document] after applying corrections.
+        - reads: The same list, mutated in-place with corrections applied.
+    """
     def _issue(page: int, kind: str, detail: str):
         if on_issue is not None:
             on_issue(page, kind, detail, None)
