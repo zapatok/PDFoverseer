@@ -22,7 +22,7 @@ CLASH_BOUNDARY_PEN   = 1.5   # sweep2
 PH5B_CONF_MIN        = 0.50  # sweep2
 PH5B_RATIO_MIN       = 0.90  # lowered from 0.95: zero regressions on 40 fixtures, fixes INS_31 (3 misreads in 31-page all-1-page PDF)
 INFERENCE_ENGINE_VERSION = "s2t-helena"
-PAGE_PATTERN_VERSION     = "v2-wordNdeM"  # v2: tot<=99 + \w+ N de M fallback
+PAGE_PATTERN_VERSION     = "v3-tot99"  # v3: reverted \w+ fallback (FP regression), keeping tot<=99
 
 # ============================================================================
 # Page Number Patterns & Normalization
@@ -33,11 +33,6 @@ _PAGE_PATTERNS = [
     # Primary: P-prefix (permissive OCR noise within word, optional spaces)
     re.compile(
         r"P.{0,6}\s*([0-9OoIilL|zZtT\’\’\’\`\´]{1,3})\s*\.?\s*d[ea]\s*([0-9OoIilL|zZtT\’\’\’\`\´]{1,3})",
-        re.IGNORECASE,
-    ),
-    # Fallback: any word before N de M — catches OCR-mangled "Página" (P→F/H/R/etc.)
-    re.compile(
-        r"\w+\s+([0-9OoIilL|zZtT\’\’\’\`\´]{1,3})\s+d[ea]\s+([0-9OoIilL|zZtT\’\’\’\`\´]{1,3})",
         re.IGNORECASE,
     ),
 ]
