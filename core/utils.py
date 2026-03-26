@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 DPI              = 150
 CROP_X_START     = 0.70   # rightmost 30%
 CROP_Y_END       = 0.22   # top 22%
-TESS_CONFIG      = "--psm 6 --oem 1"
+TESS_CONFIG      = "--psm 11 --oem 1"
 PARALLEL_WORKERS = 6      # concurrent Tesseract subprocesses
 BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
