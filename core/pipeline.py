@@ -169,6 +169,31 @@ def analyze_pdf(
     on_issue:    callable | None = None,
     doc_mode:    str = "charla",
 ) -> tuple[list[Document], list[_PageRead]]:
+    """Run the V4 OCR + inference pipeline on a PDF file.
+
+    Spawns PARALLEL_WORKERS processes via ProcessPoolExecutor, each running
+    Tesseract Tier 1 (direct) + Tier 2 (4x SR bicubic) on a page crop.
+    Pages are processed in batches of BATCH_SIZE with pause/cancel support.
+
+    After OCR, runs period detection (autocorrelation) and Dempster-Shafer
+    inference to recover failed pages, then builds Document boundaries.
+
+    Args:
+        pdf_path:     Absolute path to the PDF file.
+        on_progress:  Callback(pdf_page, total_pages) — called after each page.
+        on_log:       Callback(message, level) — receives all log lines.
+        pause_event:  If set, workers wait at batch boundaries. Default: None.
+        cancel_event: If set and is_set(), scan aborts immediately. Default: None.
+        on_issue:     Callback(page, kind, detail, extra) for low-confidence
+                      inferences and other issues. Default: None.
+        doc_mode:     Document mode string (currently unused, reserved). Default: "charla".
+
+    Returns:
+        Tuple of (documents, reads):
+        - documents: List[Document] — inferred document boundaries.
+        - reads: List[_PageRead] — one entry per page with OCR result and method.
+        Returns ([], []) on PDF read error or cancel.
+    """
     if not ocr._sr_initialized:
         ocr._setup_sr(on_log)
 
