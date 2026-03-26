@@ -1,3 +1,22 @@
+"""
+PDFoverseer FastAPI server.
+
+Entry point for the backend. Exposes:
+  - REST routes: /api/browse, /api/add_folder, /api/add_files, /api/preview,
+                 /api/start, /api/stop, /api/state,
+                 /api/sessions, /api/reset, /api/correct, /api/exclude, /api/restore
+  - WebSocket:   /ws/{session_id}
+
+Run:
+    python server.py
+
+Environment variables:
+    HOST      Bind address (default: 127.0.0.1)
+    PORT      Port (default: 8000)
+    PDF_ROOT  Required — allowed root directory for PDF path validation
+    SESSION_TTL  Session TTL in seconds (default: 3600)
+"""
+
 import os
 import asyncio
 import logging
