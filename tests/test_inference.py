@@ -2,12 +2,15 @@
 Inference unit tests — no GPU/Tesseract required.
 Tests cover _infer_missing(), _detect_period(), _build_documents(), classify_doc().
 """
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
-from core.utils import _PageRead, Document
-from core.inference import _infer_missing, _detect_period, _build_documents, classify_doc
+
+from core.inference import _build_documents, _detect_period, _infer_missing, classify_doc
+from core.utils import Document, _PageRead
 
 
 def _make_read(page, curr, total, method="direct", confidence=1.0):

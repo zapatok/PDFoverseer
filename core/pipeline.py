@@ -1,30 +1,26 @@
 """Pipeline engine: producer-consumer orchestration and human-in-the-loop workflows."""
 from __future__ import annotations
 
-import time
-import threading
 import hashlib
+import threading
+import time
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import fitz
 
+import core.inference as inference
+import core.ocr as ocr
 from core.utils import (
-    Document,
-    _PageRead,
-    PARALLEL_WORKERS,
     BATCH_SIZE,
-    _parse,
     INFERENCE_ENGINE_VERSION,
     PAGE_PATTERN_VERSION,
+    PARALLEL_WORKERS,
+    Document,
+    _PageRead,
 )
-import core.ocr as ocr
-import core.image as image
-import core.inference as inference
 
-
-_CUDA_HASH = hashlib.md5(("CUDA-GPU-V4-Producer-Consumer").encode()).hexdigest()[:8]
+_CUDA_HASH = hashlib.md5((b"CUDA-GPU-V4-Producer-Consumer")).hexdigest()[:8]
 _CORE_HASH = "2e436564"  # Commit from the last test that was shown to the user
 
 
@@ -33,6 +29,7 @@ _CORE_HASH = "2e436564"  # Commit from the last test that was shown to the user
 def _process_page_worker(pdf_path: str, page_idx: int) -> _PageRead:
     """Stateless worker function for true multiprocessing."""
     import fitz
+
     import core.ocr as ocr
     doc = fitz.open(pdf_path)
     try:
@@ -324,7 +321,7 @@ def analyze_pdf(
             d.inferred_pages.extend(next_pages)
             d_next.pages.clear()
             d_next.inferred_pages.clear()
-            d_next.declared_total = 0 
+            d_next.declared_total = 0
             _uc_fixed += 1
     if _uc_fixed:
         documents = [d for d in documents if d.declared_total > 0]

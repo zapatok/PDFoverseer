@@ -1,11 +1,14 @@
 """Tests for Ollama VLM client."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
+
 from vlm.client import query, warmup
 
 

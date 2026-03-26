@@ -3,15 +3,6 @@ export const WS_BASE = 'ws://127.0.0.1:8000/ws';
 
 export const SPINNER = ['/', '-', '\\', '|'];
 
-export const IMPACT_PRIORITY = {
-  'ph5b': 1,
-  'ph5-merge': 2,
-  'boundary': 3,
-  'sequence': 4,
-  'orphan': 5,
-  'internal': 6,
-};
-
 export const IMPACT_LABELS = {
   'ph5b': { label: 'Ph5b', color: 'text-red-400 bg-red-400/10' },
   'ph5-merge': { label: 'Fusión', color: 'text-orange-400 bg-orange-400/10' },

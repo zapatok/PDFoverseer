@@ -5,7 +5,6 @@ import argparse
 import json
 import logging
 import statistics
-import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +12,7 @@ from pathlib import Path
 import cv2
 
 from vlm.client import query, warmup
-from vlm.ground_truth import load_ground_truth, load_corpus, OCR_ALL_DIR
+from vlm.ground_truth import OCR_ALL_DIR, load_corpus, load_ground_truth
 from vlm.parser import parse
 from vlm.preprocess import apply_preprocess
 

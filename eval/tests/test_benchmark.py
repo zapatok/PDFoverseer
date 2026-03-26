@@ -1,8 +1,9 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
-from eval.ocr_benchmark import load_fixture, extract_paddle_text, score_page
+from eval.ocr_benchmark import extract_paddle_text, load_fixture, score_page
 
 
 def test_load_fixture_returns_dict():

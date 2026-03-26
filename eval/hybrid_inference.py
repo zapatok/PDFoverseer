@@ -19,8 +19,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from eval.inference import PageRead, Document, _detect_period, _infer  # noqa: E402
-from eval.graph_inference import viterbi_decode, extract_documents      # noqa: E402
+from eval.graph_inference import extract_documents, viterbi_decode  # noqa: E402
+from eval.inference import Document, PageRead, _detect_period, _infer  # noqa: E402
 
 
 def run_pipeline(reads: list[PageRead], params: dict) -> list[Document]:

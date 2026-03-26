@@ -1,16 +1,17 @@
 import os
-import sys
 import subprocess
+import sys
 import tkinter as tk
-from tkinter import filedialog
 from pathlib import Path
-from fastapi import APIRouter, Response, Depends, HTTPException
-from pydantic import BaseModel
-import fitz
+from tkinter import filedialog
 
-from api.state import get_session, SessionState
+import fitz
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
+
+from api.database import has_reads
+from api.state import SessionState, get_session
 from api.worker import _recalculate_metrics
-from api.database import get_reads, has_reads
 
 router = APIRouter()
 

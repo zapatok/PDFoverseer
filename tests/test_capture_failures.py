@@ -1,8 +1,11 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from datetime import datetime
-from tools.capture_failures import _make_image_filename, _make_image_path, _build_csv_row
+
+from tools.capture_failures import _build_csv_row, _make_image_filename, _make_image_path
 
 
 def test_make_image_filename_format():
@@ -49,8 +52,10 @@ def test_build_csv_row_has_all_columns():
     row = _build_csv_row("x", 1, datetime.now(), "x/p001.png", "", "", "")
     assert list(row.keys()) == CSV_COLUMNS
 
-import pytest
 from pathlib import Path
+
+import pytest
+
 from tools.capture_failures import capture_pdf
 
 FIXTURE_INS31 = Path("eval/fixtures/real/INS_31docs.pdf")

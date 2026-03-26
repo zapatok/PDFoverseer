@@ -1,9 +1,12 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
-from core.utils import _PageRead
+
 import api.database as database
+from core.utils import _PageRead
 
 
 def _init_temp_db(tmp_path, monkeypatch):

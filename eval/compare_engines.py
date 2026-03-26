@@ -18,9 +18,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from eval.inference       import run_pipeline as run_existing, PageRead
 from eval.graph_inference import run_pipeline as run_graph
 from eval.hybrid_inference import run_pipeline as run_hybrid
+from eval.inference import PageRead
+from eval.inference import run_pipeline as run_existing
 
 FIXTURES_DIR      = Path("eval/fixtures")
 GROUND_TRUTH_PATH = Path("eval/ground_truth.json")

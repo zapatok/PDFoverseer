@@ -102,7 +102,11 @@
       "Bash(curl -s \"https://dev.to/squadbase/3-python-libraries-tips-for-enhancing-ocr-accuracy-in-llm-apis-54nh\")",
       "Bash(grep -n \"save\\\\|imwrite\\\\|imsave\\\\|Image.save\" /a/PROJECTS/PDFoverseer/eval/*.py)",
       "Bash(identify /a/PROJECTS/PDFoverseer/data/ocr_all/ALUM_1/p001.png)",
-      "Bash(wc -l /a/PROJECTS/PDFoverseer/eval/*.py)"
+      "Bash(wc -l /a/PROJECTS/PDFoverseer/eval/*.py)",
+      "Bash(python -c \"import json; d=json.load\\(open\\(''a:/PROJECTS/PDFoverseer/eval/fixtures/real/ART_670.json''\\)\\); print\\(f''reads: {len\\(d[\"\"reads\"\"]\\)}''\\)\")",
+      "Read(//c/Users/Daniel/**)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\) if False else print\\(sys.stdin.read\\(\\)\\)\")",
+      "Bash(find /a/PROJECTS/PDFoverseer/frontend/src -type f \\\\\\(-name *.jsx -o -name *.js \\\\\\))"
     ]
   }
 }

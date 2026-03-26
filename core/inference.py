@@ -7,11 +7,20 @@ fine grid search over 7 real PDF fixtures. See eval/sweep.py for sweep design.
 """
 from __future__ import annotations
 
-from typing import Optional
 from collections import Counter
+
 import numpy as np
 
-from core.utils import Document, _PageRead, MIN_CONF_FOR_NEW_DOC, ANOMALY_DROPOUT, PHASE4_FALLBACK_CONF, CLASH_BOUNDARY_PEN, PH5B_CONF_MIN, PH5B_RATIO_MIN
+from core.utils import (
+    ANOMALY_DROPOUT,
+    CLASH_BOUNDARY_PEN,
+    MIN_CONF_FOR_NEW_DOC,
+    PH5B_CONF_MIN,
+    PH5B_RATIO_MIN,
+    PHASE4_FALLBACK_CONF,
+    Document,
+    _PageRead,
+)
 
 # ── Period Detection ─────────────────────────────────────────────────────────
 
@@ -100,34 +109,6 @@ def _detect_period(reads: list[_PageRead]) -> dict:
         "expected_total": mode_total or best,
     }
 
-
-# ── Dempster-Shafer Evidence Fusion ──────────────────────────────────────────
-
-def _ds_combine(m1: dict, m2: dict) -> dict:
-    """Dempster-Shafer combination of two mass functions.
-
-    Keys are hypothesis tuples ``(curr, total)`` or the string ``'unknown'``
-    representing the full frame of discernment (Theta).
-    """
-    combined: dict = {}
-    conflict = 0.0
-
-    for h1, v1 in m1.items():
-        for h2, v2 in m2.items():
-            product = v1 * v2
-            if h1 == "unknown":
-                combined[h2] = combined.get(h2, 0) + product
-            elif h2 == "unknown":
-                combined[h1] = combined.get(h1, 0) + product
-            elif h1 == h2:
-                combined[h1] = combined.get(h1, 0) + product
-            else:
-                conflict += product
-
-    norm = 1.0 - conflict
-    if norm < 0.01:
-        return {"unknown": 1.0}
-    return {k: v / norm for k, v in combined.items()}
 
 
 def _period_evidence(
@@ -252,7 +233,7 @@ def _infer_missing(
             prev = reads[gap_start - 1]
             if prev.curr is not None and prev.total is not None:
                 prev_c, prev_t = prev.curr, prev.total
-        
+
         for i in range(gap_start, gap_end):
             lt, hom = _local_total(i)
             if prev_c is not None and prev_t is not None:
@@ -278,7 +259,7 @@ def _infer_missing(
             nxt = reads[gap_end]
             if nxt.curr is not None and nxt.total is not None:
                 nxt_c, nxt_t = nxt.curr, nxt.total
-        
+
         for i in range(gap_end - 1, gap_start - 1, -1):
             lt, hom = _local_total(i)
             if nxt_c is not None and nxt_t is not None:
@@ -305,7 +286,7 @@ def _infer_missing(
                     if p_conf > 0.3 and t != ex_t:
                         cost += p_conf * 2.5
             return cost
-        
+
         cost_fwd = seq_cost(hyp_fwd)
         cost_bwd = seq_cost(hyp_bwd)
 
@@ -314,10 +295,10 @@ def _infer_missing(
             r_nxt = reads[gap_end]
             fwd_last_c, fwd_last_t, _ = hyp_fwd[-1]
             if r_nxt.curr is not None and r_nxt.total is not None:
-                if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or 
+                if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or
                         (fwd_last_c == fwd_last_t and r_nxt.curr == 1)):
                     cost_fwd += CLASH_BOUNDARY_PEN
-        
+
         if gap_start > 0:
             r_prev = reads[gap_start - 1]
             bwd_first_c, bwd_first_t, _ = hyp_bwd[0]

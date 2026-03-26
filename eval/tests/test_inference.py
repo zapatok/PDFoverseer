@@ -1,10 +1,10 @@
 # eval/tests/test_inference.py
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.inference import run_pipeline, PageRead, _detect_period
-
+from eval.inference import PageRead, _detect_period, run_pipeline
 from eval.params import PRODUCTION_PARAMS as PROD_PARAMS
 
 

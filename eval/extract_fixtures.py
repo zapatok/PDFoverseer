@@ -28,19 +28,19 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import fitz  # PyMuPDF
 
+from core.image import _render_clip
+from core.ocr import (
+    EASYOCR_DPI,
+    _init_easyocr,
+    _process_page,
+    _setup_sr,
+)
 from core.utils import (
-    PARALLEL_WORKERS,
     BATCH_SIZE,
+    PARALLEL_WORKERS,
     _PageRead,
     _parse,
 )
-from core.ocr import (
-    EASYOCR_DPI,
-    _process_page,
-    _setup_sr,
-    _init_easyocr,
-)
-from core.image import _render_clip
 
 # ── PDF paths ──────────────────────────────────────────────────────────────────
 

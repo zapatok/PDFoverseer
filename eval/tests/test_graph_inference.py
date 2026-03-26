@@ -1,11 +1,19 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.graph_inference import build_state_space, PageRead, Document, compute_log_emission, compute_log_transition
-import math
 import json
+import math
 import time
+
+from eval.graph_inference import (
+    Document,
+    PageRead,
+    build_state_space,
+    compute_log_emission,
+    compute_log_transition,
+)
 
 
 def test_state_space_max_total_3():
@@ -104,7 +112,7 @@ def test_trans_period_prior():
     assert log_to_modal > log_to_other
 
 
-from eval.graph_inference import viterbi_decode, extract_documents
+from eval.graph_inference import extract_documents, viterbi_decode
 
 
 def test_viterbi_clean_two_docs():

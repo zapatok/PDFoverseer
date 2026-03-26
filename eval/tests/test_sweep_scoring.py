@@ -1,11 +1,12 @@
 # eval/tests/test_sweep_scoring.py
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.sweep import score_config
 from eval.inference import PageRead, run_pipeline
 from eval.params import PRODUCTION_PARAMS
+from eval.sweep import score_config
 
 
 def _real_fx(name, n_pages, curr=1, total=1):

@@ -2,20 +2,23 @@
 API integration tests — no real OCR processing occurs.
 Uses FastAPI TestClient with monkeypatched DB_PATH and session_manager.
 """
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import api.database as database
-from api.state import session_manager, SessionState
-from core.utils import _PageRead
 
 # Patch out the eviction loop and WebSocket broadcast to avoid asyncio issues
 import api.websocket as ws_module
+from api.state import SessionState, session_manager
+from core.utils import _PageRead
 
 
 def _make_read(page, curr, total, method="direct", confidence=1.0):

@@ -1,0 +1,636 @@
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] ALUM_19.pdf | 36p 3.1s 87ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:19 COM:6(32%) INC:13 INF:0
+OCR: direct:36
+DOCS: 19total → 6ok+13bad(seq:1 under:12) | dist: 2p×6 3p×13
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:19 P:P=2 conf=61% expect=3
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] ALUM_19.pdf DOC:19 COM:6 INC:13 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] ART_670.pdf | 2719p 587.5s 216ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:684 COM:613(90%) INC:71 INF:873
+OCR: failed:776,super_resolution:1157,direct:775,easyocr:11
+DOCS: 684total → 613ok+71bad(seq:44 under:27) | dist: 2p×1 4p×682 5p×1
+INF: 873total(low:0 mid:112 hi:761) | LOW: none
+FAIL: none
+[DS:2e436564] D:684 P:P=4 conf=75% expect=4
+INF:873 x̄=87% 416✓457~0✗
+✓4:1/4s>2/4@99>3/4i,5:2/4i>3/4@99>4/4i,6:3/4i>4/4@99>1/4i,8:1/4i>2/4@99>3/4i,9:2/4i>3/4@99>4/4i,10:3/4i>4/4@99>1/4i,12:1/4i>2/4@99>3/4i,13:2/4i>3/4@99>4/4i,14:3/4i>4/4@99>1/4i,16:1/4i>2/4@99>3/4i,17:2/4i>3/4@99>4/4i,18:3/4i>4/4@99>1/4i,22:1/4i>2/4@99>3/4i,23:2/4i>3/4@99>4/4i,24:3/4i>4/4@99>1/4i,26:1/4i>2/4@99>3/4i,27:2/4i>3/4@99>4/4i,28:3/4i>4/4@99>1/4i,30:1/4i>2/4@99>3/4i,31:2/4i>3/4@99>4/4d,56:3/4s>4/4@99>1/4i,58:1/4i>2/4@99>3/4s,62:1/4d>2/4@99>3/4s,64:3/4s>4/4@99>1/4d,88:3/4d>4/4@99>1/4i,112:3/4d>4/4@99>1/4d,116:3/4s>4/4@99>1/4i,148:3/4s>4/4@99>1/4i,160:3/4s>4/4@99>1/4s,166:1/4d>2/4@99>3/4d,175:2/4d>3/4@99>4/4d,179:2/4d>3/4@99>4/4d,194:1/4s>2/4@99>3/4i,195:2/4i>3/4@99>4/4d,208:3/4d>4/4@99>1/4s,216:3/4s>4/4@99>1/4s,219:2/4s>3/4@99>4/4s,238:1/4s>2/4@99>3/4s,270:1/4i>2/4@99>3/4s,306:1/4i>2/4@99>3/4s,310:1/4d>2/4@99>3/4d,348:3/4d>4/4@99>1/4s,367:2/4d>3/4@99>4/4s,390:1/4s>2/4@99>3/4d,438:1/4d>2/4@99>3/4d,460:3/4s>4/4@99>1/4s,470:1/4s>2/4@99>3/4d,479:2/4s>3/4@99>4/4i,480:3/4i>4/4@99>1/4i,495:2/4d>3/4@99>4/4d,514:1/4d>2/4@99>3/4d,516:3/4d>4/4@99>1/4s,519:2/4s>3/4@99>4/4s,534:1/4s>2/4@99>3/4s,560:1/4s>2/4@99>3/4s,564:1/4d>2/4@99>3/4d,566:3/4d>4/4@99>1/4i,568:1/4i>2/4@99>3/4d,570:3/4d>4/4@99>1/4s,608:1/4s>2/4@99>3/4s,612:1/4i>2/4@99>3/4s,617:2/4d>3/4@99>4/4s,622:3/4s>4/4@99>1/4d,624:1/4d>2/4@99>3/4s,640:1/4i>2/4@99>3/4s,649:2/4s>3/4@99>4/4i,650:3/4i>4/4@99>1/4d,664:1/4d>2/4@99>3/4s,758:3/4s>4/4@99>1/4d,772:1/4i>2/4@99>3/4s,794:3/4s>4/4@99>1/4s,804:1/4d>2/4@99>3/4d,816:1/4i>2/4@99>3/4d,830:3/4d>4/4@99>1/4i,841:2/4s>3/4@99>4/4d,886:3/4d>4/4@99>1/4i,897:2/4s>3/4@99>4/4s,913:2/4s>3/4@99>4/4s,974:3/4s>4/4@99>1/4i,984:1/4s>2/4@99>3/4s,989:2/4d>3/4@99>4/4s,996:1/4d>2/4@99>3/4d,1004:1/4s>2/4@99>3/4d,1008:1/4d>2/4@99>3/4s,1013:2/4d>3/4@99>4/4i,1014:3/4i>4/4@99>1/4s,1032:1/4i>2/4@99>3/4i,1033:2/4i>3/4@99>4/4i,1034:3/4i>4/4@99>1/4i,1036:1/4i>2/4@99>3/4s,1042:3/4s>4/4@99>1/4i,1044:1/4i>2/4@99>3/4i,1045:2/4i>3/4@99>4/4i,1046:3/4i>4/4@99>1/4i,1052:1/4i>2/4@99>3/4d,1054:3/4d>4/4@99>1/4i,1056:1/4i>2/4@99>3/4i,1057:2/4i>3/4@99>4/4i,1058:3/4i>4/4@99>1/2i,1078:3/4s>4/4@99>1/4i,1080:1/4i>2/4@99>3/4s,1082:3/4s>4/4@99>1/4i,1084:1/4i>2/4@99>3/4i,1085:2/4i>3/4@99>4/4i,1086:3/4i>4/4@99>1/4i,1094:3/4s>4/4@99>1/4i,1098:3/4s>4/4@99>1/4i,1100:1/4i>2/4@99>3/4i,1101:2/4i>3/4@99>4/4i,1102:3/4i>4/4@99>1/4i,1104:1/4i>2/4@99>3/4s,1106:3/4s>4/4@99>1/4i,1110:3/4s>4/4@99>1/4i,1114:3/4s>4/4@99>1/4i,1116:1/4i>2/4@99>3/4s,1118:3/4s>4/4@99>1/4i,1120:1/4i>2/4@99>3/4s,1122:3/4s>4/4@99>1/4i,1124:1/4i>2/4@99>3/4i,1125:2/4i>3/4@99>4/4i,1126:3/4i>4/4@99>1/4d,1128:1/4d>2/4@99>3/4i,1129:2/4i>3/4@99>4/4i,1130:3/4i>4/4@99>1/4i,1132:1/4i>2/4@99>3/4i,1133:2/4i>3/4@99>4/4i,1134:3/4i>4/4@99>1/4s,1136:1/4s>2/4@99>3/4i,1137:2/4i>3/4@99>4/4i,1138:3/4i>4/4@99>1/4i,1140:1/4i>2/4@99>3/4i,1141:2/4i>3/4@99>4/4i,1142:3/4i>4/4@99>1/4i,1150:3/4s>4/4@99>1/4i,1152:1/4i>2/4@99>3/4i,1153:2/4i>3/4@99>4/4i,1154:3/4i>4/4@99>1/4i,1156:1/4i>2/4@99>3/4s,1164:1/4i>2/4@99>3/4i,1165:2/4i>3/4@99>4/4i,1166:3/4i>4/4@99>1/4d,1173:2/4s>3/4@99>4/4s,1222:3/4d>4/4@99>1/4i,1266:3/4d>4/4@99>1/4d,1293:2/4s>3/4@99>4/4s,1298:3/4s>4/4@99>1/4d,1320:1/4s>2/4@99>3/4d,1352:1/4d>2/4@99>3/4i,1353:2/4i>3/4@99>4/4s,1394:3/4s>4/4@99>1/4s,1402:3/4s>4/4@99>1/4s,1445:2/4s>3/4@99>4/4s,1464:1/4s>2/4@99>3/4s,1466:3/4s>4/4@99>1/4s,1492:1/4s>2/4@99>3/4s,1494:3/4s>4/4@99>1/4i,1496:1/4i>2/4@99>3/4d,1498:3/4d>4/4@99>1/4s,1501:2/4s>3/4@99>4/4i,1502:3/4i>4/4@99>1/4i,1525:2/4s>3/4@99>4/4s,1528:1/4s>2/4@99>3/4s,1530:3/4s>4/4@99>1/4s,1542:3/4s>4/4@99>1/4d,1548:1/4i>2/4@99>3/4s,1561:2/4d>3/4@99>4/4s,1564:1/4d>2/4@99>3/4s,1600:1/4s>2/4@99>3/4d,1612:1/4s>2/4@99>3/4s,1632:1/4s>2/4@99>3/4s,1664:1/4i>2/4@99>3/4s,1684:1/4s>2/4@99>3/4d,1686:3/4d>4/4@99>1/4s,1692:1/4i>2/4@99>3/4d,1697:2/4d>3/4@99>4/4s,1704:1/4i>2/4@99>3/4d,1712:1/4d>2/4@99>3/4s,1724:1/4s>2/4@99>3/4d,1745:2/4s>3/4@99>4/4d,1748:1/4s>2/4@99>3/4s,1762:1/4i>2/4@99>3/4i,1763:2/4i>3/4@99>4/4i,1764:3/4i>4/4@99>1/4i,1767:2/4i>3/4@99>4/4i,1768:3/4i>4/4@99>1/4i,1771:2/4i>3/4@99>4/4i,1780:1/4s>2/4@99>3/4i,1781:2/4i>3/4@99>4/4i,1782:3/4i>4/4@99>1/4i,1784:1/4i>2/4@99>3/4i,1785:2/4i>3/4@99>4/4i,1786:3/4i>4/4@99>1/4i,1788:1/4i>2/4@99>3/4i,1789:2/4i>3/4@99>4/4i,1790:3/4i>4/4@99>1/4i,1792:1/4i>2/4@99>3/4i,1793:2/4i>3/4@99>4/4i,1794:3/4i>4/4@99>1/4i,1824:1/4s>2/4@99>3/4i,1825:2/4i>3/4@99>4/4i,1826:3/4i>4/4@99>1/4i,1828:1/4i>2/4@99>3/4i,1829:2/4i>3/4@99>4/4i,1830:3/4i>4/4@99>1/4i,1839:1/4i>2/4@99>3/4i,1840:2/4i>3/4@99>4/4i,1841:3/4i>4/4@99>1/4i,1843:1/4i>2/4@99>3/4i,1844:2/4i>3/4@99>4/4i,1849:1/4i>2/4@99>3/4i,1850:2/4i>3/4@99>4/4i,1851:3/4i>4/4@99>1/4i,1853:1/4i>2/4@99>3/4i,1854:2/4i>3/4@99>4/4i,1855:3/4i>4/4@99>1/4i,1857:1/4i>2/4@99>3/4i,1858:2/4i>3/4@99>4/4i,1859:3/4i>4/4@99>1/4i,1861:1/4i>2/4@99>3/4i,1862:2/4i>3/4@99>4/4i,1863:3/4i>4/4@99>1/4i,1865:1/4i>2/4@99>3/4i,1866:2/4i>3/4@99>4/4i,1867:3/4i>4/4@99>1/4i,1869:1/4i>2/4@99>3/4i,1870:2/4i>3/4@99>4/4i,1871:3/4i>4/4@99>1/4i,1873:1/4i>2/4@99>3/4i,1874:2/4i>3/4@99>4/4i,1875:3/4i>4/4@99>1/4i,1877:1/4i>2/4@99>3/4i,1878:2/4i>3/4@99>4/4i,1879:3/4i>4/4@99>1/4i,1884:1/4s>2/4@99>3/4i,1885:2/4i>3/4@99>4/4i,1886:3/4i>4/4@99>1/4i,1888:1/4i>2/4@99>3/4i,1889:2/4i>3/4@99>4/4i,1890:3/4i>4/4@99>1/4i,1892:1/4i>2/4@99>3/4i,1893:2/4i>3/4@99>4/4i,1894:3/4i>4/4@99>1/4i,1917:1/4i>2/4@99>3/4i,1918:2/4i>3/4@99>4/4i,1922:1/4i>2/4@99>3/4i,1923:2/4i>3/4@99>4/4i,1927:1/4i>2/4@99>3/4i,1928:2/4i>3/4@99>4/4i,1929:3/4i>4/4@99>1/4i,1931:1/4i>2/4@99>3/4i,1932:2/4i>3/4@99>4/4i,1933:3/4i>4/4@99>1/4i,1935:1/4i>2/4@99>3/4i,1942:2/4s>3/4@99>4/4i,1943:3/4i>4/4@99>1/4s,1949:1/4i>2/4@99>3/4i,1950:2/4i>3/4@99>4/4s,1954:2/4d>3/4@99>4/4s,1957:1/4s>2/4@99>3/4s,1961:1/4i>2/4@99>3/4i,1962:2/4i>3/4@99>4/4i,1963:3/4i>4/4@99>1/4s,1966:2/4d>3/4@99>4/4i,1967:3/4i>4/4@99>1/4i,1971:3/4s>4/4@99>1/4i,1973:1/4i>2/4@99>3/4d,1977:1/4i>2/4@99>3/4i,1978:2/4i>3/4@99>4/4s,1981:1/4i>2/4@99>3/4i,1982:2/4i>3/4@99>4/4i,1983:3/4i>4/4@99>1/4i,1985:1/4i>2/4@99>3/4s,1989:1/4s>2/4@99>3/4i,1990:2/4i>3/4@99>4/4i,1991:3/4i>4/4@99>1/4i,1993:1/4i>2/4@99>3/4i,1994:2/4i>3/4@99>4/4i,1995:3/4i>4/4@99>1/4d,1997:1/4d>2/4@99>3/4i,1998:2/4i>3/4@99>4/4s,2001:1/4i>2/4@99>3/4i,2002:2/4i>3/4@99>4/4d,2005:1/4i>2/4@99>3/4i,2006:2/4i>3/4@99>4/4s,2009:1/4s>2/4@99>3/4i,2010:2/4i>3/4@99>4/4d,2018:2/4s>3/4@99>4/4s,2022:2/4d>3/4@99>4/4d,2025:1/4s>2/4@99>3/4s,2030:2/4d>3/4@99>4/4s,2043:2/4d>3/4@99>4/4i,2044:3/4i>4/4@99>1/4i,2049:1/4i>2/4@99>3/4s,2053:1/4i>2/4@99>3/4i,2054:2/4i>3/4@99>4/4i,2055:3/4i>4/4@99>1/4i,2057:1/4i>2/4@99>3/4i,2058:2/4i>3/4@99>4/4i,2059:3/4i>4/4@99>1/4i,2061:1/4i>2/4@99>3/4i,2062:2/4i>3/4@99>4/4i,2063:3/4i>4/4@99>1/4i,2065:1/4i>2/4@99>3/4i,2066:2/4i>3/4@99>4/4i,2067:3/4i>4/4@99>1/4i,2069:1/4i>2/4@99>3/4i,2070:2/4i>3/4@99>4/4i,2071:3/4i>4/4@99>1/4i,2073:1/4i>2/4@99>3/4i,2074:2/4i>3/4@99>4/4i,2075:3/4i>4/4@99>1/4i,2077:1/4i>2/4@99>3/4i,2078:2/4i>3/4@99>4/4i,2079:3/4i>4/4@99>1/4i,2081:1/4i>2/4@99>3/4i,2082:2/4i>3/4@99>4/4i,2083:3/4i>4/4@99>1/4i,2085:1/4i>2/4@99>3/4i,2086:2/4i>3/4@99>4/4i,2087:3/4i>4/4@99>1/4i,2089:1/4i>2/4@99>3/4i,2090:2/4i>3/4@99>4/4i,2091:3/4i>4/4@99>1/4i,2093:1/4i>2/4@99>3/4i,2094:2/4i>3/4@99>4/4i,2095:3/4i>4/4@99>1/4i,2097:1/4i>2/4@99>3/4i,2098:2/4i>3/4@99>4/4i,2099:3/4i>4/4@99>1/4i,2101:1/4i>2/4@99>3/4i,2102:2/4i>3/4@99>4/4i,2103:3/4i>4/4@99>1/4i,2105:1/4i>2/4@99>3/4i,2106:2/4i>3/4@99>4/4i,2107:3/4i>4/4@99>1/4i,2109:1/4i>2/4@99>3/4i,2110:2/4i>3/4@99>4/4i,2111:3/4i>4/4@99>1/4i,2113:1/4i>2/4@99>3/4i,2114:2/4i>3/4@99>4/4i,2115:3/4i>4/4@99>1/4i,2117:1/4i>2/4@99>3/4i,2118:2/4i>3/4@99>4/4i,2119:3/4i>4/4@99>1/4i,2121:1/4i>2/4@99>3/4i,2122:2/4i>3/4@99>4/4i,2123:3/4i>4/4@99>1/4i,2125:1/4i>2/4@99>3/4i,2126:2/4i>3/4@99>4/4i,2127:3/4i>4/4@99>1/4i,2129:1/4i>2/4@99>3/4i,2130:2/4i>3/4@99>4/4i,2131:3/4i>4/4@99>1/4i,2136:1/4i>2/4@99>3/4i,2137:2/4i>3/4@99>4/4i,2138:3/4i>4/4@99>1/4d,2140:1/4d>2/4@99>3/4d,2168:1/4s>2/4@99>3/4d,2172:1/4s>2/4@99>3/4s,2174:3/4s>4/4@99>1/4i,2180:1/4s>2/4@99>3/4s,2193:2/4s>3/4@99>4/4d,2208:1/4i>2/4@99>3/4s,2212:1/4i>2/4@99>3/4d,2214:3/4d>4/4@99>1/4d,2216:1/4d>2/4@99>3/4s,2224:1/4d>2/4@99>3/4s,2228:1/4s>2/4@99>3/4s,2234:3/4s>4/4@99>1/4i,2248:1/4i>2/4@99>3/4i,2272:1/4d>2/4@99>3/4s,2277:2/4d>3/4@99>4/4i,2278:3/4i>4/4@99>1/4i,2281:3/4i>4/4@99>1/4i,2294:1/4i>2/4@99>3/4i,2295:2/4i>3/4@99>4/4i,2296:3/4i>4/4@99>1/4i,2298:1/4i>2/4@99>3/4i,2299:2/4i>3/4@99>4/4i,2300:3/4i>4/4@99>1/4i,2302:1/4i>2/4@99>3/4i,2303:2/4i>3/4@99>4/4i,2308:2/4s>3/4@99>4/4i,2309:3/4i>4/4@99>1/4i,2312:2/4d>3/4@99>4/4s,2321:3/4s>4/4@99>1/4d,2333:3/4s>4/4@99>1/4d,2375:1/4s>2/4@99>3/4s,2393:3/4s>4/4@99>1/4d,2417:3/4d>4/4@99>1/4i,2421:3/4s>4/4@99>1/4s,2427:1/4d>2/4@99>3/4s,2463:1/4s>2/4@99>3/4d,2471:1/4d>2/4@99>3/4s,2481:3/4d>4/4@99>1/4i,2483:1/4i>2/4@99>3/4s,2485:3/4s>4/4@99>1/4s,2497:3/4s>4/4@99>1/4i,2503:1/4s>2/4@99>3/4i,2504:2/4i>3/4@99>4/4s,2509:3/4d>4/4@99>1/4i,2515:1/4d>2/4@99>3/4d,2529:3/4s>4/4@99>1/4s,2535:1/4d>2/4@99>3/4s,2548:2/4s>3/4@99>4/4d,2591:1/4s>2/4@99>3/4s,2619:3/4d>4/4@99>1/4s,2622:2/4s>3/4@99>4/4s,2631:3/4s>4/4@99>1/4s,2667:3/4s>4/4@99>1/4s,2671:3/4s>4/4@99>1/4d,2674:2/4d>3/4@99>4/4s,2677:1/4s>2/4@99>3/4d,2689:1/4d>2/4@99>3/4s,2701:1/4i>2/4@99>3/4s,2713:1/4i>2/4@99>3/4d
+~1:->3/4@85>4/4i,2:3/4i>4/4@85>1/4s,7:4/4i>1/4@89>2/4i,11:4/4i>1/4@75>2/4i,15:4/4i>1/4@89>2/4i,19:4/4i>1/4@68>4/4s,21:4/4s>1/4@89>2/4i,25:4/4i>1/4@89>2/4i,29:4/4i>1/4@89>2/4i,33:4/4d>1/4@89>2/4d,53:4/4d>1/4@89>2/4d,57:4/4i>1/4@89>2/4i,77:4/4d>1/4@89>2/4s,81:4/4s>1/4@89>2/4s,85:4/4s>1/4@85>2/4d,89:4/4i>1/4@68>2/4i,90:1/4i>2/4@50>3/4s,97:4/4s>1/4@89>2/4d,101:4/4s>1/4@89>2/4s,117:4/4i>1/4@50>2/4d,125:4/4d>1/4@89>2/4d,133:4/4d>1/4@87>2/4s,137:4/4s>1/4@50>2/4s,149:4/4i>1/4@89>2/4s,157:4/4d>1/4@89>2/4d,173:4/4s>1/4@89>2/4d,177:4/4d>1/4@89>2/4d,185:4/4s>1/4@89>2/4d,197:4/4d>1/4@86>2/4d,201:4/4d>1/4@50>2/4d,205:4/4s>1/4@86>2/4s,230:1/4d>2/4@50>3/4d,233:4/4s>1/4@86>2/4s,265:4/4s>1/4@89>2/4d,269:4/4s>1/4@89>2/4i,285:4/4d>1/4@89>2/4d,293:4/4d>1/4@87>2/4s,297:4/4d>1/4@50>2/4d,301:4/4d>1/4@86>2/4s,305:4/4d>1/4@89>2/4i,325:4/4s>1/4@86>2/4s,327:2/4s>3/4@68>4/4i,328:3/4i>4/4@50>1/4i,329:4/4i>1/4@86>2/4d,336:3/4s>4/4@50>1/4d,346:1/4s>2/4@50>3/4d,353:4/4s>1/4@50>2/4s,365:4/4s>1/4@50>2/4d,381:4/4s>1/4@89>2/4s,407:2/4d>3/4@50>4/4d,409:4/4d>1/4@68>2/4i,410:1/4i>2/4@50>3/4s,421:4/4d>1/4@89>2/4d,425:4/4d>1/4@89>2/4s,429:4/4s>1/4@89>2/4s,457:4/4s>1/4@89>2/4d,475:2/4d>3/4@50>4/4s,481:4/4i>1/4@50>2/4d,488:3/4d>4/4@50>1/4s,497:4/4d>1/4@89>2/4d,509:4/4d>1/4@89>2/4d,525:4/4s>1/4@89>2/4d,536:3/4s>4/4@50>4/4d,541:4/4s>1/4@68>4/4s,551:4/4s>1/4@50>2/4d,567:4/4i>1/4@89>2/4i,583:4/4d>1/4@50>2/4i,584:1/4i>2/4@50>3/4s,595:4/4d>1/4@83>2/4s,597:2/4s>3/4@50>4/4s,599:4/4s>1/4@50>2/4i,600:1/4i>2/4@68>3/4i,601:2/4i>3/4@85>4/4s,611:4/4s>1/4@89>2/4i,619:4/4s>1/4@89>2/4d,639:4/4s>1/4@89>2/4i,646:3/4s>4/4@60>1/4s,655:4/4s>1/4@50>2/4d,660:4/4d>2/4@50>3/4s,684:1/4s>2/4@50>3/4d,695:4/4d>1/4@50>2/4d,707:4/4s>1/4@89>2/4s,719:4/4s>1/4@89>2/4s,728:1/4s>2/4@50>3/4i,729:2/4i>3/4@68>4/4s,732:1/4d>2/4@68>3/4i,733:2/4i>3/4@50>4/4s,741:2/4s>3/4@50>4/4s,771:4/4s>1/4@89>2/4i,775:4/4s>1/4@89>2/4s,807:4/4d>1/4@86>2/4d,811:4/4s>1/4@50>2/4d,815:4/4s>1/4@86>2/4i,823:4/4d>1/4@50>2/4i,824:1/4i>2/4@50>4/4s,826:4/4s>4/4@68>1/4s,831:4/4i>1/4@86>2/4s,836:1/4s>2/4@50>1/4s,839:4/4s>1/4@86>2/4s,859:4/4s>1/4@89>2/4s,863:4/4s>1/4@89>2/4s,867:4/4d>1/4@89>2/4s,879:4/4s>1/4@50>2/4s,887:4/4i>1/4@50>2/4s,901:2/4s>3/4@50>4/4s,905:2/4s>3/4@50>4/4d,915:4/4s>1/4@50>2/4s,931:4/4s>1/4@89>2/4d,943:4/4s>1/4@89>2/4s,963:4/4s>1/4@89>2/4d,967:4/4d>1/4@86>2/4s,969:2/4s>3/4@50>4/4d,971:4/4d>1/4@85>2/4s,975:4/4i>1/4@89>2/4d,979:4/4s>1/4@89>2/4s,987:4/4s>1/4@89>2/4d,991:4/4s>1/4@89>2/4s,999:4/4d>1/4@89>2/4s,1031:4/4s>1/4@89>2/4i,1035:4/4i>1/4@80>2/4i,1038:3/4s>4/4@50>1/4i,1039:4/4i>1/4@80>2/4i,1040:1/4i>2/4@85>3/4s,1043:4/4i>1/4@70>2/4i,1047:4/4i>1/4@68>2/4i,1048:1/4i>2/4@50>3/4s,1051:4/4s>1/4@82>2/4i,1055:4/4i>1/4@80>2/4i,1059:4/4i>1/2@89>2/4i,1060:1/2i>2/4@50>3/4i,1061:2/4i>3/4@85>4/4i,1062:3/4i>4/4@85>1/4i,1063:4/4i>1/4@89>2/4i,1064:1/4i>2/4@85>3/4i,1065:2/4i>3/4@85>4/4i,1066:3/4i>4/4@85>1/4i,1067:4/4i>1/4@89>2/4i,1068:1/4i>2/4@85>3/4i,1069:2/4i>3/4@85>4/4s,1071:4/4s>1/4@68>2/2i,1072:1/4i>2/2@50>1/4s,1074:1/4s>4/4@68>1/4i,1075:4/4i>1/4@85>2/4i,1076:1/4i>2/4@85>3/4s,1079:4/4i>1/4@89>2/4i,1083:4/4i>1/4@75>2/4i,1087:4/4i>1/4@68>2/4i,1088:1/4i>2/4@50>3/4i,1089:2/4i>3/4@50>4/4s,1091:4/4s>1/4@68>2/4i,1092:1/4i>2/4@50>3/4s,1095:4/4i>1/4@68>2/4i,1096:1/4i>2/4@50>3/4s,1099:4/4i>1/4@75>2/4i,1103:4/4i>1/4@75>2/4i,1107:4/4i>1/4@68>2/4i,1108:1/4i>2/4@50>3/4s,1111:4/4i>1/4@68>2/4i,1112:1/4i>2/4@50>3/4s,1115:4/4i>1/4@80>2/4i,1119:4/4i>1/4@89>2/4i,1123:4/4i>1/4@89>2/4i,1131:4/4i>1/4@89>2/4i,1139:4/4i>1/4@75>2/4i,1143:4/4i>1/4@50>2/4i,1144:1/4i>2/4@68>3/4i,1145:2/4i>3/4@85>4/4i,1146:3/4i>4/4@85>1/4i,1147:4/4i>1/4@75>2/4i,1148:1/4i>2/4@85>3/4s,1151:4/4i>1/4@89>2/4i,1155:4/4i>1/4@80>2/4i,1158:3/4s>4/4@68>4/4s,1160:4/4s>2/4@50>1/4s,1163:4/4s>1/4@85>2/4i,1171:4/4d>1/4@89>2/4s,1187:4/4d>1/4@89>2/4s,1199:4/4d>1/4@87>2/4d,1203:4/4s>1/4@50>2/4s,1207:4/4s>1/4@50>2/4d,1216:1/4s>2/4@50>3/4s,1223:4/4i>1/4@89>2/4d,1235:4/4s>1/4@89>2/4d,1239:4/4d>1/4@89>2/4s,1259:4/4s>1/4@89>2/4s,1263:4/4s>1/4@89>2/4d,1276:1/4d>2/4@50>1/4s,1279:4/4d>1/4@87>2/4s,1307:4/4s>1/4@89>2/4d,1333:2/4s>3/4@50>4/4i,1334:3/4i>4/4@68>1/4i,1335:4/4i>1/4@83>2/4s,1340:1/4d>2/4@50>3/4d,1349:2/4d>3/4@50>4/4s,1355:4/4s>1/4@89>2/4s,1363:4/4s>1/4@87>2/4s,1367:4/4d>1/4@50>2/4d,1375:4/4s>1/4@89>2/4s,1379:4/4d>1/4@89>2/4s,1383:4/4d>1/4@89>2/4d,1391:4/4d>1/4@89>2/4d,1425:2/4s>3/4@50>4/4s,1427:4/4s>1/4@87>2/4s,1440:1/4d>2/4@50>3/4s,1452:1/4s>2/4@50>3/4i,1453:2/4i>3/4@68>4/4s,1471:4/4s>1/4@50>2/4s,1480:1/4s>2/4@60>2/4d,1495:4/4i>1/4@89>2/4i,1503:4/4i>1/4@89>2/4s,1507:4/4s>1/4@89>2/4s,1515:4/4d>1/4@68>2/4i,1516:1/4i>2/4@50>3/4i,1517:2/4i>3/4@50>4/4s,1532:1/4s>2/4@68>3/4i,1533:2/4i>3/4@50>4/4s,1535:4/4s>1/4@86>2/4s,1547:4/4s>1/4@89>2/4i,1566:3/4s>4/4@50>1/4d,1580:1/4s>2/4@50>3/4d,1591:4/4s>1/4@87>2/4s,1594:3/4s>4/4@50>1/4d,1615:4/4s>1/4@89>2/4d,1627:4/4s>1/4@89>2/4s,1639:4/4s>1/4@89>2/4s,1654:3/4s>4/4@50>1/4i,1655:4/4i>1/4@84>2/4s,1660:1/4s>2/4@60>3/4d,1663:4/4s>1/4@86>2/4i,1671:4/4d>1/4@89>2/4s,1675:4/4s>1/4@89>2/4d,1691:4/4s>1/4@86>2/4i,1695:4/4d>1/4@50>2/4d,1699:4/4s>1/4@85>2/4s,1703:4/4s>1/4@89>2/4i,1715:4/4s>1/4@50>2/4s,1719:4/4d>1/4@86>2/4s,1727:4/4s>1/4@86>2/4s,1730:3/4s>4/4@50>1/4s,1736:1/4d>2/4@60>3/4s,1738:3/4s>2/4@85>1/4i,1739:2/4i>1/4@86>2/4s,1751:4/4s>4/4@50>1/4i,1752:4/4i>1/4@85>2/4i,1753:1/4i>2/4@85>3/4i,1754:2/4i>3/4@85>4/4i,1755:3/4i>4/4@85>1/5i,1756:4/4i>1/5@85>2/5i,1757:1/5i>2/5@85>3/5i,1758:2/5i>3/5@85>4/5i,1759:3/5i>4/5@85>5/5i,1760:4/5i>5/5@85>1/4i,1761:5/5i>1/4@50>2/4i,1765:4/4i>1/4@75>2/4i,1766:1/4i>2/4@75>3/4i,1769:4/4i>1/4@75>2/4i,1770:1/4i>2/4@50>3/4i,1772:3/4i>4/4@50>1/4i,1773:4/4i>1/4@75>1/4d,1775:1/4d>1/4@68>2/4i,1776:1/4i>2/4@85>3/4i,1777:2/4i>3/4@85>4/4i,1778:3/4i>4/4@85>1/4s,1783:4/4i>1/4@89>2/4i,1787:4/4i>1/4@75>2/4i,1791:4/4i>1/4@75>2/4i,1795:4/4i>1/4@89>2/4i,1796:1/4i>2/4@68>4/4s,1798:4/4s>4/4@68>1/4i,1799:4/4i>1/4@85>2/4i,1800:1/4i>2/4@85>3/4i,1801:2/4i>3/4@85>4/4i,1802:3/4i>4/4@85>1/4i,1803:4/4i>1/4@85>2/4i,1804:1/4i>2/4@85>3/4i,1805:2/4i>3/4@85>4/4i,1806:3/4i>4/4@85>1/4i,1807:4/4i>1/4@85>2/4i,1808:1/4i>2/4@85>3/4i,1809:2/4i>3/4@85>4/4i,1810:3/4i>4/4@85>1/4i,1811:4/4i>1/4@85>2/4i,1812:1/4i>2/4@85>3/4i,1813:2/4i>3/4@85>4/4i,1814:3/4i>4/4@85>1/4i,1815:4/4i>1/4@85>2/4i,1816:1/4i>2/4@85>3/4i,1817:2/4i>3/4@85>4/4i,1818:3/4i>4/4@85>1/4i,1819:4/4i>1/4@85>2/4i,1820:1/4i>2/4@85>3/4i,1821:2/4i>3/4@85>4/4i,1822:3/4i>4/4@85>1/4s,1827:4/4i>1/4@89>2/4i,1831:4/4i>1/4@68>2/2i,1832:1/4i>2/2@50>1/4s,1834:1/4s>1/4@50>2/4i,1835:1/4i>2/4@85>3/4i,1836:2/4i>3/4@85>4/4i,1837:3/4i>4/4@85>1/4i,1838:4/4i>1/4@50>2/4i,1842:4/4i>1/4@75>2/4i,1845:3/4i>4/4@89>1/4i,1846:4/4i>1/4@89>4/4s,1848:4/4s>1/4@89>2/4i,1852:4/4i>1/4@89>2/4i,1856:4/4i>1/4@75>2/4i,1860:4/4i>1/4@75>2/4i,1864:4/4i>1/4@75>2/4i,1868:4/4i>1/4@75>2/4i,1872:4/4i>1/4@75>2/4i,1876:4/4i>1/4@75>2/4i,1880:4/4i>1/4@89>2/4i,1881:1/4i>2/4@68>3/3i,1882:2/4i>3/3@50>1/4s,1887:4/4i>1/4@89>2/4i,1891:4/4i>1/4@75>2/4i,1895:4/4i>1/4@89>2/4i,1896:1/4i>2/4@68>3/3i,1897:2/4i>3/3@50>1/4s,1899:1/4s>1/4@68>2/4i,1900:1/4i>2/4@85>3/4i,1901:2/4i>3/4@85>4/4i,1902:3/4i>4/4@85>1/4i,1903:4/4i>1/4@50>2/4i,1904:1/4i>2/4@68>3/4i,1905:2/4i>3/4@50>4/4i,1906:3/4i>4/4@68>1/4i,1907:4/4i>1/4@75>2/4i,1908:1/4i>2/4@85>3/4i,1909:2/4i>3/4@85>4/4i,1910:3/4i>4/4@85>1/4i,1911:4/4i>1/4@89>2/4i,1912:1/4i>2/4@85>3/4i,1913:2/4i>3/4@85>4/4i,1914:3/4i>4/4@85>4/4s,1916:4/4s>1/4@89>2/4i,1919:3/4i>4/4@68>4/4s,1921:4/4s>1/4@89>2/4i,1924:3/4i>4/4@68>4/4s,1926:4/4s>1/4@89>2/4i,1930:4/4i>1/4@89>2/4i,1934:4/4i>1/4@89>2/4i,1936:2/4i>3/4@50>2/4d,1948:4/4d>1/4@89>2/4i,1952:4/4s>1/4@89>2/4d,1960:4/4s>1/4@89>2/4i,1968:4/4i>1/4@89>2/4d,1972:4/4i>1/4@89>2/4i,1976:4/4s>1/4@89>2/4i,1980:4/4s>1/4@89>2/4i,1984:4/4i>1/4@89>2/4i,1992:4/4i>1/4@89>2/4i,2000:4/4s>1/4@89>2/4i,2004:4/4d>1/4@89>2/4i,2012:4/4d>1/4@68>2/2i,2013:1/4i>2/2@50>1/4s,2015:1/4s>2/2@50>1/4s,2020:4/4s>1/4@89>2/4d,2033:1/4d>2/4@50>3/4d,2036:4/4d>1/4@86>2/4d,2040:4/4s>1/4@89>2/4i,2041:1/4i>2/4@68>2/4d,2045:4/4i>1/4@89>2/4i,2046:1/4i>2/4@50>4/4d,2048:4/4d>1/4@89>2/4i,2052:4/4d>1/4@89>2/4i,2056:4/4i>1/4@89>2/4i,2060:4/4i>1/4@75>2/4i,2064:4/4i>1/4@75>2/4i,2068:4/4i>1/4@75>2/4i,2072:4/4i>1/4@75>2/4i,2076:4/4i>1/4@75>2/4i,2080:4/4i>1/4@75>2/4i,2084:4/4i>1/4@75>2/4i,2088:4/4i>1/4@75>2/4i,2092:4/4i>1/4@75>2/4i,2096:4/4i>1/4@75>2/4i,2100:4/4i>1/4@75>2/4i,2104:4/4i>1/4@75>2/4i,2108:4/4i>1/4@75>2/4i,2112:4/4i>1/4@75>2/4i,2116:4/4i>1/4@75>2/4i,2120:4/4i>1/4@75>2/4i,2124:4/4i>1/4@75>2/4i,2128:4/4i>1/4@75>2/4i,2132:4/4i>1/4@89>2/4i,2133:1/4i>2/4@68>4/4s,2135:4/4s>1/4@89>2/4i,2151:4/4d>1/4@89>2/4s,2163:4/4s>1/4@89>2/4s,2175:4/4i>1/4@80>2/4i,2176:1/4i>2/4@68>2/4i,2177:2/4i>2/4@50>3/4i,2178:2/4i>3/4@50>1/4s,2191:4/4s>1/4@89>2/4s,2207:4/4s>1/4@89>2/4i,2211:4/4s>1/4@89>2/4i,2235:4/4i>1/4@86>2/4s,2238:3/4s>4/4@50>1/4i,2239:4/4i>1/4@85>2/4s,2243:4/4s>1/4@85>2/4d,2247:4/4d>1/4@85>2/4i,2249:2/4i>3/4@68>4/4i,2250:3/4i>4/4@50>1/4s,2255:4/4d>1/4@87>2/4d,2263:4/4d>1/4@89>2/4s,2275:4/4d>1/4@85>2/4d,2279:4/4i>1/4@68>3/4i,2280:1/4i>3/4@50>4/4i,2282:4/4i>1/4@75>2/4i,2283:1/4i>2/4@50>3/4i,2284:2/4i>3/4@50>4/4s,2286:4/4s>1/4@84>2/4d,2290:4/4d>1/4@89>2/4i,2291:1/4i>2/4@68>4/4s,2293:4/4s>1/4@89>2/4i,2297:4/4i>1/4@89>2/4i,2301:4/4i>1/4@89>2/4i,2304:3/4i>4/4@68>4/4s,2306:4/4s>1/4@89>2/4s,2310:4/4i>1/4@89>2/4d,2326:4/4d>1/4@89>2/4d,2342:4/4d>1/4@89>2/4s,2350:4/4s>1/4@89>2/4d,2358:4/4d>1/4@89>2/4d,2370:4/4s>1/4@89>2/4d,2410:4/4s>1/4@89>2/4d,2414:4/4s>1/4@89>2/4d,2418:4/4i>1/4@89>2/4s,2442:4/4d>1/4@50>2/4d,2444:2/4d>3/4@50>4/4d,2450:4/4s>1/4@89>2/4d,2460:2/4s>3/4@68>4/4i,2461:3/4i>4/4@50>1/4s,2473:3/4s>4/4@60>1/4s,2482:4/4i>1/4@89>2/4i,2498:4/4i>1/4@89>2/4s,2506:4/4s>1/4@89>2/4s,2510:4/4i>1/4@89>2/4s,2533:3/4d>4/4@50>1/4d,2538:4/4s>1/4@86>2/4s,2556:2/4s>3/4@50>4/4d,2574:4/4s>1/4@50>2/4i,2575:1/4i>2/4@68>3/4s,2598:4/4d>1/4@89>2/4s,2609:3/4s>4/4@68>3/4d,2616:4/4s>1/4@89>2/4d,2628:4/4d>1/4@50>2/4d,2638:2/4d>3/4@50>4/4d,2660:4/4s>1/4@50>2/4i,2661:1/4i>2/4@68>3/4d,2681:1/4s>2/4@68>4/4d,2683:4/4d>4/4@50>1/4s,2700:4/4d>1/4@89>2/4i,2709:1/4s>2/4@50>3/4d,2712:4/4s>1/4@86>2/4i
+✗-
+[UI:2e436564] ART_670.pdf DOC:679 COM:617 INC:62 INF:871
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CASTRO_5.pdf | 5p 1.5s 298ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:5 COM:0(0%) INC:5 INF:0
+OCR: direct:5
+DOCS: 5total → 0ok+5bad(seq:0 under:5) | dist: 2p×5
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:5 P:P=1 conf=45% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CASTRO_5.pdf DOC:5 COM:0 INC:5 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CASTRO_15.pdf | 15p 2.2s 144ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:15 COM:0(0%) INC:15 INF:0
+OCR: direct:15
+DOCS: 15total → 0ok+15bad(seq:0 under:15) | dist: 2p×15
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:15 P:P=1 conf=45% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CASTRO_15.pdf DOC:15 COM:0 INC:15 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH_9.pdf | 17p 2.2s 127ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:9 COM:8(89%) INC:1 INF:0
+OCR: direct:17
+DOCS: 9total → 8ok+1bad(seq:0 under:1) | dist: 2p×9
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:9 P:P=2 conf=86% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CH_9.pdf DOC:9 COM:8 INC:1 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH_39.pdf | 78p 6.2s 79ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:39 COM:36(92%) INC:3 INF:1
+OCR: direct:75,super_resolution:2,failed:1
+DOCS: 39total → 36ok+3bad(seq:0 under:3) | dist: 1p×1 2p×36 3p×2
+INF: 1total(low:0 mid:0 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:39 P:P=2 conf=96% expect=2
+INF:1 x̄=68% 0✓1~0✗
+✓-
+~64:1/1s>2/2@68>1/2d
+✗-
+[UI:2e436564] CH_39.pdf DOC:39 COM:36 INC:3 INF:1
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH_51docs.pdf | 102p 7.4s 73ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:50 COM:42(84%) INC:8 INF:1
+OCR: direct:101,failed:1
+DOCS: 50total → 42ok+8bad(seq:1 under:7) | dist: 1p×1 2p×42 3p×7
+INF: 1total(low:0 mid:0 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:50 P:P=2 conf=92% expect=2
+INF:1 x̄=68% 0✓1~0✗
+✓-
+~32:1/1d>2/2@68>1/2d
+✗-
+[UI:2e436564] CH_51docs.pdf DOC:50 COM:42 INC:8 INF:1
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH_74docs.pdf | 150p 10.8s 72ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:74 COM:58(78%) INC:16 INF:2
+OCR: direct:147,failed:2,super_resolution:1
+DOCS: 74total → 58ok+16bad(seq:0 under:16) | dist: 1p×2 2p×56 3p×16
+INF: 2total(low:0 mid:0 hi:2) | LOW: none
+FAIL: none
+[DS:2e436564] D:74 P:P=2 conf=86% expect=2
+INF:2 x̄=68% 0✓2~0✗
+✓-
+~4:1/1d>2/2@67>1/3d,131:1/1d>2/2@68>1/2d
+✗-
+[UI:2e436564] CH_74docs.pdf DOC:74 COM:58 INC:16 INF:2
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CH_BSM_18.pdf | 36p 3.4s 94ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:18 COM:16(89%) INC:2 INF:0
+OCR: direct:36
+DOCS: 18total → 16ok+2bad(seq:1 under:1) | dist: 2p×16 3p×2
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:18 P:P=2 conf=96% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CH_BSM_18.pdf DOC:18 COM:16 INC:2 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CHAR_17.PDF | 17p 2.6s 152ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:17 COM:7(41%) INC:10 INF:0
+OCR: direct:16,super_resolution:1
+DOCS: 17total → 7ok+10bad(seq:0 under:10) | dist: 1p×7 2p×9 4p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:17 P:P=1 conf=45% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CHAR_17.PDF DOC:17 COM:7 INC:10 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CHAR_25.pdf | 53p 7.2s 137ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:25 COM:11(44%) INC:14 INF:2
+OCR: direct:46,failed:2,super_resolution:4,easyocr:1
+DOCS: 25total → 11ok+14bad(seq:2 under:12) | dist: 1p×1 2p×11 3p×2 4p×10 5p×1
+INF: 2total(low:0 mid:0 hi:2) | LOW: none
+FAIL: none
+[DS:2e436564] D:25 P:P=2 conf=67% expect=2
+INF:2 x̄=83% 1✓1~0✗
+✓53:1/3d>2/3@99>-
+~13:1/1d>2/2@67>1/3d
+✗-
+[UI:2e436564] CHAR_25.pdf DOC:25 COM:11 INC:14 INF:2
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] CRS_9.pdf | 19p 2.5s 131ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:9 COM:8(89%) INC:1 INF:0
+OCR: direct:19
+DOCS: 9total → 8ok+1bad(seq:0 under:1) | dist: 2p×7 3p×2
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:9 P:P=2 conf=79% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] CRS_9.pdf DOC:9 COM:8 INC:1 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] INS_31.pdf.pdf | 31p 3.9s 127ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:31 COM:31(100%) INC:0 INF:2
+OCR: direct:28,super_resolution:2,failed:1
+DOCS: 31total → 31ok+0bad | dist: 1p×31
+INF: 2total(low:0 mid:1 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:31 P:P=1 conf=72% expect=1
+INF:2 x̄=68% 0✓2~0✗
+✓-
+~27:1/1d>1/1@86>1/1d,30:1/1d>1/1@50>1/1s
+✗-
+[UI:2e436564] INS_31.pdf.pdf DOC:31 COM:31 INC:0 INF:2
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] INSAP_20.pdf | 31p 4.8s 154ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:19 COM:4(21%) INC:15 INF:1
+OCR: direct:28,failed:1,easyocr:2
+DOCS: 19total → 4ok+15bad(seq:1 under:14) | dist: 2p×13 3p×6
+INF: 1total(low:0 mid:0 hi:1) | LOW: none
+FAIL: none
+[DS:2e436564] D:19 P:P=2 conf=53% expect=2
+INF:1 x̄=99% 1✓0~0✗
+✓12:2/3d>3/3@99>1/3d
+~-
+✗-
+[UI:2e436564] INSAP_20.pdf DOC:19 COM:4 INC:15 INF:1
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] JOGA_19.pdf | 38p 3.5s 92ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:19 COM:4(21%) INC:15 INF:0
+OCR: direct:38
+DOCS: 19total → 4ok+15bad(seq:0 under:15) | dist: 2p×4 3p×15
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:19 P:P=2 conf=69% expect=3
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] JOGA_19.pdf DOC:19 COM:4 INC:15 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] QUEVEDO_1.pdf | 2p 1.4s 709ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:1 COM:0(0%) INC:1 INF:0
+OCR: direct:2
+DOCS: 1total → 0ok+1bad(seq:0 under:1) | dist: 3p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:1 P:none
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] QUEVEDO_1.pdf DOC:1 COM:0 INC:1 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] QUEVEDO_2.pdf | 4p 2.3s 566ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:2 COM:1(50%) INC:1 INF:0
+OCR: direct:3,super_resolution:1
+DOCS: 2total → 1ok+1bad(seq:0 under:1) | dist: 2p×1 3p×1
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:2 P:P=2 conf=60% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] QUEVEDO_2.pdf DOC:2 COM:1 INC:1 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] QUEVEDO_13.pdf | 26p 2.8s 109ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:13 COM:8(62%) INC:5 INF:0
+OCR: direct:26
+DOCS: 13total → 8ok+5bad(seq:1 under:4) | dist: 2p×8 3p×5
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:13 P:P=2 conf=87% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] QUEVEDO_13.pdf DOC:13 COM:8 INC:5 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] RACO_25.pdf | 43p 4.3s 99ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:25 COM:10(40%) INC:15 INF:0
+OCR: direct:42,super_resolution:1
+DOCS: 25total → 10ok+15bad(seq:0 under:15) | dist: 2p×10 3p×15
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:25 P:P=2 conf=48% expect=3
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] RACO_25.pdf DOC:25 COM:10 INC:15 INF:0
+[AI:2e436564] [MOD:v3.1-fix] [CUDA:e4391a88] SAEZ_14.pdf | 24p 2.5s 106ms/p | W6+GPU | INF:s2t-helena
+PRE5≡ DOC:14 COM:10(71%) INC:4 INF:0
+OCR: direct:24
+DOCS: 14total → 10ok+4bad(seq:0 under:4) | dist: 2p×14
+INF: 0total(low:0 mid:0 hi:0) | LOW: none
+FAIL: none
+[DS:2e436564] D:14 P:P=2 conf=78% expect=2
+INF:0 x̄=0% 0✓0~0✗
+✓-
+~-
+✗-
+[UI:2e436564] SAEZ_14.pdf DOC:14 COM:10 INC:4 INF:0
+
+
+2026-03-24 17:57:49,626 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+←[32mINFO←[0m:     Will watch for changes in these directories: ['A:\\PROJECTS\\PDFoverseer']
+←[32mINFO←[0m:     Uvicorn running on ←[1mhttp://127.0.0.1:8000←[0m (Press CTRL+C to quit)
+←[32mINFO←[0m:     Started reloader process [←[36m←[1m5084←[0m] using ←[36m←[1mWatchFiles←[0m
+2026-03-24 17:57:54,690 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:57:54,811 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+←[32mINFO←[0m:     Started server process [←[36m34008←[0m]
+←[32mINFO←[0m:     Waiting for application startup.
+←[32mINFO←[0m:     Application startup complete.
+←[32mINFO←[0m:     127.0.0.1:61932 - "←[1mGET /ui/ HTTP/1.1←[0m" ←[33m304 Not Modified←[0m
+←[32mINFO←[0m:     127.0.0.1:57131 - "WebSocket /ws?session_id=21f8eb29-fe2b-4879-bde4-998521ac4131" [accepted]
+←[32mINFO←[0m:     connection open
+←[32mINFO←[0m:     127.0.0.1:60143 - "←[1mGET /api/state HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:61932 - "←[1mGET /ui/ HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     connection closed
+←[32mINFO←[0m:     127.0.0.1:61932 - "←[1mGET /ui/assets/index-Bnk4kCCw.js HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:60359 - "←[1mGET /ui/assets/index-BYR_d3Mh.css HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:52783 - "WebSocket /ws?session_id=b07592d9-c911-4d88-bf57-a35810fa53a4" [accepted]
+←[32mINFO←[0m:     connection open
+←[32mINFO←[0m:     127.0.0.1:60143 - "←[1mOPTIONS /api/state HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:60143 - "←[1mGET /api/state HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:61932 - "←[1mGET /ui/vite.svg HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:60143 - "←[1mGET /api/browse HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:60143 - "←[1mPOST /api/start HTTP/1.1←[0m" ←[32m200 OK←[0m
+2026-03-24 17:58:15,408 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:15,408 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:15,782 [ERROR] pdfoverserver: Error procesando ALUM_1.pdf
+Traceback (most recent call last):
+  File "A:\PROJECTS\PDFoverseer\api\worker.py", line 156, in _process_pdfs
+    docs, reads = analyze_pdf(
+  File "A:\PROJECTS\PDFoverseer\core\pipeline.py", line 324, in analyze_pdf
+    documents = inference._build_documents(reads_clean, on_log, _issue, period_info)
+  File "A:\PROJECTS\PDFoverseer\core\inference.py", line 592, in _build_documents
+    elif period_info and period_info.get("period", 1) > 1 and current.declared_total == 1:
+TypeError: '>' not supported between instances of 'NoneType' and 'int'
+2026-03-24 17:58:16,775 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:16,775 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:16,782 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:16,794 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:16,794 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:16,799 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:19,013 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 17:58:19,941 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:19,943 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:19,943 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:19,943 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:19,951 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 17:58:19,968 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+[32mINFO[0m:     127.0.0.1:52214 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CALUM_1.pdf&page=1&session_id=b07592d9-c911-4d88-bf57-a35810fa53a4 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:49338 - "[1mOPTIONS /api/correct HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:49338 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-24 18:08:06,480 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:07,397 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:07,397 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:07,405 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:07,414 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:07,414 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:07,996 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:08,937 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:08,939 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:08,940 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:08,941 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:08,942 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:08,950 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:10,165 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:11,080 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:11,084 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:11,084 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:11,091 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:11,093 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:11,098 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:12,339 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:13,206 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:13,210 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:13,214 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:13,214 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:13,214 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:13,214 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:18,512 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:19,439 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:19,439 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:19,448 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:19,448 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:19,461 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:19,464 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+[32mINFO[0m:     127.0.0.1:51863 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=1&session_id=b07592d9-c911-4d88-bf57-a35810fa53a4 HTTP/1.1[0m" [32m200 OK[0m
+2026-03-24 18:08:25,953 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:26,987 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:26,992 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:26,999 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:27,020 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:27,024 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:27,043 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:36,842 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:37,683 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:37,683 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:37,691 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:37,699 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:37,699 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:37,708 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+[32mINFO[0m:     127.0.0.1:61466 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-24 18:08:39,985 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:50603 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=2&session_id=b07592d9-c911-4d88-bf57-a35810fa53a4 HTTP/1.1[0m" [32m200 OK[0m
+2026-03-24 18:08:40,342 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:41,096 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:41,099 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:41,103 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:41,111 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:41,113 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:41,115 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:42,719 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:43,649 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:43,657 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:43,657 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:43,666 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:43,666 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:43,674 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+[32mINFO[0m:     127.0.0.1:51099 - "[1mOPTIONS /api/correct HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:51099 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-24 18:08:45,868 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:55480 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=20&session_id=b07592d9-c911-4d88-bf57-a35810fa53a4 HTTP/1.1[0m" [32m200 OK[0m
+2026-03-24 18:08:48,058 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:51099 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-24 18:08:48,417 [INFO] watchfiles.main: 3 changes detected
+2026-03-24 18:08:49,944 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:50,933 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:50,941 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:50,941 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:50,941 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:50,941 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:50,956 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:52,472 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:53,366 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:53,366 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:53,374 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:53,383 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:53,383 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:53,391 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:56,405 [INFO] watchfiles.main: 1 change detected
+[32mINFO[0m:     127.0.0.1:49797 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=102&session_id=b07592d9-c911-4d88-bf57-a35810fa53a4 HTTP/1.1[0m" [32m200 OK[0m
+2026-03-24 18:08:56,759 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:08:57,421 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:57,425 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:57,425 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:57,433 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:57,437 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:08:57,441 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+[32mINFO[0m:     127.0.0.1:64516 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+2026-03-24 18:09:00,626 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:49797 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=104&session_id=b07592d9-c911-4d88-bf57-a35810fa53a4 HTTP/1.1[0m" [32m200 OK[0m
+2026-03-24 18:09:01,289 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:09:02,208 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:02,208 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:02,217 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:02,217 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:02,225 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:02,225 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:04,772 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:09:05,677 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:05,677 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:06,185 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:09:07,258 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:07,259 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:07,259 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:07,279 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:08,464 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:09:09,400 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:09,409 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:09,425 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:09,425 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:09,425 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:09,425 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:11,337 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:09:12,242 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:12,247 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:12,250 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:12,250 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:12,250 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:12,259 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:15,632 [INFO] watchfiles.main: 4 changes detected
+2026-03-24 18:09:16,551 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:16,553 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:16,555 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:16,559 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:16,571 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:16,571 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-24 18:09:18,158 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:49306 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CCH_51docs.pdf&page=6&session_id=b07592d9-c911-4d88-bf57-a35810fa53a4 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:49306 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CCH_51docs.pdf&page=8&session_id=b07592d9-c911-4d88-bf57-a35810fa53a4 HTTP/1.1[0m" [32m200 OK[0m
+
+2026-03-25 01:05:29,078 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+←[32mINFO←[0m:     Will watch for changes in these directories: ['A:\\PROJECTS\\PDFoverseer']
+←[32mINFO←[0m:     Uvicorn running on ←[1mhttp://127.0.0.1:8000←[0m (Press CTRL+C to quit)
+←[32mINFO←[0m:     Started reloader process [←[36m←[1m31344←[0m] using ←[36m←[1mWatchFiles←[0m
+2026-03-25 01:05:35,648 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:05:35,789 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+←[32mINFO←[0m:     Started server process [←[36m14460←[0m]
+←[32mINFO←[0m:     Waiting for application startup.
+←[32mINFO←[0m:     Application startup complete.
+←[32mINFO←[0m:     127.0.0.1:50962 - "←[1mOPTIONS /api/browse HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:50962 - "←[1mGET /api/browse HTTP/1.1←[0m" ←[32m200 OK←[0m
+2026-03-25 01:05:41,781 [INFO] watchfiles.main: 5 changes detected
+←[33mWARNING←[0m:  WatchFiles detected changes in 'vlm\client.py'. Reloading...
+ ←[32mINFO←[0m:     Shutting down
+←[32mINFO←[0m:     Waiting for application shutdown.
+←[32mINFO←[0m:     Application shutdown complete.
+←[32mINFO←[0m:     Finished server process [←[36m14460←[0m]
+2026-03-25 01:05:42,951 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:05:43,091 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+←[32mINFO←[0m:     Started server process [←[36m43376←[0m]
+←[32mINFO←[0m:     Waiting for application startup.
+←[32mINFO←[0m:     Application startup complete.
+←[32mINFO←[0m:     127.0.0.1:58586 - "←[1mOPTIONS /api/start HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58586 - "←[1mPOST /api/start HTTP/1.1←[0m" ←[32m200 OK←[0m
+2026-03-25 01:05:54,161 [INFO] watchfiles.main: 5 changes detected
+2026-03-25 01:05:54,871 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:05:55,486 [INFO] watchfiles.main: 35 changes detected
+←[32mINFO←[0m:     127.0.0.1:63377 - "←[1mOPTIONS /api/stop HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:63377 - "←[1mPOST /api/stop HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:63377 - "←[1mPOST /api/start HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:63377 - "←[1mPOST /api/stop HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:63377 - "←[1mPOST /api/start HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:63377 - "←[1mPOST /api/stop HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58605 - "←[1mGET /ui/ HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58605 - "←[1mGET /ui/assets/index-Bnk4kCCw.js HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58605 - "←[1mGET /ui/assets/index-BYR_d3Mh.css HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:65125 - "WebSocket /ws?session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760" [accepted]
+←[32mINFO←[0m:     127.0.0.1:63377 - "←[1mOPTIONS /api/state HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     connection open
+←[32mINFO←[0m:     127.0.0.1:63377 - "←[1mGET /api/state HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:58605 - "←[1mGET /ui/vite.svg HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:63377 - "←[1mGET /api/browse HTTP/1.1←[0m" ←[32m200 OK←[0m
+←[32mINFO←[0m:     127.0.0.1:63377 - "←[1mPOST /api/start HTTP/1.1←[0m" ←[32m200 OK←[0m
+2026-03-25 01:06:23,843 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:23,843 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:25,623 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:06:26,560 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:26,560 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:26,567 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:26,577 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:26,580 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:26,591 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:29,664 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:06:30,561 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:30,569 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:30,574 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:30,577 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:30,577 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:06:30,577 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:44,726 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:13:45,738 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:45,740 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:45,748 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:45,748 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:45,748 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:46,400 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:13:47,227 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:47,227 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:47,227 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:47,245 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:47,252 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:47,261 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:48,425 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:13:49,482 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:49,507 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:49,520 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:49,524 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:49,524 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:49,546 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:50,750 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:13:51,636 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:51,663 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:51,666 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:51,684 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:51,691 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:51,692 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:56,789 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:13:57,545 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:57,563 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:57,563 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:57,566 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:57,577 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:13:57,591 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:03,513 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:04,353 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:04,361 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:04,361 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:04,369 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:04,371 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:04,378 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:13,373 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:14,390 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:14,395 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:14,402 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:14,402 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:14,403 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:14,411 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:16,453 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:17,353 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:17,359 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:17,361 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:17,364 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:17,368 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:17,389 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:18,848 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:19,707 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:19,717 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:19,717 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:19,727 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:19,729 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:19,731 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:24,804 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:25,643 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:25,649 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:25,649 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:25,649 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:25,649 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:25,649 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:27,031 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:28,132 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:28,157 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:28,159 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:28,171 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:28,171 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:28,186 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:31,334 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:32,149 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:32,149 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:32,158 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:32,189 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:32,189 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:32,206 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:35,786 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:36,580 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:36,592 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:36,592 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:36,592 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:36,614 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:36,620 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:38,973 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:39,621 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:39,621 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:40,082 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:40,766 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:40,766 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:40,766 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:40,777 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:41,299 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:42,116 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:42,123 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:42,123 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:42,127 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:42,133 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:42,141 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:44,440 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:45,518 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:45,526 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:45,539 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:45,552 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:45,553 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:45,575 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:48,108 [INFO] watchfiles.main: 4 changes detected
+2026-03-25 01:14:48,959 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:48,979 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:48,983 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:48,991 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:49,002 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:49,014 [INFO] pdfoverserver: Inference engine loaded: s2t-helena
+2026-03-25 01:14:50,588 [INFO] watchfiles.main: 3 changes detected
+2026-03-25 01:15:15,419 [INFO] watchfiles.main: 1 change detected
+2026-03-25 01:23:01,842 [INFO] watchfiles.main: 5 changes detected
+2026-03-25 01:23:10,668 [INFO] watchfiles.main: 13 changes detected
+2026-03-25 01:23:11,022 [INFO] watchfiles.main: 37 changes detected
+[32mINFO[0m:     127.0.0.1:64026 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CINS_31.pdf.pdf&page=7&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:49209 - "[1mOPTIONS /api/correct HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:49209 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:54023 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CINS_31.pdf.pdf&page=27&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+2026-03-25 01:23:47,213 [INFO] watchfiles.main: 3 changes detected
+[32mINFO[0m:     127.0.0.1:57805 - "[1mPOST /api/correct HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:56630 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CINS_31.pdf.pdf&page=30&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+2026-03-25 01:23:54,976 [INFO] watchfiles.main: 4 changes detected
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=40&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=54&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=56&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=80&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=128&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=132&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=136&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=180&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=208&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=212&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=224&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=231&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:55582 - "[1mGET /api/preview?pdf_path=A%3A%5CPROJECTS%5CPDFoverseer%5Cdata%5Csamples%5CART_670.pdf&page=312&session_id=7c8a7f8b-6d99-453b-8098-1e3b7f08b760 HTTP/1.1[0m" [32m200 OK[0m

@@ -11,6 +11,7 @@ Usage:
     # -> writes eval/results/graph_sweep_YYYYMMDD_HHMMSS.json
 """
 from __future__ import annotations
+
 import json
 import random
 import sys
@@ -19,8 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from eval.graph_inference import run_pipeline, PageRead
-from eval.graph_params import GRAPH_PARAM_SPACE, GRAPH_DEFAULT_PARAMS
+from eval.graph_inference import PageRead, run_pipeline
+from eval.graph_params import GRAPH_DEFAULT_PARAMS, GRAPH_PARAM_SPACE
 
 FIXTURES_DIR = Path("eval/fixtures")
 GROUND_TRUTH_PATH = Path("eval/ground_truth.json")

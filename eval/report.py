@@ -7,6 +7,7 @@ Usage:
     python eval/report.py eval/results/sweep_X.json   # specific file
 """
 from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path

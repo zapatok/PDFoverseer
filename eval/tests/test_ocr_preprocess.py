@@ -9,8 +9,8 @@ import cv2
 import numpy as np
 import pytest
 
-from eval.ocr_preprocess import preprocess
 from eval.ocr_params import OCR_PRODUCTION_PARAMS
+from eval.ocr_preprocess import preprocess
 
 
 def _make_test_image(w: int = 100, h: int = 60) -> np.ndarray:

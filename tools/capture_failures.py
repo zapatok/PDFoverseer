@@ -78,15 +78,21 @@ def capture_pdf(
         List of CSV row dicts, one per captured page.
     """
     # Deferred heavy imports — keep module-level imports stdlib-only
+    import sys as _sys
+
     import cv2
     import fitz  # PyMuPDF
-    import sys as _sys
     _sys.path.insert(0, str(Path(__file__).parent.parent))
     import core.analyzer as analyzer
     from core.analyzer import (
-        _render_clip, _tess_ocr, _upsample_4x, _parse,
-        _setup_sr, _init_easyocr,
-        DPI, EASYOCR_DPI,
+        DPI,
+        EASYOCR_DPI,
+        _init_easyocr,
+        _parse,
+        _render_clip,
+        _setup_sr,
+        _tess_ocr,
+        _upsample_4x,
     )
 
     # One-time SR init (idempotent — safe to call on every capture_pdf() invocation)

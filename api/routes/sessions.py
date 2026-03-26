@@ -1,13 +1,14 @@
 import json
-import time
 import re
-from pathlib import Path
+import time
 from datetime import datetime
+from pathlib import Path
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from api.state import get_session, SessionState
-from api.database import get_reads, clear_session, has_reads
+from api.database import clear_session, has_reads
+from api.state import SessionState, get_session
 
 router = APIRouter()
 
@@ -62,10 +63,10 @@ def api_save_session(s: SessionState = Depends(get_session)):
     """Saves the current final metrics and issues to a local JSON history file."""
     sessions_dir = Path(__file__).parent.parent.parent / "data" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
-    
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filepath = sessions_dir / f"session_{timestamp}.json"
-    
+
     data = {
         "timestamp": timestamp,
         "metrics": {
@@ -78,7 +79,7 @@ def api_save_session(s: SessionState = Depends(get_session)):
         "issues_count": len(s.issues),
         "files_processed": len(s.pdf_list)
     }
-    
+
     try:
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -92,11 +93,11 @@ def api_list_sessions():
     sessions_dir = Path(__file__).parent.parent.parent / "data" / "sessions"
     if not sessions_dir.exists():
         return {"sessions": []}
-        
+
     sessions = []
     for f in sessions_dir.glob("*.json"):
         try:
-            with open(f, "r", encoding="utf-8") as jf:
+            with open(f, encoding="utf-8") as jf:
                 sessions.append(json.load(jf))
         except (json.JSONDecodeError, OSError):
             pass
@@ -111,7 +112,7 @@ def api_delete_session(req: DeleteSessionRequest):
         return {"success": False, "error": "Invalid timestamp format"}
     sessions_dir = Path(__file__).parent.parent.parent / "data" / "sessions"
     filepath = sessions_dir / f"session_{req.timestamp}.json"
-    
+
     if filepath.exists():
         try:
             filepath.unlink()

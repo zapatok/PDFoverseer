@@ -67,7 +67,7 @@ def print_report(data: dict) -> None:
               f"{entry['net_gain']:>8}  {name}")
 
     if data["top_configs"]:
-        print(f"\nBest config rescued pages:")
+        print("\nBest config rescued pages:")
         best = data["top_configs"][0]
         for p in best.get("rescued_pages", [])[:20]:
             print(f"  {p}")

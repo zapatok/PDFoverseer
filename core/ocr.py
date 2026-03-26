@@ -6,12 +6,12 @@ import threading  # kept for SR semaphore
 from pathlib import Path
 
 import cv2
+import fitz
 import numpy as np
 import pytesseract
-import fitz
 
-from core.utils import TESS_CONFIG, _parse, _PageRead
-from core.image import _render_clip, _deskew
+from core.image import _deskew, _render_clip
+from core.utils import TESS_CONFIG, _PageRead, _parse
 
 # ── Configuración ─────────────────────────────────────────────────────────────
 

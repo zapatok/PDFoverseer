@@ -49,13 +49,16 @@ def capture_pdf(
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
 
-    from core.image import _render_clip, _deskew
-    from core.ocr import (
-        _tess_ocr, _upsample_4x, _setup_sr, _init_easyocr,
-        _easyocr_reader, EASYOCR_DPI,
-    )
-    from core.utils import _parse, DPI
     import core.ocr as ocr_mod  # for _easyocr_reader access after init
+    from core.image import _deskew, _render_clip
+    from core.ocr import (
+        EASYOCR_DPI,
+        _init_easyocr,
+        _setup_sr,
+        _tess_ocr,
+        _upsample_4x,
+    )
+    from core.utils import DPI, _parse
 
     _setup_sr(print)
     if include_easyocr:

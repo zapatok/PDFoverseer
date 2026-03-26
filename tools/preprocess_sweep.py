@@ -33,8 +33,8 @@ _project_root = str(Path(__file__).parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from core.utils import _parse, TESS_CONFIG, DPI
-from core.image import _render_clip, _deskew
+from core.image import _deskew, _render_clip
+from core.utils import TESS_CONFIG, _parse
 
 # ── Tesseract path (match core/ocr.py) ─────────────────────────
 pytesseract.pytesseract.tesseract_cmd = os.getenv(
@@ -317,7 +317,7 @@ def write_report(results: dict, out_dir: Path = OUTPUT_DIR) -> None:
 
     summary_path = out_dir / "sweep_summary.txt"
     with open(summary_path, "w", encoding="utf-8") as f:
-        f.write(f"OCR Preprocessing Sweep Results\n")
+        f.write("OCR Preprocessing Sweep Results\n")
         f.write(f"{'=' * 60}\n")
         f.write(f"Failed pages tested: {results['failed_count']}\n")
         f.write(f"Variants tested: {len(stats)}\n")

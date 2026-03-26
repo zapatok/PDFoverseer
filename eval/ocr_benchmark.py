@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -25,15 +26,13 @@ import time
 from pathlib import Path
 from typing import Optional
 
-import re
-
 import cv2
 import numpy as np
 
 # Add project root so eval/ocr_benchmark.py can import core.utils / core.image
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from core.utils import _parse
 from core.image import _render_clip
+from core.utils import _parse
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -51,7 +50,7 @@ RENDER_DPI = 300
 # Matches "d<digit>" where EasyOCR merged "de " + total into one token (e.g. "d2" = "de 2")
 _DE_DIGIT_MERGE_RE = re.compile(r'\b([dD])([1-9]\d{0,2})\b')
 
-def _parse_lenient(text: str) -> tuple[Optional[int], Optional[int]]:
+def _parse_lenient(text: str) -> tuple[int | None, int | None]:
     """
     Lenient page number parser for OCR benchmark only (not production).
 
@@ -141,8 +140,8 @@ def extract_paddle_text(result) -> str:
 
 
 def score_page(
-    curr: Optional[int],
-    total: Optional[int],
+    curr: int | None,
+    total: int | None,
     gt_curr: int,
     gt_total: int,
 ) -> str:

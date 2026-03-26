@@ -32,8 +32,10 @@ import pytesseract
 
 from core.utils import _parse
 from eval.ocr_params import (
-    OCR_PARAM_SPACE, OCR_PRODUCTION_PARAMS,
-    OCR_TESS_PARAM_SPACE, OCR_TIER1_PARAMS,
+    OCR_PARAM_SPACE,
+    OCR_PRODUCTION_PARAMS,
+    OCR_TESS_PARAM_SPACE,
+    OCR_TIER1_PARAMS,
 )
 from eval.ocr_preprocess import preprocess
 
@@ -63,7 +65,7 @@ def load_pages() -> tuple[list[PageEntry], list[PageEntry]]:
     """Load page index, return (failed_pages, success_pages).
     Success = tier1 OR tier2 parsed (combined baseline)."""
     failed, success = [], []
-    with open(INDEX_CSV, "r", encoding="utf-8") as f:
+    with open(INDEX_CSV, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             t1 = (row.get("tier1_parsed") or "").strip()
@@ -85,7 +87,7 @@ def load_pages_tier1() -> tuple[list[PageEntry], list[PageEntry]]:
     Pages rescued only by tier2 are counted as failed — they become
     additional rescue candidates for the tier1 Tesseract param sweep."""
     failed, success = [], []
-    with open(INDEX_CSV, "r", encoding="utf-8") as f:
+    with open(INDEX_CSV, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             t1 = (row.get("tier1_parsed") or "").strip()

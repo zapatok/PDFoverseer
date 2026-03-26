@@ -12,6 +12,7 @@ Usage:
     # -> writes eval/results/sweep_YYYYMMDD_HHMMSS.json
 """
 from __future__ import annotations
+
 import json
 import random
 import sys
@@ -21,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from eval.inference import run_pipeline, PageRead
+from eval.inference import PageRead, run_pipeline
 from eval.params import PARAM_SPACE, PRODUCTION_PARAMS
 
 FIXTURES_DIR = Path("eval/fixtures")

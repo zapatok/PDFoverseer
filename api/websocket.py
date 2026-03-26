@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import re as _re
-from fastapi import WebSocket, WebSocketDisconnect, APIRouter, Query
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 _UUID_RE = _re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
 
@@ -42,7 +43,7 @@ def _emit(session_id: str, event_type: str, payload: dict):
     """Schedules a broadcast on the main asyncio event loop."""
     if global_loop and global_loop.is_running():
         asyncio.run_coroutine_threadsafe(
-            manager.broadcast(session_id, {"type": event_type, "payload": payload}), 
+            manager.broadcast(session_id, {"type": event_type, "payload": payload}),
             global_loop
         )
 
@@ -60,6 +61,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         return
     try:
         while True:
-            data = await websocket.receive_text()
+            await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket, session_id)

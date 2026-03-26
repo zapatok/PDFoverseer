@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import warnings
 
-import fitz  # PyMuPDF
 import cv2
+import fitz  # PyMuPDF
 import numpy as np
 
-from core.utils import DPI, CROP_X_START, CROP_Y_END
-
+from core.utils import CROP_X_START, CROP_Y_END, DPI
 
 # ── PyMuPDF clip rendering ───────────────────────────────────────────────────
 

@@ -1,6 +1,7 @@
 """Unit tests for core/image.py."""
-import numpy as np
 import cv2
+import numpy as np
+
 from core.image import _deskew
 
 

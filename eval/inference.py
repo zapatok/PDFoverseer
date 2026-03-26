@@ -17,6 +17,7 @@ params keys (all required):
     window, hom_threshold                     — Global
 """
 from __future__ import annotations
+
 import copy
 from collections import Counter
 from dataclasses import dataclass, field
@@ -257,7 +258,7 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             prev = reads[gap_start - 1]
             if prev.curr is not None and prev.total is not None:
                 prev_c, prev_t = prev.curr, prev.total
-        
+
         for i in range(gap_start, gap_end):
             lt, hom = _local_total(i)
             if prev_c is not None and prev_t is not None:
@@ -277,7 +278,7 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             nxt = reads[gap_end]
             if nxt.curr is not None and nxt.total is not None:
                 nxt_c, nxt_t = nxt.curr, nxt.total
-        
+
         for i in range(gap_end - 1, gap_start - 1, -1):
             lt, hom = _local_total(i)
             if nxt_c is not None and nxt_t is not None:
@@ -304,7 +305,7 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
                     if p_conf > 0.3 and t != ex_t:
                         cost += p_conf * clash_w_period
             return cost
-        
+
         cost_fwd = seq_cost(hyp_fwd)
         cost_bwd = seq_cost(hyp_bwd)
 
@@ -313,10 +314,10 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             r_nxt = reads[gap_end]
             fwd_last_c, fwd_last_t, _ = hyp_fwd[-1]
             if r_nxt.curr is not None and r_nxt.total is not None:
-                if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or 
+                if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or
                         (fwd_last_c == fwd_last_t and r_nxt.curr == 1)):
                     cost_fwd += clash_boundary_pen
-        
+
         if gap_start > 0:
             r_prev = reads[gap_start - 1]
             bwd_first_c, bwd_first_t, _ = hyp_bwd[0]

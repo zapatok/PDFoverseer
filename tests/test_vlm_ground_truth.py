@@ -1,12 +1,14 @@
 """Tests for VLM ground truth loader."""
 import csv
 import json
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
-from vlm.ground_truth import load_ground_truth, load_corpus, CorpusEntry
+
+from vlm.ground_truth import CorpusEntry, load_corpus, load_ground_truth
 
 OCR_ALL_DIR = "data/ocr_all"
 ALL_INDEX = f"{OCR_ALL_DIR}/all_index.csv"

@@ -1,11 +1,13 @@
 """Tests for VLM image preprocessing."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import cv2
 import numpy as np
 import pytest
+
 from vlm.preprocess import apply_preprocess
 
 

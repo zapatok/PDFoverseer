@@ -1,13 +1,16 @@
+import os
+import sys
+
 import numpy as np
-import sys, os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from tools.preprocess_sweep import (
-    build_variant_matrix,
+    Variant,
     apply_variant,
+    build_variant_matrix,
     load_ground_truth,
     score_result,
-    Variant,
 )
 
 

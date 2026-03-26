@@ -1,5 +1,6 @@
 import sqlite3
 from pathlib import Path
+
 from core.utils import _PageRead
 
 DB_PATH = Path("data/sessions.db")

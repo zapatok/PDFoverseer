@@ -17,21 +17,21 @@ Environment variables:
     SESSION_TTL  Session TTL in seconds (default: 3600)
 """
 
-import os
 import asyncio
 import logging
-from pathlib import Path
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from core import INFERENCE_ENGINE_VERSION
 import api.websocket as ws
+from api.routes import files, pipeline, sessions
 from api.websocket import router as ws_router
-from api.routes import files, sessions, pipeline
+from core import INFERENCE_ENGINE_VERSION
 
 logging.basicConfig(
     level=logging.INFO,

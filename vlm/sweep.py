@@ -14,11 +14,10 @@ import argparse
 import json
 import logging
 import random
-import sys
 from datetime import datetime
 from pathlib import Path
 
-from vlm.benchmark import run, compute_metrics
+from vlm.benchmark import run
 from vlm.params import PARAM_SPACE
 
 log = logging.getLogger(__name__)

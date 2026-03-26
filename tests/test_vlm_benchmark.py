@@ -1,11 +1,14 @@
 """Tests for VLM benchmark runner."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
-from vlm.benchmark import run, compute_metrics
+
+from vlm.benchmark import compute_metrics, run
 
 
 def test_compute_metrics_perfect():

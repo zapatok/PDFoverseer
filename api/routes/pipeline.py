@@ -1,14 +1,15 @@
-import time
 import threading
+import time
 from pathlib import Path
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from core import re_infer_documents
-from api.state import get_session, SessionState
+from api.database import get_reads, save_reads
+from api.state import SessionState, get_session
 from api.websocket import _emit
 from api.worker import _process_pdfs, _recalculate_metrics
-from api.database import get_reads, save_reads
+from core import re_infer_documents
 
 router = APIRouter()
 
@@ -29,13 +30,13 @@ class ExcludeRequest(BaseModel):
 async def api_start(req: StartProcessRequest, s: SessionState = Depends(get_session)):
     if s.running or not s.pdf_list:
         return {"success": False, "msg": "Already running or no PDFs loaded"}
-    
+
     s.running = True
     s.stop_requested = False
     s.skip_current = False
     s.cancel_event.clear()
     s.pause_event.set()
-    
+
     if req.start_index == 0:
         s.total_docs = 0
         s.total_complete = 0
@@ -45,7 +46,7 @@ async def api_start(req: StartProcessRequest, s: SessionState = Depends(get_sess
         s.skipped_pdfs.clear()
         s.confidences = {}
         s.individual_metrics = {}
-        
+
         # Wait until Session tracking is passed inside _emit before broadcasting
         _emit(s.session_id, "metrics", {
             "docs": 0, "complete": 0, "incomplete": 0, "inferred": 0,
@@ -53,12 +54,12 @@ async def api_start(req: StartProcessRequest, s: SessionState = Depends(get_sess
         })
         for i in range(len(s.pdf_list)):
             _emit(s.session_id, "status_update", {"idx": i, "status": "pending"})
-            
+
     s.global_total_pages = 0
     s.global_done_pages = 0
     s.total_paused_time = 0.0
     s.pause_start_time = 0.0
-    
+
     threading.Thread(target=_process_pdfs, args=(s.session_id, req.start_index), daemon=True).start()
     return {"success": True}
 
@@ -110,9 +111,9 @@ def api_correct(req: CorrectRequest, s: SessionState = Depends(get_session)):
     reads = get_reads(s.session_id, pdf_str)
     if not reads:
         return {"success": False, "msg": "PDF reads no encontrados en base de datos"}
-        
+
     corrections = {req.page: (req.correct_curr, req.correct_tot)}
-    
+
     def on_issue(page, kind, detail, pil_img, _path=pdf_str):
         with s._lock:
             issue = {
@@ -138,7 +139,7 @@ def api_correct(req: CorrectRequest, s: SessionState = Depends(get_session)):
         on_log=lambda msg, lvl="info": _emit(s.session_id, "log", {"msg": msg, "level": lvl}),
         on_issue=on_issue
     )
-    
+
     save_reads(s.session_id, pdf_str, new_reads)
     _recalculate_metrics(s.session_id)
     _emit(s.session_id, "log", {"msg": "Inferencia completada, actualizando lista de problemas...", "level": "ok"})
@@ -157,9 +158,9 @@ def api_exclude(req: ExcludeRequest, s: SessionState = Depends(get_session)):
     reads = get_reads(s.session_id, pdf_str)
     if not reads:
         return {"success": False, "msg": "PDF reads no encontrados en base de datos"}
-        
+
     exclusions = [req.page]
-    
+
     def on_issue(page, kind, detail, pil_img, _path=pdf_str):
         with s._lock:
             issue = {
@@ -186,10 +187,10 @@ def api_exclude(req: ExcludeRequest, s: SessionState = Depends(get_session)):
         on_issue=on_issue,
         exclusions=exclusions
     )
-    
+
     save_reads(s.session_id, pdf_str, new_reads)
     _recalculate_metrics(s.session_id)
-    
+
     _emit(s.session_id, "log", {"msg": "Página excluida, actualizando métricas...", "level": "ok"})
     with s._lock:
         surviving = [i for i in s.issues if i["pdf_path"] == pdf_str]

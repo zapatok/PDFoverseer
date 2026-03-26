@@ -1,11 +1,13 @@
 """Tests for VLM sweep utilities."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
-from vlm.sweep import lhs_sample, adjacent_configs, rank_key
+
 from vlm.params import PARAM_SPACE
+from vlm.sweep import adjacent_configs, lhs_sample, rank_key
 
 
 def test_lhs_sample_count():

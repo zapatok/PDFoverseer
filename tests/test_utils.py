@@ -1,10 +1,13 @@
 """
 Tests for core.utils._parse() regex and normalization.
 """
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
+
 from core.utils import _parse
 
 
