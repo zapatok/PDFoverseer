@@ -1,43 +1,202 @@
 {
-  "ALUM_1":    {"doc_count":  1, "complete_count":  0, "inferred_count": 0},
-  "ALUM_19":   {"doc_count": 19, "complete_count":  6, "inferred_count": 0},
-  "CASTRO_5":  {"doc_count":  5, "complete_count":  0, "inferred_count": 0},
-  "CASTRO_15": {"doc_count": 15, "complete_count":  0, "inferred_count": 0},
-  "CHAR_17":   {"doc_count": 17, "complete_count":  8, "inferred_count": 0},
-  "CHAR_25":   {"doc_count": 25, "complete_count": 11, "inferred_count": 0},
-  "CH_9":      {"doc_count":  9, "complete_count":  8, "inferred_count": 0},
-  "CH_39":     {"doc_count": 39, "complete_count": 36, "inferred_count": 0},
-  "CH_51":     {"doc_count": 51, "complete_count": 44, "inferred_count": 0},
-  "CH_74":     {"doc_count": 74, "complete_count": 58, "inferred_count": 0},
-  "CH_BSM_18": {"doc_count": 18, "complete_count": 16, "inferred_count": 0},
-  "CRS_9":     {"doc_count":  9, "complete_count":  8, "inferred_count": 0},
-  "INS_31":    {"doc_count": 31, "complete_count": 31, "inferred_count": 0},
-  "INSAP_20":  {"doc_count": 20, "complete_count":  4, "inferred_count": 0},
-  "JOGA_19":   {"doc_count": 19, "complete_count":  4, "inferred_count": 0},
-  "QUEVEDO_1": {"doc_count":  1, "complete_count":  0, "inferred_count": 0},
-  "QUEVEDO_2": {"doc_count":  2, "complete_count":  1, "inferred_count": 0},
-  "QUEVEDO_13":{"doc_count": 13, "complete_count":  8, "inferred_count": 0},
-  "RACO_25":   {"doc_count": 25, "complete_count": 10, "inferred_count": 0},
-  "SAEZ_14":   {"doc_count": 14, "complete_count": 10, "inferred_count": 0},
-
-  "syn_clean_1page":        {"doc_count": 15, "complete_count": 15, "inferred_count": 0},
-  "syn_clean_2page":        {"doc_count":  8, "complete_count":  8, "inferred_count": 0},
-  "syn_clean_3page":        {"doc_count":  6, "complete_count":  6, "inferred_count": 0},
-  "syn_clean_4page":        {"doc_count":  5, "complete_count":  5, "inferred_count": 0},
-  "syn_orphaned_tail":      {"doc_count":  8, "complete_count":  4, "inferred_count": 0},
-  "syn_orphaned_scattered": {"doc_count":  7, "complete_count":  3, "inferred_count": 0},
-  "syn_consecutive_starts": {"doc_count": 12, "complete_count":  8, "inferred_count": 0},
-  "syn_failures_2page":     {"doc_count":  6, "complete_count":  6, "inferred_count": 2},
-  "syn_failures_1page":     {"doc_count": 12, "complete_count": 12, "inferred_count": 3},
-  "syn_mixed_2_3":          {"doc_count":  8, "complete_count":  8, "inferred_count": 0},
-  "syn_incomplete_3page":   {"doc_count":  4, "complete_count":  0, "inferred_count": 0},
-  "syn_two_zones":          {"doc_count": 10, "complete_count": 10, "inferred_count": 0},
-  "syn_high_failure_2page": {"doc_count": 10, "complete_count": 10, "inferred_count": 4},
-
-  "CH_74_degraded":     {"doc_count": 74, "complete_count": 58, "inferred_count": 20},
-  "CH_39_degraded":     {"doc_count": 39, "complete_count": 36, "inferred_count": 13},
-  "INSAP_20_degraded":  {"doc_count": 20, "complete_count":  4, "inferred_count":  6},
-  "RACO_25_degraded":   {"doc_count": 25, "complete_count": 10, "inferred_count":  7},
-  "QUEVEDO_13_degraded":{"doc_count": 13, "complete_count":  8, "inferred_count":  5},
-  "JOGA_19_degraded":   {"doc_count": 19, "complete_count":  4, "inferred_count":  7}
+  "ALUM_1": {
+    "doc_count": 1,
+    "complete_count": 0,
+    "inferred_count": 0
+  },
+  "ALUM_19": {
+    "doc_count": 19,
+    "complete_count": 6,
+    "inferred_count": 0
+  },
+  "CASTRO_15": {
+    "doc_count": 15,
+    "complete_count": 0,
+    "inferred_count": 0
+  },
+  "CASTRO_5": {
+    "doc_count": 5,
+    "complete_count": 0,
+    "inferred_count": 0
+  },
+  "CHAR_17": {
+    "doc_count": 17,
+    "complete_count": 8,
+    "inferred_count": 0
+  },
+  "CHAR_25": {
+    "doc_count": 25,
+    "complete_count": 11,
+    "inferred_count": 0
+  },
+  "CH_39": {
+    "doc_count": 39,
+    "complete_count": 36,
+    "inferred_count": 0
+  },
+  "CH_39_degraded": {
+    "doc_count": 39,
+    "complete_count": 36,
+    "inferred_count": 13
+  },
+  "CH_51": {
+    "doc_count": 51,
+    "complete_count": 44,
+    "inferred_count": 0
+  },
+  "CH_74": {
+    "doc_count": 74,
+    "complete_count": 58,
+    "inferred_count": 0
+  },
+  "CH_74_degraded": {
+    "doc_count": 74,
+    "complete_count": 58,
+    "inferred_count": 20
+  },
+  "CH_9": {
+    "doc_count": 9,
+    "complete_count": 8,
+    "inferred_count": 0
+  },
+  "CH_BSM_18": {
+    "doc_count": 18,
+    "complete_count": 16,
+    "inferred_count": 0
+  },
+  "CRS_9": {
+    "doc_count": 9,
+    "complete_count": 8,
+    "inferred_count": 0
+  },
+  "INSAP_20": {
+    "doc_count": 20,
+    "complete_count": 4,
+    "inferred_count": 0
+  },
+  "INSAP_20_degraded": {
+    "doc_count": 20,
+    "complete_count": 4,
+    "inferred_count": 6
+  },
+  "INS_31": {
+    "doc_count": 31,
+    "complete_count": 31,
+    "inferred_count": 0
+  },
+  "INS_31_degraded": {
+    "doc_count": 31,
+    "complete_count": 31,
+    "inferred_count": 0
+  },
+  "JOGA_19": {
+    "doc_count": 19,
+    "complete_count": 4,
+    "inferred_count": 0
+  },
+  "JOGA_19_degraded": {
+    "doc_count": 19,
+    "complete_count": 4,
+    "inferred_count": 7
+  },
+  "QUEVEDO_1": {
+    "doc_count": 1,
+    "complete_count": 0,
+    "inferred_count": 0
+  },
+  "QUEVEDO_13": {
+    "doc_count": 13,
+    "complete_count": 8,
+    "inferred_count": 0
+  },
+  "QUEVEDO_13_degraded": {
+    "doc_count": 13,
+    "complete_count": 8,
+    "inferred_count": 5
+  },
+  "QUEVEDO_2": {
+    "doc_count": 2,
+    "complete_count": 1,
+    "inferred_count": 0
+  },
+  "RACO_25": {
+    "doc_count": 25,
+    "complete_count": 10,
+    "inferred_count": 0
+  },
+  "RACO_25_degraded": {
+    "doc_count": 25,
+    "complete_count": 10,
+    "inferred_count": 7
+  },
+  "SAEZ_14": {
+    "doc_count": 14,
+    "complete_count": 10,
+    "inferred_count": 0
+  },
+  "syn_clean_1page": {
+    "doc_count": 15,
+    "complete_count": 15,
+    "inferred_count": 0
+  },
+  "syn_clean_2page": {
+    "doc_count": 8,
+    "complete_count": 8,
+    "inferred_count": 0
+  },
+  "syn_clean_3page": {
+    "doc_count": 6,
+    "complete_count": 6,
+    "inferred_count": 0
+  },
+  "syn_clean_4page": {
+    "doc_count": 5,
+    "complete_count": 5,
+    "inferred_count": 0
+  },
+  "syn_consecutive_starts": {
+    "doc_count": 12,
+    "complete_count": 8,
+    "inferred_count": 0
+  },
+  "syn_failures_1page": {
+    "doc_count": 12,
+    "complete_count": 12,
+    "inferred_count": 3
+  },
+  "syn_failures_2page": {
+    "doc_count": 6,
+    "complete_count": 6,
+    "inferred_count": 2
+  },
+  "syn_high_failure_2page": {
+    "doc_count": 10,
+    "complete_count": 10,
+    "inferred_count": 4
+  },
+  "syn_incomplete_3page": {
+    "doc_count": 4,
+    "complete_count": 0,
+    "inferred_count": 0
+  },
+  "syn_mixed_2_3": {
+    "doc_count": 8,
+    "complete_count": 8,
+    "inferred_count": 0
+  },
+  "syn_orphaned_scattered": {
+    "doc_count": 7,
+    "complete_count": 3,
+    "inferred_count": 0
+  },
+  "syn_orphaned_tail": {
+    "doc_count": 8,
+    "complete_count": 4,
+    "inferred_count": 0
+  },
+  "syn_two_zones": {
+    "doc_count": 10,
+    "complete_count": 10,
+    "inferred_count": 0
+  }
 }

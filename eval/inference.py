@@ -165,7 +165,7 @@ def _period_evidence(
                 if r.curr is not None and r.method not in ("failed", "excluded"):
                     h = (r.curr, r.total)
                     dist_w = 1.0 / mult
-                    method_w = (1.0 if r.method in ("direct", "super_resolution", "easyocr", "manual")
+                    method_w = (1.0 if r.method in ("direct", "super_resolution", "manual")
                                 else 0.5)
                     candidates[h] = candidates.get(h, 0) + dist_w * method_w
 

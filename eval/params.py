@@ -49,7 +49,7 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "ds_prior_weight":    0.07,
     "ds_boost_max":       0.18,
     "ph5b_conf_min":      0.50,
-    "ph5b_ratio_min":     0.95,
+    "ph5b_ratio_min":     0.90,
     "min_conf_for_new_doc": 0.55,
     "anomaly_dropout":    0.0,
     "clash_w_local":      0.75,
