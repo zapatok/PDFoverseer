@@ -21,6 +21,7 @@ from core.utils import (
     PH5B_RATIO_MIN,
     PHASE4_FALLBACK_CONF,
     Document,
+    InferenceIssue,
     _PageRead,
 )
 
@@ -143,7 +144,7 @@ def _period_evidence(
 def _infer_missing(
     reads: list[_PageRead],
     period_info: dict | None = None,
-) -> list[_PageRead]:
+) -> tuple[list[_PageRead], list[InferenceIssue]]:
     """
     Constraint propagation inference for pages where OCR failed.
 
@@ -152,10 +153,17 @@ def _infer_missing(
     Phase 3: Period-enhanced validation (boost/penalize via period alignment)
     Phase 4: Cross-validation     (neighbor consistency check)
     Phase 5: Fallback             (remaining failures → best prior)
+
+    Returns:
+        Tuple of (reads, issues) where reads is the updated list of _PageRead
+        objects and issues is a list of InferenceIssue objects describing
+        inferred boundaries, contradictions, gaps, and low-confidence pages.
     """
     n = len(reads)
     if n == 0:
-        return reads
+        return reads, []
+
+    issues: list[InferenceIssue] = []
 
     # Prior P(total=N)
     total_counts = Counter(r.total for r in reads if r.total is not None)
@@ -336,6 +344,13 @@ def _infer_missing(
             r.method = "inferred"
             r.curr = c
             r.total = t
+            if c == 1:
+                issues.append(InferenceIssue(
+                    pdf_page=r.pdf_page,
+                    issue_type="boundary_inferred",
+                    confidence=0.0,  # updated after confidence is set
+                    context=f"inferred curr=1 total={t} at gap boundary",
+                ))
             if best_hyp is hyp_bwd:
                 r.confidence = 0.85
             else:
@@ -343,11 +358,16 @@ def _infer_missing(
                     rp = reads[gap_start - 1]
                     if rp.curr == rp.total:
                         r.confidence = 0.60 + hom * 0.28
+                        if c == 1 and issues and issues[-1].pdf_page == r.pdf_page:
+                            issues[-1].confidence = r.confidence
                         continue
                 if c == 1:
-                    r.confidence = 0.60 + hom * 0.28
+                    r.confidence = 0.60 + hom * 0.28  # sweep4: hom * 0.28
                 else:
-                    r.confidence = 1.0
+                    r.confidence = 1.0  # sweep4: 1.0
+            # Update boundary issue confidence
+            if c == 1 and issues and issues[-1].pdf_page == r.pdf_page:
+                issues[-1].confidence = r.confidence
 
     # ── Phase 1b: Orphan candidate marking ──────────────────────────
     # Marks inferred curr=1 pages that are immediately followed by another curr=1
@@ -382,7 +402,13 @@ def _infer_missing(
                         (r.curr == r.total and nxt.curr == 1)):
                     consistent = False
         if not consistent:
-            r.confidence = min(r.confidence, 0.40)
+            r.confidence = min(r.confidence, 0.50)  # was 0.40 — raised to put in VLM resolution range
+            issues.append(InferenceIssue(
+                pdf_page=r.pdf_page,
+                issue_type="contradiction",
+                confidence=r.confidence,
+                context=f"xval inconsistent: {r.curr}/{r.total}",
+            ))
 
     # ── Phase 4: Fallback for unresolved failures ────────────────────
     # Catches pages still marked "failed" after the bidirectional gap solver —
@@ -391,11 +417,26 @@ def _infer_missing(
     if PHASE4_FALLBACK_CONF > 0.0:
         for i, r in enumerate(reads):
             if r.method == "failed":
+                issues.append(InferenceIssue(
+                    pdf_page=r.pdf_page,
+                    issue_type="gap",
+                    confidence=0.0,
+                    context="unresolved after gap solver + fallback",
+                ))
                 lt, hom = _local_total(i)
                 r.curr   = 1
                 r.total  = lt
                 r.method = "inferred"
                 r.confidence = PHASE4_FALLBACK_CONF
+    else:
+        for r in reads:
+            if r.method == "failed":
+                issues.append(InferenceIssue(
+                    pdf_page=r.pdf_page,
+                    issue_type="gap",
+                    confidence=0.0,
+                    context="unresolved after gap solver, no fallback",
+                ))
 
     # ── Phase 5: Dempster-Shafer post-validation for uncertain pages (≤0.60) ──
     # Boosts confidence of low-confidence inferred pages using two evidence
@@ -506,7 +547,18 @@ def _infer_missing(
                 r.curr   = None
                 r.total  = None
 
-    return reads
+    # Collect low-confidence inferred pages as issues
+    for r in reads:
+        if r.method == "inferred" and r.confidence <= 0.60:
+            if not any(iss.pdf_page == r.pdf_page and iss.issue_type == "contradiction" for iss in issues):
+                issues.append(InferenceIssue(
+                    pdf_page=r.pdf_page,
+                    issue_type="low_confidence",
+                    confidence=r.confidence,
+                    context=f"inferred {r.curr}/{r.total} conf={r.confidence:.0%}",
+                ))
+
+    return reads, issues
 
 
 def _build_documents(

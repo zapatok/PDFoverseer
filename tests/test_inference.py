@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pytest
 
 from core.inference import _build_documents, _detect_period, _infer_missing, classify_doc
-from core.utils import Document, _PageRead
+from core.utils import Document, InferenceIssue, _PageRead
 
 
 def _make_read(page, curr, total, method="direct", confidence=1.0):
@@ -38,7 +38,7 @@ def test_forward_fill_mid_gap():
         _make_read(4, 4, 5),
         _make_read(5, 5, 5),
     ]
-    result = _infer_missing(reads)
+    result, _issues = _infer_missing(reads)
     assert result[2].curr == 3
     assert result[2].total == 5
     assert result[2].method == "inferred"
@@ -51,7 +51,7 @@ def test_backward_fill_mid_gap():
         _failed(2),
         _make_read(3, 3, 3),
     ]
-    result = _infer_missing(reads)
+    result, _issues = _infer_missing(reads)
     assert result[1].curr == 2
     assert result[1].total == 3
     assert result[1].method == "inferred"
@@ -64,7 +64,7 @@ def test_gap_at_start():
         _make_read(2, 2, 3),
         _make_read(3, 3, 3),
     ]
-    result = _infer_missing(reads)
+    result, _issues = _infer_missing(reads)
     # Should infer curr=1 from backward propagation
     assert result[0].method == "inferred"
     assert result[0].curr == 1
@@ -77,7 +77,7 @@ def test_gap_at_end():
         _make_read(2, 2, 3),
         _failed(3),
     ]
-    result = _infer_missing(reads)
+    result, _issues = _infer_missing(reads)
     assert result[2].method == "inferred"
     assert result[2].curr == 3
 
@@ -85,7 +85,7 @@ def test_gap_at_end():
 def test_all_pages_failed():
     """All pages failed → no crash, returns same number of reads."""
     reads = [_failed(i) for i in range(1, 6)]
-    result = _infer_missing(reads)
+    result, _issues = _infer_missing(reads)
     assert len(result) == 5
 
 
@@ -128,7 +128,7 @@ def test_phase5b_contradiction():
         reads.append(_make_read(base + 2, 2, 3 if doc_n != 1 else 4))  # one wrong
         reads.append(_make_read(base + 3, 3, 3))
     period_info = {"period": 3, "confidence": 0.9, "expected_total": 3}
-    result = _infer_missing(reads, period_info)
+    result, _issues = _infer_missing(reads, period_info)
     # Should not crash
     assert len(result) == len(reads)
 
@@ -143,7 +143,7 @@ def test_phase6_orphan_suppression():
         _PageRead(pdf_page=5, curr=1, total=3, method="inferred", confidence=0.40),
         _make_read(6, 2, 3),
     ]
-    result = _infer_missing(reads)
+    result, _issues = _infer_missing(reads)
     # No crash; result is valid
     assert len(result) == len(reads)
 
@@ -161,3 +161,57 @@ def test_classify_doc_boundary_negative():
     assert tier in ("inferred_lo", "inferred_hi", "direct")
     # 0.74 is below the 0.75 threshold — should be inferred_lo
     assert tier == "inferred_lo"
+
+
+# ── InferenceIssue export tests ───────────────────────────────────────────────
+
+def test_infer_missing_returns_tuple():
+    """_infer_missing now returns (reads, issues) tuple."""
+    reads = [
+        _make_read(1, 1, 3),
+        _failed(2),
+        _make_read(3, 3, 3),
+    ]
+    result = _infer_missing(reads)
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    reads_out, issues = result
+    assert isinstance(reads_out, list)
+    assert isinstance(issues, list)
+
+
+def test_gap_produces_gap_issue():
+    """Pages still failed after inference produce 'gap' issues."""
+    reads = [_failed(1)]
+    reads_out, issues = _infer_missing(reads)
+    assert isinstance(issues, list)
+
+
+def test_boundary_inferred_produces_issue():
+    """Inferred curr=1 at document boundary produces 'boundary_inferred' issue."""
+    reads = [
+        _make_read(1, 1, 3),
+        _make_read(2, 2, 3),
+        _make_read(3, 3, 3),
+        _failed(4),          # should become curr=1 (new doc boundary)
+        _make_read(5, 2, 3),
+        _make_read(6, 3, 3),
+    ]
+    reads_out, issues = _infer_missing(reads)
+    boundary_issues = [i for i in issues if i.issue_type == "boundary_inferred"]
+    assert len(boundary_issues) >= 1
+    assert boundary_issues[0].pdf_page == 4
+
+
+def test_low_confidence_produces_issue():
+    """Low-confidence inferred pages (<=0.60) produce 'low_confidence' issues."""
+    reads = [
+        _make_read(1, 1, 3),
+        _make_read(2, 2, 3),
+        _make_read(3, 3, 3),
+        _failed(4),
+        _failed(5),
+        _make_read(6, 2, 4),  # inconsistent → xval caps confidence
+    ]
+    reads_out, issues = _infer_missing(reads)
+    assert isinstance(issues, list)

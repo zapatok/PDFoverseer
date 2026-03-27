@@ -271,7 +271,7 @@ def analyze_pdf(
     failed_count = sum(1 for r in reads_clean if r.method == "failed")
     if failed_count > 0:
         on_log(f"Inferencia D-S: procesando {failed_count} paginas fallidas...", "info")
-        reads_clean = inference._infer_missing(reads_clean, period_info)
+        reads_clean, _inf_issues = inference._infer_missing(reads_clean, period_info)
         inferred = sum(1 for r in reads_clean if r.method == "inferred")
         on_log(f"Inferencia: {inferred} paginas recuperadas", "ok")
 
@@ -404,7 +404,7 @@ def re_infer_documents(
             r.confidence = 0.0
 
     period_info = inference._detect_period(reads)
-    reads = inference._infer_missing(reads, period_info)
+    reads, _issues = inference._infer_missing(reads, period_info)
 
     for r in reads:
         if r.method == "inferred" and r.confidence <= 0.45:
