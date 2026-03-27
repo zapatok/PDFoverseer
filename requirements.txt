@@ -1,3 +1,4 @@
+anthropic==0.86.0
 PyMuPDF==1.27.2
 pytesseract==0.3.13
 Pillow==12.0.0
@@ -8,3 +9,4 @@ uvicorn[standard]==0.41.0
 numpy==2.2.6
 httpx==0.28.1
 pytest==9.0.2
+requests==2.32.5

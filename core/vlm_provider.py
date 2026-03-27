@@ -183,6 +183,7 @@ class ClaudeProvider(VLMProvider):
                 }],
             )
         except Exception as e:
+            log.warning("ClaudeProvider API error: %s", e)
             return VLMResult("", None, 0.0, 0.0, str(e))
 
         latency_ms = (time.perf_counter() - t0) * 1000
