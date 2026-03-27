@@ -16,6 +16,7 @@ from core.utils import (
     INFERENCE_ENGINE_VERSION,
     PAGE_PATTERN_VERSION,
     PARALLEL_WORKERS,
+    VLM_ENGINE_VERSION,
     Document,
     _PageRead,
 )
@@ -141,7 +142,7 @@ def _emit_ai_telemetry(
     n_docs = len(documents)
     success_pct = f"{docs_ok/n_docs:.0%}" if n_docs else "n/a"
 
-    vlm_tag = f"VLM:{vlm_stats['version']}-{vlm_stats['provider']}" if vlm_stats else "VLM:off"
+    vlm_tag = f"VLM:{VLM_ENGINE_VERSION}-{vlm_stats['provider']}" if vlm_stats else "VLM:off"
     on_log(
         f"[AI:{_CORE_HASH}] [MOD:v6-tess-sr] [CUDA:{_CUDA_HASH}] [REG:{PAGE_PATTERN_VERSION}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
         f" | W{PARALLEL_WORKERS} | INF:{INFERENCE_ENGINE_VERSION} | {vlm_tag}\n"
@@ -226,8 +227,8 @@ def analyze_pdf(
         on_issue:     Callback(page, kind, detail, extra) for low-confidence
                       inferences and other issues. Default: None.
         doc_mode:     Document mode string (currently unused, reserved). Default: "charla".
-        vlm_provider: Optional VLMProvider instance. If set, low-confidence inferred
-                      pages are sent to the VLM for correction. Default: None.
+        vlm_provider: VLMProvider | None. If set, low-confidence inferred pages are
+                      sent to the VLM for correction. Default: None.
 
     Returns:
         Tuple of (documents, reads):
@@ -334,7 +335,7 @@ def analyze_pdf(
         )
         if vlm_stats["accepted"] > 0:
             period_info = inference._detect_period(reads_clean)
-            reads_clean, _issues2 = inference._infer_missing(reads_clean, period_info)
+            reads_clean, _ = inference._infer_missing(reads_clean, period_info)
             on_log(
                 f"Inferencia pass 2: re-inferencia con {vlm_stats['accepted']} correcciones VLM",
                 "ok",
