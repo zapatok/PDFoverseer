@@ -23,6 +23,44 @@ from core.utils import (
 _CUDA_HASH = hashlib.md5(b"CUDA-GPU-V4-Producer-Consumer").hexdigest()[:8]
 _CORE_HASH = "2e436564"  # Commit from the last test that was shown to the user
 
+# Short names for telemetry (spec: "boundary:3/3" not "boundary_inferred:3/3")
+_ISSUE_SHORT = {
+    "boundary_inferred": "boundary",
+    "low_confidence": "lowconf",
+    "contradiction": "contra",
+    "gap": "gap",
+}
+
+
+def _format_vlm_line(vlm_stats: dict | None) -> str:
+    """Format VLM stats for telemetry line.
+
+    Args:
+        vlm_stats: Dict with keys total, accepted, rejected, latency_sum,
+                   version, provider, by_type. None or total==0 → "off".
+
+    Returns:
+        Compact string for the VLM: telemetry line.
+    """
+    if vlm_stats is None or vlm_stats.get("total", 0) == 0:
+        return "off"
+    s = vlm_stats
+    avg_lat = s["latency_sum"] / s["total"] if s["total"] > 0 else 0.0
+    parts = [
+        f"{s['version']}-{s['provider']}",
+        f"{s['total']}req",
+        f"{s['accepted']}acc",
+        f"{s['rejected']}rej",
+        f"{avg_lat:.0f}ms/avg",
+    ]
+    type_parts = []
+    for t, counts in s.get("by_type", {}).items():
+        short = _ISSUE_SHORT.get(t, t)
+        type_parts.append(f"{short}:{counts['accepted']}/{counts['attempted']}")
+    if type_parts:
+        parts.append("| " + " ".join(type_parts))
+    return " ".join(parts)
+
 
 # ── Process Pool Worker (Top-Level for Pickling) ──────────────────────────────
 
@@ -49,6 +87,7 @@ def _emit_ai_telemetry(
     elapsed: float,
     total_pages: int,
     method_tally: dict,
+    vlm_stats: dict | None = None,
 ) -> None:
     """Emit [AI:] and [DS:] compact telemetry blocks to the log.
 
@@ -102,14 +141,16 @@ def _emit_ai_telemetry(
     n_docs = len(documents)
     success_pct = f"{docs_ok/n_docs:.0%}" if n_docs else "n/a"
 
+    vlm_tag = f"VLM:{vlm_stats['version']}-{vlm_stats['provider']}" if vlm_stats else "VLM:off"
     on_log(
         f"[AI:{_CORE_HASH}] [MOD:v6-tess-sr] [CUDA:{_CUDA_HASH}] [REG:{PAGE_PATTERN_VERSION}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
-        f" | W{PARALLEL_WORKERS} | INF:{INFERENCE_ENGINE_VERSION}\n"
+        f" | W{PARALLEL_WORKERS} | INF:{INFERENCE_ENGINE_VERSION} | {vlm_tag}\n"
         f"PRE5≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
         f"OCR: {mstr}\n"
         f"DOCS: {n_docs}total → {docs_ok}ok+{bad_str} | dist: {dist_str}\n"
         f"INF: {len(inf_reads)}total(low:{len(inf_low)} mid:{len(inf_mid)} hi:{len(inf_high)}) | LOW: {low_str}\n"
-        f"FAIL: {fail_str}",
+        f"FAIL: {fail_str}\n"
+        f"VLM: {_format_vlm_line(vlm_stats)}",
         "ai",
     )
 
@@ -165,6 +206,7 @@ def analyze_pdf(
     cancel_event: threading.Event | None = None,
     on_issue:    callable | None = None,
     doc_mode:    str = "charla",
+    vlm_provider=None,
 ) -> tuple[list[Document], list[_PageRead]]:
     """Run the V4 OCR + inference pipeline on a PDF file.
 
@@ -184,6 +226,8 @@ def analyze_pdf(
         on_issue:     Callback(page, kind, detail, extra) for low-confidence
                       inferences and other issues. Default: None.
         doc_mode:     Document mode string (currently unused, reserved). Default: "charla".
+        vlm_provider: Optional VLMProvider instance. If set, low-confidence inferred
+                      pages are sent to the VLM for correction. Default: None.
 
     Returns:
         Tuple of (documents, reads):
@@ -269,11 +313,38 @@ def analyze_pdf(
         )
 
     failed_count = sum(1 for r in reads_clean if r.method == "failed")
+    _inf_issues: list = []
     if failed_count > 0:
         on_log(f"Inferencia D-S: procesando {failed_count} paginas fallidas...", "info")
         reads_clean, _inf_issues = inference._infer_missing(reads_clean, period_info)
         inferred = sum(1 for r in reads_clean if r.method == "inferred")
         on_log(f"Inferencia: {inferred} paginas recuperadas", "ok")
+
+    # ── VLM Resolver (optional) ──────────────────────────────────────────
+    vlm_stats = None
+    if vlm_provider is not None and _inf_issues:
+        from core.vlm_resolver import resolve as vlm_resolve
+        reads_clean, vlm_stats = vlm_resolve(
+            reads_clean, _inf_issues, total_pages,
+            provider=vlm_provider,
+            pdf_path=pdf_path,
+            period_info=period_info,
+            on_log=on_log,
+            cancel_event=cancel_event,
+        )
+        if vlm_stats["accepted"] > 0:
+            period_info = inference._detect_period(reads_clean)
+            reads_clean, _issues2 = inference._infer_missing(reads_clean, period_info)
+            on_log(
+                f"Inferencia pass 2: re-inferencia con {vlm_stats['accepted']} correcciones VLM",
+                "ok",
+            )
+
+    # Count VLM methods in tally
+    if vlm_stats and vlm_stats.get("accepted", 0) > 0:
+        for r in reads_clean:
+            if r.method.startswith("vlm_"):
+                method_tally[r.method] = method_tally.get(r.method, 0) + 1
 
     from collections import defaultdict as _dd
     inf_groups: dict = _dd(list)
@@ -346,6 +417,7 @@ def analyze_pdf(
         elapsed=elapsed,
         total_pages=total_pages,
         method_tally=method_tally,
+        vlm_stats=vlm_stats,
     )
     on_log("Motor de inferencia: D-S v1 + deteccion de periodo", "section")
 
