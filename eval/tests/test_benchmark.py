@@ -10,15 +10,15 @@ def test_load_fixture_returns_dict():
     """Fixture loads into {pdf_page: (curr, total, method)} dict."""
     gt = load_fixture("eval/fixtures/real/ART_670.json")
     assert isinstance(gt, dict)
-    assert len(gt) == 796
+    assert len(gt) == 680  # 680 VLM-verified curr=1 boundaries
     assert gt[1] == (1, 4, "direct")
 
 
-def test_load_fixture_vlm_entries():
-    """VLM-resolved entries are loaded correctly."""
+def test_load_fixture_all_direct():
+    """All ART_670 entries use method='direct' (VLM-verified curr=1 boundaries)."""
     gt = load_fixture("eval/fixtures/real/ART_670.json")
-    vlm_pages = [p for p, (_, _, m) in gt.items() if m in ("vlm_claude", "vlm_opus")]
-    assert len(vlm_pages) == 646  # 516 + 130
+    non_direct = [p for p, (_, _, m) in gt.items() if m != "direct"]
+    assert non_direct == []
 
 
 def test_extract_paddle_text_empty():

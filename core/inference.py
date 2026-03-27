@@ -14,6 +14,7 @@ import numpy as np
 from core.utils import (
     ANOMALY_DROPOUT,
     CLASH_BOUNDARY_PEN,
+    MIN_BOUNDARY_GAP,
     MIN_CONF_FOR_NEW_DOC,
     PH5B_CONF_MIN,
     PH5B_RATIO_MIN,
@@ -21,6 +22,71 @@ from core.utils import (
     Document,
     _PageRead,
 )
+
+# ── Pre-inference deduplication ──────────────────────────────────────────────
+
+def _min_gap_dedup(reads: list[_PageRead], period_info: dict) -> None:
+    """Suppress one read when two confirmed curr=1 reads are closer than MIN_BOUNDARY_GAP.
+
+    When two OCR-confirmed curr=1 reads are within MIN_BOUNDARY_GAP pages of
+    each other, one is likely a structural false positive (e.g. a calendar-cover
+    template that always prints "Página 1 de 4" regardless of its actual position
+    in the sequence). This cannot be detected from OCR text alone.
+
+    Selection rule: keep the read whose distance from the previous confirmed
+    boundary is the better multiple of the detected period. Falls back to keeping
+    the later read (the FP precedes the real start in all observed cases).
+    The suppressed read is marked method='excluded' in-place.
+
+    Only activates when the dominant period is at least 2 × MIN_BOUNDARY_GAP and
+    is detected with reasonable confidence — prevents suppressing legitimate
+    back-to-back starts in files with short (1–3 page) documents.
+
+    Args:
+        reads: PageRead list, mutated in-place.
+        period_info: output of _detect_period (may be empty dict).
+    """
+    if MIN_BOUNDARY_GAP <= 1:
+        return
+
+    period = period_info.get("period") if period_info else None
+    period_conf = period_info.get("confidence", 0.0) if period_info else 0.0
+
+    if period is None or period < 2 * MIN_BOUNDARY_GAP or period_conf < 0.4:
+        return
+
+    starts = [
+        r for r in reads
+        if r.curr == 1 and r.method not in ("failed", "excluded")
+    ]
+
+    i = 0
+    while i < len(starts) - 1:
+        r_a, r_b = starts[i], starts[i + 1]
+        if r_b.pdf_page - r_a.pdf_page < MIN_BOUNDARY_GAP:
+            suppress_a = True  # default: suppress earlier, keep later
+            if period and i > 0:
+                anchor = starts[i - 1].pdf_page
+                dist_a = r_a.pdf_page - anchor
+                dist_b = r_b.pdf_page - anchor
+                fit_a = min(dist_a % period, period - dist_a % period)
+                fit_b = min(dist_b % period, period - dist_b % period)
+                if fit_a < fit_b:
+                    suppress_a = False  # a fits the period better, suppress b
+            if suppress_a:
+                r_a.method = "excluded"
+                r_a.curr = None
+                r_a.total = None
+                starts.pop(i)
+            else:
+                r_b.method = "excluded"
+                r_b.curr = None
+                r_b.total = None
+                starts.pop(i + 1)
+                i += 1
+        else:
+            i += 1
+
 
 # ── Period Detection ─────────────────────────────────────────────────────────
 

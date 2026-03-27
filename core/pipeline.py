@@ -267,6 +267,7 @@ def analyze_pdf(
             f"total esperado: {period_info['expected_total']})",
             "info",
         )
+    inference._min_gap_dedup(reads_clean, period_info)
 
     failed_count = sum(1 for r in reads_clean if r.method == "failed")
     if failed_count > 0:
@@ -404,6 +405,7 @@ def re_infer_documents(
             r.confidence = 0.0
 
     period_info = inference._detect_period(reads)
+    inference._min_gap_dedup(reads, period_info)
     reads = inference._infer_missing(reads, period_info)
 
     for r in reads:

@@ -55,13 +55,82 @@ class Document:
 
 
 def run_pipeline(reads: list[PageRead], params: dict) -> list[Document]:
-    """Full pipeline: deepcopy → detect period → infer → build docs → undercount recovery."""
+    """Full pipeline: deepcopy → detect period → dedup → infer → build docs → undercount recovery."""
     reads = copy.deepcopy(reads)
     period_info = _detect_period(reads)
+    min_boundary_gap = int(params.get("min_boundary_gap", 1))
+    _min_gap_dedup(reads, min_boundary_gap, period_info)
     _infer(reads, params, period_info)
     docs = _build_documents(reads)
     docs = _undercount_recovery(reads, docs)
     return docs
+
+
+# ── Minimum-gap deduplication ────────────────────────────────────────────────
+
+def _min_gap_dedup(reads: list[PageRead], min_boundary_gap: int, period_info: dict) -> None:
+    """Suppress one read when two confirmed curr=1 reads are closer than min_boundary_gap.
+
+    When two OCR-confirmed curr=1 reads are within min_boundary_gap pages of
+    each other, one is likely a structural false positive (e.g. a calendar-cover
+    template that always prints "Página 1 de 4" regardless of its actual
+    position in the sequence). This cannot be detected from OCR text alone.
+
+    Selection rule: keep the read whose distance from the previous confirmed
+    boundary is the better multiple of the detected period. Falls back to
+    keeping the later read (the FP precedes the real start in all observed
+    cases). The suppressed read is marked method='excluded' in-place.
+
+    Args:
+        reads: PageRead list, mutated in-place.
+        min_boundary_gap: minimum allowed page distance between two curr=1
+            reads. Values <= 1 are a no-op.
+        period_info: output of _detect_period (may be empty dict).
+    """
+    if min_boundary_gap <= 1:
+        return
+
+    period = period_info.get("period") if period_info else None
+    period_conf = period_info.get("confidence", 0.0) if period_info else 0.0
+
+    # Only activate when the dominant period is at least 2× the gap threshold
+    # and is detected with reasonable confidence. This prevents suppressing
+    # legitimate back-to-back starts in files with short (e.g. 1–3 page)
+    # documents. Example: period=3 + min_boundary_gap=2 → skip; period=4 → activate.
+    if period is None or period < 2 * min_boundary_gap or period_conf < 0.4:
+        return
+
+    starts = [
+        r for r in reads
+        if r.curr == 1 and r.method not in ("failed", "excluded")
+    ]
+
+    i = 0
+    while i < len(starts) - 1:
+        r_a, r_b = starts[i], starts[i + 1]
+        if r_b.pdf_page - r_a.pdf_page < min_boundary_gap:
+            suppress_a = True  # default: suppress earlier, keep later
+            if period and i > 0:
+                anchor = starts[i - 1].pdf_page
+                dist_a = r_a.pdf_page - anchor
+                dist_b = r_b.pdf_page - anchor
+                fit_a = min(dist_a % period, period - dist_a % period)
+                fit_b = min(dist_b % period, period - dist_b % period)
+                if fit_a < fit_b:
+                    suppress_a = False  # a fits the period better, suppress b
+            if suppress_a:
+                r_a.method = "excluded"
+                r_a.curr = None
+                r_a.total = None
+                starts.pop(i)
+            else:
+                r_b.method = "excluded"
+                r_b.curr = None
+                r_b.total = None
+                starts.pop(i + 1)
+                i += 1
+        else:
+            i += 1
 
 
 # ── Period Detection ─────────────────────────────────────────────────────────

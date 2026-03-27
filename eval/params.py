@@ -35,9 +35,11 @@ PARAM_SPACE: dict[str, list] = {
     # Global
     "window":           [5, 7, 9],
     "hom_threshold":    [0.80, 0.83, 0.85],
+    # Pre-inference dedup
+    "min_boundary_gap": [1, 2],
 }
 
-# Current production values — sweep2 (2026-03-24, 40 fixtures incl. degraded)
+# Current production values — sweep2 (2026-03-26, 41 fixtures incl. ART_670)
 PRODUCTION_PARAMS: dict[str, float | int] = {
     "fwd_conf":         0.99,
     "new_doc_base":     0.60,
@@ -58,4 +60,5 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "clash_boundary_pen": 1.5,
     "window":           5,
     "hom_threshold":    0.85,
+    "min_boundary_gap": 2,
 }
