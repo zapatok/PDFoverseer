@@ -28,7 +28,7 @@ PAGE_PATTERN_VERSION     = "v1-baseline"  # restored baseline: P-prefix only, to
 
 # VLM Resolver
 VLM_ENGINE_VERSION    = "v1.0"
-VLM_METHODS           = {"vlm_ollama", "vlm_claude"}
+VLM_METHODS           = frozenset({"vlm_ollama", "vlm_claude"})
 VLM_PROMPT            = "Que numero de pagina dice esta imagen? Formato: N/M"
 VLM_TEMPERATURE       = 0.3
 VLM_TOP_P             = 1.0
@@ -104,6 +104,9 @@ class _PageRead:
     _ph1_orphan_candidate: bool = field(default=False, repr=False, compare=False)
 
 
+_VALID_ISSUE_TYPES = frozenset({"low_confidence", "contradiction", "gap", "boundary_inferred"})
+
+
 @dataclass
 class InferenceIssue:
     """A problematic page identified by the inference engine."""
@@ -111,3 +114,7 @@ class InferenceIssue:
     issue_type: str       # "low_confidence" | "contradiction" | "gap" | "boundary_inferred"
     confidence: float     # current confidence (0.0 for gaps)
     context: str          # brief description for telemetry
+
+    def __post_init__(self) -> None:
+        if self.issue_type not in _VALID_ISSUE_TYPES:
+            raise ValueError(f"Unknown issue_type {self.issue_type!r}")
