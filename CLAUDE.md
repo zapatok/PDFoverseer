@@ -350,6 +350,26 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records o
 - **One responsibility per file:** Each module has a single clear purpose; if a file is doing two things, split it
 - **Module docs:** New packages/modules get a `README.md` explaining their purpose, files, and usage
 
+### Guardrails & Hooks
+
+**Hookify rules** (`.claude/hookify.*.local.md`) enforce code quality + safety at file write time:
+
+| Rule | Type | Purpose |
+|------|------|---------|
+| **eval-before-core** | **BLOCK** | Inference changes must be tested in `eval/inference.py` first — never edit `core/inference.py` directly without user approval |
+| **no-bare-except** | **BLOCK** | All exception handlers must catch specific types (not bare `:`) |
+| **no-shell-true** | **BLOCK** | Never use `shell=True` in subprocess calls — always use list form |
+| **no-sql-fstrings** | **BLOCK** | SQL queries must use `?` parameterized form, never f-strings |
+| **no-print-in-libs** | warn | `print()` forbidden in `core/`, `api/`, `vlm/`, `eval/` — use `logging.getLogger(__name__)` |
+| **ruff-before-done** | warn | Verify `ruff check .` passes (0 violations) before stopping |
+| **no-legacy-typing** | warn | Use Python 3.10+ syntax: `X \| None` not `Optional[X]`, `list[X]` not `List[X]` |
+| **bump-version-tags** | warn | Update `PAGE_PATTERN_VERSION` or `INFERENCE_ENGINE_VERSION` after pipeline changes |
+| **constants-in-utils** | warn | Pipeline constants belong in `core/utils.py`, not scattered across files |
+| **no-db-mocking** | warn | Project convention: never mock database in tests; use real SQLite fixtures |
+| **torch-try-except** | warn | Torch imports must be wrapped in try/except for CPU fallback |
+
+Rules take effect immediately (no restart needed). BLOCK rules prevent tool execution; warn rules show a message but allow it.
+
 ## Links
 
 - **Eval spec:** `docs/superpowers/specs/2026-03-15-eval-harness-design.md`
