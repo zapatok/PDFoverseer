@@ -106,7 +106,14 @@
       "Bash(python -c \"import json; d=json.load\\(open\\(''a:/PROJECTS/PDFoverseer/eval/fixtures/real/ART_670.json''\\)\\); print\\(f''reads: {len\\(d[\"\"reads\"\"]\\)}''\\)\")",
       "Read(//c/Users/Daniel/**)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\) if False else print\\(sys.stdin.read\\(\\)\\)\")",
-      "Bash(find /a/PROJECTS/PDFoverseer/frontend/src -type f \\\\\\(-name *.jsx -o -name *.js \\\\\\))"
+      "Bash(find /a/PROJECTS/PDFoverseer/frontend/src -type f \\\\\\(-name *.jsx -o -name *.js \\\\\\))",
+      "Bash(python -c \"import json; gt=json.load\\(open\\(''a:/PROJECTS/PDFoverseer/eval/ground_truth.json''\\)\\); [print\\(k,''→'',v\\) for k,v in gt.items\\(\\) if ''670'' in k]\")",
+      "Bash(python -c \"import json; gt=json.load\\(open\\(''a:/PROJECTS/PDFoverseer/eval/ground_truth.json''\\)\\); print\\(list\\(gt.keys\\(\\)\\)[:10]\\); print\\(''Total fixtures:'',len\\(gt\\)\\)\")",
+      "Bash(python -c \"import json; f=json.load\\(open\\(''a:/PROJECTS/PDFoverseer/eval/fixtures/real/ART_670.json''\\)\\); print\\(''pages:'', len\\(f.get\\(''pages'',f.get\\(''page_reads'',[]\\)\\)\\)\\); print\\(''keys:'', list\\(f.keys\\(\\)\\)[:5]\\); import pprint; pprint.pprint\\(list\\(f.items\\(\\)\\)[:3]\\)\")",
+      "Skill(hookify:help)",
+      "Skill(hookify:help:*)",
+      "Bash(find C:/Users/Daniel/.claude/plugins/ -type f -name *hookify*)",
+      "Bash(python eval/baseline_art674.py)"
     ]
   }
 }
