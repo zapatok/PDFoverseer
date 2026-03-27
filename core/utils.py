@@ -21,7 +21,6 @@ PHASE4_FALLBACK_CONF = 0.15  # re-enabled: recovers pages the gap solver missed
 CLASH_BOUNDARY_PEN   = 1.5   # sweep2
 PH5B_CONF_MIN        = 0.50  # sweep2
 PH5B_RATIO_MIN       = 0.90  # lowered from 0.95: zero regressions on 40 fixtures, fixes INS_31 (3 misreads in 31-page all-1-page PDF)
-MIN_BOUNDARY_GAP     = 2     # suppress one of two curr=1 reads closer than this; only when period >= 2*gap (guards against 1-page docs)
 INFERENCE_ENGINE_VERSION = "s2t-helena"
 PAGE_PATTERN_VERSION     = "v1-baseline"  # restored baseline: P-prefix only, tot<=10, Unicode quotes intact
 
