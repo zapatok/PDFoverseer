@@ -26,6 +26,15 @@ FAILURE_ZONE_MIN_LEN     = 10     # sweep4: minimum gap length to apply failure_
 INFERENCE_ENGINE_VERSION = "s2t4-helena"
 PAGE_PATTERN_VERSION     = "v1-baseline"  # restored baseline: P-prefix only, tot<=10, Unicode quotes intact
 
+# VLM Resolver
+VLM_ENGINE_VERSION    = "v1.0"
+VLM_METHODS           = {"vlm_ollama", "vlm_claude"}
+VLM_PROMPT            = "Que numero de pagina dice esta imagen? Formato: N/M"
+VLM_TEMPERATURE       = 0.3
+VLM_TOP_P             = 1.0
+VLM_UPSCALE           = 1.5
+VLM_MIN_ACCEPT_CONF   = 0.50    # min parser confidence to accept a VLM read
+
 # ============================================================================
 # Page Number Patterns & Normalization
 # ============================================================================
@@ -93,3 +102,12 @@ class _PageRead:
     confidence: float
     # Set by Phase 1b; not stored in sessions (has default):
     _ph1_orphan_candidate: bool = field(default=False, repr=False, compare=False)
+
+
+@dataclass
+class InferenceIssue:
+    """A problematic page identified by the inference engine."""
+    pdf_page: int
+    issue_type: str       # "low_confidence" | "contradiction" | "gap" | "boundary_inferred"
+    confidence: float     # current confidence (0.0 for gaps)
+    context: str          # brief description for telemetry
