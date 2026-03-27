@@ -4,20 +4,21 @@ from __future__ import annotations
 import logging
 import tempfile
 import threading
+from collections.abc import Callable
 from pathlib import Path
 
 import cv2
 import fitz
 
+from core.image import _render_clip
 from core.utils import (
-    _PageRead,
-    InferenceIssue,
-    VLM_UPSCALE,
-    VLM_MIN_ACCEPT_CONF,
     VLM_ENGINE_VERSION,
+    VLM_MIN_ACCEPT_CONF,
+    VLM_UPSCALE,
+    InferenceIssue,
+    _PageRead,
 )
 from core.vlm_provider import VLMProvider, VLMResult
-from core.image import _render_clip
 
 log = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ def resolve(
     provider: VLMProvider,
     pdf_path: str | Path,
     period_info: dict,
-    on_log: callable,
+    on_log: Callable[[str, str], None],
     cancel_event: threading.Event | None = None,
 ) -> tuple[list[_PageRead], dict]:
     """Selectively query VLM for problematic pages and return corrected reads.

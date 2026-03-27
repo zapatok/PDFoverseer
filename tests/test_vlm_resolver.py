@@ -2,11 +2,14 @@
 Tests for core.vlm_resolver — candidate selection, validation, mock provider.
 No real VLM calls — uses mock provider.
 """
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
-from core.utils import _PageRead, InferenceIssue
+
+from core.utils import InferenceIssue, _PageRead
 from core.vlm_provider import VLMResult
 from core.vlm_resolver import _should_accept
 
@@ -92,10 +95,12 @@ def test_accept_no_period_gap_fill():
     assert _should_accept(result, 1, reads, {}) is True
 
 
-import threading
-from unittest.mock import MagicMock, patch
-from core.vlm_resolver import resolve, ISSUE_PRIORITY
-import numpy as np
+import threading  # noqa: E402
+from unittest.mock import MagicMock, patch  # noqa: E402
+
+import numpy as np  # noqa: E402
+
+from core.vlm_resolver import ISSUE_PRIORITY, resolve  # noqa: E402
 
 
 class MockProvider:
@@ -222,12 +227,11 @@ def test_resolve_priority_ordering():
         InferenceIssue(pdf_page=3, issue_type="gap", confidence=0.0, context="test"),
         InferenceIssue(pdf_page=2, issue_type="boundary_inferred", confidence=0.50, context="test"),
     ]
-    call_order = []
+    log_messages = []
 
     class TrackingProvider:
         name = "mock"
         def query(self, path):
-            call_order.append(path)
             return VLMResult("", None, 0.0, 100.0, None)
 
     mock_doc = MagicMock()
@@ -240,8 +244,16 @@ def test_resolve_priority_ordering():
          patch("core.vlm_resolver._render_clip", return_value=mock_clip):
         resolve(
             reads, issues, 3, TrackingProvider(), "test.pdf", {},
-            on_log=lambda m, l: None,
+            on_log=lambda m, l: log_messages.append(m),
         )
 
-    # Should have been called twice (boundary first, then gap)
-    assert len(call_order) == 2
+    # Extract the order pages were processed from VLM log messages
+    page_order = [
+        int(msg.split("VLM p")[1].split(":")[0])
+        for msg in log_messages
+        if "VLM p" in msg and msg.startswith("  VLM p")
+    ]
+    # boundary_inferred (pdf_page=2) should be processed before gap (pdf_page=3)
+    assert len(page_order) == 2
+    assert page_order[0] == 2  # boundary_inferred first
+    assert page_order[1] == 3  # gap second
