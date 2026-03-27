@@ -418,7 +418,7 @@ def _infer_missing(
                         (r.curr == r.total and nxt.curr == 1)):
                     consistent = False
         if not consistent:
-            r.confidence = min(r.confidence, 0.50)  # was 0.40 — raised to put in VLM resolution range
+            r.confidence = min(r.confidence, 0.40)
             issues.append(InferenceIssue(
                 pdf_page=r.pdf_page,
                 issue_type="contradiction",

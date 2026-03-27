@@ -2,6 +2,7 @@ import logging
 import time
 
 import fitz
+import requests
 
 from api.database import has_reads, save_reads
 from api.state import session_manager
@@ -9,6 +10,22 @@ from api.websocket import _emit
 from core import _CORE_HASH, _build_documents, analyze_pdf
 
 logger = logging.getLogger("pdfoverserver")
+
+
+def _detect_ollama() -> object | None:
+    """Return an OllamaProvider if Ollama is reachable, else None."""
+    try:
+        r = requests.get("http://localhost:11434/api/tags", timeout=2)
+        r.raise_for_status()
+        models = [m.get("name", "") for m in r.json().get("models", [])]
+        if any("gemma3" in m or "gemma-3" in m for m in models):
+            from core.vlm_provider import OllamaProvider
+            logger.info("VLM: Ollama detected with Gemma 3 — VLM resolver enabled")
+            return OllamaProvider()
+        logger.info("VLM: Ollama running but no Gemma 3 model found — VLM disabled")
+    except Exception:
+        logger.info("VLM: Ollama not reachable — VLM resolver disabled")
+    return None
 
 def _recalculate_metrics(session_id: str):
     s = session_manager.get_or_create(session_id)
@@ -45,6 +62,14 @@ def _recalculate_metrics(session_id: str):
 
 def _process_pdfs(session_id: str, start_index: int = 0):
     s = session_manager.get_or_create(session_id)
+
+    # Auto-detect VLM provider (once per batch)
+    vlm_provider = _detect_ollama()
+    if vlm_provider is not None:
+        _emit(session_id, "log", {"msg": "VLM: Ollama + Gemma 3 detectado — corrección automática activada", "level": "ok"})
+    else:
+        _emit(session_id, "log", {"msg": "VLM: no disponible (Ollama no encontrado)", "level": "info"})
+
     _emit(session_id, "log", {"msg": "Pre-calculando páginas del lote...", "level": "info"})
     try:
         total_pages = 0
@@ -160,7 +185,8 @@ def _process_pdfs(session_id: str, start_index: int = 0):
                 pause_event=s.pause_event,
                 cancel_event=s.cancel_event,
                 on_issue=on_issue,
-                doc_mode="charla"
+                doc_mode="charla",
+                vlm_provider=vlm_provider,
             )
 
             if s.stop_requested:
