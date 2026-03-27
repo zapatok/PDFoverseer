@@ -148,11 +148,27 @@ def _infer_missing(
     """
     Constraint propagation inference for pages where OCR failed.
 
-    Phase 1: Forward propagation  (prev → curr)
-    Phase 2: Backward propagation (next → curr)
-    Phase 3: Period-enhanced validation (boost/penalize via period alignment)
-    Phase 4: Cross-validation     (neighbor consistency check)
-    Phase 5: Fallback             (remaining failures → best prior)
+    Phase 0:  Anomaly downgrade — soft dropout for singleton anomalies
+              (disabled by default when ANOMALY_DROPOUT=0.0).
+    Phase 1+2: Bidirectional gap solver — forward and backward hypotheses
+              are scored and the lower-cost one is applied to each contiguous
+              run of failed pages. boundary_inferred issues are emitted for
+              inferred curr=1 positions.
+    Phase 1b: Orphan candidate marking — inferred curr=1 pages immediately
+              followed by another curr=1 are flagged for Phase 6 review.
+    Phase 3:  Cross-validation — each inferred page is checked against its
+              immediate neighbors; inconsistent pages are capped at conf≤0.50
+              and a contradiction issue is emitted.
+    Phase 4:  Fallback for unresolved failures — pages still marked "failed"
+              after the gap solver (e.g., isolated failures at PDF edges) are
+              recorded as gap issues and, if PHASE4_FALLBACK_CONF > 0.0,
+              resolved to curr=1 with low confidence.
+    Phase 5:  Dempster-Shafer post-validation — boosts low-confidence inferred
+              pages using period alignment and neighbor agreement evidence.
+    Phase 5b: Period-contradiction correction — when ≥PH5B_RATIO_MIN of
+              confirmed reads agree on expected_total, outliers are corrected.
+    Phase 6:  Orphan suppression — inferred curr=1 candidates flagged in
+              Phase 1b with confidence < MIN_CONF_FOR_NEW_DOC are excluded.
 
     Returns:
         Tuple of (reads, issues) where reads is the updated list of _PageRead
@@ -548,9 +564,10 @@ def _infer_missing(
                 r.total  = None
 
     # Collect low-confidence inferred pages as issues
+    _skip_types = {"contradiction", "boundary_inferred"}
     for r in reads:
         if r.method == "inferred" and r.confidence <= 0.60:
-            if not any(iss.pdf_page == r.pdf_page and iss.issue_type == "contradiction" for iss in issues):
+            if not any(iss.pdf_page == r.pdf_page and iss.issue_type in _skip_types for iss in issues):
                 issues.append(InferenceIssue(
                     pdf_page=r.pdf_page,
                     issue_type="low_confidence",

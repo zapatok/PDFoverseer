@@ -181,10 +181,19 @@ def test_infer_missing_returns_tuple():
 
 
 def test_gap_produces_gap_issue():
-    """Pages still failed after inference produce 'gap' issues."""
+    """Failed page with no valid neighbors is resolved by the gap solver as boundary_inferred.
+
+    Note: Phase 4 (gap issue emission) is only reachable when PHASE4_FALLBACK_CONF=0.0
+    AND the page somehow survives Phase 1+2 still failed — which cannot happen under
+    current gap solver logic (it always resolves contiguous failed runs). This test
+    verifies the observable outcome: an isolated failed page produces at least one
+    issue (boundary_inferred via the gap solver), and after inference it is no longer
+    in the failed state.
+    """
     reads = [_failed(1)]
     reads_out, issues = _infer_missing(reads)
-    assert isinstance(issues, list)
+    assert len(issues) >= 1
+    assert reads_out[0].method != "failed"
 
 
 def test_boundary_inferred_produces_issue():
