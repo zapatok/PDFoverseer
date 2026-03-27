@@ -358,7 +358,7 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records o
 
 | Rule | Type | Purpose |
 |------|------|---------|
-| **eval-before-core** | **BLOCK** | Inference changes must be tested in `eval/inference.py` first — never edit `core/inference.py` directly without user approval |
+| **eval-before-core** | warn | Inference changes must be tested in `eval/inference.py` first — warns before editing `core/inference.py`, requires user approval at prompt |
 | **no-bare-except** | **BLOCK** | All exception handlers must catch specific types (not bare `:`) |
 | **no-shell-true** | **BLOCK** | Never use `shell=True` in subprocess calls — always use list form |
 | **no-sql-fstrings** | **BLOCK** | SQL queries must use `?` parameterized form, never f-strings |
