@@ -337,6 +337,12 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
                     c, t = 1, lt
             else:
                 c, t = 1, lt
+
+            if i == gap_end - 1 and gap_end < n:
+                r_nxt = reads[gap_end]
+                if r_nxt.curr == 1:
+                    t = c
+
             hyp_fwd.append((c, t, hom))
             prev_c, prev_t = c, t
 
@@ -532,7 +538,7 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             and period_conf >= ph5b_conf_min):
         expected_total = period_info.get("expected_total", period)
         reads_with_total = [r for r in reads if r.total is not None
-                           and r.method not in ("failed", "excluded")]
+                           and r.method not in ("failed", "inferred", "excluded")]
         if reads_with_total:
             agreeing = sum(1 for r in reads_with_total
                           if r.total == expected_total)

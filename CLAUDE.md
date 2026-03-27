@@ -133,7 +133,7 @@ pip install -r requirements-gpu.txt
 │   ├── ocr_failures/         # Failed OCR captures
 │   ├── preprocess_sweep/     # Preprocessing sweep data
 │   ├── inspection/           # Debug inspection images
-│   └── samples/              # Sample data
+│   └── samples/              # Source PDFs for scan + fixture extraction (21 PDFs: ALUM_1, ALUM_19, ART_670[=ART_674], CASTRO_15, CASTRO_5, CHAR_17, CHAR_25, CH_39, CH_51docs, CH_74docs, CH_9, CH_BSM_18, CRS_9, INSAP_20, INS_31.pdf.pdf, JOGA_19, QUEVEDO_1, QUEVEDO_13, QUEVEDO_2, RACO_25, SAEZ_14)
 ├── docs/
 │   ├── research/             # Research notes
 │   └── superpowers/
