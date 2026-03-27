@@ -208,5 +208,15 @@
     "doc_count": 10,
     "complete_count": 10,
     "inferred_count": 0
+  },
+  "syn_failure_zone": {
+    "doc_count": 30,
+    "complete_count": 19,
+    "inferred_count": 11
+  },
+  "syn_misread_singleton": {
+    "doc_count": 11,
+    "complete_count": 11,
+    "inferred_count": 0
   }
 }

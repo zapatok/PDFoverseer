@@ -305,6 +305,8 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
     clash_w_local = params.get("clash_w_local", 1.0)
     clash_w_period = params.get("clash_w_period", 1.0)
     clash_boundary_pen = params.get("clash_boundary_pen", 5.0)
+    failure_zone_cbpen_scale = params.get("failure_zone_cbpen_scale", 1.0)
+    failure_zone_min_len = int(params.get("failure_zone_min_len", 20))
 
     gaps = []
     start_idx = None
@@ -320,6 +322,13 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
         gaps.append((start_idx, n))
 
     for gap_start, gap_end in gaps:
+        # Effective cbpen: scale up for large failure zones
+        gap_len = gap_end - gap_start
+        if gap_len >= failure_zone_min_len and failure_zone_cbpen_scale > 1.0:
+            effective_cbpen = clash_boundary_pen * failure_zone_cbpen_scale
+        else:
+            effective_cbpen = clash_boundary_pen
+
         # Generate hyp_fwd
         hyp_fwd = []
         prev_c, prev_t = None, None
@@ -391,7 +400,7 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             if r_nxt.curr is not None and r_nxt.total is not None:
                 if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or
                         (fwd_last_c == fwd_last_t and r_nxt.curr == 1)):
-                    cost_fwd += clash_boundary_pen
+                    cost_fwd += effective_cbpen
 
         if gap_start > 0:
             r_prev = reads[gap_start - 1]
@@ -399,7 +408,7 @@ def _infer(reads: list[PageRead], params: dict, period_info: dict | None = None)
             if r_prev.curr is not None and r_prev.total is not None:
                 if not ((r_prev.total == bwd_first_t and r_prev.curr == bwd_first_c - 1) or
                         (r_prev.curr == r_prev.total and bwd_first_c == 1)):
-                    cost_bwd += clash_boundary_pen
+                    cost_bwd += effective_cbpen
 
         if cost_fwd < cost_bwd:
             best_hyp = hyp_fwd
