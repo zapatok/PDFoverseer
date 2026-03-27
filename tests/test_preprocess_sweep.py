@@ -64,11 +64,11 @@ def test_load_ground_truth_art674():
     """Load ART_674 GT and verify structure."""
     gt = load_ground_truth("ART_674")
     assert isinstance(gt, dict)
-    # GT maps pdf_page → (curr, total); 2683 VLM-verified reads (Opus visual inspection)
+    # GT maps pdf_page → (curr, total); 2686 VLM-verified reads (Opus visual inspection)
     assert gt[1] == (1, 4)
     assert gt[5] == (1, 4)  # doc 2 starts at p5
     assert gt[4] == (4, 4)  # interior pages included in full fixture
-    assert len(gt) == 2683
+    assert len(gt) == 2686
 
 
 def test_score_variant_result():

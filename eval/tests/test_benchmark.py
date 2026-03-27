@@ -10,7 +10,7 @@ def test_load_fixture_returns_dict():
     """Fixture loads into {pdf_page: (curr, total, method)} dict."""
     gt = load_fixture("eval/fixtures/real/ART_674.json")
     assert isinstance(gt, dict)
-    assert len(gt) == 2683  # 2683 VLM-verified reads (Opus visual inspection)
+    assert len(gt) == 2686  # 2686 VLM-verified reads (Opus visual inspection)
     assert gt[1] == (1, 4, "vlm_opus")
 
 

@@ -3972,6 +3972,13 @@
       "confidence": 1.0
     },
     {
+      "pdf_page": 568,
+      "curr": 2,
+      "total": 4,
+      "method": "vlm_opus",
+      "confidence": 1.0
+    },
+    {
       "pdf_page": 569,
       "curr": 3,
       "total": 4,
@@ -7577,11 +7584,25 @@
       "confidence": 1.0
     },
     {
+      "pdf_page": 1084,
+      "curr": 2,
+      "total": 4,
+      "method": "vlm_opus",
+      "confidence": 0.7
+    },
+    {
       "pdf_page": 1085,
       "curr": 3,
       "total": 4,
       "method": "vlm_opus",
       "confidence": 1.0
+    },
+    {
+      "pdf_page": 1086,
+      "curr": 4,
+      "total": 4,
+      "method": "vlm_opus",
+      "confidence": 0.7
     },
     {
       "pdf_page": 1087,
