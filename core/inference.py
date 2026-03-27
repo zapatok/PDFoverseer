@@ -14,6 +14,8 @@ import numpy as np
 from core.utils import (
     ANOMALY_DROPOUT,
     CLASH_BOUNDARY_PEN,
+    FAILURE_ZONE_CBPEN_SCALE,
+    FAILURE_ZONE_MIN_LEN,
     MIN_CONF_FOR_NEW_DOC,
     PH5B_CONF_MIN,
     PH5B_RATIO_MIN,
@@ -168,7 +170,7 @@ def _infer_missing(
 
     _lt_cache: dict[int, tuple[int, float]] = {}
 
-    def _local_total(idx: int, window: int = 5) -> tuple[int, float]:
+    def _local_total(idx: int, window: int = 9) -> tuple[int, float]:
         """Return (most_common_total, homogeneity) from ±window confirmed reads.
         Only overrides best_total when local region is highly homogeneous (≥85%).
         Mixed regions fall back to best_total to avoid bias."""
@@ -184,7 +186,7 @@ def _infer_missing(
             tc = Counter(local)
             mode_val, mode_freq = tc.most_common(1)[0]
             homogeneity = mode_freq / len(local)
-            result = (mode_val, homogeneity) if homogeneity >= 0.85 else (best_total, homogeneity)
+            result = (mode_val, homogeneity) if homogeneity >= 0.80 else (best_total, homogeneity)
         _lt_cache[idx] = result
         return result
 
@@ -226,6 +228,12 @@ def _infer_missing(
         gaps.append((start_idx, n))
 
     for gap_start, gap_end in gaps:
+        gap_len = gap_end - gap_start
+        if gap_len >= FAILURE_ZONE_MIN_LEN and FAILURE_ZONE_CBPEN_SCALE > 1.0:
+            effective_cbpen = CLASH_BOUNDARY_PEN * FAILURE_ZONE_CBPEN_SCALE
+        else:
+            effective_cbpen = CLASH_BOUNDARY_PEN
+
         # Generate hyp_fwd
         hyp_fwd = []
         prev_c, prev_t = None, None
@@ -279,12 +287,12 @@ def _infer_missing(
                 idx = gap_start + offset
                 lt_val, _ = _local_total(idx)
                 if t != lt_val:
-                    cost += hom * 0.75
+                    cost += hom * 1.5
                 if c == 1 and period_info and period_info.get("period"):
                     p_conf = period_info.get("confidence", 0.0)
                     ex_t = period_info.get("expected_total", period_info["period"])
                     if p_conf > 0.3 and t != ex_t:
-                        cost += p_conf * 2.5
+                        cost += p_conf * 3.0
             return cost
 
         cost_fwd = seq_cost(hyp_fwd)
@@ -297,7 +305,7 @@ def _infer_missing(
             if r_nxt.curr is not None and r_nxt.total is not None:
                 if not ((fwd_last_t == r_nxt.total and fwd_last_c == r_nxt.curr - 1) or
                         (fwd_last_c == fwd_last_t and r_nxt.curr == 1)):
-                    cost_fwd += CLASH_BOUNDARY_PEN
+                    cost_fwd += effective_cbpen
 
         if gap_start > 0:
             r_prev = reads[gap_start - 1]
@@ -305,7 +313,7 @@ def _infer_missing(
             if r_prev.curr is not None and r_prev.total is not None:
                 if not ((r_prev.total == bwd_first_t and r_prev.curr == bwd_first_c - 1) or
                         (r_prev.curr == r_prev.total and bwd_first_c == 1)):
-                    cost_bwd += CLASH_BOUNDARY_PEN
+                    cost_bwd += effective_cbpen
 
         if cost_fwd < cost_bwd:
             best_hyp = hyp_fwd
@@ -334,12 +342,12 @@ def _infer_missing(
                 if offset == 0 and gap_start > 0:
                     rp = reads[gap_start - 1]
                     if rp.curr == rp.total:
-                        r.confidence = 0.60 + hom * 0.30
+                        r.confidence = 0.60 + hom * 0.28
                         continue
                 if c == 1:
-                    r.confidence = 0.60 + hom * 0.30
+                    r.confidence = 0.60 + hom * 0.28
                 else:
-                    r.confidence = 0.99
+                    r.confidence = 1.0
 
     # ── Phase 1b: Orphan candidate marking ──────────────────────────
     # Marks inferred curr=1 pages that are immediately followed by another curr=1
@@ -374,7 +382,7 @@ def _infer_missing(
                         (r.curr == r.total and nxt.curr == 1)):
                     consistent = False
         if not consistent:
-            r.confidence = min(r.confidence, 0.50)
+            r.confidence = min(r.confidence, 0.40)
 
     # ── Phase 4: Fallback for unresolved failures ────────────────────
     # Catches pages still marked "failed" after the bidirectional gap solver —
@@ -425,8 +433,8 @@ def _infer_missing(
             prior_support = prior.get(r.total, 0.0)
 
             if support > 0.2 or neighbors_agree == 2:
-                boost = min(support * 0.10 + neighbors_agree * 0.10
-                            + prior_support * 0.07, 0.18)
+                boost = min(support * 0.10 + neighbors_agree * 0.08
+                            + prior_support * 0.05, 0.18)
                 r.confidence = min(r.confidence + boost, 0.75)
 
     # ── Phase 5b: Period-contradiction correction ─────────────────────────────

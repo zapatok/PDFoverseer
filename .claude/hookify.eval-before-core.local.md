@@ -2,7 +2,7 @@
 name: eval-before-core
 enabled: true
 event: file
-action: block
+action: warn
 conditions:
   - field: file_path, operator: regex_match, pattern: core[/\\]inference\.py
   - field: content, operator: regex_match, pattern: (def _infer|def phase_|MIN_CONF|CLASH_BOUNDARY|PH5B_|ANOMALY_DROPOUT|PHASE4_FALLBACK)

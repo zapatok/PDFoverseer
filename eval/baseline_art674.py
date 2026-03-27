@@ -39,7 +39,6 @@ def main() -> None:
     # Load fixture
     data = json.loads(FIXTURE_PATH.read_text())
     reads = [PageRead(**r) for r in data["reads"]]
-    reads_by_page = {r.pdf_page: r for r in reads}
 
     print(f"Fixture: {len(reads)} reads  (total PDF pages: {TOTAL_PAGES}, "
           f"missing: {TOTAL_PAGES - len(reads)})\n")
@@ -63,7 +62,7 @@ def main() -> None:
         print(f"  {lbl:<15}  {d['total']:4d} reads  {d['failed']:3d} failed ({fail_pct:.0f}%)")
     print(f"  {'TOTAL':<15}  {len(reads):4d} reads  "
           f"{sum(d['failed'] for d in region_reads.values()):3d} failed")
-    print(f"\n  Most common declared totals: "
+    print("\n  Most common declared totals: "
           + ", ".join(f"total={k}:{v}" for k, v in totals_in_fixture.most_common(5)))
     print()
 
