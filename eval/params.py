@@ -47,7 +47,7 @@ PRODUCTION_PARAMS: dict[str, float | int] = {
     "new_doc_base":     0.60,
     "new_doc_hom_mul":  0.28,
     "back_conf":        0.85,
-    "xval_cap":         0.40,
+    "xval_cap":         0.50,
     "ds_period_weight":   0.10,
     "ds_neighbor_weight": 0.08,
     "ds_prior_weight":    0.05,

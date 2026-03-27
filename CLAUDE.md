@@ -296,7 +296,7 @@ INF:3 x̄=72% 1✓1~1✗
 ```
 
 XVAL entry format: `<pdf_page>:<left_neighbor>><curr>/<total>@<conf%>><right_neighbor>`
-Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records only), `i`=inferred, `f`=failed
+Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records only), `i`=inferred, `f`=failed, `v`=vlm_ollama, `V`=vlm_claude
 
 ### Security
 

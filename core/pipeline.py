@@ -17,6 +17,7 @@ from core.utils import (
     PAGE_PATTERN_VERSION,
     PARALLEL_WORKERS,
     VLM_ENGINE_VERSION,
+    VLM_METHODS,
     Document,
     _PageRead,
 )
@@ -164,7 +165,7 @@ def _emit_ai_telemetry(
     n_consistent  = sum(1 for r in inf_reads if r.confidence >= 0.90)
     n_conflicting = sum(1 for r in inf_reads if r.confidence < 0.45)
 
-    _M = {"direct": "d", "super_resolution": "s", "easyocr": "e", "inferred": "i", "failed": "f"}
+    _M = {"direct": "d", "super_resolution": "s", "easyocr": "e", "inferred": "i", "failed": "f", "vlm_ollama": "v", "vlm_claude": "V"}
     _rc = reads_clean
 
     def _nb(idx: int) -> str:
@@ -344,7 +345,7 @@ def analyze_pdf(
     # Count VLM methods in tally
     if vlm_stats and vlm_stats.get("accepted", 0) > 0:
         for r in reads_clean:
-            if r.method.startswith("vlm_"):
+            if r.method in VLM_METHODS:
                 method_tally[r.method] = method_tally.get(r.method, 0) + 1
 
     from collections import defaultdict as _dd
