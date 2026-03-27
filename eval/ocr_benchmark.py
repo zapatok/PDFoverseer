@@ -36,7 +36,7 @@ from core.utils import _parse
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
-FIXTURE_PATH = Path("eval/fixtures/real/ART_670.json")
+FIXTURE_PATH = Path("eval/fixtures/real/ART_674.json")
 PDF_PATH     = Path("data/samples/ART_670.pdf")
 OUTPUT_PATH  = Path("data/benchmark_results.json")
 TOTAL_PAGES  = 2719
@@ -494,7 +494,7 @@ def save_json(
         })
 
     output = {
-        "fixture":    "eval/fixtures/real/ART_670.json",
+        "fixture":    "eval/fixtures/real/ART_674.json",
         "source_pdf": str(PDF_PATH),
         "render_dpi": RENDER_DPI,
         "summary": {

@@ -1,5 +1,5 @@
 {
-  "name": "ART_670",
+  "name": "ART_674",
   "source": "real",
   "reads": [
     {
@@ -14509,7 +14509,7 @@
     {
       "pdf_page": 2109,
       "curr": 2,
-      "total": 6,
+      "total": 4,
       "method": "vlm_opus",
       "confidence": 0.5
     },
@@ -14614,7 +14614,7 @@
     {
       "pdf_page": 2124,
       "curr": 1,
-      "total": 6,
+      "total": 4,
       "method": "vlm_opus",
       "confidence": 1.0
     },

@@ -8,15 +8,15 @@ from eval.ocr_benchmark import extract_paddle_text, load_fixture, score_page
 
 def test_load_fixture_returns_dict():
     """Fixture loads into {pdf_page: (curr, total, method)} dict."""
-    gt = load_fixture("eval/fixtures/real/ART_670.json")
+    gt = load_fixture("eval/fixtures/real/ART_674.json")
     assert isinstance(gt, dict)
     assert len(gt) == 2683  # 2683 VLM-verified reads (Opus visual inspection)
     assert gt[1] == (1, 4, "vlm_opus")
 
 
 def test_load_fixture_all_vlm_opus():
-    """All ART_670 entries use method='vlm_opus' (Opus visual inspection)."""
-    gt = load_fixture("eval/fixtures/real/ART_670.json")
+    """All ART_674 entries use method='vlm_opus' (Opus visual inspection)."""
+    gt = load_fixture("eval/fixtures/real/ART_674.json")
     non_vlm = [p for p, (_, _, m) in gt.items() if m != "vlm_opus"]
     assert non_vlm == []
 

@@ -60,9 +60,9 @@ def test_apply_variant_otsu_returns_binary():
     assert unique.issubset({0, 255})
 
 
-def test_load_ground_truth_art670():
-    """Load ART_670 GT and verify structure."""
-    gt = load_ground_truth("ART_670")
+def test_load_ground_truth_art674():
+    """Load ART_674 GT and verify structure."""
+    gt = load_ground_truth("ART_674")
     assert isinstance(gt, dict)
     # GT maps pdf_page → (curr, total); 2683 VLM-verified reads (Opus visual inspection)
     assert gt[1] == (1, 4)
