@@ -171,13 +171,15 @@ TESS_CONFIG      = "--psm 6 --oem 1"     # Tesseract config
 PARALLEL_WORKERS = 6                      # Tesseract concurrency
 BATCH_SIZE       = 12                     # Pages per pause checkpoint
 
-# Inference parameters (sweep2: 2026-03-24, 40 fixtures incl. degraded)
-MIN_CONF_FOR_NEW_DOC = 0.55   # min confidence to open a new document boundary
-CLASH_BOUNDARY_PEN   = 1.5    # gap-solver penalty for clash at boundaries
-PHASE4_FALLBACK_CONF = 0.15   # re-enabled: recovers pages the gap solver missed
-PH5B_CONF_MIN        = 0.50   # min period confidence to apply phase 5b correction
-PH5B_RATIO_MIN       = 0.90   # lowered 0.95→0.90 (2026-03-26): fixes INS_31 OCR misreads, zero regressions on 41 fixtures
-ANOMALY_DROPOUT      = 0.0    # anomaly suppression (disabled)
+# Inference parameters (sweep4: 2026-03-27, 42 fixtures incl. syn_failure_zone, syn_misread_singleton)
+MIN_CONF_FOR_NEW_DOC     = 0.55   # min confidence to open a new document boundary
+CLASH_BOUNDARY_PEN       = 1.0    # gap-solver penalty for clash at boundaries
+FAILURE_ZONE_CBPEN_SCALE = 3.0    # cbpen multiplier for large failure zones (≥ FAILURE_ZONE_MIN_LEN)
+FAILURE_ZONE_MIN_LEN     = 10     # min gap length to activate failure_zone_cbpen_scale
+PHASE4_FALLBACK_CONF     = 0.10   # re-enabled: recovers pages the gap solver missed
+PH5B_CONF_MIN            = 0.65   # min period confidence to apply phase 5b correction
+PH5B_RATIO_MIN           = 0.90   # lowered 0.95→0.90 (2026-03-26): fixes INS_31 OCR misreads, zero regressions on 41 fixtures
+ANOMALY_DROPOUT          = 0.10   # soft dropout for singleton anomalies in homogeneous regions
 ```
 
 ### Page Number Pattern
@@ -317,7 +319,7 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records o
 
 ### Inference Engine
 
-- **Version:** `s2t-helena` (see `INFERENCE_ENGINE_VERSION` in `core/utils.py`)
+- **Version:** `s2t4-helena` (see `INFERENCE_ENGINE_VERSION` in `core/utils.py`)
 - **Phases 1–5 + MP + 5b:** OCR results → forward/backward propagation → cross-validation → gap-solver → D-S post-validation → multi-period correction
 - **Confidence scores:** 0.0–1.0; <0.60 flagged as uncertain
 - **Period inference:** Autocorrelation + Dempster-Shafer + neighbor evidence
@@ -381,5 +383,5 @@ Rules take effect immediately (no restart needed). BLOCK rules prevent tool exec
 ## Pending Work
 
 - **INS_31:** ~~Last-page inference gap~~ FIXED (2026-03-26): ph5b_ratio_min 0.95→0.90, now 31/31 docs. Tray UX improvements still pending.
-- **Eval sweep2:** Refined grid around sweep1 winners is ready in `eval/params.py`; next run pending (ph5b_ratio_min=0.90 is new baseline)
+- **Eval sweep4:** ~~Pending~~ DONE (2026-03-27): composite 122 (+11 vs sweep2 baseline). s2t4-helena ported to core/. Manual test pending.
 - **Browse UX:** `/api/browse` opens a server-side tkinter chooser (Archivos/Carpeta) — works only when server is on local machine with a display
