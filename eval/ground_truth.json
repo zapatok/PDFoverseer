@@ -9,6 +9,11 @@
     "complete_count": 6,
     "inferred_count": 0
   },
+  "ART_670": {
+    "doc_count": 674,
+    "complete_count": 662,
+    "inferred_count": 35
+  },
   "CASTRO_15": {
     "doc_count": 15,
     "complete_count": 0,
