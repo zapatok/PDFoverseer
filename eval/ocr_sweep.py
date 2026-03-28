@@ -33,6 +33,7 @@ import pytesseract
 from core.utils import _parse
 from eval.ocr_params import (
     OCR_PARAM_SPACE,
+    OCR_PREPROCESS_V2_SPACE,
     OCR_PRODUCTION_PARAMS,
     OCR_TESS_PARAM_SPACE,
     OCR_TIER1_PARAMS,
@@ -574,12 +575,160 @@ def run_tier1_sweep() -> dict:
     }
 
 
+def run_preprocess_sweep() -> dict:
+    """4-phase incremental preprocessing sweep.
+    Phase 1-3: one technique each (isolated).
+    Phase 4: combo of winners."""
+    failed, success = load_pages_tier1()
+    rng = random.Random(42)
+    success_sample_size = min(50, len(success))
+    success_sample = rng.sample(success, success_sample_size)
+
+    # Corrected production baseline
+    baseline_params = dict(OCR_TIER1_PARAMS)
+
+    print(f"[preprocess_v2] {len(failed)} failed + {len(success)} success pages")
+    print(f"Baseline: {baseline_params}\n")
+
+    phases = {}
+
+    # --- Helper: run one phase ---
+    def _run_phase(name: str, param_key: str, values: list) -> dict:
+        """Score each value against failed+success pages, return phase result."""
+        configs = []
+        for val in values:
+            label = str(val)
+            cfg = {**baseline_params, param_key: val}
+            print(f"  [{name}] scoring {label}...")
+            sc_a = score_on_pages(cfg, failed)
+            sc_b = score_on_pages(cfg, success_sample)
+            net = sc_a["rescued"] - sc_b["regressed"] * 3
+            entry = {
+                "label": label,
+                "params": cfg,
+                "phase_a": {k: v for k, v in sc_a.items() if k != "rescued_pages"},
+                "phase_b": {k: v for k, v in sc_b.items() if k != "rescued_pages"},
+                "net_gain": net,
+                "rescued_pages": sc_a["rescued_pages"],
+            }
+            configs.append(entry)
+            print(f"    rescued={sc_a['rescued']}, regressed={sc_b['regressed']}, "
+                  f"net_gain={net}")
+
+        configs.sort(key=lambda x: -x["net_gain"])
+        winner = configs[0] if configs else None
+        return {"configs": configs, "winner": {
+            "label": winner["label"],
+            "value": values[configs.index(winner)] if winner else None,
+            "net_gain": winner["net_gain"],
+        } if winner else None}
+
+    # Phase 1: Red channel
+    print("Phase 1: Red Channel")
+    phases["red_channel"] = _run_phase(
+        "red_channel", "color_separation",
+        OCR_PREPROCESS_V2_SPACE["color_separation"],
+    )
+
+    # Phase 2: CLAHE
+    print("\nPhase 2: CLAHE")
+    phases["clahe"] = _run_phase(
+        "clahe", "clahe_clip",
+        OCR_PREPROCESS_V2_SPACE["clahe_clip"],
+    )
+
+    # Phase 3: Dilation
+    print("\nPhase 3: Dilation")
+    phases["dilate"] = _run_phase(
+        "dilate", "morph_dilate",
+        OCR_PREPROCESS_V2_SPACE["morph_dilate"],
+    )
+
+    # Phase 4: Combo of winners (only techniques with net_gain > 0)
+    print("\nPhase 4: Combo")
+    combo_params = {}
+    for phase_name, param_key in [
+        ("red_channel", "color_separation"),
+        ("clahe", "clahe_clip"),
+        ("dilate", "morph_dilate"),
+    ]:
+        w = phases[phase_name]["winner"]
+        if w and w["net_gain"] > 0:
+            combo_params[param_key] = w["value"]
+
+    if not combo_params:
+        print("  No winning techniques — skipping combo phase")
+        phases["combo"] = {"configs": [], "winner": None, "skipped": True}
+    elif len(combo_params) == 1:
+        print("  Only 1 winning technique — combo identical to single phase, skipping")
+        phases["combo"] = {"configs": [], "winner": None, "skipped": True}
+    else:
+        from itertools import product as iterproduct
+        combo_keys = list(combo_params.keys())
+        combo_values = []
+        off_values = {"color_separation": "hsv_inpaint", "clahe_clip": 0.0, "morph_dilate": 0}
+        for k in combo_keys:
+            combo_values.append([off_values[k], combo_params[k]])
+
+        combo_configs = []
+        for combo in iterproduct(*combo_values):
+            overrides = dict(zip(combo_keys, combo))
+            # Skip the all-off config (that's baseline)
+            if all(overrides[k] == off_values[k] for k in combo_keys):
+                continue
+            cfg = {**baseline_params, **overrides}
+            label = "+".join(f"{k}={v}" for k, v in overrides.items()
+                            if v != off_values[k])
+            if not label:
+                label = "baseline"
+
+            print(f"  [combo] scoring {label}...")
+            sc_a = score_on_pages(cfg, failed)
+            sc_b = score_on_pages(cfg, success_sample)
+            net = sc_a["rescued"] - sc_b["regressed"] * 3
+            entry = {
+                "label": label,
+                "params": cfg,
+                "phase_a": {k: v for k, v in sc_a.items() if k != "rescued_pages"},
+                "phase_b": {k: v for k, v in sc_b.items() if k != "rescued_pages"},
+                "net_gain": net,
+                "rescued_pages": sc_a["rescued_pages"],
+            }
+            combo_configs.append(entry)
+            print(f"    rescued={sc_a['rescued']}, regressed={sc_b['regressed']}, "
+                  f"net_gain={net}")
+
+        combo_configs.sort(key=lambda x: -x["net_gain"])
+        combo_winner = combo_configs[0] if combo_configs else None
+        phases["combo"] = {
+            "configs": combo_configs,
+            "winner": {
+                "label": combo_winner["label"],
+                "net_gain": combo_winner["net_gain"],
+            } if combo_winner else None,
+        }
+
+    return {
+        "run_at": datetime.now().isoformat(),
+        "mode": "preprocess_v2",
+        "baseline_params": baseline_params,
+        "total_failed_pages": len(failed),
+        "total_success_pages": len(success),
+        "success_sample_size": success_sample_size,
+        "phases": phases,
+    }
+
+
 def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    full_mode  = "--full"  in sys.argv
-    tier1_mode = "--tier1" in sys.argv
-    mini_mode  = "--mini"  in sys.argv
-    if mini_mode:
+    full_mode       = "--full"       in sys.argv
+    tier1_mode      = "--tier1"      in sys.argv
+    mini_mode       = "--mini"       in sys.argv
+    preprocess_mode = "--preprocess" in sys.argv
+    if preprocess_mode:
+        result = run_preprocess_sweep()
+        tag = "ocr_preprocess_v2"
+    elif mini_mode:
         result = run_mini_sweep()
         tag = "ocr_mini_sweep"
     elif tier1_mode:
@@ -591,7 +740,7 @@ def main():
     out_path = RESULTS_DIR / f"{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     out_path.write_text(json.dumps(result, indent=2))
     print(f"\nResults saved to {out_path}")
-    if result["top_configs"]:
+    if "top_configs" in result and result["top_configs"]:
         top = result["top_configs"][0]
         print(f"Best config: net_gain={top['net_gain']}, "
               f"rescued={top['phase_a']['rescued']}, "

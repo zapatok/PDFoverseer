@@ -37,8 +37,14 @@ def preprocess(bgr: np.ndarray, params: dict) -> tuple[np.ndarray, str]:
     if params.get("deskew", False) and img.ndim == 3:
         img = _deskew(img)
 
-    # 2. Blue ink removal
-    if params.get("blue_inpaint", True):
+    # 2. Color separation (blue ink removal)
+    color_sep = params.get("color_separation", "hsv_inpaint")
+    if color_sep == "red_channel":
+        # Red channel extraction: blue ink (R~30-80) fades, black text (R~0-40) preserved
+        if img.ndim == 3 and img.shape[2] >= 3:
+            img = img[:, :, 2]  # BGR → R channel (already grayscale)
+    elif params.get("blue_inpaint", True):
+        # Existing: HSV mask + Navier-Stokes inpainting
         if img.ndim == 3 and img.shape[2] >= 3:
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
             mask_blue = cv2.inRange(hsv, _LOWER_BLUE, _UPPER_BLUE)
@@ -55,6 +61,12 @@ def preprocess(bgr: np.ndarray, params: dict) -> tuple[np.ndarray, str]:
         gray = img
     else:
         gray = img[:, :, 0]
+
+    # 3b. CLAHE (adaptive contrast equalization)
+    clahe_clip = params.get("clahe_clip", 0.0)
+    if clahe_clip > 0:
+        clahe_obj = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(4, 4))
+        gray = clahe_obj.apply(gray)
 
     # 4. Unsharp mask
     sigma = params.get("unsharp_sigma", 0.0)
@@ -76,6 +88,14 @@ def preprocess(bgr: np.ndarray, params: dict) -> tuple[np.ndarray, str]:
     skip_bin = params.get("skip_binarization", False)
     if not skip_bin:
         _, gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # 6b. Morphological dilation (thicken thin character strokes)
+    morph_k = params.get("morph_dilate", 0)
+    if morph_k > 0:
+        kernel = np.ones((morph_k, morph_k), np.uint8)
+        gray = cv2.bitwise_not(gray)
+        gray = cv2.dilate(gray, kernel, iterations=1)
+        gray = cv2.bitwise_not(gray)
 
     # 7. Tesseract config — built from params, not from the production constant
     psm = params.get("psm", 6)

@@ -55,12 +55,19 @@ OCR_TESS_PARAM_SPACE: dict[str, list] = {
 OCR_PRODUCTION_PARAMS: dict[str, object] = {
     "blue_inpaint":      True,
     "grayscale_method":  "luminance",
-    "skip_binarization": False,
+    "skip_binarization": True,
     "tess_threshold":    0,
     "white_border":      0,
-    "unsharp_sigma":     0.0,
-    "unsharp_strength":  0.0,
+    "unsharp_sigma":     1.0,
+    "unsharp_strength":  0.3,
     "deskew":            False,
+}
+
+# Preprocess v2 sweep: 3 new techniques (independent of OCR_PARAM_SPACE)
+OCR_PREPROCESS_V2_SPACE: dict[str, list] = {
+    "color_separation": ["hsv_inpaint", "red_channel"],
+    "clahe_clip":       [0.0, 2.0, 3.0],
+    "morph_dilate":     [0, 2, 3],
 }
 
 # Tier 1 baseline: production image params + explicit Tesseract defaults
