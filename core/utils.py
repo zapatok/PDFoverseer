@@ -34,6 +34,7 @@ VLM_TEMPERATURE       = 0.3
 VLM_TOP_P             = 1.0
 VLM_UPSCALE           = 1.5
 VLM_MIN_ACCEPT_CONF   = 0.50    # min parser confidence to accept a VLM read
+VLM_SKIP_ISOLATED     = True    # skip single-page failures between two successes (inference fills trivially)
 
 # ============================================================================
 # Page Number Patterns & Normalization
