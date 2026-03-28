@@ -12,9 +12,9 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-RESULTS_DIR = Path("eval/results")
+RESULTS_DIR = Path(__file__).parent / "results"
 
 
 def load_result(path: Path | None = None) -> dict:
@@ -54,7 +54,7 @@ def print_report(result: dict) -> None:
         flag = "  *** REGRESSION ***" if scores["regression_count"] > 0 else ""
         print(f"Rank {rank:2d}  {fmt_scores(scores)}{flag}")
 
-        from eval.params import PRODUCTION_PARAMS
+        from eval.inference_tuning.params import PRODUCTION_PARAMS
         diffs = {k: v for k, v in params.items() if v != PRODUCTION_PARAMS.get(k)}
         if diffs:
             diff_str = "  ".join(f"{k}={v}" for k, v in diffs.items())

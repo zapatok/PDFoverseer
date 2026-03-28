@@ -24,21 +24,20 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
 
 import cv2
 import numpy as np
 
-# Add project root so eval/ocr_benchmark.py can import core.utils / core.image
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from core.image import _render_clip
-from core.utils import _parse
+# Add project root so eval/ocr_engines/benchmark.py can import core.utils / core.image
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from core.image import _render_clip  # noqa: E402
+from core.utils import _parse  # noqa: E402
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
-FIXTURE_PATH = Path("eval/fixtures/real/ART_674.json")
-PDF_PATH     = Path("data/samples/ART_670.pdf")
-OUTPUT_PATH  = Path("data/benchmark_results.json")
+FIXTURE_PATH = Path(__file__).parent.parent / "fixtures" / "real" / "ART_674.json"
+PDF_PATH     = Path(__file__).parent.parent.parent / "data" / "samples" / "ART_670.pdf"
+OUTPUT_PATH  = Path(__file__).parent.parent.parent / "data" / "benchmark_results.json"
 TOTAL_PAGES  = 2719
 
 # Production GPU fallback renders at this DPI (core/ocr.py EASYOCR_DPI = 300)

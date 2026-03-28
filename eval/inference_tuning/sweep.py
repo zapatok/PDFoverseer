@@ -20,36 +20,18 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.inference import PageRead, run_pipeline
-from eval.params import PARAM_SPACE, PRODUCTION_PARAMS
+from eval.inference_tuning.inference import run_pipeline  # noqa: E402
+from eval.inference_tuning.params import PARAM_SPACE, PRODUCTION_PARAMS  # noqa: E402
+from eval.shared.loaders import load_fixtures, load_ground_truth  # noqa: E402
 
-FIXTURES_DIR = Path("eval/fixtures")
-GROUND_TRUTH_PATH = Path("eval/ground_truth.json")
-RESULTS_DIR = Path("eval/results")
+RESULTS_DIR = Path(__file__).parent / "results"
 TOP_N = 10
 LHS_SAMPLES = 500
 PASS2_TOP_N = 20
 BEAM_TOP_N = 5
 RANDOM_SEED = 42
-
-
-# -- Fixture loading ----------------------------------------------------------
-
-def load_fixtures() -> list[dict]:
-    fixtures = []
-    for path in sorted(FIXTURES_DIR.rglob("*.json")):
-        if "archived" in path.parts:
-            continue
-        data = json.loads(path.read_text())
-        data["reads"] = [PageRead(**r) for r in data["reads"]]
-        fixtures.append(data)
-    return fixtures
-
-
-def load_ground_truth() -> dict[str, dict]:
-    return json.loads(GROUND_TRUTH_PATH.read_text())
 
 
 # -- Scoring ------------------------------------------------------------------

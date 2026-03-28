@@ -12,12 +12,13 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.inference import PageRead, run_pipeline
-from eval.params import PRODUCTION_PARAMS
+from eval.inference_tuning.inference import run_pipeline  # noqa: E402
+from eval.inference_tuning.params import PRODUCTION_PARAMS  # noqa: E402
+from eval.shared.types import PageRead  # noqa: E402
 
-FIXTURE_PATH = Path("eval/fixtures/real/ART_674.json")
+FIXTURE_PATH = Path(__file__).parent.parent / "fixtures" / "real" / "ART_674.json"
 GT = {"doc_count": 674, "complete_count": 662, "inferred_count": 35}
 
 REGION_UNREADABLE = (1753, 1933)

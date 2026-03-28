@@ -25,22 +25,22 @@ from datetime import datetime
 from itertools import product
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import cv2
-import pytesseract
+import cv2  # noqa: E402
+import pytesseract  # noqa: E402
 
-from core.utils import _parse
-from eval.ocr_params import (
+from core.utils import _parse  # noqa: E402
+from eval.ocr_preprocessing.params import (  # noqa: E402
     OCR_PARAM_SPACE,
     OCR_PREPROCESS_V2_SPACE,
     OCR_PRODUCTION_PARAMS,
     OCR_TESS_PARAM_SPACE,
     OCR_TIER1_PARAMS,
 )
-from eval.ocr_preprocess import preprocess
+from eval.ocr_preprocessing.preprocess import preprocess  # noqa: E402
 
-_ROOT       = Path(__file__).parent.parent
+_ROOT       = Path(__file__).parent.parent.parent
 DATA_DIR    = _ROOT / "data" / "ocr_all"
 INDEX_CSV   = DATA_DIR / "all_index.csv"
 RESULTS_DIR = Path(__file__).parent / "results"

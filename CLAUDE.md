@@ -68,35 +68,45 @@ pip install -r requirements-gpu.txt
 │   ├── capture_failures.py   # Capture OCR failure images
 │   ├── preprocess_sweep.py   # Preprocessing parameter sweep
 │   └── regex_pattern_test.py # Compare regex strategies on real OCR text (ART_670)
-├── eval/                     # Evaluation harness (parameter sweep)
-│   ├── inference.py          # Parameterized copy of inference pipeline
-│   ├── sweep.py              # LHS sample → fine grid → beam search
-│   ├── report.py             # Ranked results table
-│   ├── extract_fixtures.py   # One-time fixture extraction
-│   ├── params.py             # Sweep parameter space + production values
-│   ├── graph_inference.py    # Graph-based inference engine
-│   ├── graph_params.py       # Graph inference parameters
-│   ├── graph_sweep.py        # Graph inference sweep
-│   ├── compare_engines.py    # Compare inference engines
-│   ├── ocr_benchmark.py      # OCR accuracy benchmark
-│   ├── ocr_sweep.py          # OCR preprocessing sweep
-│   ├── ocr_params.py         # OCR sweep parameters
-│   ├── ocr_preprocess.py     # OCR preprocessing for eval
-│   ├── ocr_report.py         # OCR sweep results
-│   ├── hybrid_inference.py   # Hybrid inference approach
-│   ├── ground_truth.json     # Ground truth data
+├── eval/                     # Evaluation harness (organized by investigation stage)
+│   ├── shared/               # Shared types and loaders
+│   │   ├── types.py          # PageRead, Document dataclasses (single source of truth)
+│   │   └── loaders.py        # load_fixtures(), load_ground_truth()
+│   ├── inference_tuning/     # Parameter sweep for core/inference.py
+│   │   ├── inference.py      # Parameterized copy of core/inference.py
+│   │   ├── params.py         # PARAM_SPACE + PRODUCTION_PARAMS
+│   │   ├── sweep.py          # LHS sample → fine grid → beam search
+│   │   ├── report.py         # Ranked results table
+│   │   └── results/          # Sweep results (gitignored)
+│   ├── graph_inference/      # Experimental graph-based inference (HMM + Viterbi)
+│   │   ├── engine.py         # Graph inference engine
+│   │   ├── params.py         # Graph engine parameters
+│   │   ├── sweep.py          # Graph engine sweep
+│   │   ├── hybrid.py         # Phases 0-6 + Viterbi global decoder
+│   │   ├── compare.py        # Head-to-head engine comparison
+│   │   └── results/          # Sweep results (gitignored)
+│   ├── ocr_preprocessing/    # OCR image preprocessing sweeps
+│   │   ├── preprocess.py     # Preprocessing pipeline variants
+│   │   ├── params.py         # Preprocessing parameter space
+│   │   ├── sweep.py          # Preprocessing sweep runner
+│   │   ├── report.py         # Preprocessing results
+│   │   └── results/          # Sweep results (gitignored)
+│   ├── ocr_engines/          # OCR engine benchmarks (EasyOCR, PaddleOCR)
+│   │   └── benchmark.py      # Engine accuracy benchmark
+│   ├── tests/                # Centralized tests for all stages
+│   │   ├── test_inference.py
+│   │   ├── test_sweep_scoring.py
+│   │   ├── test_graph_inference.py
+│   │   ├── test_preprocess.py
+│   │   └── test_benchmark.py
 │   ├── fixtures/
 │   │   ├── real/             # 21 real PDFs (charlas CRS)
 │   │   ├── synthetic/        # 13 synthetic test cases
-│   │   ├── degraded/         # 6 degraded copies of real fixtures (~15-20% failed)
+│   │   ├── degraded/         # 7 degraded copies (~15-20% OCR failure rate)
 │   │   └── archived/         # Archived fixtures
-│   ├── tests/
-│   │   ├── test_inference.py
-│   │   ├── test_sweep_scoring.py
-│   │   ├── test_benchmark.py
-│   │   ├── test_graph_inference.py
-│   │   └── test_ocr_preprocess.py
-│   └── results/              # Sweep results (ignored)
+│   ├── ground_truth.json     # Expected document counts per fixture
+│   ├── extract_fixtures.py   # One-time fixture extraction
+│   └── extract_art674_tess.py # ART_674 Tesseract fixture extraction
 ├── tests/                    # Integration + unit tests
 │   ├── test_api.py           # FastAPI TestClient tests (no real OCR)
 │   ├── test_database.py
@@ -226,17 +236,20 @@ Matches: "Página 1 de 4", "Pag 2 de 3", etc. (Spanish-centric, with OCR digit n
 # Extract fixtures (one-time)
 python eval/extract_fixtures.py
 
-# Run parameter sweep (3 passes: ~500k combos)
-python eval/sweep.py
+# Inference tuning (primary workflow)
+python eval/inference_tuning/sweep.py
+python eval/inference_tuning/report.py
 
-# Print ranked results
-python eval/report.py
+# Graph inference (experimental)
+python eval/graph_inference/sweep.py
+python eval/graph_inference/compare.py
 
-# Compare inference engines
-python eval/compare_engines.py
+# OCR preprocessing sweep
+python eval/ocr_preprocessing/sweep.py
+python eval/ocr_preprocessing/report.py
 
-# Run OCR benchmark
-python eval/ocr_benchmark.py
+# OCR engine benchmark
+python eval/ocr_engines/benchmark.py
 ```
 
 ### VLM Module
@@ -376,7 +389,9 @@ Rules take effect immediately (no restart needed). BLOCK rules prevent tool exec
 
 - **Eval spec:** `docs/superpowers/specs/2026-03-15-eval-harness-design.md`
 - **Eval plan:** `docs/superpowers/plans/2026-03-15-eval-harness.md`
+- **Eval reorg plan:** `docs/superpowers/plans/2026-03-28-eval-reorganization.md`
 - **EasyOCR postmortem:** `docs/superpowers/reports/2026-03-25-easyocr-paddle-postmortem.md`
+- **Eval README:** `eval/README.md`
 - **Core README:** `core/README.md`
 - **Memory:** `C:\Users\Daniel\.claude\projects\a--PROJECTS-PDFoverseer\memory\`
 

@@ -12,9 +12,9 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.ocr_params import OCR_PRODUCTION_PARAMS, OCR_TIER1_PARAMS
+from eval.ocr_preprocessing.params import OCR_PRODUCTION_PARAMS, OCR_TIER1_PARAMS  # noqa: E402
 
 RESULTS_DIR = Path(__file__).parent / "results"
 

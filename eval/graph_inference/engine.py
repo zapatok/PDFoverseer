@@ -17,38 +17,15 @@ from __future__ import annotations
 
 import copy  # used in run_pipeline (Task 6)
 import math  # used in emission/transition/Viterbi (Tasks 2-4)
+import sys
 from collections import Counter  # used in modal total detection (Task 4)
-from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np  # used in Viterbi decoder (Tasks 4, 10)
 
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-@dataclass
-class PageRead:
-    pdf_page:   int
-    curr:       int | None
-    total:      int | None
-    method:     str
-    confidence: float
-    _ph1_orphan_candidate: bool = field(default=False, repr=False, compare=False)
-
-
-@dataclass
-class Document:
-    index:          int
-    start_pdf_page: int
-    declared_total: int
-    pages:          list[int] = field(default_factory=list)
-    inferred_pages: list[int] = field(default_factory=list)
-    sequence_ok:    bool      = True
-
-    @property
-    def found_total(self) -> int:
-        return len(self.pages) + len(self.inferred_pages)
-
-    @property
-    def is_complete(self) -> bool:
-        return self.sequence_ok and self.found_total == self.declared_total
+from eval.shared.types import Document, PageRead  # noqa: E402
 
 
 def build_state_space(max_total: int) -> tuple[list, dict]:

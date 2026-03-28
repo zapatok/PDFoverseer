@@ -47,8 +47,10 @@ package-lock.json
 # Git worktrees
 .worktrees/
 
-# Eval sweep results
-eval/results/
+# Eval sweep results (stage-specific)
+eval/inference_tuning/results/
+eval/graph_inference/results/
+eval/ocr_preprocessing/results/
 
 # VLM sweep results
 vlm/results/*.json

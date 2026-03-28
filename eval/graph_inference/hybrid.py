@@ -17,10 +17,11 @@ import copy
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.graph_inference import extract_documents, viterbi_decode  # noqa: E402
-from eval.inference import Document, PageRead, _detect_period, _infer  # noqa: E402
+from eval.graph_inference.engine import extract_documents, viterbi_decode  # noqa: E402
+from eval.inference_tuning.inference import _detect_period, _infer  # noqa: E402
+from eval.shared.types import Document, PageRead  # noqa: E402
 
 
 def run_pipeline(reads: list[PageRead], params: dict) -> list[Document]:

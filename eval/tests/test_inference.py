@@ -4,8 +4,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.inference import PageRead, _detect_period, run_pipeline
-from eval.params import PRODUCTION_PARAMS as PROD_PARAMS
+from eval.inference_tuning.inference import _detect_period, run_pipeline  # noqa: E402
+from eval.inference_tuning.params import PRODUCTION_PARAMS as PROD_PARAMS  # noqa: E402
+from eval.shared.types import PageRead  # noqa: E402
 
 
 def make_reads(specs):

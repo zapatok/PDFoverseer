@@ -12,19 +12,16 @@ Usage:
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from eval.graph_inference import run_pipeline as run_graph
-from eval.hybrid_inference import run_pipeline as run_hybrid
-from eval.inference import PageRead
-from eval.inference import run_pipeline as run_existing
-
-FIXTURES_DIR      = Path("eval/fixtures")
-GROUND_TRUTH_PATH = Path("eval/ground_truth.json")
+from eval.graph_inference.engine import run_pipeline as run_graph  # noqa: E402
+from eval.graph_inference.hybrid import run_pipeline as run_hybrid  # noqa: E402
+from eval.inference_tuning.inference import run_pipeline as run_existing  # noqa: E402
+from eval.shared.loaders import load_fixtures, load_ground_truth  # noqa: E402
+from eval.shared.types import PageRead  # noqa: E402
 
 SYNTHETIC_NAMES = {
     "ins31_gap", "undercount_chain", "ambiguous_start",
@@ -55,23 +52,6 @@ BEST_GRAPH = {
 
 # Hybrid: merged (key sets are disjoint)
 BEST_HYBRID = {**BEST_EXISTING, **BEST_GRAPH}
-
-
-# ── Fixture loading ───────────────────────────────────────────────────────────
-
-def load_fixtures():
-    fixtures = []
-    for path in sorted(FIXTURES_DIR.rglob("*.json")):
-        if "archived" in path.parts:
-            continue
-        data = json.loads(path.read_text())
-        data["reads"] = [PageRead(**r) for r in data["reads"]]
-        fixtures.append(data)
-    return fixtures
-
-
-def load_ground_truth():
-    return json.loads(GROUND_TRUTH_PATH.read_text())
 
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
