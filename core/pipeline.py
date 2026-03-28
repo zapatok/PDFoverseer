@@ -130,7 +130,8 @@ def _emit_ai_telemetry(
     n_docs = len(documents)
     success_pct = f"{docs_ok/n_docs:.0%}" if n_docs else "n/a"
 
-    vlm_tag = f"VLM:{VLM_ENGINE_VERSION}-{vlm_stats['provider']}" if vlm_stats else "VLM:off"
+    vlm_active = vlm_stats is not None and vlm_stats.get("queried", 0) > 0
+    vlm_tag = f"VLM:{VLM_ENGINE_VERSION}-{vlm_stats['provider']}" if vlm_active else "VLM:off"
     on_log(
         f"[AI:{_CORE_HASH}] [MOD:v6-tess-sr] [CUDA:{_CUDA_HASH}] [REG:{PAGE_PATTERN_VERSION}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
         f" | W{PARALLEL_WORKERS} | INF:{INFERENCE_ENGINE_VERSION} | {vlm_tag}\n"
