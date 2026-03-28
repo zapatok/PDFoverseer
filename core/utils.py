@@ -27,7 +27,7 @@ INFERENCE_ENGINE_VERSION = "s2t5-vlm"
 PAGE_PATTERN_VERSION     = "v1-baseline"  # restored baseline: P-prefix only, tot<=10, Unicode quotes intact
 
 # VLM Resolver
-VLM_ENGINE_VERSION    = "v1.0"
+VLM_ENGINE_VERSION    = "v2.0-tier3"
 VLM_METHODS           = frozenset({"vlm_ollama", "vlm_claude"})
 VLM_PROMPT            = "Que numero de pagina dice esta imagen? Formato: N/M"
 VLM_TEMPERATURE       = 0.3
