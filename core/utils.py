@@ -23,7 +23,7 @@ PH5B_CONF_MIN            = 0.65   # sweep4
 PH5B_RATIO_MIN           = 0.90   # lowered from 0.95: zero regressions on 40 fixtures, fixes INS_31 (3 misreads in 31-page all-1-page PDF)
 FAILURE_ZONE_CBPEN_SCALE = 3.0    # sweep4: multiply cbpen for failure zones >= FAILURE_ZONE_MIN_LEN
 FAILURE_ZONE_MIN_LEN     = 10     # sweep4: minimum gap length to apply failure_zone_cbpen_scale
-INFERENCE_ENGINE_VERSION = "s2t5-vlm"
+INFERENCE_ENGINE_VERSION = "s2t6-tier3"
 PAGE_PATTERN_VERSION     = "v1-baseline"  # restored baseline: P-prefix only, tot<=10, Unicode quotes intact
 
 # VLM Resolver
