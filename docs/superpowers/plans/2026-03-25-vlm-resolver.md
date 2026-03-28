@@ -446,8 +446,8 @@ git commit -m "feat(vlm): VLM provider interface with Ollama + Claude implementa
 ### Task 3: Export InferenceIssues from `_infer_missing()`
 
 **Files:**
-- Modify: `core/inference.py:160-520`
-- Modify: `core/pipeline.py:306,420`
+- Modify: `core/inference.py:143-509` (current line range after sweep4 additions)
+- Modify: `core/pipeline.py:274,407` (line 274: first `_infer_missing` call; line 407: call inside `re_infer_documents`)
 - Modify: `tests/test_inference.py`
 
 - [ ] **Step 1: Write failing test for new return type**
@@ -522,9 +522,21 @@ Expected: FAIL — `_infer_missing` returns `list`, not `tuple`
 
 In `core/inference.py`:
 
-**3a.** Add `InferenceIssue` to import line 14:
+**3a.** Add `InferenceIssue` to import (current import is at line ~14 — includes `FAILURE_ZONE_CBPEN_SCALE` and `FAILURE_ZONE_MIN_LEN` added in sweep4):
 ```python
-from core.utils import Document, _PageRead, MIN_CONF_FOR_NEW_DOC, ANOMALY_DROPOUT, PHASE4_FALLBACK_CONF, CLASH_BOUNDARY_PEN, PH5B_CONF_MIN, PH5B_RATIO_MIN, InferenceIssue
+from core.utils import (
+    ANOMALY_DROPOUT,
+    CLASH_BOUNDARY_PEN,
+    FAILURE_ZONE_CBPEN_SCALE,
+    FAILURE_ZONE_MIN_LEN,
+    MIN_CONF_FOR_NEW_DOC,
+    PH5B_CONF_MIN,
+    PH5B_RATIO_MIN,
+    PHASE4_FALLBACK_CONF,
+    Document,
+    _PageRead,
+    InferenceIssue,
+)
 ```
 
 **3b.** Change signature (line 160-163):
@@ -564,23 +576,26 @@ def _infer_missing(
                 if offset == 0 and gap_start > 0:
                     rp = reads[gap_start - 1]
                     if rp.curr == rp.total:
-                        r.confidence = 0.60 + hom * 0.30
+                        r.confidence = 0.60 + hom * 0.28  # matches current code (sweep4: hom * 0.28)
                         if c == 1 and issues and issues[-1].pdf_page == r.pdf_page:
                             issues[-1].confidence = r.confidence
                         continue
                 if c == 1:
-                    r.confidence = 0.60 + hom * 0.30
+                    r.confidence = 0.60 + hom * 0.28  # matches current code (sweep4: hom * 0.28)
                 else:
-                    r.confidence = 0.99
+                    r.confidence = 1.0  # matches current code (not 0.99)
             # Update boundary issue confidence
             if c == 1 and issues and issues[-1].pdf_page == r.pdf_page:
                 issues[-1].confidence = r.confidence
 ```
 
-**3e.** In Phase 3 cross-validation (line 396), add contradiction issue:
+**3e.** In Phase 3 cross-validation (line ~385 — find the `if not consistent:` block), add contradiction issue.
+
+> **⚠️ BEHAVIOR CHANGE:** Current code caps at `0.40`. This step changes the cap to `0.50` so contradicted pages fall within the VLM's query range (≤0.60). Validate against eval fixtures (`python eval/sweep.py` or spot-check `eval/tests/test_inference.py`) before merging if this causes regressions.
+
 ```python
         if not consistent:
-            r.confidence = min(r.confidence, 0.50)
+            r.confidence = min(r.confidence, 0.50)  # was 0.40 — raised to put in VLM resolution range
             issues.append(InferenceIssue(
                 pdf_page=r.pdf_page,
                 issue_type="contradiction",
@@ -660,6 +675,8 @@ result, _issues = _infer_missing(reads, period_info)
 
 # In test_phase6_orphan_suppression:
 result, _issues = _infer_missing(reads)
+
+# In test_classify_doc_boundary_negative (uses _build_documents directly, not _infer_missing — NO change needed)
 ```
 
 - [ ] **Step 5: Update `core/pipeline.py` callers to unpack tuple**
@@ -1279,16 +1296,16 @@ Expected: FAIL — `vlm_provider` not in signature
 
 In `core/pipeline.py`:
 
-**3a.** Add `VLM_ENGINE_VERSION` to imports (line 15-22):
+**3a.** Add `VLM_ENGINE_VERSION` to imports (current import block, lines 14-21). Keep `PAGE_PATTERN_VERSION` (already present, used in telemetry). Do NOT add `_parse` (not imported here — it lives in `core/ocr.py`):
 ```python
 from core.utils import (
+    BATCH_SIZE,
+    INFERENCE_ENGINE_VERSION,
+    PAGE_PATTERN_VERSION,
+    PARALLEL_WORKERS,
+    VLM_ENGINE_VERSION,
     Document,
     _PageRead,
-    PARALLEL_WORKERS,
-    BATCH_SIZE,
-    _parse,
-    INFERENCE_ENGINE_VERSION,
-    VLM_ENGINE_VERSION,
 )
 ```
 
@@ -1395,13 +1412,13 @@ def _emit_ai_telemetry(
 ) -> None:
 ```
 
-In the `[AI:]` header line, append VLM tag:
+In the `[AI:]` header line, append VLM tag. Preserve the existing `[REG:{PAGE_PATTERN_VERSION}]` field and the existing module/worker format (`v6-tess-sr`, `W{PARALLEL_WORKERS}` — no `+GPU` suffix):
 ```python
     vlm_tag = f"VLM:{vlm_stats['version']}-{vlm_stats['provider']}" if vlm_stats else "VLM:off"
 
     on_log(
-        f"[AI:{_CORE_HASH}] [MOD:v5-max-total] [CUDA:{_CUDA_HASH}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
-        f" | W{PARALLEL_WORKERS}+GPU | INF:{INFERENCE_ENGINE_VERSION} | {vlm_tag}\n"
+        f"[AI:{_CORE_HASH}] [MOD:v6-tess-sr] [CUDA:{_CUDA_HASH}] [REG:{PAGE_PATTERN_VERSION}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
+        f" | W{PARALLEL_WORKERS} | INF:{INFERENCE_ENGINE_VERSION} | {vlm_tag}\n"
 ```
 
 Change the `FAIL:` line to include VLM:
