@@ -103,10 +103,10 @@ pip install -r requirements-gpu.txt
 │   │   ├── real/             # 21 real PDFs (charlas CRS)
 │   │   ├── synthetic/        # 13 synthetic test cases
 │   │   ├── degraded/         # 7 degraded copies (~15-20% OCR failure rate)
-│   │   └── archived/         # Archived fixtures
-│   ├── ground_truth.json     # Expected document counts per fixture
-│   ├── extract_fixtures.py   # One-time fixture extraction
-│   └── extract_art674_tess.py # ART_674 Tesseract fixture extraction
+│   │   ├── archived/         # Archived fixtures
+│   │   ├── ground_truth.json # Expected document counts per fixture
+│   │   ├── extract_fixtures.py      # Fixture extraction from real PDFs (Tess+SR)
+│   │   └── extract_art674_tess.py   # ART_674 Tesseract fixture extraction
 ├── tests/                    # Integration + unit tests
 │   ├── test_api.py           # FastAPI TestClient tests (no real OCR)
 │   ├── test_database.py
@@ -234,7 +234,7 @@ Matches: "Página 1 de 4", "Pag 2 de 3", etc. (Spanish-centric, with OCR digit n
 
 ```bash
 # Extract fixtures (one-time)
-python eval/extract_fixtures.py
+python eval/fixtures/extract_fixtures.py
 
 # Inference tuning (primary workflow)
 python eval/inference_tuning/sweep.py

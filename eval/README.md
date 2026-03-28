@@ -48,14 +48,14 @@ eval/
 │   ├── test_graph_inference.py # Graph engine tests
 │   ├── test_preprocess.py   # OCR preprocessing tests
 │   └── test_benchmark.py    # OCR benchmark tests
-├── fixtures/                # Test fixtures (shared across stages)
+├── fixtures/                # Test fixtures + extraction tools
 │   ├── real/                # 21 real CRS PDFs — primary benchmark corpus
 │   ├── synthetic/           # 13 synthetic edge cases
 │   ├── degraded/            # 7 degraded copies (~15-20% OCR failure rate)
-│   └── archived/            # Superseded fixtures
-├── ground_truth.json        # Expected document counts per fixture
-├── extract_fixtures.py      # One-time fixture extraction from real PDFs
-└── extract_art674_tess.py   # ART_674 Tesseract fixture extraction
+│   ├── archived/            # Superseded fixtures
+│   ├── ground_truth.json    # Expected document counts per fixture
+│   ├── extract_fixtures.py  # Fixture extraction from real PDFs (Tess+SR)
+│   └── extract_art674_tess.py # ART_674 Tesseract fixture extraction
 ```
 
 ## Workflow
@@ -64,7 +64,7 @@ eval/
 
 ```bash
 # Extract fixtures (one-time)
-python eval/extract_fixtures.py
+python eval/fixtures/extract_fixtures.py
 
 # Run parameter sweep (3 passes: ~500k combos)
 python eval/inference_tuning/sweep.py
@@ -100,7 +100,7 @@ python eval/ocr_engines/benchmark.py
 - **`types.py`** — `PageRead` and `Document` dataclasses. Single source of truth;
   all stages import from here instead of defining their own copies.
 - **`loaders.py`** — `load_fixtures()` and `load_ground_truth()` functions.
-  Reads from `eval/fixtures/` and `eval/ground_truth.json`.
+  Reads from `eval/fixtures/` and `eval/fixtures/ground_truth.json`.
 
 ## Important
 

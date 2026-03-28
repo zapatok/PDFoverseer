@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-eval/extract_art674_tess.py
----------------------------
+eval/fixtures/extract_art674_tess.py
+------------------------------------
 Extract Tesseract reads from data/samples/ART_670.pdf.
 Saves raw OCR reads (NO inference) to eval/fixtures/real/ART_674_tess.json.
 
@@ -9,7 +9,7 @@ Does NOT overwrite ART_674.json (VLM fixture).
 
 Usage:
     source .venv-cuda/Scripts/activate   # Windows: .\\.venv-cuda\\Scripts\\activate
-    python eval/extract_art674_tess.py
+    python eval/fixtures/extract_art674_tess.py
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import fitz  # noqa: E402
@@ -28,7 +28,7 @@ from core.ocr import _process_page, _setup_sr  # noqa: E402
 from core.utils import BATCH_SIZE, PARALLEL_WORKERS, _PageRead  # noqa: E402
 
 PDF_PATH = PROJECT_ROOT / "data" / "samples" / "ART_670.pdf"
-OUT_PATH = PROJECT_ROOT / "eval" / "fixtures" / "real" / "ART_674_tess.json"
+OUT_PATH = Path(__file__).parent / "real" / "ART_674_tess.json"
 FIXTURE_NAME = "ART_674_tess"
 
 

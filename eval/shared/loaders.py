@@ -7,7 +7,7 @@ from pathlib import Path
 from .types import PageRead  # relative import: intra-package, no sys.path needed
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
-GROUND_TRUTH_PATH = Path(__file__).parent.parent / "ground_truth.json"
+GROUND_TRUTH_PATH = Path(__file__).parent.parent / "fixtures" / "ground_truth.json"
 
 
 def load_fixtures() -> list[dict]:
