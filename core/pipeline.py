@@ -145,7 +145,7 @@ def _emit_ai_telemetry(
 
     vlm_tag = f"VLM:{VLM_ENGINE_VERSION}-{vlm_stats['provider']}" if vlm_stats else "VLM:off"
     on_log(
-        f"[AI:{_CORE_HASH}] [MOD:v6-tess-sr] [CUDA:{_CUDA_HASH}] [REG:{PAGE_PATTERN_VERSION}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
+        f"[AI:{_CORE_HASH}] [MOD:v7-tess-sr-clahe] [CUDA:{_CUDA_HASH}] [REG:{PAGE_PATTERN_VERSION}] {fname} | {total_pages}p {elapsed:.1f}s {elapsed/total_pages*1000:.0f}ms/p"
         f" | W{PARALLEL_WORKERS} | INF:{INFERENCE_ENGINE_VERSION} | {vlm_tag}\n"
         f"PRE5≡ DOC:{n_docs} COM:{docs_ok}({success_pct}) INC:{docs_bad} INF:{len(inf_reads)}\n"
         f"OCR: {mstr}\n"
