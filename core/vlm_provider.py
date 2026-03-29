@@ -107,6 +107,7 @@ class OllamaProvider(VLMProvider):
                 {"role": "user", "content": VLM_PROMPT, "images": [b64]},
             ],
             "stream": False,
+            "keep_alive": -1,  # never unload — prevents cold start timeouts
             "options": {
                 "temperature": VLM_TEMPERATURE,
                 "top_p": VLM_TOP_P,

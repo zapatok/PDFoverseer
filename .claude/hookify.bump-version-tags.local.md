@@ -2,15 +2,27 @@
 name: bump-version-tags
 enabled: true
 event: file
-action: warn
+action: block
 conditions:
-  - field: file_path, operator: regex_match, pattern: core[/\\]
-  - field: content, operator: regex_match, pattern: (_parse|_PAGE_PATTERNS|PAGE_PATTERN|_infer|phase_|dempster_shafer)
+  - field: file_path, operator: regex_match, pattern: (core[/\\](pipeline|ocr|inference|image|utils|vlm_resolver|vlm_provider)\.py|vlm[/\\](client|parser|preprocess|benchmark)\.py|server\.py)
 ---
 
-**Did you bump the version tags?**
+**BLOCKED — Version bump required before editing vital files.**
 
-After any change to OCR patterns or inference logic, you MUST update:
-- `PAGE_PATTERN_VERSION` in `core/utils.py` (for regex/parse changes)
-- `INFERENCE_ENGINE_VERSION` in `core/utils.py` (for inference changes)
-- The `[REG:]` tag in the `[AI:]` telemetry log reflects these versions.
+You are editing a vital pipeline file. Before this edit can proceed, you MUST:
+
+1. **Choose which tag to bump** in `core/utils.py`:
+   - `INFERENCE_ENGINE_VERSION` — inference logic, phases, gap-solver, D-S, period detection
+   - `PAGE_PATTERN_VERSION` — regex patterns, `_parse()`, OCR digit normalization
+   - `VLM_ENGINE_VERSION` — VLM resolver, provider, prompt, preprocessing
+   - More than one if the change spans multiple areas
+
+2. **Name the new version** (e.g. `s2t8-description`, `v2-description`, etc.)
+
+3. **Edit `core/utils.py` FIRST** with the new version string
+
+4. **Confirm to the user**: "Bumped [TAG]: old → new (reason)"
+
+Only THEN retry the edit to the vital file.
+
+Vital files: `core/{pipeline,ocr,inference,image,utils,vlm_resolver,vlm_provider}.py`, `vlm/{client,parser,preprocess,benchmark}.py`, `server.py`

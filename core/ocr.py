@@ -89,10 +89,6 @@ def _tess_ocr(bgr: np.ndarray) -> str:
         bgr_clean = cv2.inpaint(bgr, mask_blue, 3, cv2.INPAINT_NS)
         gray = cv2.cvtColor(bgr_clean, cv2.COLOR_BGR2GRAY)
 
-    # CLAHE (sweep-tuned: clipLimit=2.0, preprocess v2 sweep +98 rescued)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
-    gray = clahe.apply(gray)
-
     # Unsharp mask (sweep-tuned: sigma=1.0, strength=0.3)
     blurred = cv2.GaussianBlur(gray, (0, 0), 1.0)
     gray = cv2.addWeighted(gray, 1.3, blurred, -0.3, 0)

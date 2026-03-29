@@ -168,14 +168,15 @@ def query_failed_pages(
                 )
                 continue
 
-            # Accept — mutate read in-place
+            # Accept — mutate read in-place as soft hypothesis
+            # method="inferred" so Phase 3 cross-validates against neighbors
             r.curr = curr
             r.total = total
-            r.method = f"vlm_{provider.name}"
-            r.confidence = vlm_result.confidence
+            r.method = "inferred"
+            r.confidence = 0.45
             stats["read"] += 1
             on_log(
-                f"  VLM p{r.pdf_page}: {curr}/{total} [{r.method}]",
+                f"  VLM p{r.pdf_page}: {curr}/{total} (as inferred@0.45)",
                 "page_ok",
             )
     finally:

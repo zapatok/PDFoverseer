@@ -17,7 +17,6 @@ from core.utils import (
     PAGE_PATTERN_VERSION,
     PARALLEL_WORKERS,
     VLM_ENGINE_VERSION,
-    VLM_METHODS,
     Document,
     _PageRead,
 )
@@ -302,10 +301,9 @@ def analyze_pdf(
         reads_clean, vlm_stats = query_failed_pages(
             reads_clean, vlm_provider, pdf_path, on_log, cancel_event,
         )
-        # Update method tally with VLM reads
-        for r in reads_clean:
-            if r.method in VLM_METHODS:
-                method_tally[r.method] = method_tally.get(r.method, 0) + 1
+        # VLM reads are now method="inferred" — track via vlm_stats
+        if vlm_stats and vlm_stats.get("read", 0) > 0:
+            method_tally[f"vlm_{vlm_stats['provider']}"] = vlm_stats["read"]
 
     # Period detection now includes VLM reads
     period_info = inference._detect_period(reads_clean)

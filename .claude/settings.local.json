@@ -115,5 +115,13 @@
       "Bash(find C:/Users/Daniel/.claude/plugins/ -type f -name *hookify*)",
       "Bash(python eval/baseline_art674.py)"
     ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "feature-dev@claude-code-plugins": true,
+    "explanatory-output-style@claude-code-plugins": true,
+    "episodic-memory@superpowers-marketplace": true
   }
 }

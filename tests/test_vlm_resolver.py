@@ -152,9 +152,10 @@ def test_query_reads_successful_vlm():
     assert stats["read"] == 2
     assert reads[1].curr == 2
     assert reads[1].total == 4
-    assert reads[1].method == "vlm_mock"
+    assert reads[1].method == "inferred"
+    assert reads[1].confidence == 0.45
     assert reads[2].curr == 3
-    assert reads[2].method == "vlm_mock"
+    assert reads[2].method == "inferred"
 
 
 def test_query_rejects_out_of_range():
@@ -180,7 +181,7 @@ def test_query_rejects_out_of_range():
     assert stats["read"] == 1
     assert stats["failed"] == 1
     assert reads[1].method == "failed"  # still failed (out of range)
-    assert reads[2].method == "vlm_mock"  # accepted
+    assert reads[2].method == "inferred"  # accepted as soft hypothesis
 
 
 def test_query_handles_unparseable():

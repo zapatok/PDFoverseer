@@ -12,17 +12,31 @@ from core import _CORE_HASH, _build_documents, analyze_pdf
 logger = logging.getLogger("pdfoverserver")
 
 
-def _detect_ollama() -> object | None:
-    """Return an OllamaProvider if Ollama is reachable, else None."""
+_VLM_MODEL_PRIORITY = [
+    ("qwen2.5vl:7b", "qwen2.5vl", 120),
+    ("gemma3:4b", "gemma3", 10),
+]
+
+
+def _detect_vlm() -> object | None:
+    """Return a VLM provider: Claude API (if key set) > Ollama (auto-detect)."""
+    import os
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if api_key:
+        from core.vlm_provider import ClaudeProvider
+        logger.info("VLM: Claude API key found — using ClaudeProvider")
+        return ClaudeProvider(api_key=api_key)
+
     try:
         r = requests.get("http://localhost:11434/api/tags", timeout=2)
         r.raise_for_status()
         models = [m.get("name", "") for m in r.json().get("models", [])]
-        if any("gemma3" in m or "gemma-3" in m for m in models):
-            from core.vlm_provider import OllamaProvider
-            logger.info("VLM: Ollama detected with Gemma 3 — VLM resolver enabled")
-            return OllamaProvider()
-        logger.info("VLM: Ollama running but no Gemma 3 model found — VLM disabled")
+        for model_id, label, timeout in _VLM_MODEL_PRIORITY:
+            if any(label in m for m in models):
+                from core.vlm_provider import OllamaProvider
+                logger.info("VLM: Ollama detected with %s — VLM resolver enabled", model_id)
+                return OllamaProvider(model=model_id, timeout=timeout)
+        logger.info("VLM: Ollama running but no VLM model found — VLM disabled")
     except Exception:
         logger.info("VLM: Ollama not reachable — VLM resolver disabled")
     return None
@@ -63,12 +77,12 @@ def _recalculate_metrics(session_id: str):
 def _process_pdfs(session_id: str, start_index: int = 0):
     s = session_manager.get_or_create(session_id)
 
-    # Auto-detect VLM provider (once per batch)
-    vlm_provider = _detect_ollama()
+    # Auto-detect VLM provider (once per batch): Claude API > Ollama
+    vlm_provider = _detect_vlm()
     if vlm_provider is not None:
-        _emit(session_id, "log", {"msg": "VLM: Ollama + Gemma 3 detectado — corrección automática activada", "level": "ok"})
+        _emit(session_id, "log", {"msg": f"VLM: {vlm_provider.name} detectado — Tier 3 activado", "level": "ok"})
     else:
-        _emit(session_id, "log", {"msg": "VLM: no disponible (Ollama no encontrado)", "level": "info"})
+        _emit(session_id, "log", {"msg": "VLM: no disponible", "level": "info"})
 
     _emit(session_id, "log", {"msg": "Pre-calculando páginas del lote...", "level": "info"})
     try:
