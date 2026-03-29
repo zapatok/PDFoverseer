@@ -15,26 +15,14 @@ TESS_CONFIG      = "--psm 6 --oem 1"
 PARALLEL_WORKERS = 6      # concurrent Tesseract subprocesses
 BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
-MIN_CONF_FOR_NEW_DOC     = 0.55   # sweep2 (2026-03-24, 40 fixtures incl. degraded)
-ANOMALY_DROPOUT          = 0.10   # sweep4 (2026-03-27, 42 fixtures)
-PHASE4_FALLBACK_CONF     = 0.10   # sweep4; re-enabled: recovers pages the gap solver missed
-CLASH_BOUNDARY_PEN       = 1.0    # sweep4
-PH5B_CONF_MIN            = 0.65   # sweep4
-PH5B_RATIO_MIN           = 0.90   # lowered from 0.95: zero regressions on 40 fixtures, fixes INS_31 (3 misreads in 31-page all-1-page PDF)
-FAILURE_ZONE_CBPEN_SCALE = 3.0    # sweep4: multiply cbpen for failure zones >= FAILURE_ZONE_MIN_LEN
-FAILURE_ZONE_MIN_LEN     = 10     # sweep4: minimum gap length to apply failure_zone_cbpen_scale
-INFERENCE_ENGINE_VERSION = "s2t9-tier3-claude"
+MIN_CONF_FOR_NEW_DOC = 0.55   # sweep2 (2026-03-24, 40 fixtures incl. degraded)
+ANOMALY_DROPOUT      = 0.0
+PHASE4_FALLBACK_CONF = 0.15  # re-enabled: recovers pages the gap solver missed
+CLASH_BOUNDARY_PEN   = 1.5   # sweep2
+PH5B_CONF_MIN        = 0.50  # sweep2
+PH5B_RATIO_MIN       = 0.90  # lowered from 0.95: zero regressions on 40 fixtures, fixes INS_31 (3 misreads in 31-page all-1-page PDF)
+INFERENCE_ENGINE_VERSION = "s2t-helena"
 PAGE_PATTERN_VERSION     = "v1-baseline"  # restored baseline: P-prefix only, tot<=10, Unicode quotes intact
-
-# VLM Resolver
-VLM_ENGINE_VERSION    = "v2.0-tier3"
-VLM_METHODS           = frozenset({"vlm_ollama", "vlm_claude"})
-VLM_PROMPT            = "Que numero de pagina dice esta imagen? Formato: N/M"
-VLM_TEMPERATURE       = 0.3
-VLM_TOP_P             = 1.0
-VLM_UPSCALE           = 1.5
-VLM_MIN_ACCEPT_CONF   = 0.50    # min parser confidence to accept a VLM read
-VLM_SKIP_ISOLATED     = True    # skip single-page failures between two successes (inference fills trivially)
 
 # ============================================================================
 # Page Number Patterns & Normalization
@@ -103,19 +91,3 @@ class _PageRead:
     confidence: float
     # Set by Phase 1b; not stored in sessions (has default):
     _ph1_orphan_candidate: bool = field(default=False, repr=False, compare=False)
-
-
-_VALID_ISSUE_TYPES = frozenset({"low_confidence", "contradiction", "gap", "boundary_inferred"})
-
-
-@dataclass
-class InferenceIssue:
-    """A problematic page identified by the inference engine."""
-    pdf_page: int
-    issue_type: str       # "low_confidence" | "contradiction" | "gap" | "boundary_inferred"
-    confidence: float     # current confidence (0.0 for gaps)
-    context: str          # brief description for telemetry
-
-    def __post_init__(self) -> None:
-        if self.issue_type not in _VALID_ISSUE_TYPES:
-            raise ValueError(f"Unknown issue_type {self.issue_type!r}")
