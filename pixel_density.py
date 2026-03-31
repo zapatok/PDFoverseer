@@ -283,6 +283,69 @@ def cluster_pages_vector(vectors: list[np.ndarray]) -> tuple[list[int], float, n
     return matches, max_dist, cover_center
 
 
+# ── Bilateral (N-1, N, N+1 window, --bilateral-mode) ─────────────────────────
+
+def bilateral_mode_vector(
+    vectors: list[np.ndarray],
+) -> tuple[list[int], float, float]:
+    """Delta clustering using a 3-page window: min(L2(N-1→N), L2(N→N+1)).
+
+    A true cover page is a visual outlier on *both* sides:
+      - high L2 from the last slide of the previous talk (left jump)
+      - high L2 from the first content slide of the new talk (right jump)
+
+    A disruptive infographic inside a talk has a high jump on one side but
+    a low jump on the other (same author). Taking min() enforces the AND
+    condition, filtering those false positives out.
+
+    Edge pages (i=0, i=N-1) fall back to their single available jump.
+    """
+    if len(vectors) < 2:
+        return [0], 0.0, 0.0
+
+    n = len(vectors)
+    left_jumps  = np.zeros(n)
+    right_jumps = np.zeros(n)
+
+    for i in range(1, n):
+        left_jumps[i] = l2_distance(vectors[i], vectors[i - 1])
+    for i in range(n - 1):
+        right_jumps[i] = l2_distance(vectors[i], vectors[i + 1])
+
+    # Edge fallback: use the only available side
+    left_jumps[0]   = right_jumps[0]
+    right_jumps[-1] = left_jumps[-1]
+
+    bilateral = np.minimum(left_jumps, right_jumps)
+
+    from sklearn.cluster import KMeans
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        X = bilateral.reshape(-1, 1)
+        kmeans = KMeans(n_clusters=2, random_state=42, n_init="auto").fit(X)
+
+    labels  = kmeans.labels_
+    centers = kmeans.cluster_centers_.flatten()
+
+    high_label = 1 if centers[1] > centers[0] else 0
+    low_label  = 1 - high_label
+
+    matches = [i for i, lbl in enumerate(labels) if lbl == high_label]
+
+    if 0 not in matches:
+        matches.insert(0, 0)
+
+    low_scores  = bilateral[labels == low_label]
+    high_scores = bilateral[labels == high_label]
+
+    max_low  = float(np.max(low_scores))  if len(low_scores)  > 0 else 0.0
+    min_high = float(np.min(high_scores)) if len(high_scores) > 0 else 0.0
+    threshold = (max_low + min_high) / 2.0
+
+    return matches, threshold, bilateral
+
+
 # ── Hybrid (Option 4 + Option 3, --hybrid-mode) ──────────────────────────────
 
 def hybrid_mode_vector(
@@ -574,6 +637,8 @@ def main() -> None:
                         help="Use unsupervised k-means(k=2) clustering (Option 3). Grid mode only.")
     parser.add_argument("--hybrid-mode", action="store_true",
                         help="Combine Option 4 (find breaks) and Option 3 (cluster those breaks). Grid only.")
+    parser.add_argument("--bilateral-mode", action="store_true",
+                        help="3-page window: cluster min(L2(N-1→N), L2(N→N+1)). Filters infographic false positives. Grid only.")
     parser.add_argument("--grid",        type=_parse_grid, default=None, metavar="NxN",
                         help="Enable grid mode: split each page into an N×N tile grid and "
                              "match by L2 distance on the N²-dim vector (e.g. --grid 4x4)")
@@ -583,8 +648,8 @@ def main() -> None:
 
     grid_n: int | None = args.grid
 
-    if (args.cluster_mode or args.hybrid_mode) and not grid_n:
-        parser.error("--cluster-mode and --hybrid-mode require --grid NxN to be specified")
+    if (args.cluster_mode or args.hybrid_mode or args.bilateral_mode) and not grid_n:
+        parser.error("--cluster-mode, --hybrid-mode, and --bilateral-mode require --grid NxN to be specified")
 
     # ── render ────────────────────────────────────────────────────────────────
     mode_label = f"grid {grid_n}×{grid_n}" if grid_n else "scalar"
@@ -597,12 +662,12 @@ def main() -> None:
         ratios = compute_ratios(args.pdf_path, args.dpi)
         n_pages = len(ratios)
 
-    if not args.break_mode and not args.cluster_mode and not args.hybrid_mode and not args.ref_page:
+    if not args.break_mode and not args.cluster_mode and not args.hybrid_mode and not args.bilateral_mode and not args.ref_page:
         parser.error("ref_page is required unless --break-mode, --cluster-mode, or --hybrid-mode is specified")
 
     # ── validate ref pages ────────────────────────────────────────────────────
     ref_indices: list[int] = []
-    if not (args.break_mode or args.cluster_mode or args.hybrid_mode):
+    if not (args.break_mode or args.cluster_mode or args.hybrid_mode or args.bilateral_mode):
         for rp in args.ref_page:
             idx = rp - 1
             if idx < 0 or idx >= n_pages:
@@ -614,6 +679,20 @@ def main() -> None:
     #  GRID PATH
     # ═════════════════════════════════════════════════════════════════════════
     if grid_n:
+        if args.bilateral_mode:
+            matches, threshold, bilateral = bilateral_mode_vector(vectors)
+            print(f"Bilateral Delta Clustering (grid {grid_n}×{grid_n}): K-Means on min(left_L2, right_L2)")
+            print(f"Threshold between clusters: {threshold:.4f}")
+            print(f"Matches: {len(matches)} / {n_pages} pages")
+            if not args.no_plot:
+                show_plot_breaks(
+                    bilateral.tolist(), matches, threshold,
+                    f"Pixel density bilateral {grid_n}×{grid_n}",
+                    "min(L2 left, L2 right)",
+                    args.save_plot,
+                )
+            return
+
         if args.hybrid_mode:
             matches, threshold, max_low = hybrid_mode_vector(vectors)
             print(f"Hybrid Delta Clustering (grid 4+3): K-Means on L2 Jumps")

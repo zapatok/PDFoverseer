@@ -66,6 +66,7 @@ pip install -r requirements-gpu.txt
 ├── tools/                    # Standalone analysis utilities
 │   ├── capture_all.py        # Capture all OCR page images
 │   ├── capture_failures.py   # Capture OCR failure images
+│   ├── pattern_eval.py       # Pattern evaluation utility
 │   ├── preprocess_sweep.py   # Preprocessing parameter sweep
 │   └── regex_pattern_test.py # Compare regex strategies on real OCR text (ART_670)
 ├── eval/                     # Evaluation harness (organized by investigation stage)
@@ -77,6 +78,8 @@ pip install -r requirements-gpu.txt
 │   │   ├── params.py         # PARAM_SPACE + PRODUCTION_PARAMS
 │   │   ├── sweep.py          # LHS sample → fine grid → beam search
 │   │   ├── report.py         # Ranked results table
+│   │   ├── baseline_art674.py       # ART_674 baseline runner
+│   │   ├── baseline_art674_tess.py  # ART_674 Tesseract baseline runner
 │   │   └── results/          # Sweep results (gitignored)
 │   ├── graph_inference/      # Experimental graph-based inference (HMM + Viterbi)
 │   │   ├── engine.py         # Graph inference engine
@@ -98,6 +101,8 @@ pip install -r requirements-gpu.txt
 │   │   ├── test_sweep_scoring.py
 │   │   ├── test_graph_inference.py
 │   │   ├── test_preprocess.py
+│   │   ├── test_ocr_preprocess.py
+│   │   ├── test_ocr_preprocess_new.py
 │   │   └── test_benchmark.py
 │   ├── fixtures/
 │   │   ├── real/             # 21 real PDFs (charlas CRS)
@@ -150,10 +155,9 @@ pip install -r requirements-gpu.txt
 │       ├── specs/            # Design specs
 │       ├── plans/            # Implementation plans
 │       └── reports/          # Analysis reports
+├── archived/                 # Reference copies: pre-modularization monolith + server
 ├── server.py                 # FastAPI entry point
 ├── test_ws.py                # WebSocket smoke test (manual)
-├── old_analyzer.py           # Reference: pre-modularization monolith
-├── old_server.py             # Reference: pre-modularization server
 └── requirements.txt          # Python dependencies (pinned exact versions)
 ```
 
@@ -181,15 +185,13 @@ TESS_CONFIG      = "--psm 6 --oem 1"     # Tesseract config
 PARALLEL_WORKERS = 6                      # Tesseract concurrency
 BATCH_SIZE       = 12                     # Pages per pause checkpoint
 
-# Inference parameters (sweep4: 2026-03-27, 42 fixtures incl. syn_failure_zone, syn_misread_singleton)
-MIN_CONF_FOR_NEW_DOC     = 0.55   # min confidence to open a new document boundary
-CLASH_BOUNDARY_PEN       = 1.0    # gap-solver penalty for clash at boundaries
-FAILURE_ZONE_CBPEN_SCALE = 3.0    # cbpen multiplier for large failure zones (≥ FAILURE_ZONE_MIN_LEN)
-FAILURE_ZONE_MIN_LEN     = 10     # min gap length to activate failure_zone_cbpen_scale
-PHASE4_FALLBACK_CONF     = 0.10   # re-enabled: recovers pages the gap solver missed
-PH5B_CONF_MIN            = 0.65   # min period confidence to apply phase 5b correction
-PH5B_RATIO_MIN           = 0.90   # lowered 0.95→0.90 (2026-03-26): fixes INS_31 OCR misreads, zero regressions on 41 fixtures
-ANOMALY_DROPOUT          = 0.10   # soft dropout for singleton anomalies in homogeneous regions
+# Inference parameters (sweep2: 2026-03-24, 40 fixtures incl. degraded)
+MIN_CONF_FOR_NEW_DOC = 0.55   # min confidence to open a new document boundary
+CLASH_BOUNDARY_PEN   = 1.5   # gap-solver penalty for clash at boundaries
+PHASE4_FALLBACK_CONF = 0.15  # re-enabled: recovers pages the gap solver missed
+PH5B_CONF_MIN        = 0.50  # min period confidence to apply phase 5b correction
+PH5B_RATIO_MIN       = 0.90  # lowered 0.95→0.90: fixes INS_31 OCR misreads, zero regressions on 40 fixtures
+ANOMALY_DROPOUT      = 0.0   # soft dropout for singleton anomalies in homogeneous regions
 ```
 
 ### Page Number Pattern
@@ -205,15 +207,15 @@ Matches: "Página 1 de 4", "Pag 2 de 3", etc. (Spanish-centric, with OCR digit n
 
 > **Note:** Word-anchor fallback (`\w+ N de M`) was evaluated and reverted — FP rate too high on ART_670.
 > Guard variants tried: tot<=9 (worse), tot<=20 (worse), tot<=99 (much worse). tot<=10 is optimal.
-> See `docs/superpowers/reports/2026-03-26-regex-guard-sweep.md` for full results.
+> See `docs/superpowers/plans/2026-03-26-word-anchor-fallback.md` for full results.
 
 ## Development
 
 ### Git Info
 
 - **Main branch:** `master`
-- **Current branch:** `cuda-gpu`
-- **Active worktree:** `.worktrees/pixel-density` → `feature/pixel-density`
+- **Current branch:** `master`
+- **Active worktrees:** `.worktrees/pixel-density`, `.worktrees/crop-selector`, `.worktrees/ocr-matcher`
 
 ### Worktrees
 
@@ -225,7 +227,6 @@ Matches: "Página 1 de 4", "Pag 2 de 3", etc. (Spanish-centric, with OCR digit n
 - `.worktrees/ocr-matcher` → `feature/ocr-matcher` — fuzzy OCR pattern generator for "Página N de M" variants (unmerged)
 
 **Stale branches (merged, pending deletion):**
-- `feature/core-modularization` — 0 unique commits vs master, fully merged
 - `feature/inference-engine` — merged via "merge: feature/inference-engine into master"
 
 **Setup:** Use `superpowers:using-git-worktrees` skill to create isolated workspaces.
@@ -332,7 +333,7 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records o
 
 ### Inference Engine
 
-- **Version:** `s2t5-vlm` (see `INFERENCE_ENGINE_VERSION` in `core/utils.py`)
+- **Version:** `s2t-helena` (see `INFERENCE_ENGINE_VERSION` in `core/utils.py`)
 - **Phases 1–5 + MP + 5b:** OCR results → forward/backward propagation → cross-validation → gap-solver → D-S post-validation → multi-period correction
 - **Confidence scores:** 0.0–1.0; <0.60 flagged as uncertain
 - **Period inference:** Autocorrelation + Dempster-Shafer + neighbor evidence
@@ -387,10 +388,8 @@ Rules take effect immediately (no restart needed). BLOCK rules prevent tool exec
 
 ## Links
 
-- **Eval spec:** `docs/superpowers/specs/2026-03-15-eval-harness-design.md`
-- **Eval plan:** `docs/superpowers/plans/2026-03-15-eval-harness.md`
 - **Eval reorg plan:** `docs/superpowers/plans/2026-03-28-eval-reorganization.md`
-- **EasyOCR postmortem:** `docs/superpowers/reports/2026-03-25-easyocr-paddle-postmortem.md`
+- **VLM integration postmortem:** `docs/superpowers/reports/2026-03-29-vlm-integration-postmortem.md`
 - **Eval README:** `eval/README.md`
 - **Core README:** `core/README.md`
 - **Memory:** `C:\Users\Daniel\.claude\projects\a--PROJECTS-PDFoverseer\memory\`
@@ -398,5 +397,5 @@ Rules take effect immediately (no restart needed). BLOCK rules prevent tool exec
 ## Pending Work
 
 - **INS_31:** ~~Last-page inference gap~~ FIXED (2026-03-26): ph5b_ratio_min 0.95→0.90, now 31/31 docs. Tray UX improvements still pending.
-- **Eval sweep4:** ~~Pending~~ DONE (2026-03-27): composite 122 (+11 vs sweep2 baseline). s2t4-helena ported to core/. Manual test pending.
+- **VLM integration:** ~~Attempted~~ REVERTED (2026-03-30): VLM pre-inference tier removed, s2t-helena baseline restored. See `docs/superpowers/reports/2026-03-29-vlm-integration-postmortem.md`.
 - **Browse UX:** `/api/browse` opens a server-side tkinter chooser (Archivos/Carpeta) — works only when server is on local machine with a display

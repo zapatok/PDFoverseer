@@ -468,3 +468,151 @@ cd A:/PROJECTS/PDFoverseer/.worktrees/pixel-density
 git add -A
 git commit -m "chore(pixel-density): smoke test complete — pixel_density.py ready"
 ```
+
+---
+
+---
+
+# Research Findings — Bilateral Pixel Density Investigation
+
+> **Session:** 2026-03-30
+> **Branch:** `research/pixel-density` (evolved from `feature/pixel-density`)
+> **Status:** Investigation in progress — paused, documented here for next session
+
+---
+
+## What Was Built
+
+The original MVP (scalar dark_ratio + threshold) proved insufficient. The investigation evolved to a **bilateral grid-density** approach:
+
+- **`pixel_density.py`** — extended with `compute_ratios_grid(pdf, dpi, grid_n)`: divides each page into an N×N grid and computes dark-pixel ratio per cell, producing a feature vector per page instead of a scalar.
+- **`sweep_bilateral.py`** — parameter sweep over `dpi × grid_n × score_fn`. Bilateral score per page: harmonic mean of L2 distance to left neighbor and L2 distance to right neighbor. K-Means k=2 clusters pages into "cover" and "non-cover".
+- **`inspect_bilateral.py`** — 3-way diff: bilateral vs Tesseract fixture (`curr==1` reads), with `--diagnose` flag for per-page score analysis.
+- **`extract_inspect_pages.py`** — renders full-page PNGs for visual inspection of each cluster.
+- **`simulate_bilateral_union.py`** — injects bilateral-detected covers as synthetic reads into the Tesseract fixture and runs the production inference engine to project the result.
+
+---
+
+## Sweep Results
+
+Best configuration (ART_674.pdf, target=674):
+
+```
+rank   dpi    grid    score_fn   matches   signed   error   threshold
+   1   100     8×8    harmonic       668       -6       6      0.5041
+   2   100     6×6    harmonic       659      -15      15      0.3406
+```
+
+`min` score_fn dramatically overfits (1630+ matches). Harmonic is the right aggregation — it penalises pages where only one neighbor shows a jump.
+
+---
+
+## 3-Way Diff (bilateral vs Tesseract curr==1)
+
+Against fixture `eval/fixtures/real/ART_674_tess.json` (527 pages with `curr==1`):
+
+| Group | Count | Description |
+|-------|-------|-------------|
+| SHARED | 496 | Both agree |
+| BILATERAL-ONLY | 172 | Bilateral detects, Tesseract curr==1 never read |
+| TESS-ONLY | 31 | Tesseract confirmed curr==1, bilateral misses |
+
+Note: bilateral gives 668 total; baseline inference (BASELINE.txt, `v6-tess-sr`) also gives **DOC:668** — same count but different pages.
+
+---
+
+## Visual Inspection
+
+**TESS-ONLY (all 31 pages):**
+- Majority are "Análisis de Riesgos en el Trabajo (ART)" handwritten paper forms — identical printed template, varying handwritten content.
+- ~3 pages (`p2041`, `p2014`, `p1998`) are **signature/attendance tables ("Toma de Conocimiento")** — these are NOT document first pages; Tesseract falsely read `curr==1` on them (fixture FPs).
+- The 31 TESS-ONLY pages are **not consecutive** in the PDF — they are separated by other document types.
+
+**BILATERAL-ONLY (sample of 31 / 172):**
+- Majority appear to be legitimate document covers where OCR failed (pages with stamps, poor scan quality, overlapping text).
+- A small number (`p0074`, `p2248`, `p2256`) are **visually low-density** (near-blank pages) — bilateral fires on them because they differ visually from neighbors, but they are not real covers (FPs).
+- Estimated ~5–20 FPs out of 172.
+
+---
+
+## Score Diagnostic — Why Bilateral Misses ART Forms
+
+Running `python inspect_bilateral.py --diagnose`:
+
+```
+TESS-ONLY scores   min=0.2562  max=0.4980  mean=0.4333  median=0.4300
+SHARED scores      min=0.5102  max=0.7736  mean=0.6494  median=0.6529
+threshold = 0.5041
+```
+
+**Key finding: there is zero overlap between the two score distributions.** The highest TESS-ONLY score (0.4980) is below the lowest SHARED score (0.5102). The threshold sits precisely in that gap.
+
+Two sub-groups within TESS-ONLY:
+- **Group A** (`gap < -0.07`, pages 1765–1926 + outliers): genuinely weak bilateral signal — L2 jumps into/out of these pages are small. Neighbours also score low (group `-`), meaning the entire surrounding region has homogeneous visual density.
+- **Group B** (`gap -0.006 to -0.05`, pages 1940–2028): close to threshold. Right neighbours have notably lower scores (~0.27–0.35), suggesting a real visual discontinuity exists but is asymmetric — the harmonic penalises this.
+
+**Conclusion:** This is not a threshold calibration problem. The bilateral signal is structurally weaker for ART forms. Lowering the threshold enough to catch them would pull thousands of non-cover pages into the high cluster.
+
+---
+
+## Simulation — Bilateral ∪ Tesseract Union
+
+Script: `simulate_bilateral_union.py`
+Approach: inject the 172 bilateral-only pages as synthetic `curr==1` reads (`total=1`, `confidence=0.70`, `method='bilateral'`) and run the production inference engine (`PRODUCTION_PARAMS`).
+
+| Scenario | curr==1 reads | DOC | Error vs 674 | Complete docs |
+|----------|--------------|-----|-------------|--------------|
+| Baseline (tess only) | 527 | 668 | -6 | 608 |
+| Union all (172 injected) | 699 | 694 | +20 | 574 |
+| Union score≥0.40 (172) | 699 | 694 | +20 | 574 |
+
+The score filter ≥0.40 had no effect — all 172 bilateral-only pages score above 0.40.
+
+**Why injection overcounts (+26 docs):**
+1. `total=1` assumption is wrong for multi-page documents. Many ART forms have `total=4`. Injecting with `total=1` fragments a 4-page document into a 1-page document + 3 orphan pages, which the engine then splits further.
+2. `complete` drops from 608 to 574 — 34 documents that were correctly assembled in the baseline get broken by the injection.
+3. The 172 bilateral-only covers are **already partially accounted for** in the baseline via period inference (873 inferred pages in the baseline). Re-adding them as explicit reads causes some double-boundary detection.
+
+---
+
+## What Is Still Unclear / Problems With Current Framing
+
+1. **The `total=1` assumption distorts the simulation.** The realistic injection would require knowing the correct `total` for each bilateral-only page. We don't have that — the fixture only has `total` for pages where Tesseract successfully read it.
+
+2. **Overlap between bilateral-only and baseline inferred pages is unknown.** The baseline already infers ~603 pages via period detection. It's unclear how many of the 172 bilateral-only pages are already covered by that inference. A better simulation would only inject pages where the baseline has zero coverage.
+
+3. **Fixture FPs contaminate the TESS-ONLY analysis.** The ~3 signature tables with `curr==1` in the fixture are noise. The actual number of confirmed covers bilateral misses is closer to 28, not 31.
+
+4. **The "same count, different pages" observation is not fully explained.** Bilateral gives 668 docs, baseline inference gives 668 docs, but they disagree on 203 specific pages (172 bilateral-only + 31 tess-only). We haven't verified how many of the bilateral-only pages are also inferred (method=`i`) in the baseline — they might be the exact same documents, just with the boundary placed on a slightly different page.
+
+---
+
+## Next Steps to Explore
+
+**Option A — Confidence boosting instead of injection**
+Instead of adding new reads, boost the confidence of existing `failed` reads on bilateral-detected pages. If a page is `method=failed` in the fixture AND bilateral fires on it, treat it as `method=bilateral` with moderate confidence. This avoids the `total` problem entirely.
+
+**Option B — Resolve `total` from context before injecting**
+For each bilateral-only page, look at the surrounding fixture reads to infer the probable `total` (e.g., look at the next 5–10 pages for a `curr==2` or `curr==3` read with the same total). Inject with the inferred total. This makes the simulation much more realistic.
+
+**Option C — Targeted injection only for baseline-uncovered pages**
+Run baseline inference, identify pages where `method=inferred` and confidence is low (< 0.55). Cross-reference with bilateral-only. Only inject bilateral reads for pages where both conditions are true: bilateral fires AND baseline has low-confidence inferred coverage. This avoids double-boundary issues.
+
+**Option D — Use bilateral as a period-detection input**
+The bilateral signal already encodes "visual discontinuity between consecutive pages." Feed bilateral scores directly into the period detection phase (Phase 5) as an additional evidence source for autocorrelation, rather than as document boundary reads.
+
+**Preferred next experiment:** Option B or C — they address the root problem (wrong `total`) without architectural changes to the inference engine. Option B is more informative; Option C is more conservative and less likely to regress on other documents.
+
+---
+
+## Files Introduced This Session
+
+| File | Location | Purpose |
+|------|----------|---------|
+| `inspect_bilateral.py` | root | 3-way diff + `--diagnose` score analysis |
+| `extract_inspect_pages.py` | root | Render full-page PNGs for visual inspection |
+| `simulate_bilateral_union.py` | root | Inject bilateral reads + run inference projection |
+| `sweep_bilateral_dpi100.txt` | root | Saved sweep results (best configs) |
+| `inspect_results_raw.txt` | root | Raw 3-way diff page lists |
+| `data/pixel_density/bilateral_only/` | data/ | 172 PNG pages for bilateral-only cluster |
+| `data/pixel_density/tess_only/` | data/ | 31 PNG pages for tess-only cluster |
