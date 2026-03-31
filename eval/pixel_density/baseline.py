@@ -20,14 +20,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import numpy as np
 from sklearn.cluster import KMeans
 
-from sweep_bilateral import bilateral_scores
-from sweep_preprocessing import compute_variant_vectors
+from eval.pixel_density.sweep_bilateral import bilateral_scores
+from eval.pixel_density.sweep_preprocessing import compute_variant_vectors
 
 PDF_PATH    = "data/samples/ART_674.pdf"
 VLM_FIXTURE = "eval/fixtures/real/ART_674.json"

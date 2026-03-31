@@ -42,7 +42,6 @@ import fitz
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SCALAR MODE — pure functions
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -252,31 +251,32 @@ def page_breaks_vector(
 
 def cluster_pages_vector(vectors: list[np.ndarray]) -> tuple[list[int], float, np.ndarray]:
     """Cluster all page vectors into 2 groups using KMeans.
-    
+
     Returns the indices of the smaller cluster (assumed to be cover pages),
     and the scalar threshold equivalent (the maximum distance from the cover
     cluster center to its furthest member).
     """
-    from sklearn.cluster import KMeans
     import warnings
+
+    from sklearn.cluster import KMeans
     # Suppress sklearn's memory leak warning on Windows with MKL
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         X = np.stack(vectors)
         kmeans = KMeans(n_clusters=2, random_state=42, n_init="auto").fit(X)
-        
+
     labels = kmeans.labels_
     count_0 = np.sum(labels == 0)
     count_1 = np.sum(labels == 1)
-    
+
     # Cover pages are assumed to be the minority class
     cover_label = 0 if count_0 < count_1 else 1
     matches = [i for i, lbl in enumerate(labels) if lbl == cover_label]
-    
+
     # Calculate threshold-equivalent (max distance to centroid) for plotting
     cover_center = kmeans.cluster_centers_[cover_label]
     max_dist = max(l2_distance(vectors[m], cover_center) for m in matches)
-    
+
     # Pre-emptively fix if clustering separated something wildly wrong
     # (e.g. if the "minority" is just 2 blank pages at the end)
     # But for now, we just trust k=2
@@ -318,8 +318,9 @@ def bilateral_mode_vector(
 
     bilateral = np.minimum(left_jumps, right_jumps)
 
-    from sklearn.cluster import KMeans
     import warnings
+
+    from sklearn.cluster import KMeans
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         X = bilateral.reshape(-1, 1)
@@ -352,14 +353,14 @@ def hybrid_mode_vector(
     vectors: list[np.ndarray]
 ) -> tuple[list[int], float, float]:
     """Combines Break detection with Clustering (Delta Clustering).
-    
+
     Instead of clustering absolute page vectors, we cluster the 1D sequence
     of *L2 distance jumps* between adjacent pages.
-    
+
     1. Calculate L2 jump for every page i relative to i-1.
     2. Cluster the 1D array of jumps into 2 groups (High Jump vs Low Jump).
     3. The cluster with the higher centroid is the "Break" cluster.
-    
+
     Returns: (matches, threshold_jump, max_jump_in_low_cluster)
     """
     if len(vectors) < 2:
@@ -372,38 +373,39 @@ def hybrid_mode_vector(
     for i in range(1, len(vectors)):
         jumps[i] = l2_distance(vectors[i], vectors[i-1])
 
-    from sklearn.cluster import KMeans
     import warnings
+
+    from sklearn.cluster import KMeans
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         # KMeans expects 2D array: shape (n_samples, n_features=1)
         X_jumps = jumps.reshape(-1, 1)
         kmeans = KMeans(n_clusters=2, random_state=42, n_init="auto").fit(X_jumps)
-        
+
     labels = kmeans.labels_
     centers = kmeans.cluster_centers_.flatten()
-    
+
     # The cluster with the higher average jump is our 'break' cluster
     high_label = 1 if centers[1] > centers[0] else 0
     low_label  = 0 if high_label == 1 else 1
-    
+
     matches = [i for i, lbl in enumerate(labels) if lbl == high_label]
-    
+
     # Always include 0 as a cover page heuristically if it's missing
     if 0 not in matches:
         matches.insert(0, 0)
-        
+
     # Find the boundary (threshold) between the two clusters
     # E.g. max jump in the 'low' cluster
     low_jumps = jumps[labels == low_label]
     high_jumps = jumps[labels == high_label]
-    
+
     max_low = float(np.max(low_jumps)) if len(low_jumps) > 0 else 0.0
     min_high = float(np.min(high_jumps)) if len(high_jumps) > 0 else 0.0
-    
+
     # We return the midpoint between the highest non-break and the lowest break
     threshold = (max_low + min_high) / 2.0
-    
+
     return matches, threshold, max_low
 
 
@@ -582,11 +584,11 @@ def show_plot_breaks(
     pages = list(range(1, len(values) + 1))
     fig, ax = plt.subplots(figsize=(16, 4))
     ax.plot(pages, values, color="grey", linewidth=0.5, label=ylabel)
-    
+
     match_pages  = [m + 1     for m in matches]
     match_values = [values[m] for m in matches]
     ax.scatter(match_pages, match_values, color="red", s=4, zorder=5, label=f"matches ({len(matches)})")
-    
+
     ax.set_xlabel("Page")
     ax.set_ylabel(ylabel)
     ax.set_title(f"{title} — {len(matches)} matches / {len(values)} pages (jump threshold: {min_jump:.4f})")
@@ -695,7 +697,7 @@ def main() -> None:
 
         if args.hybrid_mode:
             matches, threshold, max_low = hybrid_mode_vector(vectors)
-            print(f"Hybrid Delta Clustering (grid 4+3): K-Means on L2 Jumps")
+            print("Hybrid Delta Clustering (grid 4+3): K-Means on L2 Jumps")
             print(f"Algorithm separated jumps precisely at L2 = {threshold:.4f} (max interior jump was {max_low:.4f})")
             print(f"Matches: {len(matches)} / {n_pages} pages")
             if not args.no_plot:

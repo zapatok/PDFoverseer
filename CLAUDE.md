@@ -96,6 +96,18 @@ pip install -r requirements-gpu.txt
 │   │   └── results/          # Sweep results (gitignored)
 │   ├── ocr_engines/          # OCR engine benchmarks (EasyOCR, PaddleOCR)
 │   │   └── benchmark.py      # Engine accuracy benchmark
+│   ├── pixel_density/        # Bilateral pixel density cover detection (no OCR)
+│   │   ├── pixel_density.py  # Core: rendering, dark_ratio, grid, L2, clustering
+│   │   ├── params.py         # BEST_COUNT_CONFIG + BEST_QUALITY_CONFIG (PD_BASELINE)
+│   │   ├── sweep_bilateral.py       # Bilateral scores + K-Means classification
+│   │   ├── sweep_preprocessing.py   # 8 variants: CLAHE, Otsu, ink, red channel
+│   │   ├── baseline.py              # Full 54-combo standalone sweep + VLM eval
+│   │   ├── inspect.py               # 3-way diff (bilateral vs Tesseract)
+│   │   ├── audit_coverage.py        # Pipeline cross-reference + VLM GT
+│   │   ├── characterize_density.py  # Density regimes + bimodality
+│   │   ├── simulate_injection.py    # Realistic injection simulation
+│   │   ├── simulate_naive.py        # Naive injection (total=1)
+│   │   └── extract_pages.py         # PNG extraction for visual inspection
 │   ├── tests/                # Centralized tests for all stages
 │   │   ├── test_inference.py
 │   │   ├── test_sweep_scoring.py
@@ -103,6 +115,7 @@ pip install -r requirements-gpu.txt
 │   │   ├── test_preprocess.py
 │   │   ├── test_ocr_preprocess.py
 │   │   ├── test_ocr_preprocess_new.py
+│   │   ├── test_pixel_density.py
 │   │   └── test_benchmark.py
 │   ├── fixtures/
 │   │   ├── real/             # 21 real PDFs (charlas CRS)
@@ -251,6 +264,13 @@ python eval/ocr_preprocessing/report.py
 
 # OCR engine benchmark
 python eval/ocr_engines/benchmark.py
+
+# Pixel density (standalone cover detection, no OCR)
+python eval/pixel_density/baseline.py           # full 54-combo sweep
+python eval/pixel_density/inspect.py            # 3-way diff vs Tesseract
+python eval/pixel_density/inspect.py --diagnose # per-page score table
+python eval/pixel_density/audit_coverage.py     # pipeline cross-reference
+python eval/pixel_density/characterize_density.py --bimodality  # density regimes
 ```
 
 ### VLM Module
@@ -390,6 +410,8 @@ Rules take effect immediately (no restart needed). BLOCK rules prevent tool exec
 
 - **Eval reorg plan:** `docs/superpowers/plans/2026-03-28-eval-reorganization.md`
 - **VLM integration postmortem:** `docs/superpowers/reports/2026-03-29-vlm-integration-postmortem.md`
+- **Pixel density research:** `docs/research/2026-03-31-bilateral-pixel-density.md`
+- **Pixel density README:** `eval/pixel_density/README.md`
 - **Eval README:** `eval/README.md`
 - **Core README:** `core/README.md`
 - **Memory:** `C:\Users\Daniel\.claude\projects\a--PROJECTS-PDFoverseer\memory\`

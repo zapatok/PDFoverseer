@@ -12,13 +12,16 @@ Usage
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from itertools import product
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import numpy as np
 
-from pixel_density import compute_ratios_grid, l2_distance
+from eval.pixel_density.pixel_density import compute_ratios_grid, l2_distance
 
 # ── Parameter space ───────────────────────────────────────────────────────────
 
@@ -69,8 +72,9 @@ def bilateral_scores(vectors: list[np.ndarray], score_fn: str) -> np.ndarray:
 
 def kmeans_matches(scores: np.ndarray) -> tuple[list[int], float]:
     """K-Means k=2 on 1D scores; returns indices of high cluster + threshold."""
-    from sklearn.cluster import KMeans
     import warnings
+
+    from sklearn.cluster import KMeans
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         km = KMeans(n_clusters=2, random_state=42, n_init="auto").fit(scores.reshape(-1, 1))

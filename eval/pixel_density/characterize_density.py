@@ -17,7 +17,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import matplotlib
 import numpy as np
@@ -25,8 +28,8 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-from pixel_density import compute_ratios, compute_ratios_grid  # noqa: E402
-from sweep_bilateral import bilateral_scores, kmeans_matches  # noqa: E402
+from eval.pixel_density.pixel_density import compute_ratios, compute_ratios_grid  # noqa: E402
+from eval.pixel_density.sweep_bilateral import bilateral_scores, kmeans_matches  # noqa: E402
 
 PDF_PATH     = "data/samples/ART_674.pdf"
 TESS_FIXTURE = "eval/fixtures/real/ART_674_tess.json"

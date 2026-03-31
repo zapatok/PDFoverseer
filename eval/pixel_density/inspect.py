@@ -19,13 +19,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import numpy as np
 
-from pixel_density import compute_ratios_grid
-from sweep_bilateral import bilateral_scores, kmeans_matches
+from eval.pixel_density.pixel_density import compute_ratios_grid
+from eval.pixel_density.sweep_bilateral import bilateral_scores, kmeans_matches
 
 PDF_PATH    = "data/samples/ART_674.pdf"
 FIXTURE     = "eval/fixtures/real/ART_674_tess.json"
@@ -127,9 +130,12 @@ def diagnose_tess_only(
     tess_set     = set(diff["tess_only"])
 
     def group(idx: int) -> str:
-        if idx in shared_set:   return "S"
-        if idx in bilat_set:    return "B"
-        if idx in tess_set:     return "T"
+        if idx in shared_set:
+            return "S"
+        if idx in bilat_set:
+            return "B"
+        if idx in tess_set:
+            return "T"
         return "-"
 
     sep = "-" * 78

@@ -1,26 +1,31 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import numpy as np
 import pytest
-from pixel_density import (
+
+from eval.pixel_density.pixel_density import (
+    auto_threshold,
+    auto_threshold_vector,
+    cluster_pages_vector,
     # scalar
     dark_ratio,
-    find_matches,
-    auto_threshold,
-    ref_band,
-    find_matches_in_band,
-    page_breaks,
     # grid
     dark_ratio_grid,
-    median_vector,
-    l2_distance,
+    find_matches,
+    find_matches_in_band,
     find_matches_vector,
-    auto_threshold_vector,
-    ref_band_vector,
     find_matches_vector_in_band,
-    page_breaks_vector,
-    cluster_pages_vector,
     hybrid_mode_vector,
+    l2_distance,
+    median_vector,
+    page_breaks,
+    page_breaks_vector,
+    ref_band,
+    ref_band_vector,
 )
-
 
 # ─── Scalar — original ────────────────────────────────────────────────────────
 
@@ -287,7 +292,7 @@ def test_page_breaks_vector_detects_jumps():
     p3 = np.array([0.1, 0.5]) # jump = 0.5 ***
     p4 = np.array([0.2, 0.5]) # jump = 0.1
     p5 = np.array([0.9, 0.9]) # jump = ~0.8 ***
-    
+
     vectors = [p1, p2, p3, p4, p5]
     matches = page_breaks_vector(vectors, min_l2_jump=0.4)
     assert matches == [0, 2, 4]
@@ -300,7 +305,7 @@ def test_cluster_pages_vector_separates_majority_minority():
     interior = [np.ones(2) + np.random.uniform(-0.1, 0.1, 2) for _ in range(8)]
     # 2 "cover" pages (minority)
     covers = [np.zeros(2) + np.random.uniform(-0.1, 0.1, 2) for _ in range(2)]
-    
+
     vectors = interior + covers  # indices 8, 9 are covers
     matches, _, _ = cluster_pages_vector(vectors)
     assert set(matches) == {8, 9}
@@ -313,29 +318,29 @@ def test_hybrid_mode_vector_filters_then_clusters():
     # p1..10: interior (no jumps > 0.2)
     # p11: cover 2 (jump!)
     # p12..20: interior (no jumps > 0.2)
-    
+
     p0 = np.zeros(2)
     p1 = np.ones(2)
     interior_1 = [p1 + np.array([0.0, i*0.01]) for i in range(10)]
-    
+
     p11 = np.zeros(2)
     p12 = np.ones(2)
     interior_2 = [p12 + np.array([0.0, i*0.01]) for i in range(9)]
-    
+
     vectors = [p0] + interior_1 + [p11] + interior_2
     # Jumps > 0.2 happen at index 1 (0 -> 1) and index 11 (10 -> 11) and index 12 (11 -> 12).
     # So candidates = [0, 1, 11, 12]
     # Clustering subset: p0 (zero), p1 (ones), p11 (zero), p12 (ones).
     # Cover cluster (minority or equal? equal here, but we force 0 to be included)
     # Actually wait: 2 zeros, 2 ones. Kmeans will pick one. But let's make it unambiguous minority:
-    
+
     # making 3 interiors and 1 cover as candidates to test minority sorting:
     # 0: cover (candidate by default)
     # 1: interior (candidate due to jump from 0)
     # 2: interior (small jump, not candidate)
     # 3: interior (small jump, not candidate)
     # 4: interior (small jump, not candidate)
-    
+
     vectors = [
         np.zeros(2),             # 0: cover [0, 0]
         np.ones(2) * 2,          # 1: interior [2, 2] (jump=2.8)
@@ -354,7 +359,7 @@ def test_hybrid_mode_vector_filters_then_clusters():
     # The centroid of (1, 4, 6) is [4, 4]. Distance to 0 is ~5.6.
     # K-means should easily group 1, 4, 6 vs 0 (if random seed behaves).
     # To make it absolutely unambiguous, let's just use identical points!
-    
+
     vectors = [
         np.zeros(2),
         np.ones(2),
@@ -380,7 +385,7 @@ def test_hybrid_mode_vector_filters_then_clusters():
         np.zeros(2), # 2
         np.zeros(2), # 3
         np.zeros(2), # 4
-        
+
         np.array([10., 10.]), # 5 (jump = 14.14)
         np.array([10., 10.]), # 6
         np.array([10., 10.]), # 7
