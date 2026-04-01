@@ -329,6 +329,48 @@ Tras el fracaso de V2 en validacion cruzada, se investigaron 3 lineas para resca
 | Rescue B (fusion 0.1) | 0.940 | 0.939 | 0.941 | 634 | 41 | 40 | 14 |
 | **Rescue C** (multi+pct) | **0.956** | 0.956 | 0.957 | 645 | 30 | 29 | **26** |
 
+### Conteo de documentos: V1 vs Rescue C (PDF por PDF)
+
+Esta es la metrica que mas importa al usuario final — cuantos documentos detecta cada config.
+
+| PDF | Target | V1 | V1 err | RC | RC err | Mejor |
+|-----|--------|-----|--------|-----|--------|-------|
+| ALUM_1 | 1 | 2 | +1 | 2 | +1 | -- |
+| ALUM_19 | 19 | 10 | -9 | 9 | -10 | V1 |
+| ART_674 | 674 | 675 | +1 | 675 | +1 | -- |
+| ART_CH_13 | 13 | **13** | **+0** | **13** | **+0** | -- |
+| ART_CON_13 | 13 | **13** | **+0** | **13** | **+0** | -- |
+| ART_EX_13 | 13 | **13** | **+0** | **13** | **+0** | -- |
+| ART_GR_8 | 8 | 9 | +1 | **8** | **+0** | RC |
+| ART_ROC_10 | 10 | **10** | **+0** | **10** | **+0** | -- |
+| CASTRO_15 | 15 | 6 | -9 | 4 | -11 | V1 |
+| CASTRO_5 | 5 | 2 | -3 | 2 | -3 | -- |
+| CHAR_17 | 17 | 5 | -12 | 5 | -12 | -- |
+| CHAR_25 | 25 | 13 | -12 | 13 | -12 | -- |
+| CH_39 | 39 | 21 | -18 | 20 | -19 | V1 |
+| CH_51 | 51 | 28 | -23 | 27 | -24 | V1 |
+| CH_74 | 74 | 38 | -36 | 38 | -36 | -- |
+| CH_9 | 9 | 4 | -5 | 5 | -4 | RC |
+| CH_BSM_18 | 18 | 11 | -7 | 10 | -8 | V1 |
+| CRS_9 | 9 | 5 | -4 | 5 | -4 | -- |
+| HLL_363 | 363 | 135 | -228 | 135 | -228 | -- |
+| INSAP_20 | 20 | 8 | -12 | 8 | -12 | -- |
+| INS_31 | 31 | 9 | -22 | 10 | -21 | RC |
+| JOGA_19 | 19 | 10 | -9 | 10 | -9 | -- |
+| QUEVEDO_1 | 1 | 2 | +1 | 2 | +1 | -- |
+| QUEVEDO_13 | 13 | 7 | -6 | 8 | -5 | RC |
+| QUEVEDO_2 | 2 | 1 | -1 | 3 | +1 | -- |
+| RACO_25 | 25 | 13 | -12 | 12 | -13 | V1 |
+| SAEZ_14 | 14 | 6 | -8 | 6 | -8 | -- |
+| | | **MAE** | **16.3** | **MAE** | **16.4** | |
+| | | **Exactos** | **4** | **Exactos** | **5** | |
+
+**Score: V1 gana 6, RC gana 4, empate 17.**
+
+En conteo puro, V1 y RC son practicamente identicos (MAE 16.3 vs 16.4). La diferencia real esta en la calidad page-level: RC detecta las portadas *correctas* con mucha mas precision (F1=0.956 vs 0.922 en ART_674), aunque el numero total de detecciones sea similar.
+
+Dicho de otra forma: RC y V1 detectan ~la misma cantidad de portadas, pero RC acierta mas en *cuales* son portadas reales y cuales no.
+
 ### Veredicto por linea
 
 **Rescue A (edge_density standalone, pct_75.2): VIABLE**
