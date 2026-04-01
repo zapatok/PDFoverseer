@@ -103,3 +103,40 @@ def test_scorer_rescue_c_returns_list_of_ints():
     assert isinstance(matches, list)
     assert all(isinstance(i, int) for i in matches)
     assert 0 in matches
+
+
+def test_format_comparison_table(capsys):
+    """format_comparison_table() prints a readable per-PDF comparison."""
+    from eval.pixel_density.sweep_rescue import format_comparison_table
+
+    v1_results = [
+        {"name": "PDF_A", "target": 10, "matches": 10, "error": 0, "abs_error": 0},
+        {"name": "PDF_B", "target": 5, "matches": 7, "error": 2, "abs_error": 2},
+    ]
+    rescue_results = {
+        "A": [
+            {"name": "PDF_A", "target": 10, "matches": 11, "error": 1, "abs_error": 1},
+            {"name": "PDF_B", "target": 5, "matches": 5, "error": 0, "abs_error": 0},
+        ],
+    }
+    format_comparison_table(v1_results, rescue_results)
+    captured = capsys.readouterr()
+    assert "PDF_A" in captured.out
+    assert "PDF_B" in captured.out
+    assert "V1" in captured.out
+
+
+def test_compute_summary_mae():
+    """compute_summary() returns MAE and exact-match count."""
+    from eval.pixel_density.sweep_rescue import compute_summary
+
+    results = [
+        {"name": "A", "abs_error": 2},
+        {"name": "B", "abs_error": 4},
+        {"name": "C", "abs_error": 0},
+    ]
+    summary = compute_summary(results)
+    assert summary["mae"] == pytest.approx(2.0)
+    assert summary["exact"] == 1
+    assert summary["within_2"] == 2
+    assert summary["n"] == 3

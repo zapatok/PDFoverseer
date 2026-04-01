@@ -241,3 +241,211 @@ def scorer_rescue_c(pages: np.ndarray, pct: float = 75.2) -> list[int]:
     normed_list = [normed[i] for i in range(normed.shape[0])]
     scores = bilateral_l2(normed_list, "min")
     return _percentile_threshold(scores, pct)
+
+
+def compute_summary(results: list[dict]) -> dict:
+    """Compute aggregate metrics from cross-validation results.
+
+    Args:
+        results: List of per-PDF result dicts with abs_error key.
+
+    Returns:
+        Dict with mae, exact (count), within_2 (count), n.
+    """
+    n = len(results)
+    errors = [r["abs_error"] for r in results]
+    return {
+        "mae": sum(errors) / n if n else 0.0,
+        "exact": sum(1 for e in errors if e == 0),
+        "within_2": sum(1 for e in errors if e <= 2),
+        "n": n,
+    }
+
+
+def format_comparison_table(
+    v1_results: list[dict],
+    rescue_results: dict[str, list[dict]],
+) -> None:
+    """Print a per-PDF comparison table: V1 vs each rescue line.
+
+    Args:
+        v1_results: V1-count per-PDF results.
+        rescue_results: {rescue_name: per-PDF results}.
+    """
+    rescue_names = sorted(rescue_results.keys())
+    # Header
+    hdr = f"{'PDF':<14} {'Tgt':>4} | {'V1':>4} {'err':>5}"
+    for rn in rescue_names:
+        hdr += f" | {rn:>4} {'err':>5}"
+    print(hdr)  # noqa: T201
+    print("-" * len(hdr))  # noqa: T201
+
+    # Rows
+    rescue_by_name = {
+        rn: {r["name"]: r for r in results}
+        for rn, results in rescue_results.items()
+    }
+
+    for v1r in v1_results:
+        name = v1r["name"]
+        row = (f"{name:<14} {v1r['target']:>4} | "
+               f"{v1r['matches']:>4} {v1r['error']:>+5}")
+        for rn in rescue_names:
+            rr = rescue_by_name[rn].get(name)
+            if rr:
+                row += f" | {rr['matches']:>4} {rr['error']:>+5}"
+            else:
+                row += f" | {'--':>4} {'--':>5}"
+        print(row)  # noqa: T201
+
+    # Summary
+    print("-" * len(hdr))  # noqa: T201
+    v1_s = compute_summary(v1_results)
+    summ = f"{'MAE':<14} {'':>4} | {'':>4} {v1_s['mae']:>5.1f}"
+    for rn in rescue_names:
+        rs = compute_summary(rescue_results[rn])
+        summ += f" | {'':>4} {rs['mae']:>5.1f}"
+    print(summ)  # noqa: T201
+
+    exact = f"{'Exact':<14} {'':>4} | {'':>4} {v1_s['exact']:>5}"
+    for rn in rescue_names:
+        rs = compute_summary(rescue_results[rn])
+        exact += f" | {'':>4} {rs['exact']:>5}"
+    print(exact)  # noqa: T201
+
+    within = f"{'Within +/-2':<14} {'':>4} | {'':>4} {v1_s['within_2']:>5}"
+    for rn in rescue_names:
+        rs = compute_summary(rescue_results[rn])
+        within += f" | {'':>4} {rs['within_2']:>5}"
+    print(within)  # noqa: T201
+
+
+def main() -> None:
+    """Run all rescue lines with cross-validation."""
+    parser = argparse.ArgumentParser(
+        description="PD V2 Rescue -- cross-validation sweep")
+    parser.add_argument("--rescue", nargs="*", default=["A", "B", "C"],
+                        choices=["A", "B", "C"],
+                        help="Which rescue lines to run (default: all)")
+    args = parser.parse_args()
+
+    print("=" * 70)  # noqa: T201
+    print("PD V2 Rescue -- Cross-Validation Sweep")  # noqa: T201
+    print("=" * 70)  # noqa: T201
+
+    full_corpus = GENERAL_CORPUS + ART_CORPUS
+    t_total = time.perf_counter()
+
+    # 1. V1 baseline
+    logger.info("\n--- V1 Baseline ---")
+    t0 = time.perf_counter()
+    v1_results = cross_validate(scorer_v1, full_corpus)
+    logger.info("V1 done in %.1fs", time.perf_counter() - t0)
+
+    # 2. Rescue lines
+    rescue_results: dict[str, list[dict]] = {}
+
+    if "A" in args.rescue:
+        logger.info("\n--- Rescue A: edge_density standalone ---")
+        t0 = time.perf_counter()
+        rescue_results["A"] = cross_validate(scorer_rescue_a, full_corpus)
+        logger.info("Rescue A done in %.1fs", time.perf_counter() - t0)
+
+    if "B" in args.rescue:
+        logger.info("\n--- Rescue B: score fusion (sweep edge_weight) ---")
+        t0 = time.perf_counter()
+        best_b_mae = float("inf")
+        best_b_results: list[dict] = []
+        best_b_weight = 0.0
+        for ew in [0.1, 0.2, 0.3, 0.4]:
+            def _scorer_b(pages: np.ndarray, w: float = ew) -> list[int]:
+                return scorer_rescue_b(pages, edge_weight=w)
+            results_b = cross_validate(_scorer_b, full_corpus)
+            mae_b = compute_summary(results_b)["mae"]
+            logger.info("  edge_weight=%.1f  MAE=%.1f", ew, mae_b)
+            if mae_b < best_b_mae:
+                best_b_mae = mae_b
+                best_b_results = results_b
+                best_b_weight = ew
+        rescue_results["B"] = best_b_results
+        logger.info("Rescue B best: edge_weight=%.1f MAE=%.1f (%.1fs)",
+                     best_b_weight, best_b_mae, time.perf_counter() - t0)
+
+    if "C" in args.rescue:
+        logger.info("\n--- Rescue C: multi-descriptor + pct threshold ---")
+        t0 = time.perf_counter()
+        rescue_results["C"] = cross_validate(scorer_rescue_c, full_corpus)
+        logger.info("Rescue C done in %.1fs", time.perf_counter() - t0)
+
+    # 3. Report
+    print("\n" + "=" * 70)  # noqa: T201
+    print("GENERAL CORPUS (22 PDFs)")  # noqa: T201
+    print("=" * 70)  # noqa: T201
+    gen_names = {c[0] for c in GENERAL_CORPUS}
+    v1_gen = [r for r in v1_results if r["name"] in gen_names]
+    rescue_gen = {
+        rn: [r for r in results if r["name"] in gen_names]
+        for rn, results in rescue_results.items()
+    }
+    format_comparison_table(v1_gen, rescue_gen)
+
+    print("\n" + "=" * 70)  # noqa: T201
+    print("ART FAMILY (5 PDFs)")  # noqa: T201
+    print("=" * 70)  # noqa: T201
+    art_names = {c[0] for c in ART_CORPUS}
+    v1_art = [r for r in v1_results if r["name"] in art_names]
+    rescue_art = {
+        rn: [r for r in results if r["name"] in art_names]
+        for rn, results in rescue_results.items()
+    }
+    format_comparison_table(v1_art, rescue_art)
+
+    # 4. ART_674 page-level metrics (only PDF with per-page GT)
+    print("\n" + "=" * 70)  # noqa: T201
+    print("ART_674 Page-Level Metrics (per-page GT available)")  # noqa: T201
+    print("=" * 70)  # noqa: T201
+    gt_covers = load_art674_gt()
+    tess_only = load_tess_only_pages()
+    art_pages = ensure_cache("data/samples/ART_674.pdf", dpi=DPI)
+
+    scorers = {"V1": scorer_v1, "A": scorer_rescue_a, "C": scorer_rescue_c}
+    for label, scorer_fn in scorers.items():
+        if label != "V1" and label not in args.rescue:
+            continue
+        matches = scorer_fn(art_pages)
+        m = compute_metrics(matches, gt_covers, 674, tess_only_pages=tess_only)
+        print(f"  {label:>2}: F1={m['f1']:.4f}  P={m['precision']:.3f}  "  # noqa: T201
+              f"R={m['recall']:.3f}  TP={m['tp']}  FP={m['fp']}  "
+              f"FN={m['fn']}  TESS={m.get('tess_only_recovered', 0)}")
+    # Rescue B at best weight
+    if "B" in args.rescue:
+        matches_b = scorer_rescue_b(art_pages, edge_weight=best_b_weight)
+        m = compute_metrics(matches_b, gt_covers, 674, tess_only_pages=tess_only)
+        print(f"   B: F1={m['f1']:.4f}  P={m['precision']:.3f}  "  # noqa: T201
+              f"R={m['recall']:.3f}  TP={m['tp']}  FP={m['fp']}  "
+              f"FN={m['fn']}  TESS={m.get('tess_only_recovered', 0)}  "
+              f"(edge_weight={best_b_weight})")
+
+    # 5. Save results
+    output = {
+        "sweep": "pd_v2_rescue",
+        "timestamp": datetime.now().isoformat(),
+        "v1_results": v1_results,
+        "rescue_results": {rn: results for rn, results in rescue_results.items()},
+        "summaries": {
+            "v1_general": compute_summary(v1_gen),
+            "v1_art": compute_summary(v1_art),
+        },
+    }
+    for rn in rescue_results:
+        output["summaries"][f"{rn}_general"] = compute_summary(rescue_gen[rn])
+        output["summaries"][f"{rn}_art"] = compute_summary(rescue_art[rn])
+    if "B" in args.rescue:
+        output["best_b_weight"] = best_b_weight
+
+    save_results(output, "data/pixel_density/sweep_rescue.json")
+    logger.info("\nTotal time: %.0fs", time.perf_counter() - t_total)
+
+
+if __name__ == "__main__":
+    main()
