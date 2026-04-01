@@ -102,7 +102,7 @@ pip install -r requirements-gpu.txt
 │   │   ├── sweep_bilateral.py       # Bilateral scores + K-Means classification
 │   │   ├── sweep_preprocessing.py   # 8 variants: CLAHE, Otsu, ink, red channel
 │   │   ├── baseline.py              # Full 54-combo standalone sweep + VLM eval
-│   │   ├── inspect.py               # 3-way diff (bilateral vs Tesseract)
+│   │   ├── inspect_pages.py          # 3-way diff (bilateral vs Tesseract)
 │   │   ├── audit_coverage.py        # Pipeline cross-reference + VLM GT
 │   │   ├── characterize_density.py  # Density regimes + bimodality
 │   │   ├── simulate_injection.py    # Realistic injection simulation
@@ -267,8 +267,8 @@ python eval/ocr_engines/benchmark.py
 
 # Pixel density (standalone cover detection, no OCR)
 python eval/pixel_density/baseline.py           # full 54-combo sweep
-python eval/pixel_density/inspect.py            # 3-way diff vs Tesseract
-python eval/pixel_density/inspect.py --diagnose # per-page score table
+python eval/pixel_density/inspect_pages.py            # 3-way diff vs Tesseract
+python eval/pixel_density/inspect_pages.py --diagnose # per-page score table
 python eval/pixel_density/audit_coverage.py     # pipeline cross-reference
 python eval/pixel_density/characterize_density.py --bimodality  # density regimes
 ```

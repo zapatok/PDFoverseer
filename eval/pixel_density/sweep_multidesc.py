@@ -1,7 +1,7 @@
 # eval/pixel_density/sweep_multidesc.py
 """Phase 3: Multi-descriptor bilateral sweep.
 
-Stage A: Individual feature evaluation (each feature solo → bilateral → F1).
+Stage A: Individual feature evaluation (each feature solo -- bilateral -- F1).
 Stage B: Combine top features with dark_ratio_grid baseline (z-score + L2).
 
 Usage
@@ -225,7 +225,7 @@ def main() -> None:
         report_table(results_a, sort_key="f1", top_n=14)
 
         best_a_f1 = results_a[0]["f1"] if results_a else 0
-        print(f"Best individual F1: {best_a_f1:.4f} (baseline: 0.922) → "
+        print(f"Best individual F1: {best_a_f1:.4f} (baseline: 0.922) -- "
               f"{'PASS' if best_a_f1 > 0.922 else 'FAIL'}")
 
     if "B" in args.stage:
@@ -248,7 +248,7 @@ def main() -> None:
         best_b_f1 = results_b[0]["f1"] if results_b else 0
         best_a_f1 = results_a[0]["f1"] if results_a else 0.922
         print(f"Best combination F1: {best_b_f1:.4f} vs best individual: "
-              f"{best_a_f1:.4f} → "
+              f"{best_a_f1:.4f} -- "
               f"{'PASS' if best_b_f1 > best_a_f1 else 'FAIL'}")
 
     output = {

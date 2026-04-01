@@ -61,3 +61,6 @@ data/ocr_all/
 # OCR benchmark output
 data/benchmark_results.json
 data/benchmark_run.log
+
+# Pixel density cache (large rendered page arrays)
+data/pixel_density/cache/

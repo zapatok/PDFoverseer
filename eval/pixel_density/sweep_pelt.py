@@ -156,7 +156,7 @@ def main() -> None:
         }
         results_art.append(result)
 
-        logger.info("  → matches=%d error=%+d F1=%.3f penalty=%.4f in %.1fs",
+        logger.info("  -- matches=%d error=%+d F1=%.3f penalty=%.4f in %.1fs",
                      metrics["matches"], metrics["error"], metrics["f1"],
                      penalty, elapsed)
 
@@ -166,13 +166,13 @@ def main() -> None:
     if results_art:
         best_f1 = results_art[0]["f1"]
         print("\n--- Gate Check ---")
-        print(f"Best F1: {best_f1:.4f} (baseline: 0.922) → "
+        print(f"Best F1: {best_f1:.4f} (baseline: 0.922) -- "
               f"{'PASS' if best_f1 > 0.922 else 'FAIL'}")
 
         for r in results_art:
             n_seg = r["params"]["n_segments"]
             if n_seg > ART_TARGET * 1.15:
-                logger.warning("Over-segmentation: %s/%s → %d segments "
+                logger.warning("Over-segmentation: %s/%s -- %d segments "
                                "(%.0f%% over target)",
                                r["params"]["features"], r["params"]["pelt_model"],
                                n_seg, (n_seg / ART_TARGET - 1) * 100)

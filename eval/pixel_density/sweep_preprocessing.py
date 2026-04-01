@@ -163,6 +163,35 @@ def grid_clahe_ink_sum(img_gray: np.ndarray, grid_n: int) -> np.ndarray:
     return grid_ink_sum(enhanced, grid_n)
 
 
+def grid_no_blue(img_rgb: np.ndarray, grid_n: int) -> np.ndarray:
+    """Remove blue ink (ballpoint pen) via HSV masking, then dark_ratio < 128.
+
+    Blue pen ink has high saturation and hue in the ~90-130 range (OpenCV 0-180).
+    Pixels matching this are set to white before grayscale dark_ratio computation.
+    """
+    hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
+    blue_mask = (
+        (hsv[:, :, 0] >= 90) & (hsv[:, :, 0] <= 130)  # hue: blue range
+        & (hsv[:, :, 1] > 50)                            # saturation: not gray
+    )
+    gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+    gray[blue_mask] = 255  # blank out blue pixels
+    return grid_baseline(gray, grid_n)
+
+
+def grid_black_only(img_rgb: np.ndarray, grid_n: int) -> np.ndarray:
+    """Keep only achromatic dark pixels (printed black ink), remove all color.
+
+    Achromatic = low saturation (S < 50) in HSV.  Colored pixels (pen, stamps,
+    highlights) are set to white.  Then standard dark_ratio < 128.
+    """
+    hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
+    color_mask = hsv[:, :, 1] >= 50  # anything with noticeable color
+    gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+    gray[color_mask] = 255  # blank out colored pixels
+    return grid_baseline(gray, grid_n)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Variant runner
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -177,6 +206,8 @@ VARIANTS = {
     "ink_sum":        {"needs_rgb": False, "fn": grid_ink_sum},
     "ink_only":       {"needs_rgb": False, "fn": grid_ink_only},
     "clahe_ink_sum":  {"needs_rgb": False, "fn": grid_clahe_ink_sum},
+    "no_blue":        {"needs_rgb": True,  "fn": grid_no_blue},
+    "black_only":     {"needs_rgb": True,  "fn": grid_black_only},
 }
 
 

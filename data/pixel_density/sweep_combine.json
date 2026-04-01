@@ -1,0 +1,1472 @@
+{
+  "sweep": "signal_combination",
+  "timestamp": "2026-04-01T12:19:16.813200",
+  "sources": [
+    "bilateral_l2",
+    "chi2",
+    "multidesc"
+  ],
+  "results_art674": [
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.1,
+          "chi2": 0.0,
+          "multidesc": 0.9
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 667,
+      "error": -7,
+      "abs_error": 7,
+      "tp": 643,
+      "fp": 24,
+      "fn": 31,
+      "precision": 0.9640179910044977,
+      "recall": 0.9540059347181009,
+      "f1": 0.9589858314690529,
+      "tess_only_recovered": 26
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.2,
+          "chi2": 0.0,
+          "multidesc": 0.8
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 657,
+      "error": -17,
+      "abs_error": 17,
+      "tp": 637,
+      "fp": 20,
+      "fn": 37,
+      "precision": 0.969558599695586,
+      "recall": 0.9451038575667656,
+      "f1": 0.95717505634861,
+      "tess_only_recovered": 22
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.30000000000000004,
+          "chi2": 0.0,
+          "multidesc": 0.7000000000000001
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 647,
+      "error": -27,
+      "abs_error": 27,
+      "tp": 632,
+      "fp": 15,
+      "fn": 42,
+      "precision": 0.9768160741885626,
+      "recall": 0.9376854599406528,
+      "f1": 0.9568508705526116,
+      "tess_only_recovered": 20
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 0.0,
+          "multidesc": 1.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 681,
+      "error": 7,
+      "abs_error": 7,
+      "tp": 648,
+      "fp": 33,
+      "fn": 26,
+      "precision": 0.9515418502202643,
+      "recall": 0.9614243323442137,
+      "f1": 0.9564575645756458,
+      "tess_only_recovered": 26
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 0.1,
+          "multidesc": 0.9
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 645,
+      "error": -29,
+      "abs_error": 29,
+      "tp": 628,
+      "fp": 17,
+      "fn": 46,
+      "precision": 0.9736434108527132,
+      "recall": 0.9317507418397626,
+      "f1": 0.9522365428354814,
+      "tess_only_recovered": 21
+    },
+    {
+      "params": {
+        "strategy": "voting_majority_1"
+      },
+      "matches": 726,
+      "error": 52,
+      "abs_error": 52,
+      "tp": 666,
+      "fp": 60,
+      "fn": 8,
+      "precision": 0.9173553719008265,
+      "recall": 0.9881305637982196,
+      "f1": 0.9514285714285714,
+      "tess_only_recovered": 26
+    },
+    {
+      "params": {
+        "strategy": "union"
+      },
+      "matches": 726,
+      "error": 52,
+      "abs_error": 52,
+      "tp": 666,
+      "fp": 60,
+      "fn": 8,
+      "precision": 0.9173553719008265,
+      "recall": 0.9881305637982196,
+      "f1": 0.9514285714285714,
+      "tess_only_recovered": 26
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.4,
+          "chi2": 0.0,
+          "multidesc": 0.6000000000000001
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 635,
+      "error": -39,
+      "abs_error": 39,
+      "tp": 620,
+      "fp": 15,
+      "fn": 54,
+      "precision": 0.9763779527559056,
+      "recall": 0.9198813056379822,
+      "f1": 0.9472880061115355,
+      "tess_only_recovered": 16
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.1,
+          "chi2": 0.1,
+          "multidesc": 0.8
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 633,
+      "error": -41,
+      "abs_error": 41,
+      "tp": 619,
+      "fp": 14,
+      "fn": 55,
+      "precision": 0.9778830963665087,
+      "recall": 0.9183976261127597,
+      "f1": 0.9472073450650345,
+      "tess_only_recovered": 18
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.7000000000000001,
+          "chi2": 0.0,
+          "multidesc": 0.30000000000000004
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 621,
+      "error": -53,
+      "abs_error": 53,
+      "tp": 613,
+      "fp": 8,
+      "fn": 61,
+      "precision": 0.9871175523349437,
+      "recall": 0.9094955489614244,
+      "f1": 0.9467181467181468,
+      "tess_only_recovered": 8
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.6000000000000001,
+          "chi2": 0.0,
+          "multidesc": 0.4
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 623,
+      "error": -51,
+      "abs_error": 51,
+      "tp": 613,
+      "fp": 10,
+      "fn": 61,
+      "precision": 0.9839486356340289,
+      "recall": 0.9094955489614244,
+      "f1": 0.9452582883577486,
+      "tess_only_recovered": 9
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.5,
+          "chi2": 0.0,
+          "multidesc": 0.5
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 623,
+      "error": -51,
+      "abs_error": 51,
+      "tp": 612,
+      "fp": 11,
+      "fn": 62,
+      "precision": 0.9823434991974318,
+      "recall": 0.9080118694362018,
+      "f1": 0.943716268311488,
+      "tess_only_recovered": 11
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.2,
+          "chi2": 0.1,
+          "multidesc": 0.7000000000000001
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 617,
+      "error": -57,
+      "abs_error": 57,
+      "tp": 608,
+      "fp": 9,
+      "fn": 66,
+      "precision": 0.9854132901134521,
+      "recall": 0.9020771513353115,
+      "f1": 0.9419054996127033,
+      "tess_only_recovered": 12
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.8,
+          "chi2": 0.0,
+          "multidesc": 0.2
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 618,
+      "error": -56,
+      "abs_error": 56,
+      "tp": 607,
+      "fp": 11,
+      "fn": 67,
+      "precision": 0.982200647249191,
+      "recall": 0.900593471810089,
+      "f1": 0.9396284829721363,
+      "tess_only_recovered": 2
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.4,
+          "chi2": 0.1,
+          "multidesc": 0.5
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 610,
+      "error": -64,
+      "abs_error": 64,
+      "tp": 602,
+      "fp": 8,
+      "fn": 72,
+      "precision": 0.9868852459016394,
+      "recall": 0.8931750741839762,
+      "f1": 0.9376947040498442,
+      "tess_only_recovered": 7
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.9,
+          "chi2": 0.0,
+          "multidesc": 0.1
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 625,
+      "error": -49,
+      "abs_error": 49,
+      "tp": 609,
+      "fp": 16,
+      "fn": 65,
+      "precision": 0.9744,
+      "recall": 0.9035608308605341,
+      "f1": 0.9376443418013857,
+      "tess_only_recovered": 1
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.1,
+          "chi2": 0.2,
+          "multidesc": 0.7000000000000001
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 605,
+      "error": -69,
+      "abs_error": 69,
+      "tp": 599,
+      "fp": 6,
+      "fn": 75,
+      "precision": 0.9900826446280991,
+      "recall": 0.8887240356083086,
+      "f1": 0.9366692728694292,
+      "tess_only_recovered": 7
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.5,
+          "chi2": 0.1,
+          "multidesc": 0.4
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 608,
+      "error": -66,
+      "abs_error": 66,
+      "tp": 600,
+      "fp": 8,
+      "fn": 74,
+      "precision": 0.9868421052631579,
+      "recall": 0.8902077151335311,
+      "f1": 0.9360374414976599,
+      "tess_only_recovered": 5
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 0.2,
+          "multidesc": 0.8
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 607,
+      "error": -67,
+      "abs_error": 67,
+      "tp": 599,
+      "fp": 8,
+      "fn": 75,
+      "precision": 0.9868204283360791,
+      "recall": 0.8887240356083086,
+      "f1": 0.9352068696330991,
+      "tess_only_recovered": 7
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.30000000000000004,
+          "chi2": 0.1,
+          "multidesc": 0.6000000000000001
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 612,
+      "error": -62,
+      "abs_error": 62,
+      "tp": 601,
+      "fp": 11,
+      "fn": 73,
+      "precision": 0.9820261437908496,
+      "recall": 0.8916913946587537,
+      "f1": 0.9346811819595646,
+      "tess_only_recovered": 7
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.2,
+          "chi2": 0.2,
+          "multidesc": 0.6000000000000001
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 601,
+      "error": -73,
+      "abs_error": 73,
+      "tp": 595,
+      "fp": 6,
+      "fn": 79,
+      "precision": 0.9900166389351082,
+      "recall": 0.8827893175074184,
+      "f1": 0.9333333333333333,
+      "tess_only_recovered": 6
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.7000000000000001,
+          "chi2": 0.1,
+          "multidesc": 0.2
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 606,
+      "error": -68,
+      "abs_error": 68,
+      "tp": 596,
+      "fp": 10,
+      "fn": 78,
+      "precision": 0.9834983498349835,
+      "recall": 0.884272997032641,
+      "f1": 0.9312499999999999,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.6000000000000001,
+          "chi2": 0.1,
+          "multidesc": 0.30000000000000004
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 602,
+      "error": -72,
+      "abs_error": 72,
+      "tp": 594,
+      "fp": 8,
+      "fn": 80,
+      "precision": 0.9867109634551495,
+      "recall": 0.8813056379821959,
+      "f1": 0.9310344827586207,
+      "tess_only_recovered": 2
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.30000000000000004,
+          "chi2": 0.2,
+          "multidesc": 0.5
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 598,
+      "error": -76,
+      "abs_error": 76,
+      "tp": 592,
+      "fp": 6,
+      "fn": 82,
+      "precision": 0.9899665551839465,
+      "recall": 0.8783382789317508,
+      "f1": 0.9308176100628932,
+      "tess_only_recovered": 5
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 1.0,
+          "chi2": 0.0,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 626,
+      "error": -48,
+      "abs_error": 48,
+      "tp": 605,
+      "fp": 21,
+      "fn": 69,
+      "precision": 0.9664536741214057,
+      "recall": 0.8976261127596439,
+      "f1": 0.9307692307692307,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 0.30000000000000004,
+          "multidesc": 0.7000000000000001
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 597,
+      "error": -77,
+      "abs_error": 77,
+      "tp": 591,
+      "fp": 6,
+      "fn": 83,
+      "precision": 0.9899497487437185,
+      "recall": 0.8768545994065282,
+      "f1": 0.9299763965381589,
+      "tess_only_recovered": 6
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.1,
+          "chi2": 0.30000000000000004,
+          "multidesc": 0.6000000000000001
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 591,
+      "error": -83,
+      "abs_error": 83,
+      "tp": 587,
+      "fp": 4,
+      "fn": 87,
+      "precision": 0.9932318104906938,
+      "recall": 0.870919881305638,
+      "f1": 0.9280632411067193,
+      "tess_only_recovered": 5
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.8,
+          "chi2": 0.1,
+          "multidesc": 0.1
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 601,
+      "error": -73,
+      "abs_error": 73,
+      "tp": 591,
+      "fp": 10,
+      "fn": 83,
+      "precision": 0.9833610648918469,
+      "recall": 0.8768545994065282,
+      "f1": 0.9270588235294118,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.9,
+          "chi2": 0.1,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 608,
+      "error": -66,
+      "abs_error": 66,
+      "tp": 594,
+      "fp": 14,
+      "fn": 80,
+      "precision": 0.9769736842105263,
+      "recall": 0.8813056379821959,
+      "f1": 0.9266770670826833,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.4,
+          "chi2": 0.2,
+          "multidesc": 0.4
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 593,
+      "error": -81,
+      "abs_error": 81,
+      "tp": 587,
+      "fp": 6,
+      "fn": 87,
+      "precision": 0.9898819561551433,
+      "recall": 0.870919881305638,
+      "f1": 0.9265982636148382,
+      "tess_only_recovered": 2
+    },
+    {
+      "params": {
+        "strategy": "voting_majority_2"
+      },
+      "matches": 595,
+      "error": -79,
+      "abs_error": 79,
+      "tp": 587,
+      "fp": 8,
+      "fn": 87,
+      "precision": 0.9865546218487395,
+      "recall": 0.870919881305638,
+      "f1": 0.9251379038613082,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.5,
+          "chi2": 0.2,
+          "multidesc": 0.30000000000000004
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 590,
+      "error": -84,
+      "abs_error": 84,
+      "tp": 584,
+      "fp": 6,
+      "fn": 90,
+      "precision": 0.9898305084745763,
+      "recall": 0.8664688427299704,
+      "f1": 0.9240506329113924,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.6000000000000001,
+          "chi2": 0.2,
+          "multidesc": 0.2
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 588,
+      "error": -86,
+      "abs_error": 86,
+      "tp": 582,
+      "fp": 6,
+      "fn": 92,
+      "precision": 0.9897959183673469,
+      "recall": 0.8635014836795252,
+      "f1": 0.9223454833597463,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 0.4,
+          "multidesc": 0.6000000000000001
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 584,
+      "error": -90,
+      "abs_error": 90,
+      "tp": 580,
+      "fp": 4,
+      "fn": 94,
+      "precision": 0.9931506849315068,
+      "recall": 0.8605341246290801,
+      "f1": 0.9220985691573927,
+      "tess_only_recovered": 4
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.2,
+          "chi2": 0.30000000000000004,
+          "multidesc": 0.5
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 587,
+      "error": -87,
+      "abs_error": 87,
+      "tp": 581,
+      "fp": 6,
+      "fn": 93,
+      "precision": 0.989778534923339,
+      "recall": 0.8620178041543026,
+      "f1": 0.9214908802537668,
+      "tess_only_recovered": 1
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.8,
+          "chi2": 0.2,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 590,
+      "error": -84,
+      "abs_error": 84,
+      "tp": 582,
+      "fp": 8,
+      "fn": 92,
+      "precision": 0.9864406779661017,
+      "recall": 0.8635014836795252,
+      "f1": 0.9208860759493671,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.7000000000000001,
+          "chi2": 0.2,
+          "multidesc": 0.1
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 589,
+      "error": -85,
+      "abs_error": 85,
+      "tp": 581,
+      "fp": 8,
+      "fn": 93,
+      "precision": 0.9864176570458404,
+      "recall": 0.8620178041543026,
+      "f1": 0.9200316706254947,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.30000000000000004,
+          "chi2": 0.30000000000000004,
+          "multidesc": 0.4
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 585,
+      "error": -89,
+      "abs_error": 89,
+      "tp": 579,
+      "fp": 6,
+      "fn": 95,
+      "precision": 0.9897435897435898,
+      "recall": 0.8590504451038575,
+      "f1": 0.9197776012708498,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.4,
+          "chi2": 0.30000000000000004,
+          "multidesc": 0.30000000000000004
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 584,
+      "error": -90,
+      "abs_error": 90,
+      "tp": 578,
+      "fp": 6,
+      "fn": 96,
+      "precision": 0.9897260273972602,
+      "recall": 0.857566765578635,
+      "f1": 0.918918918918919,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.5,
+          "chi2": 0.30000000000000004,
+          "multidesc": 0.2
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 581,
+      "error": -93,
+      "abs_error": 93,
+      "tp": 575,
+      "fp": 6,
+      "fn": 99,
+      "precision": 0.9896729776247849,
+      "recall": 0.8531157270029673,
+      "f1": 0.9163346613545816,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.1,
+          "chi2": 0.4,
+          "multidesc": 0.5
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 579,
+      "error": -95,
+      "abs_error": 95,
+      "tp": 574,
+      "fp": 5,
+      "fn": 100,
+      "precision": 0.9913644214162349,
+      "recall": 0.8516320474777448,
+      "f1": 0.9162011173184358,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 0.5,
+          "multidesc": 0.5
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 575,
+      "error": -99,
+      "abs_error": 99,
+      "tp": 571,
+      "fp": 4,
+      "fn": 103,
+      "precision": 0.9930434782608696,
+      "recall": 0.8471810089020771,
+      "f1": 0.9143314651721378,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.2,
+          "chi2": 0.4,
+          "multidesc": 0.4
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 578,
+      "error": -96,
+      "abs_error": 96,
+      "tp": 572,
+      "fp": 6,
+      "fn": 102,
+      "precision": 0.9896193771626297,
+      "recall": 0.8486646884272997,
+      "f1": 0.9137380191693291,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.7000000000000001,
+          "chi2": 0.30000000000000004,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 580,
+      "error": -94,
+      "abs_error": 94,
+      "tp": 572,
+      "fp": 8,
+      "fn": 102,
+      "precision": 0.9862068965517241,
+      "recall": 0.8486646884272997,
+      "f1": 0.9122807017543859,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.6000000000000001,
+          "chi2": 0.30000000000000004,
+          "multidesc": 0.1
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 579,
+      "error": -95,
+      "abs_error": 95,
+      "tp": 571,
+      "fp": 8,
+      "fn": 103,
+      "precision": 0.9861830742659758,
+      "recall": 0.8471810089020771,
+      "f1": 0.9114126097366322,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.1,
+          "chi2": 0.5,
+          "multidesc": 0.4
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 575,
+      "error": -99,
+      "abs_error": 99,
+      "tp": 569,
+      "fp": 6,
+      "fn": 105,
+      "precision": 0.9895652173913043,
+      "recall": 0.844213649851632,
+      "f1": 0.9111289031224981,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.30000000000000004,
+          "chi2": 0.4,
+          "multidesc": 0.30000000000000004
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 575,
+      "error": -99,
+      "abs_error": 99,
+      "tp": 569,
+      "fp": 6,
+      "fn": 105,
+      "precision": 0.9895652173913043,
+      "recall": 0.844213649851632,
+      "f1": 0.9111289031224981,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.6000000000000001,
+          "chi2": 0.4,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 578,
+      "error": -96,
+      "abs_error": 96,
+      "tp": 570,
+      "fp": 8,
+      "fn": 104,
+      "precision": 0.986159169550173,
+      "recall": 0.8456973293768546,
+      "f1": 0.9105431309904153,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.4,
+          "chi2": 0.4,
+          "multidesc": 0.2
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 574,
+      "error": -100,
+      "abs_error": 100,
+      "tp": 568,
+      "fp": 6,
+      "fn": 106,
+      "precision": 0.9895470383275261,
+      "recall": 0.8427299703264095,
+      "f1": 0.9102564102564102,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 0.6000000000000001,
+          "multidesc": 0.4
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 572,
+      "error": -102,
+      "abs_error": 102,
+      "tp": 567,
+      "fp": 5,
+      "fn": 107,
+      "precision": 0.9912587412587412,
+      "recall": 0.841246290801187,
+      "f1": 0.9101123595505617,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.2,
+          "chi2": 0.5,
+          "multidesc": 0.30000000000000004
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 573,
+      "error": -101,
+      "abs_error": 101,
+      "tp": 567,
+      "fp": 6,
+      "fn": 107,
+      "precision": 0.9895287958115183,
+      "recall": 0.841246290801187,
+      "f1": 0.909382518043304,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.5,
+          "chi2": 0.4,
+          "multidesc": 0.1
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 573,
+      "error": -101,
+      "abs_error": 101,
+      "tp": 567,
+      "fp": 6,
+      "fn": 107,
+      "precision": 0.9895287958115183,
+      "recall": 0.841246290801187,
+      "f1": 0.909382518043304,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.5,
+          "chi2": 0.5,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 576,
+      "error": -98,
+      "abs_error": 98,
+      "tp": 568,
+      "fp": 8,
+      "fn": 106,
+      "precision": 0.9861111111111112,
+      "recall": 0.8427299703264095,
+      "f1": 0.9087999999999999,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.1,
+          "chi2": 0.6000000000000001,
+          "multidesc": 0.30000000000000004
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 572,
+      "error": -102,
+      "abs_error": 102,
+      "tp": 566,
+      "fp": 6,
+      "fn": 108,
+      "precision": 0.9895104895104895,
+      "recall": 0.8397626112759644,
+      "f1": 0.9085072231139647,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.30000000000000004,
+          "chi2": 0.5,
+          "multidesc": 0.2
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 572,
+      "error": -102,
+      "abs_error": 102,
+      "tp": 566,
+      "fp": 6,
+      "fn": 108,
+      "precision": 0.9895104895104895,
+      "recall": 0.8397626112759644,
+      "f1": 0.9085072231139647,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 0.7000000000000001,
+          "multidesc": 0.30000000000000004
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 571,
+      "error": -103,
+      "abs_error": 103,
+      "tp": 565,
+      "fp": 6,
+      "fn": 109,
+      "precision": 0.989492119089317,
+      "recall": 0.8382789317507419,
+      "f1": 0.9076305220883535,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.2,
+          "chi2": 0.6000000000000001,
+          "multidesc": 0.2
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 571,
+      "error": -103,
+      "abs_error": 103,
+      "tp": 565,
+      "fp": 6,
+      "fn": 109,
+      "precision": 0.989492119089317,
+      "recall": 0.8382789317507419,
+      "f1": 0.9076305220883535,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.30000000000000004,
+          "chi2": 0.6000000000000001,
+          "multidesc": 0.1
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 571,
+      "error": -103,
+      "abs_error": 103,
+      "tp": 565,
+      "fp": 6,
+      "fn": 109,
+      "precision": 0.989492119089317,
+      "recall": 0.8382789317507419,
+      "f1": 0.9076305220883535,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.4,
+          "chi2": 0.5,
+          "multidesc": 0.1
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 571,
+      "error": -103,
+      "abs_error": 103,
+      "tp": 565,
+      "fp": 6,
+      "fn": 109,
+      "precision": 0.989492119089317,
+      "recall": 0.8382789317507419,
+      "f1": 0.9076305220883535,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.1,
+          "chi2": 0.7000000000000001,
+          "multidesc": 0.2
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 572,
+      "error": -102,
+      "abs_error": 102,
+      "tp": 565,
+      "fp": 7,
+      "fn": 109,
+      "precision": 0.9877622377622378,
+      "recall": 0.8382789317507419,
+      "f1": 0.9069020866773676,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.4,
+          "chi2": 0.6000000000000001,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 573,
+      "error": -101,
+      "abs_error": 101,
+      "tp": 565,
+      "fp": 8,
+      "fn": 109,
+      "precision": 0.9860383944153578,
+      "recall": 0.8382789317507419,
+      "f1": 0.9061748195669608,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.2,
+          "chi2": 0.7000000000000001,
+          "multidesc": 0.1
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 569,
+      "error": -105,
+      "abs_error": 105,
+      "tp": 563,
+      "fp": 6,
+      "fn": 111,
+      "precision": 0.9894551845342706,
+      "recall": 0.8353115727002968,
+      "f1": 0.9058728881737731,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 0.8,
+          "multidesc": 0.2
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 567,
+      "error": -107,
+      "abs_error": 107,
+      "tp": 560,
+      "fp": 7,
+      "fn": 114,
+      "precision": 0.9876543209876543,
+      "recall": 0.8308605341246291,
+      "f1": 0.9024979854955681,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.30000000000000004,
+          "chi2": 0.7000000000000001,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 567,
+      "error": -107,
+      "abs_error": 107,
+      "tp": 560,
+      "fp": 7,
+      "fn": 114,
+      "precision": 0.9876543209876543,
+      "recall": 0.8308605341246291,
+      "f1": 0.9024979854955681,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.1,
+          "chi2": 0.8,
+          "multidesc": 0.1
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 565,
+      "error": -109,
+      "abs_error": 109,
+      "tp": 558,
+      "fp": 7,
+      "fn": 116,
+      "precision": 0.9876106194690265,
+      "recall": 0.827893175074184,
+      "f1": 0.900726392251816,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.2,
+          "chi2": 0.8,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 567,
+      "error": -107,
+      "abs_error": 107,
+      "tp": 557,
+      "fp": 10,
+      "fn": 117,
+      "precision": 0.982363315696649,
+      "recall": 0.8264094955489614,
+      "f1": 0.8976631748589846,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 0.9,
+          "multidesc": 0.1
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 564,
+      "error": -110,
+      "abs_error": 110,
+      "tp": 553,
+      "fp": 11,
+      "fn": 121,
+      "precision": 0.9804964539007093,
+      "recall": 0.8204747774480712,
+      "f1": 0.8933764135702746,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "voting_unanimous"
+      },
+      "matches": 547,
+      "error": -127,
+      "abs_error": 127,
+      "tp": 544,
+      "fp": 3,
+      "fn": 130,
+      "precision": 0.9945155393053017,
+      "recall": 0.8071216617210683,
+      "f1": 0.8910728910728911,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "intersection"
+      },
+      "matches": 547,
+      "error": -127,
+      "abs_error": 127,
+      "tp": 544,
+      "fp": 3,
+      "fn": 130,
+      "precision": 0.9945155393053017,
+      "recall": 0.8071216617210683,
+      "f1": 0.8910728910728911,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.1,
+          "chi2": 0.9,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 563,
+      "error": -111,
+      "abs_error": 111,
+      "tp": 550,
+      "fp": 13,
+      "fn": 124,
+      "precision": 0.9769094138543517,
+      "recall": 0.8160237388724035,
+      "f1": 0.889248181083266,
+      "tess_only_recovered": 0
+    },
+    {
+      "params": {
+        "strategy": "score_fusion",
+        "weights": {
+          "bilateral_l2": 0.0,
+          "chi2": 1.0,
+          "multidesc": 0.0
+        },
+        "threshold": "kmeans_k2"
+      },
+      "matches": 561,
+      "error": -113,
+      "abs_error": 113,
+      "tp": 544,
+      "fp": 17,
+      "fn": 130,
+      "precision": 0.9696969696969697,
+      "recall": 0.8071216617210683,
+      "f1": 0.8809716599190284,
+      "tess_only_recovered": 0
+    }
+  ]
+}

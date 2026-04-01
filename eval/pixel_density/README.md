@@ -27,7 +27,7 @@ Configs defined in `params.py`:
 | `sweep_bilateral.py` | Bilateral score computation + K-Means classification | `python eval/pixel_density/sweep_bilateral.py data/samples/ART_674.pdf --target 674` |
 | `sweep_preprocessing.py` | 8 preprocessing variants (CLAHE, Otsu, ink, red channel) | `python eval/pixel_density/sweep_preprocessing.py` |
 | `baseline.py` | Full 54-combo standalone sweep + VLM evaluation | `python eval/pixel_density/baseline.py` |
-| `inspect.py` | 3-way diff (bilateral vs Tesseract) + score diagnostics | `python eval/pixel_density/inspect.py [--diagnose]` |
+| `inspect_pages.py` | 3-way diff (bilateral vs Tesseract) + score diagnostics | `python eval/pixel_density/inspect_pages.py [--diagnose]` |
 | `audit_coverage.py` | Cross-reference bilateral pages vs inference pipeline + VLM GT | `python eval/pixel_density/audit_coverage.py` |
 | `characterize_density.py` | Density regime analysis + bimodality check | `python eval/pixel_density/characterize_density.py [--bimodality]` |
 | `simulate_injection.py` | Realistic injection simulation (correct totals from VLM GT) | `python eval/pixel_density/simulate_injection.py` |

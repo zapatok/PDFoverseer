@@ -201,9 +201,9 @@ def main() -> None:
     best_f1 = art_results[0]["f1"]
     best_tess = max(r.get("tess_only_recovered", 0) for r in art_results)
     print("\n--- Gate Check ---")
-    print(f"Best F1: {best_f1:.4f} (baseline: 0.922) → "
+    print(f"Best F1: {best_f1:.4f} (baseline: 0.922) -- "
           f"{'PASS' if best_f1 > 0.922 else 'FAIL'}")
-    print(f"Max TESS-ONLY recovered: {best_tess}/31 → "
+    print(f"Max TESS-ONLY recovered: {best_tess}/27 -- "
           f"{'PASS' if best_tess >= 1 else 'FAIL'}")
 
     hll_results: list[dict] = []
@@ -214,7 +214,7 @@ def main() -> None:
         hll_results.sort(key=lambda r: r["abs_error"])
         print("\n--- HLL_363 (top 5 ART configs) ---")
         for r in hll_results:
-            print(f"  {r['params']} → matches={r['matches']} error={r['error']:+d}")
+            print(f"  {r['params']} -- matches={r['matches']} error={r['error']:+d}")
 
     # Save raw per-page scores for best config (needed by Phase 4)
     best_params = art_results[0]["params"]
