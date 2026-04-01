@@ -124,6 +124,75 @@ The floor was designed to address this but has no effect on ART_674 because all 
 
 **Solving this properly requires replacing the percentile with an adaptive cut that finds the natural boundary between "cover scores" and "content scores" without assuming a fixed ratio.**
 
+## Investigation Results (Phase 2)
+
+### find_peaks (scipy.signal) — Breakthrough for ART
+
+Instead of percentile threshold, treat bilateral scores as a 1D signal and detect **peaks** (local maxima that stand out from surroundings). Uses `scipy.signal.find_peaks` with `prominence` parameter — prominence measures how much a peak rises above its lowest surrounding contour, independent of absolute height.
+
+```
+scipy.signal.find_peaks(scores, prominence=0.5, distance=2)
+```
+
+- `prominence=0.5`: minimum rise from surrounding signal to count as a peak
+- `distance=2`: minimum 2 pages between peaks (ART docs are always ≥2 pages)
+
+**ART_674 results (prominence sweep):**
+
+| Prominence | Detected | TP | FP | FN | F1 | Doc count error |
+|------------|----------|-----|----|----|------|----------------|
+| 0.5 | 670 | 666 | 4 | 8 | **0.9911** | -4 |
+| 1.0 | 668 | 664 | 4 | 10 | 0.9896 | -6 |
+| 1.3 | 667 | 664 | 3 | 10 | 0.9903 | -7 |
+
+**Best: prominence=0.5, distance=2 → F1=0.9911** (vs V2_RC F1=0.956). Only 4 FP and 8 FN.
+
+**ART family doc count cross-validation:**
+
+| PDF | Target | V2_RC | err | find_peaks p=0.5 | err |
+|-----|--------|-------|-----|------------------|-----|
+| ART_674 | 674 | 675 | +1 | 670 | **-4** |
+| ART_CH_13 | 13 | 13 | 0 | 13 | 0 |
+| ART_CON_13 | 13 | 13 | 0 | 13 | 0 |
+| ART_EX_13 | 13 | 13 | 0 | 13 | 0 |
+| ART_GR_8 | 8 | 8 | 0 | 8 | 0 |
+| ART_ROC_10 | 10 | 10 | 0 | 10 | 0 |
+| **Total MAE** | | | **0.2** | | **0.7** |
+
+find_peaks preserves perfect accuracy on the 5 small ART PDFs while dramatically improving F1 on ART_674. Doc count error goes from +1 to -4 (slightly worse in absolute terms but the quality of detections is vastly superior: 4 FP vs 30 FP).
+
+**General corpus:** find_peaks is WORSE than percentile on non-ART PDFs (MAE 25.7 vs 20.1). This is expected — non-ART PDFs don't have the same peak-structured signal. find_peaks is an ART-specific optimization.
+
+**Why it works:** find_peaks doesn't assume "25% are covers" — it finds pages that genuinely stand out from their neighbors. No ratio assumption. A single-document ART PDF would correctly detect only page 0 (no other peaks exist).
+
+### Suppress Near-Identical Scores
+
+Testing on V2_RC (percentile 75.2) with various epsilon values:
+
+| Epsilon | Detected | TP | FP | FN | F1 | Error |
+|---------|----------|-----|----|----|------|-------|
+| 0 (V2_RC) | 675 | 645 | 30 | 29 | 0.956 | +1 |
+| 0.001 | 665 | 643 | 22 | 31 | 0.960 | -9 |
+| 0.01 | 665 | 643 | 22 | 31 | 0.960 | -9 |
+| 0.5 | 661 | 642 | 19 | 32 | 0.962 | -13 |
+| 1.0 | 657 | 641 | 16 | 33 | 0.963 | -17 |
+
+Reduces FPs but also loses some TPs (those at boundaries where both pages are real covers from adjacent documents). Net F1 improvement is modest (+0.004 to +0.007). Doc count error worsens from +1 to -9 through -17.
+
+**Verdict:** Not worth pursuing as standalone intervention. find_peaks already eliminates the boundary pair problem more elegantly.
+
+### Otsu Threshold
+
+Tested `skimage.filters.threshold_otsu` on bilateral scores:
+
+| PDF | Target | Otsu detected | Error |
+|-----|--------|---------------|-------|
+| ART_674 | 674 | 682 | +8 |
+| ART_CH_13 | 13 | 25 | +12 |
+| ART_GR_8 | 8 | 16 | +8 |
+
+**Verdict:** Otsu severely over-detects on small PDFs. Same problem as KMeans k=2 — adapts to each PDF's score distribution, not to document structure. Rejected.
+
 ## Future Investigation Lines
 
 ### 1. Suppress with Near-Identical Scores (Low Risk, High Confidence)
