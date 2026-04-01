@@ -141,6 +141,26 @@ def _robust_z_normalize(matrix: np.ndarray) -> np.ndarray:
     return (matrix - median) / (mad * 1.4826)
 
 
+def _apply_floor(
+    matches: list[int],
+    scores: np.ndarray,
+    floor: float,
+) -> list[int]:
+    """Remove detected pages whose bilateral score is below an absolute floor.
+
+    Page 0 is always kept (first page of the PDF is always a document start).
+
+    Args:
+        matches: Detected cover page indices (0-based).
+        scores: Full bilateral score array.
+        floor: Minimum absolute score to retain a detection.
+
+    Returns:
+        Filtered list of cover page indices.
+    """
+    return [m for m in matches if m == 0 or scores[m] >= floor]
+
+
 # ── Scorers ────────────────────────────────────────────────────────────────
 
 
