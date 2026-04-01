@@ -312,6 +312,46 @@ def scorer_rescue_c(pages: np.ndarray, pct: float = 75.2) -> list[int]:
     return _percentile_threshold(scores, pct)
 
 
+def scorer_v3(
+    pages: np.ndarray,
+    pct: float = 75.2,
+    floor: float = 0.0,
+    suppress_consecutive: bool = True,
+) -> list[int]:
+    """V3: V2_RC features + absolute floor + consecutive suppression.
+
+    Pipeline: extract features -> robust-z normalize -> bilateral L2 ->
+    percentile threshold -> absolute floor -> consecutive suppression.
+
+    Args:
+        pages: Array of shape (N, H, W), uint8 grayscale pages.
+        pct: Percentile threshold (default: 75.2).
+        floor: Minimum absolute bilateral score to retain a detection.
+            Set to 0.0 to disable (default).
+        suppress_consecutive: If True, when consecutive pages are both
+            detected, keep only the highest-scoring one.
+
+    Returns:
+        List of detected cover page indices (0-based).
+    """
+    feat_list = ["dark_ratio_grid", "edge_density_grid"]
+    vectors = [extract_features(pages[i], feat_list) for i in range(pages.shape[0])]
+    matrix = np.vstack(vectors)
+    normed = _robust_z_normalize(matrix)
+    normed_list = [normed[i] for i in range(normed.shape[0])]
+    scores = bilateral_l2(normed_list, "min")
+
+    matches = _percentile_threshold(scores, pct)
+
+    if floor > 0.0:
+        matches = _apply_floor(matches, scores, floor)
+
+    if suppress_consecutive:
+        matches = _suppress_consecutive(matches, scores)
+
+    return matches
+
+
 def compute_summary(results: list[dict]) -> dict:
     """Compute aggregate metrics from cross-validation results.
 
