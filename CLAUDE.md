@@ -412,6 +412,7 @@ Rules take effect immediately (no restart needed). BLOCK rules prevent tool exec
 - **VLM integration postmortem:** `docs/superpowers/reports/2026-03-29-vlm-integration-postmortem.md`
 - **Pixel density research (V1):** `docs/research/2026-03-31-bilateral-pixel-density.md`
 - **Pixel density advanced sweep + rescue (V2 RC):** `docs/research/2026-04-01-pixel-density-advanced-sweep-results.md`
+- **Pixel density V3 error analysis:** `docs/research/2026-04-01-pd-v3-error-analysis.md`
 - **Pixel density README:** `eval/pixel_density/README.md`
 - **Eval README:** `eval/README.md`
 - **Core README:** `core/README.md`

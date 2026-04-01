@@ -81,11 +81,17 @@ PDF ──► Render all pages (DPI=100, grayscale)
 | `simulate_injection.py` | Realistic injection simulation | `python eval/pixel_density/simulate_injection.py` |
 | `simulate_naive.py` | Naive injection simulation | `python eval/pixel_density/simulate_naive.py` |
 | `extract_pages.py` | Extract PNG strips for visual inspection | `python eval/pixel_density/extract_pages.py` |
+| `analyze_errors.py` | FP/FN diagnostic: scores, positions, neighbor context | `python eval/pixel_density/analyze_errors.py --render` |
+| `sweep_v3.py` | V3 sweep: floor + consecutive suppression (18 combos) | `python eval/pixel_density/sweep_v3.py` |
 
 ## Research History
 
 1. **PD_BASELINE** (2026-03-31): 54-combo sweep, dark_ratio L2 bilateral. Report: `docs/research/2026-03-31-bilateral-pixel-density.md`
 2. **PD_V2** (2026-04-01): Multi-descriptor + KMeans. F1=0.957 on ART_674 but failed cross-validation (overfit). **Superseded.**
 3. **PD_V2_RC** (2026-04-01): V2 features + V1 threshold. F1=0.956, generalizes. Report: `docs/research/2026-04-01-pixel-density-advanced-sweep-results.md`
+4. **PD_V3 Error Analysis** (2026-04-01): FP/FN diagnosis + absolute floor + consecutive suppression. Floor has no effect on ART_674 (FPs have genuinely high scores). Suppress reduces FP 30→3 but regresses gen_MAE 20.1→29.7. **V2_RC remains best.** Report: `docs/research/2026-04-01-pd-v3-error-analysis.md`
 
-Key finding: the percentile threshold (75.2) is what makes configs generalize. KMeans k=2 overfits to each PDF's score distribution.
+Key findings:
+- The percentile threshold (75.2) is what makes configs generalize. KMeans k=2 overfits to each PDF's score distribution.
+- FPs on ART_674 are structural (document boundary pairs) — not fixable by score filtering.
+- Consecutive suppression works for ART but breaks short-document PDFs.
