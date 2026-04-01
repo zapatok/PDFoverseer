@@ -10,7 +10,9 @@ logger = logging.getLogger(__name__)
 
 VLM_FIXTURE = Path(__file__).parent.parent / "fixtures" / "real" / "ART_674.json"
 TESS_FIXTURE = Path(__file__).parent.parent / "fixtures" / "real" / "ART_674_tess.json"
-TESS_ONLY_CACHE = Path("data/pixel_density/tess_only_pages.json")
+TESS_ONLY_CACHE = (
+    Path(__file__).parent.parent.parent / "data" / "pixel_density" / "tess_only_pages.json"
+)
 
 
 # ── Ground truth ─────────────────────────────────────────────────────────────
@@ -91,6 +93,7 @@ def compute_metrics(
         matches count, and tess_only_recovered.
     """
     match_set = set(matches)
+    n_matches = len(match_set)
     tp = len(match_set & gt_covers)
     fp = len(match_set - gt_covers)
     fn = len(gt_covers - match_set)
@@ -104,9 +107,9 @@ def compute_metrics(
     )
 
     result: dict = {
-        "matches": len(matches),
-        "error": len(matches) - target,
-        "abs_error": abs(len(matches) - target),
+        "matches": n_matches,
+        "error": n_matches - target,
+        "abs_error": abs(n_matches - target),
         "tp": tp,
         "fp": fp,
         "fn": fn,

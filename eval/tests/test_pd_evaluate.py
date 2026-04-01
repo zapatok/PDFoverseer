@@ -10,9 +10,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import pytest  # noqa: E402
 
+_FIXTURE = Path(__file__).parent.parent / "fixtures" / "real" / "ART_674.json"
+_needs_fixture = pytest.mark.skipif(
+    not _FIXTURE.exists(), reason="ART_674.json fixture not available",
+)
+
 # ── load_art674_gt ───────────────────────────────────────────────────────────
 
 
+@_needs_fixture
 def test_load_art674_gt_returns_set_of_ints():
     from eval.pixel_density.evaluate import load_art674_gt
 
@@ -21,13 +27,16 @@ def test_load_art674_gt_returns_set_of_ints():
     assert all(isinstance(i, int) for i in covers)
 
 
+@_needs_fixture
 def test_load_art674_gt_count_is_674():
+    """674 covers = 674 documents in ART_674 (one curr==1 per doc)."""
     from eval.pixel_density.evaluate import load_art674_gt
 
     covers = load_art674_gt()
     assert len(covers) == 674
 
 
+@_needs_fixture
 def test_load_art674_gt_zero_based():
     """Page indices are 0-based (VLM fixture is 1-based, converted on load)."""
     from eval.pixel_density.evaluate import load_art674_gt
@@ -101,13 +110,14 @@ def test_compute_metrics_count_only():
 # ── load_tess_only_pages ─────────────────────────────────────────────────────
 
 
+@_needs_fixture
 def test_load_tess_only_pages_returns_set():
     from eval.pixel_density.evaluate import load_tess_only_pages
 
     pages = load_tess_only_pages()
     assert isinstance(pages, set)
     assert all(isinstance(i, int) for i in pages)
-    # Should be non-empty (we know there are 31 TESS-ONLY pages)
+    # 31 TESS-ONLY pages at PD_BASELINE (CLAHE/min/kmeans)
     assert len(pages) > 0
 
 
