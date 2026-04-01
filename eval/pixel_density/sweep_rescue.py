@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import numpy as np  # noqa: E402
+from scipy.signal import find_peaks as scipy_find_peaks  # noqa: E402
 
 from eval.pixel_density.cache import ensure_cache  # noqa: E402
 from eval.pixel_density.evaluate import (  # noqa: E402
@@ -210,6 +211,40 @@ def _suppress_consecutive(
     return sorted(result)
 
 
+def _shift_to_cover(
+    peaks: list[int],
+    scores: np.ndarray,
+    score_similarity: float = 0.99,
+) -> list[int]:
+    """Correct displacement errors by shifting peaks left when the previous page has a similar score.
+
+    When find_peaks detects a peak at page N, but page N-1 has a score within
+    the similarity ratio, the real cover is likely at N-1 (the peak landed on
+    the last page of the previous document instead of the first page of the
+    next). This shifts the detection left by 1 in those cases.
+
+    Page 0 is never shifted (no page before it).
+
+    Args:
+        peaks: Detected peak indices (0-based), sorted.
+        scores: Full bilateral score array.
+        score_similarity: Minimum ratio score[p-1]/score[p] to trigger shift.
+
+    Returns:
+        Corrected list of cover page indices, sorted, deduplicated.
+    """
+    result: list[int] = []
+    for p in peaks:
+        if p == 0:
+            result.append(p)
+            continue
+        if scores[p - 1] >= scores[p] * score_similarity:
+            result.append(p - 1)
+        else:
+            result.append(p)
+    return sorted(set(result))
+
+
 # ── Scorers ────────────────────────────────────────────────────────────────
 
 
@@ -348,6 +383,55 @@ def scorer_v3(
 
     if suppress_consecutive:
         matches = _suppress_consecutive(matches, scores)
+
+    return matches
+
+
+def scorer_find_peaks(
+    pages: np.ndarray,
+    prominence: float = 0.5,
+    distance: int = 2,
+    shift_covers: bool = True,
+    score_similarity: float = 0.99,
+) -> list[int]:
+    """Detect cover pages as prominent peaks in the bilateral score signal.
+
+    Instead of assuming a fixed ratio of covers (percentile threshold), this
+    scorer finds pages that genuinely stand out from their neighbors using
+    scipy's peak detection. A cover-shift post-processing step corrects
+    displacement errors where the peak falls 1 page off from the real cover.
+
+    Pipeline: extract features -> robust-z normalize -> bilateral L2 ->
+    find_peaks (prominence + distance) -> cover shift.
+
+    Args:
+        pages: Array of shape (N, H, W), uint8 grayscale pages.
+        prominence: Minimum prominence for a peak to be detected. Higher
+            values require peaks to stand out more from surroundings.
+        distance: Minimum number of pages between detected peaks.
+        shift_covers: If True, correct displacement errors by shifting
+            peaks left when the previous page has a similar score.
+        score_similarity: Similarity ratio for cover-shift (only used
+            when shift_covers=True).
+
+    Returns:
+        List of detected cover page indices (0-based).
+    """
+    feat_list = ["dark_ratio_grid", "edge_density_grid"]
+    vectors = [extract_features(pages[i], feat_list) for i in range(pages.shape[0])]
+    matrix = np.vstack(vectors)
+    normed = _robust_z_normalize(matrix)
+    normed_list = [normed[i] for i in range(normed.shape[0])]
+    scores = bilateral_l2(normed_list, "min")
+
+    peaks, _ = scipy_find_peaks(scores, prominence=prominence, distance=distance)
+    matches = [int(p) for p in peaks]
+
+    if 0 not in matches:
+        matches.insert(0, 0)
+
+    if shift_covers:
+        matches = _shift_to_cover(matches, scores, score_similarity)
 
     return matches
 

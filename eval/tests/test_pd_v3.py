@@ -147,3 +147,82 @@ def test_v3_floor_reduces_detections_on_few_doc_pdf(_needs_samples):
     assert len(matches_with_floor) <= len(matches_no_floor), (
         "Floor should not increase detections"
     )
+
+
+def test_shift_to_cover_shifts_when_similar():
+    """When previous page has score within sim ratio, shift detection left."""
+    from eval.pixel_density.sweep_rescue import _shift_to_cover
+
+    scores = np.array([3.0, 18.0, 18.1, 5.0, 15.0])
+    peaks = [0, 2]
+    result = _shift_to_cover(peaks, scores, score_similarity=0.99)
+    assert 1 in result
+    assert 2 not in result
+
+
+def test_shift_to_cover_no_shift_when_dissimilar():
+    """When previous page score is much lower, no shift."""
+    from eval.pixel_density.sweep_rescue import _shift_to_cover
+
+    scores = np.array([3.0, 8.0, 18.0, 5.0])
+    peaks = [0, 2]
+    result = _shift_to_cover(peaks, scores, score_similarity=0.99)
+    assert 2 in result
+    assert 1 not in result
+
+
+def test_shift_to_cover_keeps_page_0():
+    """Page 0 is never shifted. Page 1 shifts to 0 and deduplicates."""
+    from eval.pixel_density.sweep_rescue import _shift_to_cover
+
+    scores = np.array([18.0, 17.9, 5.0])
+    peaks = [0, 1]
+    result = _shift_to_cover(peaks, scores, score_similarity=0.99)
+    assert 0 in result
+    assert 1 not in result
+    assert len(result) == 1
+
+
+def test_shift_to_cover_deduplicates():
+    """If shift would create a duplicate, result is deduplicated."""
+    from eval.pixel_density.sweep_rescue import _shift_to_cover
+
+    scores = np.array([18.0, 18.0, 18.1, 5.0])
+    peaks = [0, 2]
+    result = _shift_to_cover(peaks, scores, score_similarity=0.99)
+    assert result == [0, 1]
+
+
+def test_scorer_find_peaks_returns_list_of_ints():
+    """scorer_find_peaks() returns cover page indices."""
+    from eval.pixel_density.sweep_rescue import scorer_find_peaks
+
+    rng = np.random.RandomState(42)
+    pages = rng.randint(0, 256, size=(20, 100, 80), dtype=np.uint8)
+    matches = scorer_find_peaks(pages)
+    assert isinstance(matches, list)
+    assert all(isinstance(i, int) for i in matches)
+    assert 0 in matches
+
+
+def test_scorer_find_peaks_page_0_always_included():
+    """Page 0 is always in the result even on flat signal (all pages identical)."""
+    from eval.pixel_density.sweep_rescue import scorer_find_peaks
+
+    pages = np.full((10, 100, 80), 128, dtype=np.uint8)
+    matches = scorer_find_peaks(pages)
+    assert 0 in matches
+
+
+def test_scorer_find_peaks_no_shift_when_disabled():
+    """With shift_covers=False, no displacement correction is applied."""
+    from eval.pixel_density.sweep_rescue import scorer_find_peaks
+
+    rng = np.random.RandomState(42)
+    pages = rng.randint(0, 256, size=(20, 100, 80), dtype=np.uint8)
+    with_shift = scorer_find_peaks(pages, shift_covers=True)
+    without_shift = scorer_find_peaks(pages, shift_covers=False)
+    assert isinstance(with_shift, list)
+    assert isinstance(without_shift, list)
+    assert 0 in with_shift
+    assert 0 in without_shift
