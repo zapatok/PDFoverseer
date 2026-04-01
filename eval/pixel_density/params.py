@@ -55,3 +55,24 @@ BEST_RESCUE_CONFIG: dict = {
     "threshold_method": "percentile",
     "threshold_percentile": 75.2,
 }
+
+# ── find_peaks: Peak detection for ART documents (PD_FIND_PEAKS) ─────────
+# Uses scipy.signal.find_peaks on bilateral score signal instead of
+# percentile threshold. Detects pages that genuinely stand out from
+# neighbors — no fixed cover ratio assumption.
+# ART_674 page-level: F1=0.993, P=0.996, R=0.990, 3 FP, 7 FN.
+# ART family (6 PDFs total): 5/5 small ARTs exact, ART_674 err=-4.
+#
+# Cover-shift corrects displacement errors where the bilateral peak
+# falls on the last page of doc A instead of the first page of doc B.
+
+BEST_FIND_PEAKS_CONFIG: dict = {
+    "features": ["dark_ratio_grid", "edge_density_grid"],
+    "normalization": "robust_z",
+    "score_fn": "min",
+    "threshold_method": "find_peaks",
+    "prominence": 0.5,
+    "distance": 2,
+    "shift_covers": True,
+    "score_similarity": 0.99,
+}
