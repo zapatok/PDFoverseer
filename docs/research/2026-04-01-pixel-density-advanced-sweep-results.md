@@ -297,6 +297,105 @@ La tecnica de robust-z esta validada para combinar features de distinta escala. 
 
 ---
 
+## Investigacion de rescate (Rescue Sweep)
+
+Tras el fracaso de V2 en validacion cruzada, se investigaron 3 lineas para rescatar componentes utiles. Se ejecuto cada linea sobre 27 PDFs (22 generales + 5 familia ART) con el **mismo threshold de V1 (percentil 75.2)** para aislar el efecto del feature vs el threshold.
+
+### Resultados: Corpus general (22 PDFs)
+
+| Metrica | V1 | Rescue A | Rescue B | Rescue C |
+|---------|-----|----------|----------|----------|
+| MAE | 20.0 | 20.0 | 20.0 | 20.1 |
+| Exactos | 0 | 0 | 0 | 0 |
+| Dentro +/-2 | 4 | 4 | 4 | 4 |
+
+**Hallazgo:** con percentil 75.2, TODAS las lineas empatan con V1. El threshold domina; el feature subyacente casi no afecta el conteo. La estabilidad de V1 viene del threshold, no del feature.
+
+### Resultados: Familia ART (5 PDFs)
+
+| Metrica | V1 | Rescue A | Rescue B | Rescue C |
+|---------|-----|----------|----------|----------|
+| MAE | 0.2 | **0.0** | **0.0** | **0.0** |
+| Exactos | 4/5 | **5/5** | **5/5** | **5/5** |
+
+**Hallazgo:** las tres lineas corrigen ART_GR_8 (error +1 en V1) a exacto. Edge density captura mejor los limites de documentos tipo ART.
+
+### Resultados: ART_674 page-level (unico PDF con GT por pagina)
+
+| Config | F1 | P | R | TP | FP | FN | TESS-ONLY |
+|--------|-----|------|------|-----|-----|-----|-----------|
+| V1 | 0.922 | 0.921 | 0.923 | 622 | 53 | 52 | 7 |
+| **Rescue A** (edge solo) | **0.928** | 0.927 | 0.929 | 626 | 49 | 48 | **27** |
+| Rescue B (fusion 0.1) | 0.940 | 0.939 | 0.941 | 634 | 41 | 40 | 14 |
+| **Rescue C** (multi+pct) | **0.956** | 0.956 | 0.957 | 645 | 30 | 29 | **26** |
+
+### Veredicto por linea
+
+**Rescue A (edge_density standalone, pct_75.2): VIABLE**
+- Misma MAE que V1 en corpus general (no regresion)
+- 5/5 exactos en familia ART (+1 sobre V1)
+- F1=0.928 en ART_674 (+0.6pp), 27/27 TESS-ONLY
+- La mas simple de implementar (un solo feature, sin normalizacion)
+
+**Rescue B (fusion V1 + edge, pct_75.2): VIABLE pero sin ventaja clara**
+- Misma MAE que V1 en corpus general
+- 5/5 en familia ART
+- F1=0.940 en ART_674 — intermedia entre A y C
+- El peso optimo es 0.1 (solo 10% de edge) — V1 domina la fusion
+- Complejidad adicional sin ganancia suficiente sobre A o C
+
+**Rescue C (dark_ratio + edge_density, robust-z, pct_75.2): GANADORA**
+- MAE=20.1 en corpus general (practicamente igual a V1)
+- 5/5 en familia ART
+- **F1=0.956** en ART_674 — **el mismo resultado que V2 pero sin sobreajuste**
+- 26/27 TESS-ONLY recuperadas
+- Confirma la hipotesis: V2 fallo por KMeans, no por los features ni la normalizacion
+
+### Conclusion del rescate
+
+**El percentil 75.2 es la clave de la generalizacion.** V2 fallo porque KMeans k=2 sobreajusta a la distribucion de cada PDF. El percentil fijo toma siempre el top ~25% de scores, independientemente de la forma de la distribucion.
+
+Rescue C hereda lo mejor de ambos mundos:
+- De V1: el threshold estable (percentil 75.2) que generaliza
+- De V2: los features complementarios (dark_ratio + edge_density) y la normalizacion robust-z que mejoran la calidad page-level
+
+**Config ganadora (PD_V2_RESCUE):**
+```
+features: dark_ratio_grid (8x8, 64d) + edge_density_grid (4x4, 16d)
+normalization: robust-z (median + MAD * 1.4826)
+distance: L2
+bilateral score: min
+threshold: percentile 75.2
+```
+
+---
+
+## Resumen ejecutivo final
+
+```
+Baseline V1 (CLAHE/min/pct_75.2)     ████████████████████░░  F1=0.922
+Phase 1 (Chi-sq)                      ████████████████░░░░░░  F1=0.885  FAIL
+Phase 2 (PELT)                        ████░░░░░░░░░░░░░░░░░░  F1=0.237  DEAD END
+Phase 3 (Multidesc, kmeans)           ███████████████████░░░  F1=0.957  SOBREAJUSTE
+Phase 4 (Fusion, kmeans)              ████████████████████░░  F1=0.959  SOBREAJUSTE
+Rescue A (edge solo, pct)             ████████████████████░░  F1=0.928  VIABLE
+Rescue B (fusion, pct)                █████████████████████░  F1=0.940  VIABLE
+Rescue C (multidesc, pct)             ███████████████████░░░  F1=0.956  GANADORA
+```
+
+**Arco completo:** Optimizacion agresiva para ART_674 (F1=0.959) --> fracaso en cross-validation --> diagnostico (KMeans es el problema) --> rescate exitoso (F1=0.956 con percentil que generaliza).
+
+| | V1 baseline | Rescue C (final) | Cambio |
+|--|-------------|-------------------|--------|
+| MAE general (22 PDFs) | 20.0 | 20.1 | +0.1 (neutro) |
+| MAE ART (5 PDFs) | 0.2 | **0.0** | **-0.2** |
+| F1 ART_674 | 0.922 | **0.956** | **+3.4pp** |
+| TESS-ONLY | 7/27 | **26/27** | **+19** |
+| FP ART_674 | 53 | **30** | **-23** |
+| FN ART_674 | 52 | **29** | **-23** |
+
+---
+
 ## Archivos de datos
 
 | Archivo | Contenido |
@@ -305,5 +404,5 @@ La tecnica de robust-z esta validada para combinar features de distinta escala. 
 | `data/pixel_density/sweep_multidesc.json` | Phase 3: Stage A (14) + Stage B (~60) + scores del best config |
 | `data/pixel_density/sweep_combine.json` | Phase 4: ~75 resultados de fusion |
 | `data/pixel_density/tess_only_pages.json` | Cache de 27 paginas TESS-ONLY |
-| `data/pixel_density/cache/ART_674_100.npz` | Cache de paginas renderizadas (714 MB, gitignored) |
-| `data/pixel_density/cache/HLL_363_100.npz` | Cache de paginas renderizadas (121 MB, gitignored) |
+| `data/pixel_density/sweep_rescue.json` | Rescue sweep: V1 + A + B + C over 27 PDFs |
+| `data/pixel_density/cache/*.npz` | Cached rendered page arrays (gitignored) |

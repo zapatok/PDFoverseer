@@ -3,6 +3,7 @@ Pixel density configurations.
 
 PD_BASELINE (2026-03-31): 54-combination sweep on ART_674.pdf, dark_ratio L2 bilateral.
 PD_V2 (2026-04-01): Multi-descriptor bilateral (dark_ratio + edge_density, robust-z).
+PD_V2_RESCUE (2026-04-01): V2 features + V1 threshold — generalizes across 27 PDFs.
 """
 
 # ── Shared rendering parameters ─────────────────────────────────────────────
@@ -29,17 +30,28 @@ BEST_QUALITY_CONFIG: dict[str, str | float] = {
     "threshold_method": "kmeans_k2",
 }
 
-# ── V2: Multi-descriptor bilateral (PD_V2) ─────────────────────────────────
-# 648 matches, error=-26, P=0.952, R=0.961, F1=0.957, TESS-ONLY=26/27
-# Fusion variant: F1=0.959 (90% multidesc + 10% bilateral L2)
-#
-# Combines dark_ratio_grid (ink density, 64 dims) with edge_density_grid
-# (layout structure, 16 dims) after robust z-score normalization. L2 bilateral
-# with min scoring, KMeans k=2 thresholding.
+# ── V2: Multi-descriptor bilateral (PD_V2) — SUPERSEDED by V2_RESCUE ──────
+# Overfits to ART_674 (KMeans threshold). Kept for reference only.
+# F1=0.957 on ART_674 but MAE=22.4 on cross-validation (worse than V1).
 
 BEST_MULTIDESC_CONFIG: dict = {
     "features": ["dark_ratio_grid", "edge_density_grid"],
     "normalization": "robust_z",
     "score_fn": "min",
     "threshold_method": "kmeans_k2",
+}
+
+# ── V2 Rescue: Multi-descriptor + V1 threshold (PD_V2_RESCUE) ─────────────
+# Cross-validated on 27 PDFs: MAE=20.1 general (same as V1), 0.0 ART family.
+# ART_674 page-level: F1=0.956, P=0.956, R=0.957, TESS-ONLY=26/27.
+#
+# Same features and normalization as V2, but percentile 75.2 instead of
+# KMeans — eliminates overfitting while preserving accuracy gains.
+
+BEST_RESCUE_CONFIG: dict = {
+    "features": ["dark_ratio_grid", "edge_density_grid"],
+    "normalization": "robust_z",
+    "score_fn": "min",
+    "threshold_method": "percentile",
+    "threshold_percentile": 75.2,
 }
