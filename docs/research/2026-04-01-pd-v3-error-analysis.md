@@ -165,6 +165,34 @@ find_peaks preserves perfect accuracy on the 5 small ART PDFs while dramatically
 
 **Why it works:** find_peaks doesn't assume "25% are covers" — it finds pages that genuinely stand out from their neighbors. No ratio assumption. A single-document ART PDF would correctly detect only page 0 (no other peaks exist).
 
+### find_peaks + Cover Shift — F1=0.9926
+
+**Key discovery:** 3 of the 4 FPs are **displacement errors** — the bilateral peak is 1 page off from the real cover. The peak lands on page N+1 (last page of current doc) instead of page N (first page of next doc), because both sides of the document boundary have similar scores.
+
+Example: page 541 is a real cover (curr=1), page 542 is the last page of a 1-page document (curr=4/total=4), page 543 is another real cover. The bilateral scores are 19.22, 19.27, 19.27 — find_peaks picks 542 as the peak because it's the local maximum, but 541 is the real cover.
+
+**Fix: shift_to_cover.** For each detected peak, check if the page before it has a score within 1% (sim=0.99). If so, shift the detection left by 1. This corrects the displacement without affecting peaks that are clearly positioned.
+
+| Config | Detected | TP | FP | FN | F1 | Doc err |
+|--------|----------|-----|----|----|------|---------|
+| V2_RC (pct 75.2) | 675 | 645 | 30 | 29 | 0.956 | +1 |
+| find_peaks p=0.5 d=2 | 670 | 666 | 4 | 8 | 0.991 | -4 |
+| **fp + shift (sim=0.99)** | **670** | **667** | **3** | **7** | **0.9926** | **-4** |
+
+The remaining 3 FP and 7 FN are **irreducible with bilateral scores alone**:
+
+**3 FP (content pages that are genuine visual outliers):**
+- p1762: score=15.03 — content page with unusual layout
+- p1795: score=15.08 — content page with unusual layout
+- p2061: score=13.32 — content page in homogeneous zone
+
+**7 FN (covers that are NOT local maxima):**
+- All 7 have `is_local_max=False` — their right neighbor has a higher score
+- p1745 (score=7.98) and p2128 (score=10.23) have genuinely low bilateral scores — visually similar to neighbors
+- p543 (score=19.27) is a special case: two consecutive covers (1-page doc between them) create equal scores, and find_peaks picks one, shift corrects the other, but the third (p543) remains undetected
+
+**ART family cross-validation (find_peaks + shift):** 5/5 small ARTs remain exact. ART_674 doc count = 670 (err=-4).
+
 ### Suppress Near-Identical Scores
 
 Testing on V2_RC (percentile 75.2) with various epsilon values:
