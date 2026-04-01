@@ -258,16 +258,33 @@ Detect that a sequence of 3-4 pages with consistent feature vectors repeats thro
 **Advantage:** Doesn't need a threshold — detects document structure directly.
 **Risk:** Assumes documents follow a consistent template. Fails for heterogeneous collections. High implementation complexity.
 
+## Final Results: PD_FIND_PEAKS (Recommended for ART)
+
+| Config | ART_674 docs | err | F1 | FP | FN |
+|--------|-------------|-----|------|----|----|
+| V2_RC (pct 75.2) | 675 | +1 | 0.956 | 30 | 29 |
+| find_peaks p=0.5 d=2 + shift | **670** | **-4** | **0.993** | **3** | **7** |
+
+**Improvement over V2_RC:**
+- F1: +3.7 points (0.956 -> 0.993)
+- FP: -90% (30 -> 3)
+- FN: -76% (29 -> 7)
+- No percentile assumption -- detects structure, not ratios
+- Fixes single-document problem (no false covers when no peaks exist)
+
+**Remaining errors (irreducible with bilateral scores):**
+- 3 FP: content pages that are genuine visual outliers with high prominence
+- 7 FN: covers that are not local maxima (score rises toward neighbor)
+
+**Recommendation:** Use `scorer_find_peaks` for all ART-family PDFs. Keep `scorer_rescue_c` (V2_RC) as general-purpose fallback for non-ART PDFs.
+
 ## Conclusion
 
-**PD_V2_RC remains the best generalized config.** The V3 post-processing tools (`_apply_floor`, `_suppress_consecutive`, `scorer_v3`) are implemented and tested but not promoted to production because they don't improve cross-validation metrics.
+**Two scorers coexist:**
+- `scorer_rescue_c` (V2_RC): best generalized config for all PDF types (pct 75.2, F1=0.956)
+- `scorer_find_peaks` (PD_FIND_PEAKS): best for ART-family PDFs (find_peaks + shift, F1=0.993)
 
-The tools remain available for:
-- **Floor:** Safety mechanism for known-single-document PDFs
-- **Consecutive suppression:** ART-specific optimization when cross-validation is not a concern
-- **scorer_v3:** Composable scorer with configurable post-processing
-
-The most promising next step is **near-identical suppress** (line 1): low risk, targets 8/30 FPs specifically, unlikely to regress. After that, **two-pass enrichment** (line 3) or **periodicity** (line 2) for the 29 FN pages.
+The V3 post-processing tools (`_apply_floor`, `_suppress_consecutive`, `scorer_v3`) are implemented and tested but not promoted — superseded by `scorer_find_peaks` for ART use cases.
 
 ## Files
 
@@ -275,5 +292,7 @@ The most promising next step is **near-identical suppress** (line 1): low risk, 
 |------|---------|
 | `eval/pixel_density/analyze_errors.py` | FP/FN diagnostic script |
 | `eval/pixel_density/sweep_v3.py` | V3 parameter sweep |
-| `eval/tests/test_pd_v3.py` | 11 tests for V3 functions |
-| `data/pixel_density/sweep_v3.json` | Sweep results |
+| `eval/pixel_density/sweep_find_peaks.py` | find_peaks prominence sweep |
+| `eval/tests/test_pd_v3.py` | 18 tests for V3 + find_peaks functions |
+| `data/pixel_density/sweep_v3.json` | V3 sweep results |
+| `data/pixel_density/sweep_find_peaks.json` | find_peaks sweep results |
