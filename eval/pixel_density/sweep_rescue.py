@@ -161,6 +161,55 @@ def _apply_floor(
     return [m for m in matches if m == 0 or scores[m] >= floor]
 
 
+def _suppress_consecutive(
+    matches: list[int],
+    scores: np.ndarray,
+) -> list[int]:
+    """When consecutive pages are both detected, keep only the highest-scoring one.
+
+    Processes runs of consecutive detected pages: within each run, only the
+    page with the highest bilateral score survives. Page 0 is always kept
+    (even if it loses on score, creating a pair — this is by design since
+    page 0 is always a document start).
+
+    Args:
+        matches: Detected cover page indices (0-based), must be sorted.
+        scores: Full bilateral score array.
+
+    Returns:
+        Filtered list of cover page indices, sorted.
+    """
+    if len(matches) <= 1:
+        return list(matches)
+
+    sorted_matches = sorted(matches)
+    result: list[int] = []
+
+    # Group into runs of consecutive indices
+    runs: list[list[int]] = []
+    current_run: list[int] = [sorted_matches[0]]
+    for i in range(1, len(sorted_matches)):
+        if sorted_matches[i] == sorted_matches[i - 1] + 1:
+            current_run.append(sorted_matches[i])
+        else:
+            runs.append(current_run)
+            current_run = [sorted_matches[i]]
+    runs.append(current_run)
+
+    for run in runs:
+        if len(run) == 1:
+            result.append(run[0])
+        else:
+            # Keep the page with the highest score in this run
+            best = max(run, key=lambda p: scores[p])
+            result.append(best)
+            # Always keep page 0 if it was in the run
+            if 0 in run and 0 != best:
+                result.append(0)
+
+    return sorted(result)
+
+
 # ── Scorers ────────────────────────────────────────────────────────────────
 
 
