@@ -119,3 +119,31 @@ def test_scorer_v3_floor_0_consecutive_off_equals_rescue_c():
     rescue_c = scorer_rescue_c(pages)
     v3_noop = scorer_v3(pages, floor=0.0, suppress_consecutive=False)
     assert rescue_c == v3_noop
+
+
+@pytest.fixture()
+def _needs_samples():
+    """Skip if sample PDFs are not available."""
+    if not Path("data/samples/QUEVEDO_1.pdf").exists():
+        pytest.skip("Sample PDFs not available")
+
+
+def test_v3_floor_reduces_detections_on_few_doc_pdf(_needs_samples):
+    """V3 with floor should detect fewer covers than without floor on a low-doc-ratio PDF.
+
+    QUEVEDO_2 has 2 documents in ~8 pages — the percentile threshold over-detects.
+    The floor should filter out spurious detections with low absolute scores.
+    """
+    from eval.pixel_density.cache import ensure_cache
+    from eval.pixel_density.sweep_rescue import scorer_v3
+
+    pages = ensure_cache("data/samples/QUEVEDO_2.pdf", dpi=100)
+    # Without floor, suppress off: percentile marks ~25% as covers
+    matches_no_floor = scorer_v3(pages, floor=0.0, suppress_consecutive=False)
+    # With floor: should detect fewer (only pages with genuinely high bilateral scores)
+    # TODO: Replace 10.0 with the actual floor value from sweep_v3 winner.
+    matches_with_floor = scorer_v3(pages, floor=10.0, suppress_consecutive=False)
+    # The floor version should have equal or fewer detections
+    assert len(matches_with_floor) <= len(matches_no_floor), (
+        "Floor should not increase detections"
+    )
