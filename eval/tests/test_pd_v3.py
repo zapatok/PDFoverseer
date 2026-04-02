@@ -226,3 +226,73 @@ def test_scorer_find_peaks_no_shift_when_disabled():
     assert isinstance(without_shift, list)
     assert 0 in with_shift
     assert 0 in without_shift
+
+
+def test_template_rescue_finds_similar_pages():
+    """Pages similar to the confirmed-cover template are rescued."""
+    from eval.pixel_density.sweep_rescue import _template_rescue
+
+    vectors = [
+        np.array([1.0, 0.0, 0.0]),
+        np.array([0.0, 1.0, 0.0]),
+        np.array([1.1, 0.1, 0.0]),
+        np.array([0.0, 0.0, 1.0]),
+        np.array([0.9, 0.05, 0.0]),
+    ]
+    confirmed = [0, 2]
+    rescued = _template_rescue(confirmed, vectors, threshold=0.5)
+    assert 4 in rescued
+    assert 1 not in rescued
+    assert 3 not in rescued
+    assert 0 not in rescued
+    assert 2 not in rescued
+
+
+def test_template_rescue_returns_empty_when_nothing_to_rescue():
+    """When all similar pages are already confirmed, rescue is empty."""
+    from eval.pixel_density.sweep_rescue import _template_rescue
+
+    vectors = [
+        np.array([1.0, 0.0]),
+        np.array([0.0, 1.0]),
+        np.array([1.1, 0.1]),
+    ]
+    confirmed = [0, 2]
+    rescued = _template_rescue(confirmed, vectors, threshold=0.5)
+    assert rescued == []
+
+
+def test_template_rescue_threshold_0_rescues_nothing():
+    """Threshold <= 0 is disabled by guard, returns immediately."""
+    from eval.pixel_density.sweep_rescue import _template_rescue
+
+    vectors = [
+        np.array([1.0, 0.0]),
+        np.array([1.01, 0.01]),
+        np.array([0.0, 1.0]),
+    ]
+    confirmed = [0]
+    rescued = _template_rescue(confirmed, vectors, threshold=0.0)
+    assert rescued == []
+
+
+def test_scorer_find_peaks_rescue_disabled_by_default():
+    """With default params (rescue_threshold=0), rescue is not applied."""
+    from eval.pixel_density.sweep_rescue import scorer_find_peaks
+
+    rng = np.random.RandomState(42)
+    pages = rng.randint(0, 256, size=(20, 100, 80), dtype=np.uint8)
+    without_rescue = scorer_find_peaks(pages, rescue_threshold=0.0)
+    default = scorer_find_peaks(pages)
+    assert without_rescue == default
+
+
+def test_scorer_find_peaks_rescue_adds_pages():
+    """With rescue enabled, the result has >= as many pages as without."""
+    from eval.pixel_density.sweep_rescue import scorer_find_peaks
+
+    rng = np.random.RandomState(42)
+    pages = rng.randint(0, 256, size=(20, 100, 80), dtype=np.uint8)
+    without = scorer_find_peaks(pages, rescue_threshold=0.0)
+    with_rescue = scorer_find_peaks(pages, rescue_threshold=999.0)
+    assert len(with_rescue) >= len(without)
