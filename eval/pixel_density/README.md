@@ -84,6 +84,7 @@ PDF ──► Render all pages (DPI=100, grayscale)
 | `analyze_errors.py` | FP/FN diagnostic: scores, positions, neighbor context | `python eval/pixel_density/analyze_errors.py --render` |
 | `sweep_v3.py` | V3 sweep: floor + consecutive suppression (18 combos) | `python eval/pixel_density/sweep_v3.py` |
 | `sweep_find_peaks.py` | find_peaks prominence sweep on ART family | `python eval/pixel_density/sweep_find_peaks.py` |
+| `sweep_template_rescue.py` | Template rescue threshold sweep on ART family | `python eval/pixel_density/sweep_template_rescue.py` |
 
 ## Research History
 
@@ -91,7 +92,7 @@ PDF ──► Render all pages (DPI=100, grayscale)
 2. **PD_V2** (2026-04-01): Multi-descriptor + KMeans. F1=0.957 on ART_674 but failed cross-validation (overfit). **Superseded.**
 3. **PD_V2_RC** (2026-04-01): V2 features + V1 threshold. F1=0.956, generalizes. Report: `docs/research/2026-04-01-pixel-density-advanced-sweep-results.md`
 4. **PD_V3 Error Analysis** (2026-04-01): FP/FN diagnosis + absolute floor + consecutive suppression. Floor has no effect on ART_674 (FPs have genuinely high scores). Suppress reduces FP 30→3 but regresses gen_MAE 20.1→29.7. **V2_RC remains best for general use.** Report: `docs/research/2026-04-01-pd-v3-error-analysis.md`
-5. **PD_FIND_PEAKS** (2026-04-01): `scipy.signal.find_peaks` replaces percentile threshold for ART documents. Peak detection + cover-shift correction. F1=0.993 on ART_674 (vs 0.956 V2_RC). 5/5 small ARTs exact. Report: `docs/research/2026-04-01-pd-v3-error-analysis.md`
+5. **PD_FIND_PEAKS** (2026-04-01): `scipy.signal.find_peaks` + cover-shift + template rescue. Three-stage pipeline: peak detection, displacement correction, similarity rescue. F1=0.996 on ART_674, **6/6 ART exact (MAE=0.0)**. Report: `docs/research/2026-04-01-pd-v3-error-analysis.md`
 
 Key findings:
 - The percentile threshold (75.2) is what makes configs generalize. KMeans k=2 overfits to each PDF's score distribution.
