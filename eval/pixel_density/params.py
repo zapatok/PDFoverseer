@@ -60,11 +60,14 @@ BEST_RESCUE_CONFIG: dict = {
 # Uses scipy.signal.find_peaks on bilateral score signal instead of
 # percentile threshold. Detects pages that genuinely stand out from
 # neighbors — no fixed cover ratio assumption.
-# ART_674 page-level: F1=0.993, P=0.996, R=0.990, 3 FP, 7 FN.
-# ART family (6 PDFs total): 5/5 small ARTs exact, ART_674 err=-4.
 #
-# Cover-shift corrects displacement errors where the bilateral peak
-# falls on the last page of doc A instead of the first page of doc B.
+# Three-stage pipeline:
+#   1. find_peaks (prominence + distance): detect bilateral score peaks
+#   2. Cover-shift (similarity): correct off-by-one displacement at boundaries
+#   3. Template rescue (threshold): recover covers similar to confirmed ones
+#
+# ART_674 page-level: F1=0.996, P=0.996, R=0.996, 3 FP, 3 FN, 674 docs (exact).
+# ART family (6 PDFs total): 6/6 exact, MAE=0.0.
 
 BEST_FIND_PEAKS_CONFIG: dict = {
     "features": ["dark_ratio_grid", "edge_density_grid"],
@@ -75,4 +78,5 @@ BEST_FIND_PEAKS_CONFIG: dict = {
     "distance": 2,
     "shift_covers": True,
     "score_similarity": 0.99,
+    "rescue_threshold": 0.40,
 }
