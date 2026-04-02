@@ -281,8 +281,10 @@ Detect that a sequence of 3-4 pages with consistent feature vectors repeats thro
 ## Conclusion
 
 **Two scorers coexist:**
-- `scorer_rescue_c` (V2_RC): best generalized config for all PDF types (pct 75.2, F1=0.956)
-- `scorer_find_peaks` (PD_FIND_PEAKS): best for ART-family PDFs (find_peaks + shift, F1=0.993)
+- `scorer_rescue_c` (V2_RC): least-bad on general corpus (MAE=20.1, 0/22 exact — poor, but other methods are worse). Relies on percentile 75.2 which structurally under-detects on non-ART PDFs.
+- `scorer_find_peaks` (PD_FIND_PEAKS): best for ART-family PDFs (find_peaks + shift, F1=0.993). Not suitable for non-ART PDFs.
+
+**Important caveat:** Neither scorer works well on non-ART PDFs. The general corpus results are poor across all methods — this is a known limitation of the bilateral pixel density approach for documents without strong visual transitions between covers.
 
 The V3 post-processing tools (`_apply_floor`, `_suppress_consecutive`, `scorer_v3`) are implemented and tested but not promoted — superseded by `scorer_find_peaks` for ART use cases.
 
