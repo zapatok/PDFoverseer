@@ -245,6 +245,43 @@ def _shift_to_cover(
     return sorted(set(result))
 
 
+def _template_rescue(
+    confirmed: list[int],
+    vectors: list[np.ndarray],
+    threshold: float,
+) -> list[int]:
+    """Rescue undetected pages that are similar to confirmed covers.
+
+    Builds a mean template from the feature vectors of confirmed cover pages,
+    then finds undetected pages whose L2 distance to the template is within
+    the threshold.
+
+    Args:
+        confirmed: Indices of already-detected cover pages (0-based).
+        vectors: Feature vectors for all pages (raw, not normalized).
+        threshold: Maximum L2 distance from template to rescue a page.
+
+    Returns:
+        List of rescued page indices (0-based), sorted. Does NOT include
+        pages already in confirmed.
+    """
+    if not confirmed or threshold <= 0:
+        return []
+
+    confirmed_set = set(confirmed)
+    template = np.mean([vectors[i] for i in confirmed], axis=0)
+
+    rescued: list[int] = []
+    for i in range(len(vectors)):
+        if i in confirmed_set:
+            continue
+        dist = float(np.linalg.norm(vectors[i] - template))
+        if dist <= threshold:
+            rescued.append(i)
+
+    return sorted(rescued)
+
+
 # ── Scorers ────────────────────────────────────────────────────────────────
 
 
@@ -393,16 +430,18 @@ def scorer_find_peaks(
     distance: int = 2,
     shift_covers: bool = True,
     score_similarity: float = 0.99,
+    rescue_threshold: float = 0.0,
 ) -> list[int]:
     """Detect cover pages as prominent peaks in the bilateral score signal.
 
     Instead of assuming a fixed ratio of covers (percentile threshold), this
     scorer finds pages that genuinely stand out from their neighbors using
     scipy's peak detection. A cover-shift post-processing step corrects
-    displacement errors where the peak falls 1 page off from the real cover.
+    displacement errors, and an optional template rescue recovers covers
+    that are similar to confirmed detections but weren't peaks themselves.
 
     Pipeline: extract features -> robust-z normalize -> bilateral L2 ->
-    find_peaks (prominence + distance) -> cover shift.
+    find_peaks (prominence + distance) -> cover shift -> template rescue.
 
     Args:
         pages: Array of shape (N, H, W), uint8 grayscale pages.
@@ -413,6 +452,9 @@ def scorer_find_peaks(
             peaks left when the previous page has a similar score.
         score_similarity: Similarity ratio for cover-shift (only used
             when shift_covers=True).
+        rescue_threshold: Maximum L2 distance (in raw feature space) from
+            the mean cover template to rescue undetected pages.
+            Set to 0.0 to disable (default).
 
     Returns:
         List of detected cover page indices (0-based).
@@ -432,6 +474,10 @@ def scorer_find_peaks(
 
     if shift_covers:
         matches = _shift_to_cover(matches, scores, score_similarity)
+
+    if rescue_threshold > 0:
+        rescued = _template_rescue(matches, vectors, rescue_threshold)
+        matches = sorted(set(matches) | set(rescued))
 
     return matches
 
