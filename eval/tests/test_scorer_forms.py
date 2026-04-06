@@ -76,3 +76,49 @@ def test_vertical_density_not_in_registry():
     from eval.pixel_density.features import _FEATURE_REGISTRY
 
     assert "vertical_density" not in _FEATURE_REGISTRY
+
+
+# ── Otsu 1D + bimodality ──────────────────────────────────────────────────
+
+
+def test_otsu_bimodal_separation():
+    """Otsu on clearly bimodal data separates the two groups."""
+    from eval.pixel_density.sweep_forms import otsu_threshold_1d
+
+    rng = np.random.default_rng(42)
+    low = rng.normal(0.3, 0.02, 200)
+    high = rng.normal(0.8, 0.02, 100)
+    data = np.concatenate([low, high])
+    thresh = otsu_threshold_1d(data)
+    assert 0.34 < thresh < 0.7  # threshold falls between groups
+
+
+def test_otsu_uniform_data():
+    """Otsu on uniform data returns some threshold without crashing."""
+    from eval.pixel_density.sweep_forms import otsu_threshold_1d
+
+    data = np.linspace(0.0, 1.0, 100)
+    thresh = otsu_threshold_1d(data)
+    assert 0.0 <= thresh <= 1.0
+
+
+def test_bimodal_coefficient_bimodal():
+    """Bimodal data has BC >= 0.555."""
+    from eval.pixel_density.sweep_forms import bimodal_coefficient
+
+    rng = np.random.default_rng(42)
+    low = rng.normal(0.3, 0.02, 300)
+    high = rng.normal(0.8, 0.02, 300)
+    data = np.concatenate([low, high])
+    bc = bimodal_coefficient(data)
+    assert bc >= 0.555
+
+
+def test_bimodal_coefficient_unimodal():
+    """Unimodal data has BC < 0.555."""
+    from eval.pixel_density.sweep_forms import bimodal_coefficient
+
+    rng = np.random.default_rng(42)
+    data = rng.normal(0.5, 0.1, 500)
+    bc = bimodal_coefficient(data)
+    assert bc < 0.555
