@@ -122,3 +122,91 @@ def test_bimodal_coefficient_unimodal():
     data = rng.normal(0.5, 0.1, 500)
     bc = bimodal_coefficient(data)
     assert bc < 0.555
+
+
+# ── scorer_forms ──────────────────────────────────────────────────────────
+
+
+def test_scorer_forms_returns_list():
+    """Scorer returns a list of ints."""
+    from eval.pixel_density.sweep_forms import scorer_forms
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (10, 100, 80), dtype=np.uint8)
+    result = scorer_forms(pages)
+    assert isinstance(result, list)
+    assert all(isinstance(i, int) for i in result)
+
+
+def test_scorer_forms_includes_page_0():
+    """Page 0 is always in the result."""
+    from eval.pixel_density.sweep_forms import scorer_forms
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (10, 100, 80), dtype=np.uint8)
+    result = scorer_forms(pages)
+    assert 0 in result
+
+
+def test_scorer_forms_single_page():
+    """Single-page PDF returns [0]."""
+    from eval.pixel_density.sweep_forms import scorer_forms
+
+    pages = np.full((1, 100, 80), 200, dtype=np.uint8)
+    result = scorer_forms(pages)
+    assert result == [0]
+
+
+def test_scorer_forms_sorted_output():
+    """Output is sorted ascending."""
+    from eval.pixel_density.sweep_forms import scorer_forms
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (20, 100, 80), dtype=np.uint8)
+    result = scorer_forms(pages)
+    assert result == sorted(result)
+
+
+def test_scorer_forms_all_signals():
+    """All signal types run without error."""
+    from eval.pixel_density.sweep_forms import scorer_forms
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (10, 100, 80), dtype=np.uint8)
+    for signal in ("bot_top_ratio", "bot_absolute", "bot_full_ratio", "bot_mid_ratio"):
+        result = scorer_forms(pages, signal=signal)
+        assert 0 in result
+
+
+def test_scorer_forms_all_threshold_methods():
+    """All threshold methods run without error."""
+    from eval.pixel_density.sweep_forms import scorer_forms
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (10, 100, 80), dtype=np.uint8)
+    for method in ("otsu", "kmeans_k2", "percentile_50"):
+        result = scorer_forms(pages, threshold_method=method)
+        assert 0 in result
+
+
+def test_scorer_forms_otsu_bimodality_guard_identical():
+    """Otsu on identical pages triggers bimodality guard (early return path)."""
+    from eval.pixel_density.sweep_forms import scorer_forms
+
+    page = np.full((100, 80), 200, dtype=np.uint8)
+    pages = np.stack([page] * 10)
+    result = scorer_forms(pages, threshold_method="otsu")
+    assert result == [0]
+
+
+def test_scorer_forms_otsu_bimodality_guard_unimodal():
+    """Otsu on varied but unimodal pages triggers bimodality guard (BC formula path)."""
+    from eval.pixel_density.sweep_forms import scorer_forms
+
+    rng = np.random.default_rng(42)
+    pages = np.full((20, 100, 80), 200, dtype=np.uint8)
+    for i in range(20):
+        noise = rng.integers(0, 10 + i * 2, (100, 80), dtype=np.uint8)
+        pages[i] = np.clip(pages[i].astype(np.int16) - noise, 0, 255).astype(np.uint8)
+    result = scorer_forms(pages, threshold_method="otsu")
+    assert 0 in result
