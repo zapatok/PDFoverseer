@@ -210,3 +210,39 @@ def test_scorer_forms_otsu_bimodality_guard_unimodal():
         pages[i] = np.clip(pages[i].astype(np.int16) - noise, 0, 255).astype(np.uint8)
     result = scorer_forms(pages, threshold_method="otsu")
     assert 0 in result
+
+
+# ── ART safety gate ───────────────────────────────────────────────────────
+
+
+@pytest.mark.slow
+def test_art_safety_gate():
+    """Importing scorer_forms must not affect scorer_find_peaks ART results.
+
+    This is the hard gate: if this test fails, the new code is broken.
+    Runs scorer_find_peaks on all 6 ART PDFs and verifies exact doc counts.
+    """
+    # Import scorer_forms first to trigger any side effects
+    from eval.pixel_density.sweep_forms import scorer_forms  # noqa: F401
+    from eval.pixel_density.cache import ensure_cache
+    from eval.pixel_density.sweep_rescue import scorer_find_peaks
+
+    art_pdfs = [
+        ("ART_674", "data/samples/ART_674.pdf", 674),
+        ("ART_CH_13", "data/samples/arts/ART_CH_13.pdf", 13),
+        ("ART_CON_13", "data/samples/arts/ART_CON_13.pdf", 13),
+        ("ART_EX_13", "data/samples/arts/ART_EX_13.pdf", 13),
+        ("ART_GR_8", "data/samples/arts/ART_GR_8.pdf", 8),
+        ("ART_ROC_10", "data/samples/arts/ART_ROC_10.pdf", 10),
+    ]
+
+    for name, pdf_path, target in art_pdfs:
+        pages = ensure_cache(pdf_path, dpi=100)
+        matches = scorer_find_peaks(
+            pages, prominence=0.5, distance=2,
+            shift_covers=True, score_similarity=0.99,
+            rescue_threshold=0.40,
+        )
+        assert len(matches) == target, (
+            f"ART GATE FAILED: {name} expected {target}, got {len(matches)}"
+        )
