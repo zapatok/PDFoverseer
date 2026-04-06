@@ -43,17 +43,25 @@ The **vertical ink distribution** shows a discriminating signal: attendance shee
 
 ### Architecture
 
-A new scorer function `scorer_forms()` in `eval/pixel_density/sweep_rescue.py`, following the same interface as all existing scorers:
+A new scorer function `scorer_forms()` in `eval/pixel_density/sweep_forms.py` (separate file — follows project convention of one responsibility per file, and sweep_rescue.py is already 690+ lines).
 
 ```python
-def scorer_forms(pages: np.ndarray, ...) -> list[int]
+def scorer_forms(
+    pages: np.ndarray,
+    bottom_frac: float = 0.35,
+    signal: str = "bot_top_ratio",
+    threshold_method: str = "otsu",
+) -> list[int]
 ```
 
 - **Input:** Array of shape (N, H, W), uint8 grayscale pages (from `ensure_cache`)
 - **Output:** List of 0-based page indices classified as document covers
 - **Paradigm:** Page classification (not boundary detection)
+- **Page 0 convention:** Always included in output (same convention as all existing scorers)
 
 The scorer is independent — it does not modify, import from, or share mutable state with any existing scorer.
+
+The sweep script wraps it with `functools.partial` for parameter variation, matching the pattern used in `sweep_rescue.py` for `scorer_rescue_b`.
 
 ### ART Safety Gate
 
@@ -77,30 +85,37 @@ Manual selection by the user or calling script. No auto-detection of PDF type in
 ```python
 def feat_vertical_density(
     img: np.ndarray,
-    zones: tuple[float, float, float] = (0.30, 0.40, 0.30),
+    bottom_frac: float = 0.35,
 ) -> np.ndarray:
-    """Dark pixel fraction per vertical zone.
+    """Dark pixel fraction for top and bottom zones.
 
-    Divides the page into vertical zones (top, mid, bottom) and computes
-    dark_ratio for each zone independently.
+    Divides the page into two zones: top (1 - bottom_frac) and bottom (bottom_frac).
+    The mid zone is not computed separately — the discriminant signal comes from
+    comparing bottom vs top, and a 3-zone split adds complexity without value.
 
     Args:
         img: Grayscale image (H, W), uint8.
-        zones: Fraction of page height for (top, mid, bottom). Must sum to 1.0.
+        bottom_frac: Fraction of page height for the bottom zone.
 
     Returns:
-        1-D array of shape (3,), float64: [top_dark, mid_dark, bot_dark].
+        1-D array of shape (2,), float64: [top_dark, bot_dark].
     """
 ```
 
-Registered in `_FEATURE_REGISTRY` as `"vertical_density"`.
+Registered in `_FEATURE_REGISTRY` as `"vertical_density"` with default `bottom_frac=0.35`.
 
 **Scorer logic:**
 
 1. Extract `feat_vertical_density` for all N pages
-2. Compute discriminant signal per page: `ratio = bot_dark / top_dark`
-3. Separate with Otsu 1D threshold on the ratio array
+2. Compute discriminant signal per page (one of three options swept):
+   - `bot_top_ratio`: `bot_dark / max(top_dark, 1e-9)` — guards against division by zero on blank pages
+   - `bot_absolute`: `bot_dark` directly
+   - `bot_full_ratio`: `bot_dark / max(full_dark, 1e-9)`
+3. Separate with Otsu 1D threshold on the signal array
 4. Pages above threshold = covers (document starts)
+5. Force-include page 0 if not already classified as cover
+
+**Otsu 1D implementation:** Custom implementation on a 256-bin histogram of the signal values (same algorithm as `cv2.threshold` but operating on float arrays, not images). ~15 lines of numpy, no extra dependency.
 
 **Why Otsu over KMeans k=2:** Otsu minimizes intra-class variance on a 1D histogram. It is deterministic (no random initialization), operates on the distribution shape directly, and is the standard approach for bimodal 1D separation. KMeans k=2 on 1D data is functionally equivalent but adds unnecessary complexity and non-determinism.
 
@@ -108,11 +123,13 @@ Registered in `_FEATURE_REGISTRY` as `"vertical_density"`.
 
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
-| bottom_cut | 0.25, 0.30, 0.35, 0.40 | Where "bottom zone" starts |
-| signal | bot/top ratio, bot_dark absolute, bot/full ratio | Which discriminant to threshold |
-| threshold_method | otsu, percentile(sweep 30-70), kmeans_k2 | Separation method |
+| bottom_frac | 0.25, 0.30, 0.35, 0.40 | Where "bottom zone" starts |
+| signal | bot_top_ratio, bot_absolute, bot_full_ratio | Which discriminant to threshold |
+| threshold_method | otsu, percentile(sweep 30-70 step 5), kmeans_k2 | Separation method |
 
-**Sweep corpus:** HLL_363 + GENERAL_CORPUS + ART_CORPUS (same as sweep_rescue.py)
+Total combinations: 4 × 3 × 11 = 132 (fast — single feature extraction, only threshold varies).
+
+**Sweep corpus:** GENERAL_CORPUS + ART_CORPUS (HLL_363 is already in GENERAL_CORPUS — no double-counting).
 
 **Success criteria:** HLL_363 error ≤ ±30 (from -228 baseline). If met, refine. If not, proceed to Phase 2.
 
@@ -135,11 +152,14 @@ def feat_table_regularity(img: np.ndarray, min_line_width_frac: float = 0.3) -> 
             span to count as a table line.
 
     Returns:
-        1-D array of shape (2,): [n_regular_lines, spacing_std_normalized].
+        1-D array of shape (2,): [n_regular_lines, spacing_regularity].
         n_regular_lines: Count of detected horizontal lines with regular spacing.
-        spacing_std_normalized: Std of inter-line spacing / mean spacing (0 = perfectly regular).
+        spacing_regularity: 1.0 - (std / mean) of inter-line spacing, clamped to [0, 1].
+            1.0 = perfectly regular, 0.0 = irregular or no lines.
     """
 ```
+
+This feature is **NOT registered** in `_FEATURE_REGISTRY` because its two dimensions have different semantics (count vs ratio) and should not be concatenated with other features via `extract_features()`. It is used directly inside `scorer_forms`.
 
 **Detection logic:**
 
@@ -147,18 +167,20 @@ def feat_table_regularity(img: np.ndarray, min_line_width_frac: float = 0.3) -> 
 2. Threshold: rows where `row_sums / width > min_line_width_frac` = candidate table lines
 3. Find peaks in the projection (scipy.signal.find_peaks)
 4. Compute spacing between consecutive peaks
-5. Measure regularity: `std(spacings) / mean(spacings)` — low = regular table
+5. Measure regularity: `1.0 - std(spacings) / mean(spacings)`, clamped to [0, 1]
 
 **Combined scorer:**
 
+Both signals are normalized to [0, 1] via `_normalize_01` (already available in `sweep_rescue.py`) before fusion:
+
 ```python
-score = w1 * vertical_signal + w2 * (1.0 - regularity_signal)
+score = w1 * norm_vertical + w2 * (1.0 - norm_regularity)
 ```
 
 Attendance sheets: low vertical_signal + high regularity (regular table) → low score.
 Cover forms: high vertical_signal + low regularity (no table or irregular) → high score.
 
-**Sweep:** w1/w2 weights × threshold methods over the combined corpus.
+**Sweep:** w1/w2 weights (0.1 step) × threshold methods over the combined corpus.
 
 **Success criteria:** HLL_363 error ≤ ±15.
 
@@ -183,14 +205,13 @@ This phase is exploratory and does not have a pre-defined pipeline.
 
 | File | Purpose |
 |------|---------|
-| `eval/pixel_density/sweep_forms.py` | Sweep script for scorer_forms variants |
+| `eval/pixel_density/sweep_forms.py` | Scorer function + sweep script (scorer lives here, not in sweep_rescue.py) |
 
 ### Modified Files
 
 | File | Change |
 |------|--------|
 | `eval/pixel_density/features.py` | Add `feat_vertical_density`, possibly `feat_table_regularity` (Phase 2) |
-| `eval/pixel_density/sweep_rescue.py` | Add `scorer_forms()` function |
 | `eval/pixel_density/params.py` | Add `BEST_FORMS_CONFIG` after sweep identifies best params |
 | `eval/pixel_density/README.md` | Document new scorer and results |
 
