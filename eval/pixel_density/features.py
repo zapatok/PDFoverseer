@@ -191,6 +191,34 @@ def feat_projection_stats(img: np.ndarray) -> np.ndarray:
     )
 
 
+def feat_vertical_density(
+    img: np.ndarray,
+    bottom_frac: float = 0.35,
+) -> np.ndarray:
+    """Dark pixel fraction for top and bottom zones.
+
+    Divides the page into two zones: top (1 - bottom_frac) and bottom (bottom_frac).
+    Used by scorer_forms for page classification on form-based PDFs.
+
+    Not registered in _FEATURE_REGISTRY — purpose-specific semantics that should
+    not be concatenated with general features via extract_features().
+
+    Args:
+        img: Grayscale image (H, W), uint8.
+        bottom_frac: Fraction of page height for the bottom zone.
+
+    Returns:
+        1-D array of shape (2,), float64: [top_dark, bot_dark].
+    """
+    h = img.shape[0]
+    split = int(h * (1.0 - bottom_frac))
+    top = img[:split, :]
+    bot = img[split:, :]
+    top_dark = float((top < 128).mean()) if top.size else 0.0
+    bot_dark = float((bot < 128).mean()) if bot.size else 0.0
+    return np.array([top_dark, bot_dark], dtype=np.float64)
+
+
 # -- Feature registry --------------------------------------------------------
 
 _FEATURE_REGISTRY: dict[str, tuple[Callable[..., np.ndarray], dict]] = {
