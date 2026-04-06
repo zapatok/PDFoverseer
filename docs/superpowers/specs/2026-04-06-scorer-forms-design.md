@@ -66,7 +66,7 @@ The sweep script wraps it with `functools.partial` for parameter variation, matc
 ### ART Safety Gate
 
 Every sweep and test includes automatic verification:
-1. Run `scorer_find_peaks` on all 6 ART PDFs — confirm 6/6 exact (MAE=0.0)
+1. Run `scorer_find_peaks` on ART_CORPUS (5 PDFs) + ART_674 (in GENERAL_CORPUS) — confirm 6/6 exact (MAE=0.0)
 2. This verifies that the new code has not altered any shared module behavior
 3. The gate is a test assertion, not a runtime check
 
