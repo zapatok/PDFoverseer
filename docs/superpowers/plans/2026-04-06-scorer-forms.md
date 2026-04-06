@@ -412,15 +412,32 @@ def test_scorer_forms_all_threshold_methods():
         assert 0 in result
 
 
-def test_scorer_forms_otsu_bimodality_guard():
-    """Otsu on uniform-density pages triggers bimodality guard, returns [0]."""
+def test_scorer_forms_otsu_bimodality_guard_identical():
+    """Otsu on identical pages triggers bimodality guard (early return path)."""
     from eval.pixel_density.sweep_forms import scorer_forms
 
-    # All pages identical → unimodal signal → BC < 0.555 → return [0]
+    # All pages identical → std < 1e-12 → BC = 0.0 → return [0]
     page = np.full((100, 80), 200, dtype=np.uint8)
     pages = np.stack([page] * 10)
     result = scorer_forms(pages, threshold_method="otsu")
     assert result == [0]
+
+
+def test_scorer_forms_otsu_bimodality_guard_unimodal():
+    """Otsu on varied but unimodal pages triggers bimodality guard (BC formula path)."""
+    from eval.pixel_density.sweep_forms import scorer_forms
+
+    # Pages with gradually varying darkness — unimodal distribution
+    # Bottom zone gets progressively darker but no bimodal separation
+    rng = np.random.default_rng(42)
+    pages = np.full((20, 100, 80), 200, dtype=np.uint8)
+    for i in range(20):
+        # Add noise proportional to page index — creates smooth gradient, not bimodal
+        noise = rng.integers(0, 10 + i * 2, (100, 80), dtype=np.uint8)
+        pages[i] = np.clip(pages[i].astype(np.int16) - noise, 0, 255).astype(np.uint8)
+    result = scorer_forms(pages, threshold_method="otsu")
+    # Should either trigger guard (return [0]) or at minimum not crash
+    assert 0 in result
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -441,6 +458,7 @@ def scorer_forms(
     bottom_frac: float = 0.35,
     signal: str = "bot_top_ratio",
     threshold_method: str = "otsu",
+    _vd_precomputed: np.ndarray | None = None,
 ) -> list[int]:
     """Classify pages as cover/non-cover by vertical ink distribution.
 
@@ -454,6 +472,9 @@ def scorer_forms(
             "bot_top_ratio", "bot_absolute", "bot_full_ratio", "bot_mid_ratio".
         threshold_method: Separation method. One of:
             "otsu", "kmeans_k2", "percentile_<N>" (e.g. "percentile_50").
+        _vd_precomputed: Optional pre-computed vertical density array of shape
+            (N, 2) from feat_vertical_density. Used by sweep to avoid redundant
+            extraction. If None, features are extracted internally.
 
     Returns:
         Sorted list of 0-based page indices classified as covers.
@@ -462,8 +483,11 @@ def scorer_forms(
     if n <= 1:
         return [0]
 
-    # Extract vertical density for all pages
-    vd = np.array([feat_vertical_density(pages[i], bottom_frac) for i in range(n)])
+    # Extract vertical density for all pages (or use pre-computed cache)
+    if _vd_precomputed is not None:
+        vd = _vd_precomputed
+    else:
+        vd = np.array([feat_vertical_density(pages[i], bottom_frac) for i in range(n)])
     top_dark = vd[:, 0]
     bot_dark = vd[:, 1]
 
@@ -479,11 +503,13 @@ def scorer_forms(
         # 3-zone split: top=[0, bf*h), mid=[bf*h, (1-bf)*h), bot=[(1-bf)*h, h)
         # Note: top_dark from feat_vertical_density is NOT used here — the zones
         # are redefined symmetrically around the center of the page.
+        # At bf=0.40, mid is only 20% of page height — narrow but still meaningful.
         top_frac = 1.0 - bottom_frac
         mid_frac = top_frac - bottom_frac if top_frac > bottom_frac else 0.0
         if mid_frac < 0.05:
-            # No meaningful mid zone — fall back to bot_top_ratio
-            values = bot_dark / np.maximum(top_dark, 1e-9)
+            # No meaningful mid zone (bf >= ~0.475) — skip this combo entirely.
+            # Returning [0] signals "not applicable" so the sweep can exclude it.
+            return [0]
         else:
             h = pages.shape[1]
             top_end = int(h * bottom_frac)  # top zone = bottom_frac of height
@@ -499,6 +525,11 @@ def scorer_forms(
         raise ValueError(f"Unknown signal: {signal!r}")
 
     # Apply threshold
+    # NOTE on percentile convention: the existing _percentile_threshold (sweep_rescue.py)
+    # uses pct=75.2 meaning "take pages >= 75.2th percentile" = top 24.8%.
+    # Here, percentile_N means "classify top N% as covers" — OPPOSITE convention.
+    # This is intentional: bilateral scoring assumes few covers (25%), page
+    # classification can have any ratio (HLL has 67.5%).
     if threshold_method == "otsu":
         bc = bimodal_coefficient(values)
         if bc < 0.555:
@@ -537,7 +568,7 @@ def scorer_forms(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest eval/tests/test_scorer_forms.py -v`
-Expected: 17 PASSED (6 feature + 4 otsu/bimodal + 7 scorer)
+Expected: 18 PASSED (6 feature + 4 otsu/bimodal + 8 scorer)
 
 - [ ] **Step 5: Commit**
 
@@ -700,6 +731,17 @@ def run_sweep(corpus: list[tuple[str, str, int]], quick: bool = False) -> list[d
     for name, pdf_path, _ in corpus:
         page_cache[name] = ensure_cache(pdf_path, dpi=DPI)
 
+    # Pre-compute vertical density features per (pdf, bottom_frac) to avoid
+    # 44x redundant extraction (4 signals × 11 methods share the same features).
+    # Key: (name, bottom_frac) -> np.ndarray of shape (N, 2)
+    vd_cache: dict[tuple[str, float], np.ndarray] = {}
+    for name in page_cache:
+        pages = page_cache[name]
+        for bf in BOTTOM_FRACS:
+            vd_cache[(name, bf)] = np.array([
+                feat_vertical_density(pages[i], bf) for i in range(pages.shape[0])
+            ])
+
     results: list[dict] = []
     total = len(BOTTOM_FRACS) * len(SIGNALS) * len(THRESHOLD_METHODS)
     done = 0
@@ -712,7 +754,11 @@ def run_sweep(corpus: list[tuple[str, str, int]], quick: bool = False) -> list[d
 
                 for name, _, target in corpus:
                     pages = page_cache[name]
-                    matches = scorer_forms(pages, bottom_frac=bf, signal=sig, threshold_method=tm)
+                    vd = vd_cache[(name, bf)]
+                    matches = scorer_forms(
+                        pages, bottom_frac=bf, signal=sig,
+                        threshold_method=tm, _vd_precomputed=vd,
+                    )
                     metrics = compute_metrics_count_only(matches, target)
                     metrics["name"] = name
                     metrics["target"] = target

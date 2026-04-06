@@ -132,7 +132,7 @@ This feature is **NOT registered** in `_FEATURE_REGISTRY` — it has purpose-spe
 
 Total combinations: 4 × 4 × 11 = 176 (~5-10 min with cached pages — 176 combos × 27 PDFs, each combo is feature extraction + threshold, no rendering).
 
-**Sweep corpus:** GENERAL_CORPUS + ART_CORPUS (HLL_363 is already in GENERAL_CORPUS — no double-counting).
+**Sweep corpus:** GENERAL_CORPUS only (HLL_363 is already in GENERAL_CORPUS). ART_CORPUS is excluded from scoring because `scorer_forms` is not designed for presentation PDFs — ART is only verified via the safety gate (scorer_find_peaks).
 
 **Success criteria:**
 - **≤ ±15:** Phase 1 successful, skip Phase 2
