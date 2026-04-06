@@ -90,8 +90,6 @@ def feat_vertical_density(
     """Dark pixel fraction for top and bottom zones.
 
     Divides the page into two zones: top (1 - bottom_frac) and bottom (bottom_frac).
-    The mid zone is not computed separately — the discriminant signal comes from
-    comparing bottom vs top, and a 3-zone split adds complexity without value.
 
     Args:
         img: Grayscale image (H, W), uint8.
@@ -102,36 +100,44 @@ def feat_vertical_density(
     """
 ```
 
-Registered in `_FEATURE_REGISTRY` as `"vertical_density"` with default `bottom_frac=0.35`.
+This feature is **NOT registered** in `_FEATURE_REGISTRY` — it has purpose-specific semantics (2 dims, top/bottom) that should not be concatenated with general features via `extract_features()`. Used directly inside `scorer_forms`.
 
 **Scorer logic:**
 
 1. Extract `feat_vertical_density` for all N pages
-2. Compute discriminant signal per page (one of three options swept):
+2. Compute `full_dark` per page separately: `(img < 128).mean()` (needed for `bot_full_ratio` signal)
+3. Compute discriminant signal per page (one of four options swept):
    - `bot_top_ratio`: `bot_dark / max(top_dark, 1e-9)` — guards against division by zero on blank pages
    - `bot_absolute`: `bot_dark` directly
-   - `bot_full_ratio`: `bot_dark / max(full_dark, 1e-9)`
-3. Separate with Otsu 1D threshold on the signal array
-4. Pages above threshold = covers (document starts)
-5. Force-include page 0 if not already classified as cover
+   - `bot_full_ratio`: `bot_dark / max(full_dark, 1e-9)` — full_dark computed in scorer, not in feature
+   - `bot_mid_ratio`: `bot_dark / max(mid_dark, 1e-9)` — mid_dark = dark_ratio of the zone between top and bottom (computed in scorer as `1 - top_frac - bottom_frac`)
+4. Check bimodality of the signal array (bimodal coefficient: `(skewness^2 + 1) / kurtosis`; if BC < 0.555 the distribution is likely unimodal → skip Otsu, return only page 0)
+5. Separate with Otsu 1D threshold on the signal array
+6. Pages above threshold = covers (document starts)
+7. Force-include page 0 if not already classified as cover
 
 **Otsu 1D implementation:** Custom implementation on a 256-bin histogram of the signal values (same algorithm as `cv2.threshold` but operating on float arrays, not images). ~15 lines of numpy, no extra dependency.
 
 **Why Otsu over KMeans k=2:** Otsu minimizes intra-class variance on a 1D histogram. It is deterministic (no random initialization), operates on the distribution shape directly, and is the standard approach for bimodal 1D separation. KMeans k=2 on 1D data is functionally equivalent but adds unnecessary complexity and non-determinism.
+
+**Bimodality guard:** If the signal distribution is unimodal (no separation between page types), Otsu places an arbitrary threshold in the middle and produces garbage results. The bimodal coefficient (BC) check prevents this: BC ≥ 0.555 indicates bimodality, below that the scorer returns only `[0]` (no detection possible). Percentile methods in the sweep bypass this check since they don't assume bimodality.
 
 **Sweep parameters:**
 
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
 | bottom_frac | 0.25, 0.30, 0.35, 0.40 | Where "bottom zone" starts |
-| signal | bot_top_ratio, bot_absolute, bot_full_ratio | Which discriminant to threshold |
+| signal | bot_top_ratio, bot_absolute, bot_full_ratio, bot_mid_ratio | Which discriminant to threshold |
 | threshold_method | otsu, percentile(sweep 30-70 step 5), kmeans_k2 | Separation method |
 
-Total combinations: 4 × 3 × 11 = 132 (fast — single feature extraction, only threshold varies).
+Total combinations: 4 × 4 × 11 = 176 (~5-10 min with cached pages — 176 combos × 27 PDFs, each combo is feature extraction + threshold, no rendering).
 
 **Sweep corpus:** GENERAL_CORPUS + ART_CORPUS (HLL_363 is already in GENERAL_CORPUS — no double-counting).
 
-**Success criteria:** HLL_363 error ≤ ±30 (from -228 baseline). If met, refine. If not, proceed to Phase 2.
+**Success criteria:**
+- **≤ ±15:** Phase 1 successful, skip Phase 2
+- **±16 to ±30:** Refine Phase 1 (try 3-zone mid variants, finer bottom_frac grid) before jumping to Phase 2
+- **> ±30:** Proceed to Phase 2
 
 ### Phase 2: Add Table Structure Detection
 
@@ -229,7 +235,7 @@ This phase is exploratory and does not have a pre-defined pipeline.
 
 1. Run scorer_forms with current params on HLL_363 → report count error
 2. Run scorer_forms on GENERAL_CORPUS → report MAE (context only, not optimization target)
-3. Run scorer_find_peaks on ART_CORPUS → confirm 6/6 exact (**hard gate**)
+3. Run scorer_find_peaks on ART_CORPUS (5 PDFs) + ART_674 (in GENERAL_CORPUS) → confirm 6/6 exact (**hard gate**)
 
 ### Final Validation
 
