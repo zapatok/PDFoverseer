@@ -80,3 +80,19 @@ BEST_FIND_PEAKS_CONFIG: dict = {
     "score_similarity": 0.99,
     "rescue_threshold": 0.40,
 }
+
+# ── Forms: Page classification for form-based PDFs (PD_FORMS) ────────────
+# Classifies pages by vertical ink distribution. Designed for PDFs like
+# HLL_363 where bilateral scoring fails due to visual uniformity.
+#
+# HLL_363: detected=364, error=+1 (target=363)
+# General corpus MAE: 61.6 (expected — not designed for CH/ART types)
+#
+# Three-stage approach: vertical density → page classification → covers.
+# Independent from bilateral scorers.
+
+BEST_FORMS_CONFIG: dict = {
+    "bottom_frac": 0.35,
+    "signal": "bot_top_ratio",
+    "threshold_method": "kmeans_k2",
+}
