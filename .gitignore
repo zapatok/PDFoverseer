@@ -66,5 +66,12 @@ data/ocr_all/
 data/benchmark_results.json
 data/benchmark_run.log
 
-# Pixel density cache (large rendered page arrays)
-data/pixel_density/cache/
+# Generated data (all regenerable via scripts)
+data/art670_pages/
+data/inspection/
+data/ocr_failures/
+data/preprocess_sweep/
+data/pixel_density/
+
+# Database
+data/sessions.db

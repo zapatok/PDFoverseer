@@ -46,8 +46,7 @@ pip install -r requirements-gpu.txt
 ├── tests/          # Integration + unit tests
 ├── models/         # Super-resolution models (FSRCNN_x4.pb, EDSR_x4.pb)
 ├── data/samples/   # 22 source PDFs for scan + fixture extraction
-├── docs/           # Research notes, specs, plans, reports
-├── archived/       # Pre-modularization monolith (reference only)
+├── docs/           # Active research notes + referenced plans/postmortems
 ├── server.py       # FastAPI entry point
 └── requirements.txt
 ```
@@ -141,9 +140,7 @@ When compacting, preserve:
 
 ## Links
 
-- **Eval reorg plan:** `docs/superpowers/plans/2026-03-28-eval-reorganization.md`
 - **VLM integration postmortem:** `docs/superpowers/reports/2026-03-29-vlm-integration-postmortem.md`
-- **Pixel density research:** `docs/research/2026-03-31-bilateral-pixel-density.md`
 - **Pixel density README:** `eval/pixel_density/README.md`
 - **Eval README:** `eval/README.md`
 - **Core README:** `core/README.md`
