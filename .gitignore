@@ -19,6 +19,10 @@ ENV/
 *.swp
 *.swo
 
+# MemPalace (project-local config, auto-generated)
+entities.json
+mempalace.yaml
+
 # OS
 Thumbs.db
 .DS_Store

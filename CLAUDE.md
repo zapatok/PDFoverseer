@@ -418,6 +418,31 @@ Rules take effect immediately (no restart needed). BLOCK rules prevent tool exec
 - **Core README:** `core/README.md`
 - **Memory:** `C:\Users\Daniel\.claude\projects\a--PROJECTS-PDFoverseer\memory\`
 
+## Documentation Access (AgentSearch)
+
+When you need current documentation for any library used in this project, use `npx nia-docs` to query it directly:
+
+```bash
+# Browse structure
+npx nia-docs <docs-url> -c "tree -L 1"
+
+# Read a page
+npx nia-docs <docs-url> -c "cat <page>.md"
+
+# Search across docs
+npx nia-docs <docs-url> -c "grep -rl '<term>' ."
+```
+
+Commonly used documentation URLs:
+- PyMuPDF: https://pymupdf.readthedocs.io
+- FastAPI: https://fastapi.tiangolo.com
+- Tesseract: https://tesseract-ocr.github.io/tessdoc/
+- React: https://react.dev
+- Vite: https://vite.dev/guide/
+- ChromaDB: https://docs.trychroma.com
+
+Use this BEFORE implementing anything that depends on external API behavior, especially if your training data may be outdated.
+
 ## Pending Work
 
 - **INS_31:** ~~Last-page inference gap~~ FIXED (2026-03-26): ph5b_ratio_min 0.95→0.90, now 31/31 docs. Tray UX improvements still pending.
