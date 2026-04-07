@@ -19,7 +19,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import numpy as np  # noqa: E402
 from scipy.stats import kurtosis, skew  # noqa: E402
 
-
 # ── Threshold utilities ───────────────────────────────────────────────────
 
 

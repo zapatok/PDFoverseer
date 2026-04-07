@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
-
 # ── feat_vertical_density ─────────────────────────────────────────────────
 
 
@@ -223,8 +222,8 @@ def test_art_safety_gate():
     Runs scorer_find_peaks on all 6 ART PDFs and verifies exact doc counts.
     """
     # Import scorer_forms first to trigger any side effects
-    from eval.pixel_density.sweep_forms import scorer_forms  # noqa: F401
     from eval.pixel_density.cache import ensure_cache
+    from eval.pixel_density.sweep_forms import scorer_forms  # noqa: F401
     from eval.pixel_density.sweep_rescue import scorer_find_peaks
 
     art_pdfs = [

@@ -85,6 +85,7 @@ PDF ──► Render all pages (DPI=100, grayscale)
 | `sweep_v3.py` | V3 sweep: floor + consecutive suppression (18 combos) | `python eval/pixel_density/sweep_v3.py` |
 | `sweep_find_peaks.py` | find_peaks prominence sweep on ART family | `python eval/pixel_density/sweep_find_peaks.py` |
 | `sweep_template_rescue.py` | Template rescue threshold sweep on ART family | `python eval/pixel_density/sweep_template_rescue.py` |
+| `sweep_forms.py` | Page classification scorer + sweep for form-based PDFs | `python eval/pixel_density/sweep_forms.py` |
 
 ## Research History
 
@@ -94,8 +95,11 @@ PDF ──► Render all pages (DPI=100, grayscale)
 4. **PD_V3 Error Analysis** (2026-04-01): FP/FN diagnosis + absolute floor + consecutive suppression. Floor has no effect on ART_674 (FPs have genuinely high scores). Suppress reduces FP 30→3 but regresses gen_MAE 20.1→29.7. **V2_RC remains best for general use.** Report: `docs/research/2026-04-01-pd-v3-error-analysis.md`
 5. **PD_FIND_PEAKS** (2026-04-01): `scipy.signal.find_peaks` + cover-shift + template rescue. Three-stage pipeline: peak detection, displacement correction, similarity rescue. F1=0.996 on ART_674, **6/6 ART exact (MAE=0.0)**. Report: `docs/research/2026-04-01-pd-v3-error-analysis.md`
 
+6. **PD_FORMS** (2026-04-06): Page classification scorer for form-based PDFs. Uses vertical ink distribution to classify covers instead of bilateral scoring. Designed for HLL_363 where bilateral fails (unimodal score distribution). Best config: kmeans_k2 / bot_top_ratio / bf=0.35 → HLL error +1. Spec: `docs/superpowers/specs/2026-04-06-scorer-forms-design.md`. Results: `docs/research/2026-04-06-scorer-forms-results.md`
+
 Key findings:
 - The percentile threshold (75.2) is what makes configs generalize. KMeans k=2 overfits to each PDF's score distribution.
 - FPs on ART_674 are structural (document boundary pairs) — not fixable by score filtering.
 - Consecutive suppression works for ART but breaks short-document PDFs.
 - **find_peaks detects structure, not ratios** — no 25% assumption, fixes single-document problem.
+- **Page classification beats bilateral for form PDFs** — when all pages share the same template, vertical ink distribution separates covers from attendance sheets.
