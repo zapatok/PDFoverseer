@@ -96,3 +96,19 @@ BEST_FORMS_CONFIG: dict = {
     "signal": "bot_top_ratio",
     "threshold_method": "kmeans_k2",
 }
+
+# ── Forms V2: Multi-feature KMeans for CH-family PDFs (PD_FORMS_V2) ──────
+# KMeans k=2 on joint feature vector. Cover = cluster containing page 0.
+# Designed for CH_39/51/74 where single-feature V1 underperforms.
+#
+# Sweep: 63 feature subsets on CH_39+51+74 (Stage 1), then HLL_363 cross-
+# validation (Stage 2). Only lbp_histogram passes HLL gate (error ≤ 15).
+#
+# CH combined F1:  0.873 (P=0.812, R=0.945) — target was >0.85
+# HLL_363 error:   +10 (target: ≤15)
+
+BEST_FORMS_V2_CONFIG: dict = {
+    "feature_groups": ["lbp_histogram"],
+    "bottom_frac": 0.35,
+    "threshold_method": "kmeans_k2",
+}

@@ -290,7 +290,7 @@ def print_stage2_results(top_configs: list[dict]) -> None:
     for rank, r in enumerate(top_configs, 1):
         err = r.get("hll_error")
         err_str = f"{err:+d}" if isinstance(err, int) else "N/A"
-        ok = " ✓" if isinstance(err, int) and abs(err) <= 15 else "  "
+        ok = " OK" if isinstance(err, int) and abs(err) <= 15 else "  "
         print(f"{rank:>3}  {r['combined_f1']:>6.3f}  {err_str:>7}{ok}  {'+'.join(r['feature_groups'])}")
 
 
