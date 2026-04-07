@@ -211,6 +211,84 @@ def test_scorer_forms_otsu_bimodality_guard_unimodal():
     assert 0 in result
 
 
+# ── scorer_forms_v2 ────────────────────────────────────────────────────────
+
+
+def test_scorer_forms_v2_returns_list():
+    """Returns a list of ints."""
+    from eval.pixel_density.sweep_forms import scorer_forms_v2
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (10, 100, 80), dtype=np.uint8)
+    result = scorer_forms_v2(pages, ["cc_stats"])
+    assert isinstance(result, list)
+    assert all(isinstance(i, int) for i in result)
+
+
+def test_scorer_forms_v2_includes_page_0():
+    """Page 0 is always in the result."""
+    from eval.pixel_density.sweep_forms import scorer_forms_v2
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (10, 100, 80), dtype=np.uint8)
+    result = scorer_forms_v2(pages, ["cc_stats", "edge_density_grid"])
+    assert 0 in result
+
+
+def test_scorer_forms_v2_single_page():
+    """Single-page PDF returns [0]."""
+    from eval.pixel_density.sweep_forms import scorer_forms_v2
+
+    pages = np.full((1, 100, 80), 200, dtype=np.uint8)
+    result = scorer_forms_v2(pages, ["cc_stats"])
+    assert result == [0]
+
+
+def test_scorer_forms_v2_sorted_output():
+    """Output is sorted ascending."""
+    from eval.pixel_density.sweep_forms import scorer_forms_v2
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (20, 100, 80), dtype=np.uint8)
+    result = scorer_forms_v2(pages, ["cc_stats", "edge_density_grid"])
+    assert result == sorted(result)
+
+
+def test_scorer_forms_v2_identical_pages():
+    """All-identical pages returns [0] via pre-normalization check."""
+    from eval.pixel_density.sweep_forms import scorer_forms_v2
+
+    page = np.full((100, 80), 128, dtype=np.uint8)
+    pages = np.stack([page] * 8)
+    result = scorer_forms_v2(pages, ["cc_stats", "dark_ratio_grid"])
+    assert result == [0]
+
+
+def test_scorer_forms_v2_vertical_density_group():
+    """vertical_density feature group works (special-cased, not in registry)."""
+    from eval.pixel_density.sweep_forms import scorer_forms_v2
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (10, 100, 80), dtype=np.uint8)
+    result = scorer_forms_v2(pages, ["vertical_density"])
+    assert 0 in result
+    assert isinstance(result, list)
+
+
+def test_scorer_forms_v2_all_feature_groups():
+    """All 6 feature groups together run without error."""
+    from eval.pixel_density.sweep_forms import scorer_forms_v2
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (10, 100, 80), dtype=np.uint8)
+    groups = [
+        "vertical_density", "projection_stats", "edge_density_grid",
+        "cc_stats", "dark_ratio_grid", "lbp_histogram",
+    ]
+    result = scorer_forms_v2(pages, groups)
+    assert 0 in result
+
+
 # ── ART safety gate ───────────────────────────────────────────────────────
 
 
