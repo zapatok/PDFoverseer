@@ -210,6 +210,91 @@ def scorer_forms(
     return sorted(matches)
 
 
+# ── scorer_forms_v2 ────────────────────────────────────────────────────────
+
+_V2_VALID_GROUPS = frozenset([
+    "vertical_density", "projection_stats", "edge_density_grid",
+    "cc_stats", "dark_ratio_grid", "lbp_histogram",
+])
+
+
+def scorer_forms_v2(
+    pages: np.ndarray,
+    feature_groups: list[str],
+    bottom_frac: float = 0.35,
+    random_state: int = 42,
+    _features_precomputed: dict[str, np.ndarray] | None = None,
+) -> list[int]:
+    """Classify pages as covers using multi-feature KMeans k=2.
+
+    Builds a joint feature matrix [N_pages × D_features] from the requested
+    feature groups, robust-z normalizes per dimension, and applies KMeans k=2.
+    The cluster containing page 0 is treated as covers.
+
+    Args:
+        pages: Rendered page images, shape [N, H, W], dtype uint8.
+        feature_groups: Feature groups to use. Valid names: vertical_density,
+            projection_stats, edge_density_grid, cc_stats, dark_ratio_grid,
+            lbp_histogram.
+        bottom_frac: Bottom zone fraction for vertical_density feature.
+        random_state: KMeans seed for reproducibility.
+        _features_precomputed: Optional dict mapping group name → [N, D] array.
+            Skips feature extraction for groups present in this dict (sweep
+            efficiency — extract once per PDF, reuse across 63 subsets).
+
+    Returns:
+        Sorted list of 0-indexed cover page indices. Page 0 always included.
+    """
+    from eval.pixel_density.features import _FEATURE_REGISTRY, feat_vertical_density
+
+    n_pages = len(pages)
+
+    # Edge case: single page
+    if n_pages == 1:
+        return [0]
+
+    # Build raw feature matrix [N, D]
+    parts: list[np.ndarray] = []
+    for group in feature_groups:
+        if _features_precomputed is not None and group in _features_precomputed:
+            parts.append(_features_precomputed[group])
+        elif group == "vertical_density":
+            vd = np.array([feat_vertical_density(p, bottom_frac) for p in pages])
+            parts.append(vd)
+        else:
+            fn, kwargs = _FEATURE_REGISTRY[group]
+            feats = np.array([fn(p, **kwargs) for p in pages])
+            parts.append(feats)
+
+    raw_matrix = np.concatenate(parts, axis=1)  # [N, D]
+
+    # Edge case: all pages identical — check pre-normalization
+    if np.all(raw_matrix == raw_matrix[0]):
+        return [0]
+
+    # Robust-z normalize per feature dimension
+    median = np.median(raw_matrix, axis=0)
+    mad = np.median(np.abs(raw_matrix - median), axis=0)
+    scale = np.maximum(mad * 1.4826, 1e-9)
+    norm_matrix = (raw_matrix - median) / scale
+
+    # KMeans k=2
+    import warnings
+
+    from sklearn.cluster import KMeans
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        km = KMeans(n_clusters=2, random_state=random_state, n_init="auto")
+        km.fit(norm_matrix)
+
+    cover_label = int(km.labels_[0])
+    covers = sorted(
+        {i for i, lbl in enumerate(km.labels_) if lbl == cover_label} | {0}
+    )
+    return [int(i) for i in covers]
+
+
 # ── Sweep harness ─────────────────────────────────────────────────────────
 
 import argparse  # noqa: E402
