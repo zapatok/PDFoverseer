@@ -3,5 +3,30 @@
     "allow": [
       "Bash(tasklist)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/ruff-format.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-compact.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }

@@ -1,0 +1,32 @@
+== POST-COMPACTION CONTEXT REFRESH ==
+
+PROJECT: PDFoverseer — PDF document analyzer, counts internal documents in lecture PDFs via OCR + AI inference.
+STACK: Python 3.10+ (CUDA GPU), FastAPI, PyMuPDF, Tesseract, React + Vite frontend.
+
+COMMANDS:
+- Backend: source .venv-cuda/Scripts/activate && python server.py
+- Frontend: cd frontend && npm run dev
+- Tests: pytest
+- Lint: ruff check . (must be 0 violations before commit)
+
+CRITICAL RULES:
+- No bare except: — catch specific types (Exception at minimum)
+- No shell=True in subprocess — always list form
+- No SQL f-strings — use ? parameterized queries
+- No print() in core/, api/, vlm/, eval/ — use logging.getLogger(__name__)
+- Python 3.10+ types: X | None not Optional[X], list[X] not List[X]
+- Constants belong in core/utils.py, not scattered
+- Torch imports must be wrapped in try/except for CPU fallback
+- Inference changes: test in eval/inference_tuning/ BEFORE editing core/inference.py
+
+GIT CONVENTIONS:
+- Commits in English: type(scope): message (e.g., feat(ocr): add SR tier 2)
+- Main branch: master
+- Lint must pass before commit: ruff check .
+
+KEY FILES:
+- Pipeline: core/pipeline.py (V4, 6 parallel Tesseract workers)
+- Inference: core/inference.py (phases 1-5 + MP + 5b, Dempster-Shafer)
+- Constants: core/utils.py (DPI, CROP_*, thresholds)
+- API: server.py -> api/routes/{files,sessions,pipeline}.py
+- Ground truth: eval/fixtures/ground_truth.json (22 real + 15 synthetic + 7 degraded)
