@@ -289,6 +289,116 @@ def test_scorer_forms_v2_all_feature_groups():
     assert 0 in result
 
 
+# ── sweep_forms_v2 utilities ──────────────────────────────────────────────
+
+
+def test_load_ch_gt_covers_and_noncov():
+    """load_ch_gt returns non-overlapping covers and noncov sets."""
+    from eval.pixel_density.sweep_forms_v2 import load_ch_gt
+
+    covers, noncov = load_ch_gt("eval/fixtures/real/CH_39.json")
+    assert len(covers) > 0
+    assert len(noncov) > 0
+    assert covers.isdisjoint(noncov)
+    assert 0 in covers  # first page is always a cover
+
+
+def test_load_ch_gt_zero_indexed():
+    """load_ch_gt returns 0-indexed page indices (pdf_page - 1)."""
+    from eval.pixel_density.sweep_forms_v2 import load_ch_gt
+
+    covers, noncov = load_ch_gt("eval/fixtures/real/CH_39.json")
+    assert all(i >= 0 for i in covers | noncov)
+
+
+def test_load_ch_gt_excludes_failed():
+    """Pages with method=='failed' are excluded from both sets."""
+    import json
+
+    from eval.pixel_density.sweep_forms_v2 import load_ch_gt
+
+    with open("eval/fixtures/real/CH_39.json") as f:
+        data = json.load(f)
+
+    failed = {r["pdf_page"] - 1 for r in data["reads"] if r["method"] == "failed"}
+    covers, noncov = load_ch_gt("eval/fixtures/real/CH_39.json")
+    # failed pages must not appear in either set
+    assert failed.isdisjoint(covers | noncov)
+
+
+def test_compute_f1_perfect():
+    """Perfect prediction gives F1=1.0."""
+    from eval.pixel_density.sweep_forms_v2 import compute_f1
+
+    covers = {0, 2, 4}
+    noncov = {1, 3, 5}
+    m = compute_f1(list(covers), covers, noncov)
+    assert m["f1"] == pytest.approx(1.0)
+    assert m["precision"] == pytest.approx(1.0)
+    assert m["recall"] == pytest.approx(1.0)
+
+
+def test_compute_f1_missed_covers():
+    """Missing predicted covers reduces recall."""
+    from eval.pixel_density.sweep_forms_v2 import compute_f1
+
+    covers = {0, 2, 4}
+    noncov = {1, 3, 5}
+    m = compute_f1([0], covers, noncov)  # only page 0 predicted (forced)
+    assert m["recall"] < 1.0
+    assert m["f1"] < 1.0
+
+
+def test_compute_f1_failed_pages_ignored():
+    """Predicting a failed page (not in covers or noncov) does not count as FP."""
+    from eval.pixel_density.sweep_forms_v2 import compute_f1
+
+    covers = {0, 2}
+    noncov = {1, 3}
+    # page 99 is a "failed" page — not in covers or noncov
+    m_with = compute_f1([0, 2, 99], covers, noncov)
+    m_without = compute_f1([0, 2], covers, noncov)
+    # FP count should be the same
+    assert m_with["fp"] == m_without["fp"]
+    assert m_with["f1"] == pytest.approx(m_without["f1"])
+
+
+def test_extract_all_features_shape():
+    """extract_all_features returns dict with correct per-group shapes."""
+    from eval.pixel_density.sweep_forms_v2 import extract_all_features
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (5, 100, 80), dtype=np.uint8)
+    feats = extract_all_features(pages, bottom_frac=0.35)
+
+    expected_shapes = {
+        "vertical_density": (5, 2),
+        "projection_stats": (5, 6),
+        "edge_density_grid": (5, 16),
+        "cc_stats": (5, 2),
+        "dark_ratio_grid": (5, 64),
+        "lbp_histogram": (5, 10),
+    }
+    for group, shape in expected_shapes.items():
+        assert group in feats, f"Missing group: {group}"
+        assert feats[group].shape == shape, f"{group}: expected {shape}, got {feats[group].shape}"
+
+
+def test_scorer_forms_v2_precomputed_matches_live():
+    """scorer_forms_v2 with precomputed cache gives same result as live extraction."""
+    from eval.pixel_density.sweep_forms import scorer_forms_v2
+    from eval.pixel_density.sweep_forms_v2 import extract_all_features
+
+    rng = np.random.default_rng(42)
+    pages = rng.integers(0, 256, (8, 100, 80), dtype=np.uint8)
+
+    precomp = extract_all_features(pages)
+    r_precomp = scorer_forms_v2(pages, ["cc_stats", "edge_density_grid"],
+                                _features_precomputed=precomp)
+    r_live = scorer_forms_v2(pages, ["cc_stats", "edge_density_grid"])
+    assert r_precomp == r_live
+
+
 # ── ART safety gate ───────────────────────────────────────────────────────
 
 
