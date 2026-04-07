@@ -122,6 +122,6 @@
     "hookify@claude-plugins-official": true,
     "feature-dev@claude-code-plugins": true,
     "explanatory-output-style@claude-code-plugins": true,
-    "episodic-memory@superpowers-marketplace": true
+    "episodic-memory@superpowers-marketplace": false
   }
 }
