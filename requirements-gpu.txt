@@ -1,5 +1,8 @@
 -r requirements.txt
 torch==2.10.0+cu126
+transformers>=4.40,<5
 # easyocr removed 2026-03-25: benchmark showed 0-1% accuracy on ART_670 GT pages,
 # no speed benefit (ran concurrently; Tesseract+SR was bottleneck), marginal quality harm.
 # torch kept for SR Tier 2 GPU bicubic upscaling in core/ocr.py.
+# transformers added 2026-04-11: DiT-base embeddings experiment for cover-page detection
+# (eval/pixel_density/dit_embeddings.py).
