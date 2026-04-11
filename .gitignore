@@ -19,10 +19,6 @@ ENV/
 *.swp
 *.swo
 
-# MemPalace (project-local config, auto-generated)
-entities.json
-mempalace.yaml
-
 # OS
 Thumbs.db
 .DS_Store
@@ -75,3 +71,7 @@ data/pixel_density/
 
 # Database
 data/sessions.db
+
+# Serena MCP (trial — remove these lines to track config)
+.serena/
+pyrightconfig.json

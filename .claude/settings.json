@@ -15,6 +15,16 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "WebFetch|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/web-content-warning.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostCompact": [
