@@ -98,6 +98,33 @@ def bilateral_l2(
     )
 
 
+def bilateral_cosine(
+    page_features: list[np.ndarray],
+    score_fn: str,
+) -> np.ndarray:
+    """Bilateral scoring with cosine distance (1 - cosine similarity).
+
+    Magnitude-invariant: only the direction of each feature vector matters.
+    Recommended for high-dimensional embeddings (e.g., DiT 768-d) where L2
+    distance concentration is a problem.
+
+    Args:
+        page_features: Per-page feature vectors.
+        score_fn: Aggregation: "min", "mean", or "harmonic".
+
+    Returns:
+        1-D array of bilateral scores in [0, 2].
+    """
+    def cosine_dist(a: np.ndarray, b: np.ndarray) -> float:
+        na = float(np.linalg.norm(a))
+        nb = float(np.linalg.norm(b))
+        if na == 0.0 or nb == 0.0:
+            return 1.0
+        return 1.0 - float(np.dot(a, b) / (na * nb))
+
+    return bilateral_scores(page_features, cosine_dist, score_fn)
+
+
 def bilateral_chi2(
     page_features: list[np.ndarray],
     score_fn: str,
