@@ -96,7 +96,7 @@ export const useWebSocket = (preCascadeRef) => {
         ws.current.close();
       }
     };
-  }, []);
+  }, [sessionId]);
 
   return ws;
 };
