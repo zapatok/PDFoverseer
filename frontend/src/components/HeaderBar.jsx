@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useStore } from '../store/useStore';
 
 export const HeaderBar = ({ api }) => {
@@ -5,15 +6,38 @@ export const HeaderBar = ({ api }) => {
   const globalProg = useStore(s => s.globalProg);
   const pdfs = useStore(s => s.pdfs);
   const setConfirmModal = useStore(s => s.setConfirmModal);
+  const [showBrowseMenu, setShowBrowseMenu] = useState(false);
 
-  const { handleBrowse, handleNewSession, handleSaveSession, handleViewHistory, handleStart, handlePause, handleResume, handleStop, handleSkip } = api;
+  const { handleBrowse, handleBrowseFolder, handleNewSession, handleSaveSession, handleViewHistory, handleStart, handlePause, handleResume, handleStop, handleSkip } = api;
 
   return (
     <div className="h-16 bg-surface/80 backdrop-blur-xl border-b border-white/5 px-6 flex items-center justify-between shadow-lg z-20">
       <div className="flex items-center space-x-3">
-        <button onClick={handleBrowse} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
-          Abrir
-        </button>
+        <div className="relative">
+          <button onClick={() => setShowBrowseMenu(v => !v)} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
+            Abrir
+            <svg className="w-3 h-3 ml-1.5 opacity-60" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
+          </button>
+          {showBrowseMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowBrowseMenu(false)} />
+              <div className="absolute top-full left-0 mt-1 bg-panel border border-[#313244] rounded shadow-lg z-50 min-w-[180px]">
+                <button
+                  onClick={() => { setShowBrowseMenu(false); handleBrowse(); }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-surface transition-colors rounded-t"
+                >
+                  Archivos PDF
+                </button>
+                <button
+                  onClick={() => { setShowBrowseMenu(false); handleBrowseFolder(); }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-surface transition-colors rounded-b"
+                >
+                  Carpeta con PDFs
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         <div className="w-px h-6 bg-gray-700 mx-1"></div>
         <button onClick={handleNewSession} className="bg-panel hover:bg-surface text-gray-300 font-medium py-1.5 px-4 rounded transition-colors text-sm shadow flex items-center border border-[#313244]">
           Nueva Sesión

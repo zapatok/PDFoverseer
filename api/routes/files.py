@@ -32,7 +32,11 @@ def _pdf_list_state(s: SessionState) -> list[dict]:
     result = []
     for p in s.pdf_list:
         p_str = str(p)
-        st = "done" if has_reads(s.session_id, p_str) else ("skipped" if p_str in s.skipped_pdfs else "pending")
+        st = (
+            "done"
+            if has_reads(s.session_id, p_str)
+            else ("skipped" if p_str in s.skipped_pdfs else "pending")
+        )
         result.append({"name": p.name, "path": p_str, "status": st})
     return result
 
@@ -49,7 +53,7 @@ def _open_file_dialog():
     """Opens a native tkinter file dialog for selecting PDFs."""
     root = tk.Tk()
     root.withdraw()
-    root.attributes('-topmost', True)
+    root.attributes("-topmost", True)
     file_paths = filedialog.askopenfilenames(
         title="Seleccionar archivos PDF",
         filetypes=[("PDF", "*.pdf")],
@@ -58,18 +62,21 @@ def _open_file_dialog():
     return list(file_paths)
 
 
-@router.get("/browse")
-def api_browse(s: SessionState = Depends(get_session)):
-    """Opens native file dialog and adds selected PDFs to the session."""
-    file_paths = _open_file_dialog()
-    if not file_paths:
-        return {"success": True, "pdfs": _pdf_list_state(s)}
+def _open_folder_dialog():
+    """Opens a native tkinter folder dialog."""
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    folder = filedialog.askdirectory(title="Seleccionar carpeta con PDFs")
+    root.destroy()
+    return folder
 
-    new_paths = [Path(p) for p in file_paths]
+
+def _add_pdfs_to_session(s: SessionState, paths: list[Path]):
+    """Deduplicates paths and adds new PDFs to the session, counting pages."""
     existing = set(s.pdf_list)
-    new_pdfs = [p for p in new_paths if p not in existing]
+    new_pdfs = [p for p in paths if p not in existing]
     s.pdf_list.extend(new_pdfs)
-
     for p in new_pdfs:
         p_str = str(p)
         if p_str not in s.page_counts:
@@ -80,6 +87,34 @@ def api_browse(s: SessionState = Depends(get_session)):
             except Exception:
                 pass
 
+
+@router.get("/browse")
+def api_browse(s: SessionState = Depends(get_session)):
+    """Opens native file dialog and adds selected PDFs to the session."""
+    file_paths = _open_file_dialog()
+    if not file_paths:
+        return {"success": True, "pdfs": _pdf_list_state(s)}
+
+    _add_pdfs_to_session(s, [Path(p) for p in file_paths])
+    return {"success": True, "pdfs": _pdf_list_state(s)}
+
+
+@router.get("/browse_folder")
+def api_browse_folder(s: SessionState = Depends(get_session)):
+    """Opens native folder dialog and adds all PDFs found recursively."""
+    folder_path = _open_folder_dialog()
+    if not folder_path:
+        return {"success": True, "pdfs": _pdf_list_state(s)}
+
+    folder = Path(folder_path)
+    if not folder.is_dir():
+        return {"success": True, "pdfs": _pdf_list_state(s)}
+
+    pdfs = sorted(
+        (p for p in folder.rglob("*.[pP][dD][fF]") if not p.name.startswith("~$")),
+        key=lambda p: p.name,
+    )
+    _add_pdfs_to_session(s, pdfs)
     return {"success": True, "pdfs": _pdf_list_state(s)}
 
 
@@ -173,7 +208,7 @@ def api_open_pdf(pdf_path: str, page: int = 1, s: SessionState = Depends(get_ses
         if path.suffix.lower() != ".pdf":
             return {"success": False, "error": "Not a PDF file"}
 
-        if os.name == 'nt':
+        if os.name == "nt":
             os.startfile(str(path))
         else:
             # SECURITY: subprocess.call uses list form, no shell injection; path validated against pdf_list

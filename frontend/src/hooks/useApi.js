@@ -50,6 +50,17 @@ export const useApi = (refs) => {
     } catch (e) { handleApiErr(e, 'Abrir'); }
   };
 
+  const handleBrowseFolder = async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/browse_folder`);
+      const data = await res.json();
+      if (data.success && data.pdfs) {
+        useStore.getState().setPdfs(data.pdfs);
+        useStore.getState().setStatus('idle');
+      }
+    } catch (e) { handleApiErr(e, 'Abrir Carpeta'); }
+  };
+
   const handleAddFolder = async (path) => {
     try {
       const res = await authFetch(`${API_BASE}/add_folder`, {
@@ -207,11 +218,15 @@ export const useApi = (refs) => {
     store.setGlobalProg(prev => ({ ...prev, paused: false }));
     store.setFileProg({ done: 0, total: 0, filename: '' });
     try {
-      await authFetch(`${API_BASE}/start`, {
+      const res = await authFetch(`${API_BASE}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ start_index: startIndex })
       });
+      const data = await res.json();
+      if (!data.success) {
+        store.setStatus('idle');
+      }
     } catch (e) { handleApiErr(e, 'Iniciar Lote'); }
   };
 
@@ -375,6 +390,7 @@ export const useApi = (refs) => {
 
   return {
     handleBrowse,
+    handleBrowseFolder,
     handleAddFolder,
     handleAddFiles,
     handleRemovePdf,
