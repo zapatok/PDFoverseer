@@ -622,7 +622,6 @@ git commit -m "feat(db): SQLite connection lifecycle + WAL + schema init"
 `tests/unit/db/test_sessions_repo.py`:
 ```python
 import json
-from datetime import datetime, timezone
 
 import pytest
 
@@ -801,7 +800,6 @@ from core.db.historical_repo import (
     upsert_count,
     get_counts_for_month,
     query_range,
-    HistoricalCount,
 )
 
 
@@ -948,8 +946,14 @@ git commit -m "feat(db): historical_counts repository with upsert + cross-month 
 - Create: `data/templates/RESUMEN_template_v1.xlsx` (manual, see steps)
 - Create: `data/templates/README.md`
 
-- [ ] **Step 1: Copy the sample as base**
+- [ ] **Step 1: Copy the sample as base** (Windows PowerShell)
 
+```powershell
+Copy-Item "A:\PROJECTS\PDFoverseer\data\output_sample\RESUMEN_ABRIL_2026.xlsx" `
+          "A:\PROJECTS\PDFoverseer\data\templates\RESUMEN_template_v1.xlsx"
+```
+
+Or via Bash on Git-Bash:
 ```bash
 cp "A:/PROJECTS/PDFoverseer/data/output_sample/RESUMEN_ABRIL_2026.xlsx" \
    "A:/PROJECTS/PDFoverseer/data/templates/RESUMEN_template_v1.xlsx"
@@ -1842,15 +1846,17 @@ from core.domain import SIGLAS as _SIGLAS
 from core.scanners.simple_factory import make_simple_scanner as _make
 
 
-def _register_default_scanners() -> None:
-    if _REGISTRY:
-        return  # already populated (e.g. in tests)
+def register_defaults() -> None:
+    """Register all 18 sigla scanners. Idempotent — safe to call after clear()."""
     for sigla in _SIGLAS:
-        register(_make(sigla))
+        if not has(sigla):
+            register(_make(sigla))
 
 
-_register_default_scanners()
+register_defaults()
 ```
+
+Update `__all__` to include `register_defaults` so tests can re-register after `clear()`.
 
 - [ ] **Step 5: Run to verify all tests pass**
 
@@ -2574,9 +2580,15 @@ def scan(
 ) -> dict:
     if not _SESSION_ID_RE.match(session_id):
         raise HTTPException(400, f"Invalid session_id: {session_id}")
-    state = mgr.get_session_state(session_id)
+    try:
+        state = mgr.get_session_state(session_id)
+    except KeyError:
+        raise HTTPException(404, f"Session not found: {session_id}")
     month_root = Path(state["month_root"])
-    inv = enumerate_month(month_root)
+    try:
+        inv = enumerate_month(month_root)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
     results = scan_month(inv)
     for (hosp, sigla), r in results.items():
         mgr.apply_cell_result(session_id, hosp, sigla, r)
@@ -2589,12 +2601,15 @@ def scan(
     }
 ```
 
-- [ ] **Step 7: Implement `api/routes/__init__.py`**
+- [ ] **Step 7: Implement `api/routes/__init__.py`** (only modules that exist at this stage)
 
 ```python
-from api.routes import months, sessions, output, ws
-__all__ = ["months", "sessions", "output", "ws"]
+"""API routes — modules added incrementally per task."""
+from api.routes import months, sessions
+__all__ = ["months", "sessions"]
 ```
+
+Tasks 18 and 19 will extend this when `output` and `ws` modules are created.
 
 - [ ] **Step 8: Run to verify**
 
@@ -2861,16 +2876,19 @@ if __name__ == "__main__":
     )
 ```
 
-- [ ] **Step 4: Smoke test the server**
+- [ ] **Step 4: Smoke test the server** (Windows PowerShell)
 
-```bash
-source .venv-cuda/Scripts/activate
-python server.py &
-sleep 5
-curl -s http://localhost:8000/api/months | head -c 200
-# Kill it
-pkill -f "uvicorn"
+```powershell
+# Start in background
+Start-Process -FilePath "python" -ArgumentList "server.py" -NoNewWindow -PassThru | Tee-Object -Variable proc
+Start-Sleep -Seconds 5
+# Probe
+Invoke-WebRequest -Uri "http://localhost:8000/api/months" -UseBasicParsing | Select-Object -ExpandProperty Content
+# Stop
+Stop-Process -Id $proc.Id -Force
 ```
+
+Or skip this step — Task 25 E2E test exercises the same surface via FastAPI TestClient. Mark step done after running pytest.
 
 Expected: JSON response with months array.
 
@@ -2892,16 +2910,18 @@ git commit -m "feat(api): main app + lifespan + WS skeleton + server.py rewrite"
 - Delete: existing component files that don't fit new architecture
 - Create: `frontend/src/lib/format.js`
 
-- [ ] **Step 1: Delete old components**
+- [ ] **Step 1: Delete old components** (use `git rm` for clean tracking)
 
 ```bash
-rm frontend/src/components/Terminal.jsx
-rm frontend/src/components/IssueInbox.jsx
-rm frontend/src/components/CorrectionPanel.jsx
-rm frontend/src/components/HistoryModal.jsx
-rm frontend/src/components/ConfirmModal.jsx
+git rm frontend/src/components/Terminal.jsx
+git rm frontend/src/components/IssueInbox.jsx
+git rm frontend/src/components/CorrectionPanel.jsx
+git rm frontend/src/components/HistoryModal.jsx
+git rm frontend/src/components/ConfirmModal.jsx
 # Keep: ProgressBar.jsx, HeaderBar.jsx, Sidebar.jsx (reusable, refactor later if needed)
 ```
+
+On Windows PowerShell, `git rm` works the same. If git is not invoked, `Remove-Item <path>` per file.
 
 - [ ] **Step 2: Install zustand if not present**
 
@@ -3503,6 +3523,8 @@ def client(tmp_path, monkeypatch):
 
 @pytest.mark.slow
 def test_end_to_end_abril_flow(client, tmp_path):
+    import openpyxl
+
     # 1) list months
     months = client.get("/api/months").json()["months"]
     abril = next(m for m in months if m["name"].upper() == "ABRIL")
@@ -3523,8 +3545,31 @@ def test_end_to_end_abril_flow(client, tmp_path):
     out = client.post(
         f"/api/sessions/{abril['session_id']}/output", json={},
     ).json()
-    assert Path(out["output_path"]).exists()
-    assert out["cells_written"] >= 50  # at least most cells populated
+    output_path = Path(out["output_path"])
+    assert output_path.exists()
+    assert out["cells_written"] >= 50
+
+    # 5) verify the actual Excel contents match scan results (spec §1.5 acceptance #2)
+    wb = openpyxl.load_workbook(output_path)
+    summary = scan_result["summary"]
+    matched = 0
+    for name in wb.defined_names:
+        if not name.endswith("_count"):
+            continue
+        # name e.g. "HPV_art_count" → key "HPV_art"
+        prefix = name[:-len("_count")]
+        if prefix not in summary:
+            continue
+        destinations = list(wb.defined_names[name].destinations)
+        sheet, coord = destinations[0]
+        cell_value = wb[sheet][coord].value
+        if cell_value is not None:
+            assert cell_value == summary[prefix], (
+                f"Cell {name} = {cell_value} but scan said {summary[prefix]}"
+            )
+            matched += 1
+    # At least 50 of the 54 non-compilation cells should match
+    assert matched >= 50, f"Only {matched} cells matched the scan result"
 ```
 
 - [ ] **Step 2: Run**
@@ -3573,9 +3618,9 @@ cd frontend && npm run dev  # frontend :5173
 For full design: `docs/superpowers/specs/2026-05-11-pdfoverseer-overhaul-design.md`.
 ```
 
-- [ ] **Step 2: Update memory**
+- [ ] **Step 2: Update memory** (via Serena, not direct file edit)
 
-Edit `C:\Users\Daniel\.claude\projects\a--PROJECTS-PDFoverseer\memory\project_pdfoverseer_purpose.md`: append a note that FASE 1 MVP is live on `research/pixel-density`.
+The user's auto-memory should be updated via the appropriate memory tool, not direct file editing. Append a "FASE 1 status" section to `project_pdfoverseer_purpose.md` noting that the MVP shipped on `research/pixel-density` with tag `fase-1-mvp`. If using `mcp__serena__write_memory`, write to `domain_workflow_purpose` (Serena memory) too.
 
 - [ ] **Step 3: Final ruff check**
 
