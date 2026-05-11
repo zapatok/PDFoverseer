@@ -78,3 +78,10 @@ pyrightconfig.json
 
 # Visual brainstorming companion (superpowers skill)
 .superpowers/
+
+# FASE 1 overhaul artifacts
+data/overseer.db
+data/overseer.db-shm
+data/overseer.db-wal
+data/outputs/
+frontend/dist/
