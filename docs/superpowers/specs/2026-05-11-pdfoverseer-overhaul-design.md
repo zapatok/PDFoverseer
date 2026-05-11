@@ -220,7 +220,6 @@ class ScanResult:
 class Scanner(Protocol):
     sigla: str  # "art", "irl", "odi", ...
 
-    def can_handle(self, folder: Path) -> bool: ...
     def count(
         self,
         folder: Path,
@@ -228,6 +227,8 @@ class Scanner(Protocol):
         override_method: str | None = None,
     ) -> ScanResult: ...
 ```
+
+Nota: el dispatch es por sigla via registry (§3.2), no por `can_handle()`. Mantener la interfaz minimal — agregar capabilities solo cuando el orchestrator las necesite.
 
 ### 3.2 Registry pattern
 
@@ -310,14 +311,35 @@ class LegacyInferenceScanner:
         ...
 ```
 
-### 3.6 Acceptance per scanner (uniforme)
+### 3.6 Factory para scanners triviales
 
-Cada scanner debe:
+12-14 de los 18 scanners son `filename_glob` puro sin fallback (categorías 5, 8-13, 15-18 + tentativamente 1, 6, 9). Crear 12 archivos casi idénticos es boilerplate sin valor. Solución:
+
+```python
+# core/scanners/simple_factory.py
+def make_simple_scanner(sigla: str, *, page_anomaly_threshold: int = 10) -> Scanner:
+    """Build a filename_glob scanner with optional compilation-detected flag."""
+    ...
+
+# core/scanners/__init__.py
+for sigla in ("reunion", "chintegral", "bodega", "maquinaria", "ext", "senal",
+              "exc", "caliente", "herramientas_elec", "andamios", "chps",
+              "insgral", "dif_pts"):
+    register(make_simple_scanner(sigla))
+```
+
+Los scanners con técnica especializada (`art`, `odi`, `irl`, `charla`) tienen archivo propio en `core/scanners/<sigla>_scanner.py`.
+
+### 3.7 Acceptance per custom scanner
+
+Cada scanner con archivo propio debe:
 1. Tener su archivo `core/scanners/<sigla>_scanner.py` (≤250 LOC)
 2. Tener tests en `tests/scanners/test_<sigla>_scanner.py` con fixture real de ABRIL
 3. Documentar su técnica + edge cases en docstring del módulo
 4. Implementar el Scanner Protocol exactamente
 5. Auto-registrarse al final del archivo
+
+Para scanners simples (factory): un único test parametrizado en `tests/scanners/test_simple_factory.py` cubre todas las siglas triviales.
 
 ---
 
@@ -325,7 +347,11 @@ Cada scanner debe:
 
 ### 4.1 Storage backend
 
-SQLite local en `data/overseer.db` (nueva DB, no extiende `sessions.db`). Una sola conexión por proceso, transacciones explícitas, conexión cerrada en shutdown.
+SQLite local en `data/overseer.db` (nueva DB, no extiende `sessions.db`).
+
+**Concurrency model**: solo el **orchestrator** (proceso main) escribe a la DB. Los scanners corren en `multiprocessing.Pool` workers, devuelven `ScanResult` al orchestrator vía pool result, y el orchestrator persiste serialmente. Esto evita SQLite locks por contención de workers.
+
+**Connection lifecycle**: una sola conexión persistente en el orchestrator + WAL mode habilitado para resiliencia ante crashes. Conexión cerrada en shutdown (FastAPI lifespan). Transacciones explícitas para writes multi-fila.
 
 ### 4.2 Schema
 
@@ -435,6 +461,13 @@ Beneficio: el writer no depende de posición de celda (G15, H22, etc.) → si el
 
 ```python
 # core/excel/writer.py
+@dataclass(frozen=True)
+class ExcelGenerationResult:
+    output_path: Path
+    cells_written: int
+    warnings: list[str]    # ["named range XYZ not found", "value clipped", ...]
+    duration_ms: int
+
 def generate_resumen(
     session_state: SessionState,
     output_path: Path,
@@ -444,7 +477,9 @@ def generate_resumen(
     ...
 ```
 
-Trabajo en **copy-and-modify**: nunca modificar el template directamente. `cp template → output → fill cells → save`.
+**Atomicity**: write-then-rename pattern. Escribe a `<output_path>.tmp` → fsync → rename atómico a `<output_path>`. Si target existe, primero `output_path → output_path.bak` antes del rename. Esto garantiza que `output_path` siempre es un Excel válido (nunca a medio-escribir).
+
+Trabajo en **copy-and-modify**: nunca modificar el template directamente. `cp template → tmp → fill cells → save tmp → rename`.
 
 ### 5.4 Cross-month report (FASE 3)
 
@@ -505,8 +540,9 @@ GET    /api/health                                  app health + scanner registr
 ```
 
 **Validaciones críticas**:
-- `/api/pdfs?path=...` debe validar que el path esté **dentro de una carpeta whitelist** (configurable). Sin esa validación, path traversal vulnerability. Usar `pathlib.Path.resolve()` + check `.is_relative_to(allowed_root)`.
-- `PATCH /api/sessions/.../cells/...` con `user_override: int` validar `>= 0` y `<= MAX_REASONABLE_COUNT`.
+- `/api/pdfs?path=...` debe validar path traversal. **Whitelist por default**: la `month_folder` de la sesión activa + los paths en `custom_pdfs_added`. Cualquier path fuera → 403. Implementación: `pathlib.Path.resolve()` + check `.is_relative_to(allowed_root)` contra cada root permitido.
+- `PATCH /api/sessions/.../cells/...` con `user_override: int` validar `>= 0` y `<= MAX_REASONABLE_COUNT` (constante en `core/utils.py`, default 10000).
+- Todos los `session_id` validados contra regex `^\d{4}-(0[1-9]|1[0-2])$` antes de usar.
 
 ### 6.2 WebSocket events
 
@@ -622,12 +658,13 @@ frontend/src/
 
 **Scope**:
 - Folder enumeration: dado `A:\informe mensual\<MES>\`, descubrir 4 hospitales × 18 categorías
-- 18 scanners filename-glob baseline (todos arrancan con la técnica trivial)
+- **Un único `simple_filename_scanner` parametrizable** (no 18 archivos casi idénticos) que sirve a las 12-14 categorías que solo necesitan glob. Los 4-6 que necesitan técnicas custom (ART, ODI, IRL, Charlas) se construyen en FASE 2 — en FASE 1 también usan `simple_filename_scanner` como baseline
+- `page_count_heuristic.py` util (~50 LOC): flag `compilation_detected` cuando `total_pages_in_folder / num_pdfs > umbral_por_sigla`. Usado solo para badges, no para conteo
 - Storage layer (sessions + historical, schema completo, sin queries cross-mes)
 - API endpoints básicos: months, sessions, scan, output (sin cancel, sin overrides)
 - Frontend: MonthOverview + HospitalDetail (sin Settings, sin side panel detallado, sin viewer)
 - Excel writer: template propio + named ranges + generate básico
-- Tests por scanner con fixtures ABRIL
+- Tests por scanner con fixtures ABRIL + write-guard que falla loud si un test escribe a `A:\informe mensual\`
 
 **Acceptance**:
 - Abrir `A:\informe mensual\ABRIL` → ver los 4 hospitales en < 2s
@@ -707,7 +744,8 @@ frontend/src/
 | PDF corrupto | Scanner falla con error específico, celda en ✕, mensaje en panel |
 | Permission denied | Error claro, mensaje sobre permisos requeridos |
 | Excel template no encontrado | Bloquear Generar Resumen, mensaje con path esperado |
-| Excel write falla (target en uso) | Reintentar 1x, si falla, mostrar error y sugerir cerrar Excel |
+| Excel write falla (target en uso) | Write-then-rename garantiza el original intacto. Reintentar 1x, si falla, mostrar error y sugerir cerrar Excel. NO marcar la sesión como finalized si Excel falló |
+| Finalize parcial (DB write OK, Excel falla) | Compensating action: rollback `historical_counts` rows + revertir `sessions.status` a 'active'. Único orden válido: Excel `.tmp` → DB transaction → rename Excel a final. Si rename falla, ya está en disco como `.tmp` → manual recovery posible |
 | WS disconnect | Frontend muestra banner, reintenta cada 3s, no pierde estado (estado vive en DB) |
 | Override negative o no numérico | API rechaza con 400 + mensaje validation |
 | Sesión finalizada modificada | Pedir confirmación, re-finalizar UPSERT |
@@ -753,6 +791,7 @@ tests/
 ### 10.2 Fixtures
 
 - **Reuso del corpus real**: `A:\informe mensual\ABRIL\HPV\` etc. — los tests apuntan a estos folders en read-only mode
+- **Write-guard contra el corpus**: `tests/conftest.py` define un autouse fixture que monkey-patches `Path.write_*`, `Path.unlink`, `shutil.copy*`, `os.rename` para FALLAR loud si el target está dentro de `A:\informe mensual\` o `A:\estadistica mensual\`. Garantiza que ningún test (intencional o accidental) corrompa el corpus de origen
 - **No mocking de DB**: cada test crea DB temporal con `tmp_path` fixture (regla del proyecto)
 - **No mocking de Tesseract**: ejecutamos OCR real en tests (más lento pero realista). Tests OCR pesados marcados con `@pytest.mark.slow` para CI fast/full split.
 - **No fabricar fixtures**: los counts conocidos vienen de las celdas del RESUMEN sample. Cualquier número en un test viene de un PDF real (regla `feedback_art670_fixture_disaster`).
