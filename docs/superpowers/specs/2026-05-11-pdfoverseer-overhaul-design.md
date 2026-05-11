@@ -852,11 +852,15 @@ data/
 └── outputs/          (nuevo)
 ```
 
-### 11.2 Coexistencia durante FASE 1
+### 11.2 Aislamiento por branch (sin coexistencia in-app)
 
-Durante FASE 1, la app vieja sigue funcional para no perder la capacidad de procesar PDFs individuales. Acceso por toggle en header: "Modo nuevo / Modo legacy".
+El overhaul vive en `research/pixel-density`. La app original sigue intacta en `master`. Si Daniel necesita usar la app vieja, cambia de branch (`git checkout master`) y la app vieja arranca normalmente.
 
-Al final de FASE 2, retirar el modo legacy.
+**Implicaciones**:
+- No hay toggle "modo nuevo/legacy" en el header (simplifica frontend y backend)
+- FASE 1 puede borrar componentes viejos del frontend sin compatibility shims
+- Endpoints API viejos se eliminan, no se conservan
+- Si en algún momento querés mergear a master, primero hay que decidir si la app vieja muere o convive — decisión diferida a ese momento
 
 ### 11.3 Datos históricos (sessions.db existente)
 
