@@ -64,13 +64,19 @@ Cuatro siglas tienen archivo propio. Los otros 14 quedan con `simple_factory` (s
 | art | `core/scanners/art_scanner.py` | `corner_count` (busca "Página N de M" en esquina superior derecha) | `filename_glob` |
 | odi | `core/scanners/odi_scanner.py` | `header_detect` (busca regex `F-CRS-ODI/\d+` en top de cada página) | `filename_glob` |
 | irl | `core/scanners/irl_scanner.py` | `header_detect` (`F-CRS-IRL/\d+`) | `filename_glob` |
-| charla | `core/scanners/charla_scanner.py` | `page_count_pure` (1 página = 1 charla) | `filename_glob` |
+| charla | `core/scanners/charla_scanner.py` | `page_count_pure` aplicado al único PDF compilado de la carpeta (1 página = 1 charla) | `filename_glob` |
 
 Decision rule uniforme dentro de cada scanner especializado:
 
-1. Si carpeta solo tiene 1 PDF con `page_count` >> esperado → técnica primaria OCR
+1. Si carpeta solo tiene 1 PDF con `page_count` >> esperado (compilación) → técnica primaria OCR aplicada a ese PDF
 2. Si carpeta tiene N PDFs con `page_count` normal → `filename_glob` directo (no gasta OCR)
 3. Si OCR falla (no matches, timeout, error) → `filename_glob` como fallback, `confidence=LOW`, flag `ocr_failed`
+
+`page_count_pure` opera sobre **un único PDF** (el PDF compilado de la
+carpeta charla). El scanner llama `page_count_pure(pdf_path)` solo cuando
+la carpeta cumple regla 1. Para carpetas con N PDFs individualizados,
+charla cae a `filename_glob` por regla 2 — no se suma `page_count` de N
+PDFs (eso contaría páginas, no documentos).
 
 ### 3.3 OCR utils
 
@@ -109,8 +115,12 @@ def count_form_codes(pdf_path: Path, *, sigla_code: str, dpi: int = 200) -> Head
 def count_paginations(pdf_path: Path, *, dpi: int = 200) -> CornerCountResult
 # Renderea esquina superior derecha (per-spec original §266), OCR, parsea "Página N de M".
 # Cuenta transiciones M en cada total único, suma. Una serie [1/3, 2/3, 3/3, 1/2, 2/2] → 2 docs.
-# Reusa PAGE_PATTERN_VERSION del motor 5-fases si existe (no re-inventar regex).
 ```
+
+Reuso del motor 5-fases: el regex y digit-normalization de `core/utils.py`
+(`_PAGE_PATTERNS`, OCR digit map) ya están probados y resuelven los falsos
+positivos. `corner_count.py` los importa directamente — qué exactamente
+queda como decisión durante implementación (ver §11.2).
 
 ### 3.4 Cell state model
 
@@ -142,15 +152,29 @@ Estado por celda en `sessions.state_json["cells"][hospital][sigla]`:
 
 **Migración FASE 1 → FASE 2:**
 
-Al abrir una sesión existente (state_json con campo `count` legacy), se renombra in-place:
+Al abrir una sesión existente (state_json con campo `count` legacy), el primer
+`get_session_state` aplica la migración in-place y persiste de vuelta via
+`update_session_state` en la misma transacción:
 
 ```python
-state["cells"][hosp][sigla]["filename_count"] = state["cells"][hosp][sigla].pop("count")
-state["cells"][hosp][sigla].setdefault("ocr_count", None)
-state["cells"][hosp][sigla].setdefault("override_note", None)
+def _migrate_cell_v1_to_v2(cell: dict) -> dict:
+    if "count" in cell:
+        cell["filename_count"] = cell.pop("count")
+    cell.setdefault("ocr_count", None)
+    cell.setdefault("override_note", None)
+    # `excluded` (bool, FASE 1) se mantiene; sin uso UI nuevo en FASE 2.
+    return cell
 ```
 
-Migración trivial, una sola vez por sesión al primer GET. No requiere migración SQL.
+Idempotente: las celdas sin `count` (nunca escaneadas) o ya migradas pasan sin
+cambios. La persistencia inmediata garantiza que consumers no-API (orchestrator
+en re-scan, generador de Excel) leen siempre el schema FASE 2. No requiere
+migración SQL — el cambio vive en el JSON state.
+
+**Excluded cells:** el flag `cell.excluded: bool` heredado de FASE 1 sigue
+existiendo en el JSON state. FASE 2 no introduce UI nueva para togglearlo
+(queda para FASE 3); el writer del Excel respeta `excluded` ignorando esas
+celdas como hoy.
 
 ### 3.5 Cancellation
 
@@ -170,6 +194,15 @@ class CancellationToken:
 Cada scanner OCR debe chequear el token en cada checkpoint natural (entre páginas del PDF, entre archivos de la carpeta). Target: `cancel()` a notificación de `scan_cancelled` debe ocurrir en <3 segundos.
 
 El backend mantiene 1 token por sesión activa. Re-lanzar un batch antes que el anterior termine retorna 409 Conflict.
+
+**Edge cases:**
+
+| Caso | Comportamiento |
+|---|---|
+| `POST /cancel` sin batch activo | 200 OK idempotente (no-op). No emite WS event. |
+| `cancel()` antes de iterar primera celda | Orchestrator detecta token al primer check → emite `scan_cancelled` con `scanned=0, total=N` y retorna. |
+| `cancel()` justo después de `scan_complete` emitido | Token se ignora — el batch ya terminó. POST cancel sigue devolviendo 200. |
+| `cancel()` durante render de página | Worker termina la página actual, próximo checkpoint detecta token y abandona el PDF. La celda queda con `errors=["cancelled"]` (no en `ocr_count`). |
 
 ## 4. Backend changes
 
@@ -208,9 +241,9 @@ def scan_cells_ocr(
 |---|---|---|---|
 | POST | `/api/sessions/{id}/scan-ocr` | `{cells: [["HPV","odi"], ...]}` | 202 Accepted, batch lanzado en thread; progreso via WS. 409 si hay otro batch en curso. |
 | POST | `/api/sessions/{id}/cancel` | — | 200 OK; setea `cancel_token.cancelled`. |
-| PATCH | `/api/sessions/{id}/cells/{hospital}/{sigla}/override` | `{value: int \| null, note: str \| null}` | 200 OK + cell state actualizado. Validación: `value >= 0`. |
-| GET | `/api/sessions/{id}/cells/{hospital}/{sigla}/files` | — | `[{name: "x.pdf", subfolder: "TITAN", page_count: 28, suspect: true}, ...]` |
-| GET | `/api/sessions/{id}/cells/{hospital}/{sigla}/pdf` | `?index=N` (opcional) | application/pdf streaming. Default index=0 (mayor `page_count`). Validación de path traversal obligatoria. |
+| PATCH | `/api/sessions/{id}/cells/{hospital}/{sigla}/override` | `{value: int \| null, note: str \| null}` | 200 OK + cell state actualizado. Validación: `value` debe estar en `[0, MAX_REASONABLE_COUNT]` (default 10000, carry-over de FASE 1) o ser `null` para borrar. |
+| GET | `/api/sessions/{id}/cells/{hospital}/{sigla}/files` | — | `[{name: "x.pdf", subfolder: "TITAN", page_count: 28, suspect: true}, ...]`. Lista vacía `[]` si la carpeta no tiene PDFs. |
+| GET | `/api/sessions/{id}/cells/{hospital}/{sigla}/pdf` | `?index=N` (opcional) | application/pdf streaming. Default index=0 (mayor `page_count`). Validación de path traversal obligatoria. 404 con `{detail: "no_pdfs_in_cell"}` si la carpeta no tiene PDFs; 400 si `index` está fuera de rango. |
 
 Endpoint existente sin cambios: `POST /api/sessions/{id}/scan` (pase 1 filename_glob).
 
@@ -220,26 +253,75 @@ Endpoint `/ws/sessions/{session_id}` (ya existe desde FASE 1 como keepalive). FA
 
 ```jsonl
 {"type":"cell_scanning","hospital":"HPV","sigla":"odi","timestamp":1234567890}
-{"type":"cell_done","hospital":"HPV","sigla":"odi","result":{"ocr_count":17,"method":"header_detect","confidence":"high","duration_ms":23410}}
+{"type":"cell_done","hospital":"HPV","sigla":"odi","result":{"ocr_count":17,"method":"header_detect","confidence":"high","duration_ms_ocr":23410}}
 {"type":"cell_error","hospital":"HPV","sigla":"odi","error":"pdf_corrupted: ..."}
 {"type":"scan_progress","done":3,"total":10,"eta_ms":120000}
 {"type":"scan_complete","scanned":10,"errors":0,"cancelled":0}
 {"type":"scan_cancelled","scanned":3,"total":10}
 ```
 
-El servidor emite via `loop.call_soon_threadsafe` desde el callback del orchestrator. Reconexión por parte del cliente cada 3s si cae; al reconectar el cliente hace `GET /sessions/{id}` para resincronizar el state completo (los eventos perdidos no se replayean).
+`cell_done` siempre corresponde al pase OCR (el pase 1 no emite progreso
+granular), por eso el campo se llama `duration_ms_ocr` consistente con el
+schema en §3.4.
+
+**Threading model concreto.** La ruta `POST /scan-ocr` lanza
+`scan_cells_ocr` en un thread vía `BackgroundTasks` o
+`asyncio.run_in_executor`. Dentro, `ProcessPoolExecutor(2)` ejecuta workers
+en subprocesses. El thread orchestrator itera `as_completed(futures)` y
+para cada resultado invoca el `on_progress(event)` callback —
+**ese callback corre en el thread orchestrator**, no en el subprocess.
+El callback construye el evento WS y lo encola al asyncio loop principal
+con `app.state.loop.call_soon_threadsafe(broadcast, event)`. La función
+`broadcast` recorre conexiones WS activas para esa sesión y manda el JSON.
+Captura del loop principal: en `app.main:lifespan` se guarda
+`app.state.loop = asyncio.get_running_loop()`.
+
+**Reconexión.** Cliente reintenta cada 3s tras drop. Al reconectar:
+
+1. Frontend hace `GET /sessions/{id}` → resync del cell state persistido.
+2. Frontend **limpia** `scanningCells` y `scanProgress` en el store.
+3. Si un batch sigue activo en el backend, los próximos `cell_scanning`/
+   `cell_done`/`scan_progress` eventos repueblan el store. Visualmente hay
+   un gap de 0-3s donde el progress bar muestra estado "vacío".
+
+Aceptamos ese gap visual en FASE 2 — la alternativa (endpoint
+`/scan-status` para query del estado in-flight) suma superficie API sin
+beneficio práctico (Daniel raramente cierra el browser mid-batch).
 
 ### 4.5 DB additions
 
-`historical_counts` table ya existe desde FASE 1 (migration en `core/db/migrations.py`). FASE 2 agrega la **escritura**: al final de `POST /sessions/{id}/output`, después de generar el Excel exitosamente, UPSERT una fila por celda no excluida:
+`historical_counts` table ya existe desde FASE 1 (migration en `core/db/migrations.py`). El schema:
 
 ```sql
-INSERT INTO historical_counts (year, month, hospital, sigla, count, source)
-VALUES (?, ?, ?, ?, ?, ?)
-ON CONFLICT(year, month, hospital, sigla) DO UPDATE SET count = excluded.count, source = excluded.source
+historical_counts(year, month, hospital, sigla, count, confidence, method, finalized_at)
+PRIMARY KEY (year, month, hospital, sigla)
 ```
 
-`source` ∈ `{"override", "ocr", "filename"}` indica de qué campo salió el count efectivo (auditoría implícita).
+FASE 2 agrega la **escritura** sin migración de schema: al final de
+`POST /sessions/{id}/output`, después de generar el Excel exitosamente,
+UPSERT una fila por celda no excluida:
+
+```sql
+INSERT INTO historical_counts (year, month, hospital, sigla, count, confidence, method, finalized_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(year, month, hospital, sigla) DO UPDATE SET
+  count = excluded.count,
+  confidence = excluded.confidence,
+  method = excluded.method,
+  finalized_at = excluded.finalized_at
+```
+
+El campo `method` codifica el origen efectivo del count:
+
+| Origen del count efectivo | `method` value |
+|---|---|
+| `user_override != null` | `"override"` |
+| `ocr_count` ganó (no override, hubo OCR) | técnica concreta: `"header_detect"`, `"corner_count"`, `"page_count_pure"` |
+| `filename_count` ganó (no override ni OCR) | `"filename_glob"` |
+
+Auditoría implícita: `method = "override"` en histórico marca celdas donde
+hubo intervención humana. Idempotente: regenerar Excel del mismo mes 2 veces
+no rompe (UPSERT sobreescribe con valores iguales).
 
 ### 4.6 PDF serving
 
@@ -333,6 +415,8 @@ Singleton instanciado en `App.jsx` al abrir sesión, cerrado al cambiar sesión 
 
 ### 5.6 Layout responsive
 
+Breakpoints: ≥1400px = 3 columnas lado a lado · 1024-1399px = archivos stacked debajo del detalle · <1024px fuera de scope (Daniel trabaja en desktop).
+
 ```
 ≥1400px:                          1024-1399px:
 ┌────┬────────┬────────┐          ┌────┬─────────────┐
@@ -341,8 +425,6 @@ Singleton instanciado en `App.jsx` al abrir sesión, cerrado al cambiar sesión 
 │    │        │        │          │    │ archivos    │
 └────┴────────┴────────┘          └────┴─────────────┘
 ```
-
-<1024px (smartphone/tablet portrait): fuera de scope. Daniel trabaja en desktop.
 
 ## 6. UX flows
 
@@ -358,7 +440,7 @@ Singleton instanciado en `App.jsx` al abrir sesión, cerrado al cambiar sesión 
 8. **Editar nota:** textarea blur → PATCH (debounce 1s).
 9. **Error en OCR:** WS `cell_error` → CategoryRow ✕ rojo → panel detalle muestra error → Daniel puede override igual o reintentar.
 10. **WS disconnect:** banner "Reconectando..." → cada 3s reintenta → al volver, GET /sessions resync.
-11. **Cerrar app a mitad de batch:** backend sigue corriendo → DB persiste cada cell_done → reapertura del frontend resync vía REST + WS.
+11. **Cerrar el frontend a mitad de batch (sin matar el backend):** el proceso uvicorn sigue corriendo, el batch sigue ejecutándose en su thread, DB persiste cada `cell_done` atómicamente. Al reabrir el browser: WS reconecta, GET resync, el batch completa normalmente. Si Daniel mata el proceso backend (Ctrl+C en la terminal), el batch se pierde — sin recovery automático en FASE 2; Daniel re-lanza el batch al volver.
 
 ## 7. Error handling
 
@@ -394,14 +476,14 @@ Singleton instanciado en `App.jsx` al abrir sesión, cerrado al cambiar sesión 
 - `HLU_odi_compilation.pdf` (48pp, esperado ~24 ODIs)
 - `HPV_art_multidoc_sample.pdf` (28pp con paginación)
 - `HPV_charla_single.pdf` (multi-página normal, 1 doc)
-- 1 PDF sintético "corrupted.pdf" (0-byte) para test de error handling
+- 1 PDF sintético `corrupted.pdf` (0-byte) **deliberadamente fabricado** para test de error handling. Justificación: no es substituto de datos reales para inferencia (que es lo que `feedback_art670_fixture_disaster` prohibe) sino un input degenerado controlado para verificar que el scanner falla gracefully. No alimenta ningún test de count.
 
 ## 9. Performance budgets
 
 | Métrica | Target | Cómo medir |
 |---|---|---|
 | Pase 1 filename_glob 54 cells | <10s | Test integración existente |
-| OCR 1 celda HRB/ODI (34pp) | <30s | Benchmark único en `tests/benchmark/` |
+| OCR 1 celda HRB/ODI (34pp) | <45s | Benchmark único en `tests/benchmark/`. Cálculo back-of-envelope: 34 páginas × ~0.8s Tesseract sobre crop top-third @ 200 DPI ≈ 27s. Margen 45s para overhead de PyMuPDF + IO. |
 | OCR batch 10 celdas | <5 min con `max_workers=2` | E2E test |
 | Cancel response | <3s desde click hasta `scan_cancelled` | Test de timing dedicado |
 | PDF serve | <1s para PDFs <100MB | FastAPI FileResponse benchmark |
@@ -422,6 +504,7 @@ Singleton instanciado en `App.jsx` al abrir sesión, cerrado al cambiar sesión 
 - [ ] Cancel <3s validado
 - [ ] Lightbox abre PDFs de 100+ páginas sin congelar
 - [ ] Override survival entre re-scans validado
+- [ ] **Regression guard:** los counts de FASE 1 (celdas sin OCR aplicado) permanecen sin cambios después de la migración legacy `count` → `filename_count`. Test E2E lo verifica corriendo un scan FASE 1, migrando, y comparando antes/después de las 54 celdas
 - [ ] CLAUDE.md, README, memorias actualizadas con FASE 2
 - [ ] Tag `fase-2-mvp`
 
