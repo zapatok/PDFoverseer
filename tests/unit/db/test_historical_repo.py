@@ -1,11 +1,11 @@
 import pytest
+
+from core.db.connection import close_all, open_connection
 from core.db.historical_repo import (
     get_counts_for_month,
     query_range,
     upsert_count,
 )
-
-from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
 
 

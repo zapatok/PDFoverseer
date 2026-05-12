@@ -1,10 +1,9 @@
 from pathlib import Path
 
-from core.scanners.simple_factory import make_simple_scanner
-
 from core.domain import SIGLAS
 from core.scanners import all_siglas, get
 from core.scanners.base import ConfidenceLevel
+from core.scanners.simple_factory import make_simple_scanner
 
 ABRIL = Path("A:/informe mensual/ABRIL")
 

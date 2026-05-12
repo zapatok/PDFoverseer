@@ -3,9 +3,9 @@ from pathlib import Path
 
 import openpyxl
 import pytest
-from core.excel.writer import ExcelGenerationResult, generate_resumen
 
 from core.excel.template import DEFAULT_TEMPLATE
+from core.excel.writer import ExcelGenerationResult, generate_resumen
 
 
 def test_generate_writes_atomic_file(tmp_path):

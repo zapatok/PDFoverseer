@@ -2,6 +2,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+
 from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
 

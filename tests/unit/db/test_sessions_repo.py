@@ -1,6 +1,9 @@
 import json
 
 import pytest
+
+from core.db.connection import close_all, open_connection
+from core.db.migrations import init_schema
 from core.db.sessions_repo import (
     SessionRecord,
     create_session,
@@ -8,9 +11,6 @@ from core.db.sessions_repo import (
     get_session,
     update_session_state,
 )
-
-from core.db.connection import close_all, open_connection
-from core.db.migrations import init_schema
 
 
 @pytest.fixture

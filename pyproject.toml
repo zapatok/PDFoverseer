@@ -32,6 +32,7 @@ exclude = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests", "eval/tests"]
 markers = [
     "slow: tests that read the real corpus or run scanners over many PDFs (deselect with '-m \"not slow\"')",
 ]

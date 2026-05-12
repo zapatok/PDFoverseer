@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+
 from core.excel.template import DEFAULT_TEMPLATE, list_named_ranges, load_template
 
 

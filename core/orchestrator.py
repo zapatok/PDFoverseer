@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from core.domain import CATEGORY_FOLDERS, HOSPITALS, SIGLAS
+
+if TYPE_CHECKING:
+    from core.scanners.base import ScanResult
 
 
 @dataclass(frozen=True)
