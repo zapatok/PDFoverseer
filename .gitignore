@@ -84,4 +84,5 @@ data/overseer.db
 data/overseer.db-shm
 data/overseer.db-wal
 data/outputs/
+data/output_sample/
 frontend/dist/
