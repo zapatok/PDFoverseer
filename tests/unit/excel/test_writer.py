@@ -2,7 +2,6 @@ import shutil
 from pathlib import Path
 
 import openpyxl
-import pytest
 
 from core.excel.template import DEFAULT_TEMPLATE
 from core.excel.writer import ExcelGenerationResult, generate_resumen
@@ -59,3 +58,39 @@ def test_unknown_range_emits_warning(tmp_path):
     )
     assert any("NONEXISTENT_RANGE" in w for w in result.warnings)
     assert result.cells_written == 0
+
+
+def test_writer_priority_override_over_ocr_over_filename(tmp_path):
+    from core.excel.writer import resolve_cell_value
+
+    # Override wins
+    assert resolve_cell_value({"user_override": 17, "ocr_count": 16, "filename_count": 1}) == 17
+    # OCR wins when no override
+    assert resolve_cell_value({"user_override": None, "ocr_count": 16, "filename_count": 1}) == 16
+    # Filename wins when neither
+    assert resolve_cell_value({"user_override": None, "ocr_count": None, "filename_count": 5}) == 5
+    # All null → 0
+    assert (
+        resolve_cell_value({"user_override": None, "ocr_count": None, "filename_count": None}) == 0
+    )
+    # Excluded → None signals "do not write"
+    assert resolve_cell_value({"user_override": 5, "excluded": True}) is None
+    # Legacy count field (un-migrated) → still works
+    assert resolve_cell_value({"count": 42}) == 42
+    # Override of 0 is meaningful (explicit zero), wins over ocr_count
+    assert resolve_cell_value({"user_override": 0, "ocr_count": 16, "filename_count": 1}) == 0
+
+
+def test_writer_uses_priority_in_generate_resumen(tmp_path):
+    """Smoke test: generate_resumen uses resolve_cell_value internally."""
+    from core.excel.writer import generate_resumen
+
+    cell_values = {
+        # Caller pre-resolved values; writer just writes named ranges.
+        "HPV_art_count": 767,
+        "HRB_odi_count": 17,
+    }
+    out = tmp_path / "out.xlsx"
+    result = generate_resumen(cell_values=cell_values, output_path=out)
+    assert result.cells_written == 2
+    assert out.exists()

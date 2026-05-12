@@ -11,6 +11,26 @@ from openpyxl import load_workbook
 from core.excel.template import DEFAULT_TEMPLATE, get_range_cell
 
 
+def resolve_cell_value(cell: dict) -> int | None:
+    """Compute the effective count for an Excel cell from the FASE 2 schema.
+
+    Priority cascade: user_override > ocr_count > filename_count > legacy count > 0.
+
+    Returns None if the cell is excluded — caller skips writing.
+    """
+    if cell.get("excluded"):
+        return None
+    if cell.get("user_override") is not None:
+        return cell["user_override"]
+    if cell.get("ocr_count") is not None:
+        return cell["ocr_count"]
+    if cell.get("filename_count") is not None:
+        return cell["filename_count"]
+    if "count" in cell and cell["count"] is not None:
+        return cell["count"]
+    return 0
+
+
 @dataclass(frozen=True)
 class ExcelGenerationResult:
     output_path: Path
