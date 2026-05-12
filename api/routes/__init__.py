@@ -1,1 +1,5 @@
-# Este paquete contiene los enrutadores de FastAPI.
+"""API routes — modules added incrementally per task."""
+
+from api.routes import months, sessions
+
+__all__ = ["months", "sessions"]

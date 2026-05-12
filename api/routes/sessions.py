@@ -1,122 +1,111 @@
-import json
+"""Sessions endpoints: create/get + trigger scan."""
+
+from __future__ import annotations
+
+import os
 import re
-import time
-from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Body, Depends, HTTPException
 
-from api.database import clear_session, has_reads
-from api.state import SessionState, get_session
+from api.state import SessionManager
+from core.orchestrator import enumerate_month, scan_month
 
 router = APIRouter()
 
-class DeleteSessionRequest(BaseModel):
-    timestamp: str
+_SESSION_ID_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 
-@router.get("/state")
-def api_get_state(s: SessionState = Depends(get_session)):
-    """Returns the current backend state so React can survive an F5 refresh."""
-    pdf_list_state = []
-    for p in s.pdf_list:
-        p_str = str(p)
-        st = "done" if has_reads(s.session_id, p_str) else ("skipped" if p_str in s.skipped_pdfs else "pending")
-        pdf_list_state.append({"name": p.name, "path": p_str, "status": st})
+_MONTH_NAMES = {
+    "ENERO": 1,
+    "FEBRERO": 2,
+    "MARZO": 3,
+    "ABRIL": 4,
+    "MAYO": 5,
+    "JUNIO": 6,
+    "JULIO": 7,
+    "AGOSTO": 8,
+    "SEPTIEMBRE": 9,
+    "OCTUBRE": 10,
+    "NOVIEMBRE": 11,
+    "DICIEMBRE": 12,
+}
 
-    return {
-        "running": s.running,
-        "pdf_list": pdf_list_state,
-        "issues": s.issues,
-        "metrics": {
-            "docs": s.total_docs,
-            "complete": s.total_complete,
-            "incomplete": s.total_incomplete,
-            "inferred": s.total_inferred,
-            "confidences": s.confidences,
-            "individual": s.individual_metrics
-        },
-        "globalProg": {"done": s.global_done_pages, "total": s.global_total_pages}
-    }
 
-@router.post("/reset")
-def api_reset(s: SessionState = Depends(get_session)):
-    """Hard wipe of the backend state to start a new session."""
-    s.pdf_list = []
-    s.skipped_pdfs.clear()
-    clear_session(s.session_id)
-    s.issues = []
-    s.total_docs = 0
-    s.total_complete = 0
-    s.total_incomplete = 0
-    s.total_inferred = 0
-    s.global_total_pages = 0
-    s.global_done_pages = 0
-    s.running = False
-    s.start_time = 0.0
-    s.confidences = {}
-    s.individual_metrics = {}
-    return {"success": True}
+def _informe_root() -> Path:
+    return Path(os.environ.get("INFORME_MENSUAL_ROOT", "A:/informe mensual"))
 
-@router.post("/save_session")
-def api_save_session(s: SessionState = Depends(get_session)):
-    """Saves the current final metrics and issues to a local JSON history file."""
-    sessions_dir = Path(__file__).parent.parent.parent / "data" / "sessions"
-    sessions_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filepath = sessions_dir / f"session_{timestamp}.json"
+def _resolve_month_dir(year: int, month: int) -> Path:
+    target_name = next(
+        (name for name, num in _MONTH_NAMES.items() if num == month),
+        None,
+    )
+    if target_name is None:
+        raise HTTPException(400, f"Invalid month: {month}")
+    root = _informe_root()
+    if not root.exists():
+        raise HTTPException(404, f"INFORME_MENSUAL root not found: {root}")
+    for p in root.iterdir():
+        if p.is_dir() and p.name.upper() == target_name:
+            return p
+    raise HTTPException(404, f"Month folder not found: {target_name}")
 
-    data = {
-        "timestamp": timestamp,
-        "metrics": {
-            "docs": s.total_docs,
-            "complete": s.total_complete,
-            "incomplete": s.total_incomplete,
-            "inferred": s.total_inferred,
-            "total_time": time.time() - s.start_time if s.start_time > 0 else 0.0
-        },
-        "issues_count": len(s.issues),
-        "files_processed": len(s.pdf_list)
-    }
 
+def get_manager() -> SessionManager:
+    """Dependency placeholder — overridden in tests + main.py."""
+    raise RuntimeError("get_manager not configured")
+
+
+@router.post("/sessions")
+def create(
+    body: dict = Body(...),
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Open or return an existing session for ``(year, month)``."""
+    year = body.get("year")
+    month = body.get("month")
+    if not isinstance(year, int) or not isinstance(month, int):
+        raise HTTPException(400, "year and month required (integers)")
+    month_dir = _resolve_month_dir(year, month)
+    return mgr.open_session(year=year, month=month, month_root=month_dir)
+
+
+@router.get("/sessions/{session_id}")
+def get(
+    session_id: str,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Return the persisted state dict for a session."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
     try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        return {"success": True, "path": str(filepath)}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+        return mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, f"Session not found: {session_id}") from exc
 
-@router.get("/sessions")
-def api_list_sessions():
-    """Returns a list of saved historical sessions."""
-    sessions_dir = Path(__file__).parent.parent.parent / "data" / "sessions"
-    if not sessions_dir.exists():
-        return {"sessions": []}
 
-    sessions = []
-    for f in sessions_dir.glob("*.json"):
-        try:
-            with open(f, encoding="utf-8") as jf:
-                sessions.append(json.load(jf))
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    sessions.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-    return {"sessions": sessions}
-
-@router.post("/delete_session")
-def api_delete_session(req: DeleteSessionRequest):
-    """Deletes a saved session from the local history."""
-    if not re.match(r'^\d{8}_\d{6}$', req.timestamp):
-        return {"success": False, "error": "Invalid timestamp format"}
-    sessions_dir = Path(__file__).parent.parent.parent / "data" / "sessions"
-    filepath = sessions_dir / f"session_{req.timestamp}.json"
-
-    if filepath.exists():
-        try:
-            filepath.unlink()
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    return {"success": False, "error": "File not found"}
+@router.post("/sessions/{session_id}/scan")
+def scan(
+    session_id: str,
+    body: dict = Body(default={"scope": "all"}),
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Trigger a full scan of the session's month folder and persist results."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    try:
+        state = mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, f"Session not found: {session_id}") from exc
+    month_root = Path(state["month_root"])
+    try:
+        inv = enumerate_month(month_root)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    results = scan_month(inv)
+    for (hosp, sigla), r in results.items():
+        mgr.apply_cell_result(session_id, hosp, sigla, r)
+    return {
+        "scanned": len(results),
+        "summary": {f"{hosp}_{sigla}": r.count for (hosp, sigla), r in results.items()},
+    }
