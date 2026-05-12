@@ -28,14 +28,12 @@ def _output_dir() -> Path:
 
 def _build_cell_values(state: dict) -> dict[str, int]:
     """Translate session.cells into named-range-keyed dict for the writer."""
+    from core.excel.writer import resolve_cell_value
+
     out: dict[str, int] = {}
     for hosp, sigla_map in state.get("cells", {}).items():
         for sigla, cell in sigla_map.items():
-            if cell.get("excluded"):
-                continue
-            value = cell.get("user_override")
-            if value is None:
-                value = cell.get("count")
+            value = resolve_cell_value(cell)
             if value is None:
                 continue
             out[f"{hosp}_{sigla}_count"] = value

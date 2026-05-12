@@ -34,3 +34,21 @@ def test_generate_output_creates_xlsx(client, tmp_path):
     data = response.json()
     assert Path(data["output_path"]).exists()
     assert data["output_path"].endswith(".xlsx")
+
+
+def test_output_uses_v2_priority(client, tmp_path):
+    """V2 cells with user_override get the override in the Excel."""
+    import openpyxl
+
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    client.post("/api/sessions/2026-04/scan", json={"scope": "all"})
+
+    # Override HRB/odi to 17 via SessionManager
+    mgr = client.app.dependency_overrides[get_manager]()
+    mgr.apply_user_override("2026-04", "HRB", "odi", value=17, note="manual")
+
+    out = client.post("/api/sessions/2026-04/output", json={}).json()
+    wb = openpyxl.load_workbook(out["output_path"])
+    dest = list(wb.defined_names["HRB_odi_count"].destinations)[0]
+    sheet, coord = dest
+    assert wb[sheet][coord].value == 17
