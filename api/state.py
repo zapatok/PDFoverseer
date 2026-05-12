@@ -7,12 +7,14 @@ import sqlite3
 from pathlib import Path
 
 from core.db.sessions_repo import (
+    SessionRecord,
     create_session,
     finalize_session,
     get_session,
     update_session_state,
 )
 from core.scanners.base import ScanResult
+from core.state.migrations import migrate_state_v1_to_v2
 
 
 class SessionManager:
@@ -66,13 +68,104 @@ class SessionManager:
         Raises:
             KeyError: If no session with that ID exists.
         """
+        state, rec = self._load_and_migrate(session_id)
+        state["session_id"] = rec.session_id
+        state["status"] = rec.status
+        return state
+
+    def _load_and_migrate(
+        self, session_id: str
+    ) -> tuple[dict, SessionRecord]:
+        """Load session state, run lazy migration, return (state, record).
+
+        Internal helper used by all setters + getter. Persists migrated state
+        back via update_session_state only when migration actually changed
+        something — idempotent on subsequent calls.
+        """
         rec = get_session(self._conn, session_id)
         if rec is None:
             raise KeyError(session_id)
         state = json.loads(rec.state_json)
-        state["session_id"] = rec.session_id
-        state["status"] = rec.status
-        return state
+        state, changed = migrate_state_v1_to_v2(state)
+        if changed:
+            update_session_state(self._conn, session_id, state_json=json.dumps(state))
+        return state, rec
+
+    def apply_filename_result(
+        self, session_id: str, hospital: str, sigla: str, result: ScanResult
+    ) -> None:
+        """Persist a filename_glob scanner result. Touches the filename pass
+        fields and shared metadata (method, confidence, flags, errors,
+        breakdown). Never touches ocr_count, user_override, or override_note.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+        cell["filename_count"] = result.count
+        cell["confidence"] = result.confidence.value
+        cell["method"] = result.method
+        cell["breakdown"] = result.breakdown
+        cell["flags"] = list(result.flags)
+        cell["errors"] = list(result.errors)
+        cell["files_scanned"] = result.files_scanned
+        cell["duration_ms_filename"] = result.duration_ms
+        cell.setdefault("ocr_count", None)
+        cell.setdefault("user_override", None)
+        cell.setdefault("override_note", None)
+        cell.setdefault("excluded", False)
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    def apply_ocr_result(
+        self, session_id: str, hospital: str, sigla: str, result: ScanResult
+    ) -> None:
+        """Persist an OCR scanner result. Touches ocr_count, method,
+        confidence, flags, errors, breakdown, duration_ms_ocr. method =
+        ``result.method`` (header_detect, corner_count, page_count_pure, or
+        filename_glob when the OCR scanner fell back internally).
+
+        flags/errors/breakdown are written unconditionally — an empty list/dict
+        means "no flags this run" (NOT "preserve previous"). Stale data from
+        a previous OCR run is overwritten, which is the correct semantic for
+        a fresh scan.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+        cell["ocr_count"] = result.count
+        cell["confidence"] = result.confidence.value
+        cell["method"] = result.method
+        cell["breakdown"] = result.breakdown
+        cell["flags"] = list(result.flags)
+        cell["errors"] = list(result.errors)
+        cell["duration_ms_ocr"] = result.duration_ms
+        cell.setdefault("filename_count", None)
+        cell.setdefault("user_override", None)
+        cell.setdefault("override_note", None)
+        cell.setdefault("excluded", False)
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    def apply_user_override(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        *,
+        value: int | None,
+        note: str | None,
+    ) -> None:
+        """Set or clear the user override + note.
+
+        When ``value=None``, both ``user_override`` AND ``override_note`` are
+        forced to None regardless of the ``note`` parameter (a note without
+        an override is meaningless). When ``value`` is an int, ``note`` is
+        persisted verbatim (may be None or a string).
+        """
+        state, _ = self._load_and_migrate(session_id)
+        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+        cell["user_override"] = value
+        cell["override_note"] = note if value is not None else None
+        cell.setdefault("filename_count", None)
+        cell.setdefault("ocr_count", None)
+        cell.setdefault("excluded", False)
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     def apply_cell_result(
         self,
@@ -81,70 +174,8 @@ class SessionManager:
         sigla: str,
         result: ScanResult,
     ) -> None:
-        """Persist a scanner result into the session cell grid.
-
-        Args:
-            session_id: Target session identifier.
-            hospital: Hospital key (e.g. ``"HPV"``).
-            sigla: Document type sigla (e.g. ``"art"``).
-            result: The ScanResult to record.
-
-        Raises:
-            KeyError: If no session with that ID exists.
-        """
-        rec = get_session(self._conn, session_id)
-        if rec is None:
-            raise KeyError(session_id)
-        state = json.loads(rec.state_json)
-        cells = state.setdefault("cells", {})
-        hosp_cells = cells.setdefault(hospital, {})
-        hosp_cells[sigla] = {
-            "count": result.count,
-            "confidence": result.confidence.value,
-            "method": result.method,
-            "breakdown": result.breakdown,
-            "flags": result.flags,
-            "errors": result.errors,
-            "duration_ms": result.duration_ms,
-            "files_scanned": result.files_scanned,
-            "user_override": None,
-            "excluded": False,
-        }
-        update_session_state(
-            self._conn,
-            session_id,
-            state_json=json.dumps(state),
-        )
-
-    def apply_user_override(
-        self,
-        session_id: str,
-        hospital: str,
-        sigla: str,
-        override: int | None,
-    ) -> None:
-        """Set a user override count on a cell.
-
-        Args:
-            session_id: Target session identifier.
-            hospital: Hospital key.
-            sigla: Document type sigla.
-            override: User-supplied count, or ``None`` to clear.
-
-        Raises:
-            KeyError: If no session with that ID exists.
-        """
-        rec = get_session(self._conn, session_id)
-        if rec is None:
-            raise KeyError(session_id)
-        state = json.loads(rec.state_json)
-        cell = state["cells"].setdefault(hospital, {}).setdefault(sigla, {})
-        cell["user_override"] = override
-        update_session_state(
-            self._conn,
-            session_id,
-            state_json=json.dumps(state),
-        )
+        """Deprecated. Use apply_filename_result for pase 1 results."""
+        self.apply_filename_result(session_id, hospital, sigla, result)
 
     def finalize(self, session_id: str) -> None:
         """Mark a session as finalized.
