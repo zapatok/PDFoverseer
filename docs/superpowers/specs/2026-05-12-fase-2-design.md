@@ -159,7 +159,7 @@ Al abrir una sesión existente (state_json con campo `count` legacy), el primer
 ```python
 def _migrate_cell_v1_to_v2(cell: dict) -> dict:
     if "count" in cell:
-        cell["filename_count"] = cell.pop("count")
+        cell["filename_count"] = cell.pop("count", None)  # default-safe por si futuro refactor mueve la guarda
     cell.setdefault("ocr_count", None)
     cell.setdefault("override_note", None)
     # `excluded` (bool, FASE 1) se mantiene; sin uso UI nuevo en FASE 2.
@@ -216,7 +216,7 @@ def apply_ocr_result(self, session_id, hospital, sigla, result: ScanResult) -> N
 def apply_user_override(self, session_id, hospital, sigla, value: int | None, note: str | None) -> None
 ```
 
-Cada uno toca exactamente sus campos (no pisa otros). `apply_ocr_result` además guarda `method` (la técnica concreta usada: `"header_detect"`, `"corner_count"`, etc.) y `duration_ms_ocr`. `value=None` en override borra el campo.
+Cada uno toca exactamente sus campos (no pisa otros). `apply_ocr_result` además guarda `method` y `duration_ms_ocr`. El valor de `method` refleja la técnica que efectivamente produjo el `ocr_count`: si la primaria del scanner ganó, `method ∈ {"header_detect", "corner_count", "page_count_pure"}`; si la primaria falló (no_matches, timeout, error) y el scanner cayó a `filename_glob` como fallback interno, `method = "filename_glob"` (es decir, el origen real del número guardado). `value=None` en override borra el campo.
 
 Migración legacy se ejecuta en `get_session_state` antes de devolver al cliente (lazy, idempotente).
 
@@ -240,7 +240,7 @@ def scan_cells_ocr(
 | Método | Path | Body | Resultado |
 |---|---|---|---|
 | POST | `/api/sessions/{id}/scan-ocr` | `{cells: [["HPV","odi"], ...]}` | 202 Accepted, batch lanzado en thread; progreso via WS. 409 si hay otro batch en curso. |
-| POST | `/api/sessions/{id}/cancel` | — | 200 OK; setea `cancel_token.cancelled`. |
+| POST | `/api/sessions/{id}/cancel` | — | 200 OK siempre (idempotente). Si hay batch activo, setea `cancel_token.cancelled`. Si no hay batch, no-op (sin error, sin WS event). Ver §3.5 edge-cases. |
 | PATCH | `/api/sessions/{id}/cells/{hospital}/{sigla}/override` | `{value: int \| null, note: str \| null}` | 200 OK + cell state actualizado. Validación: `value` debe estar en `[0, MAX_REASONABLE_COUNT]` (default 10000, carry-over de FASE 1) o ser `null` para borrar. |
 | GET | `/api/sessions/{id}/cells/{hospital}/{sigla}/files` | — | `[{name: "x.pdf", subfolder: "TITAN", page_count: 28, suspect: true}, ...]`. Lista vacía `[]` si la carpeta no tiene PDFs. |
 | GET | `/api/sessions/{id}/cells/{hospital}/{sigla}/pdf` | `?index=N` (opcional) | application/pdf streaming. Default index=0 (mayor `page_count`). Validación de path traversal obligatoria. 404 con `{detail: "no_pdfs_in_cell"}` si la carpeta no tiene PDFs; 400 si `index` está fuera de rango. |
@@ -513,7 +513,7 @@ Breakpoints: ≥1400px = 3 columnas lado a lado · 1024-1399px = archivos stacke
 Quedan algunos puntos a refinar durante el plan de implementación:
 
 1. **`page_count_heuristic` thresholds por sigla:** los umbrales actuales son conservadores. FASE 2 puede ajustarlos basándose en distribución real de ABRIL/MARZO/FEBRERO una vez tengamos ese data.
-2. **`corner_count` reusa o duplica el motor 5-fases:** decisión durante implementación — si la regex y guard del motor existente sirven, reusar; sino, scanner propio limpio.
+2. **`corner_count` — qué símbolos exactos importa del motor 5-fases:** el spec §3.2 ya commit a reusar `core/utils._PAGE_PATTERNS` + digit-normalization. Queda decidir durante implementación qué wrapper/helper público exponer (si se mueve a un módulo neutro vs import directo desde `core/utils`).
 3. **PDF viewer:** `<iframe>` es el plan por simplicidad. Si la UX queda pobre (no annotations, no thumbnail navigation), evaluar pdf.js en FASE 3.
 4. **Thread vs process pool para OCR:** `ProcessPoolExecutor(2)` es el plan. Si Tesseract muestra ser thread-safe en práctica, podría bajarse a threads (menos overhead). A medir.
 5. **Idempotencia del UPSERT a `historical_counts`:** re-generar el Excel del mismo mes 2 veces debe ser idempotente. Hoy lo es por design del `ON CONFLICT DO UPDATE`. Test E2E lo cubre.
