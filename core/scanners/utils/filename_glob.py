@@ -6,9 +6,20 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-_FILENAME_SIGLA_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}_(?P<sigla>[a-z_]+?)(?:_|\\.)",
+from core.domain import SIGLAS
+
+# Capture the dash-free remainder between the date prefix and the .pdf suffix.
+# Sigla resolution (which token of the remainder is the sigla) happens against
+# the closed SIGLAS list — the previous regex-only approach broke on multi-word
+# siglas like `dif_pts` because non-greedy `[a-z_]+?` stopped at the first `_`.
+_FILENAME_REMAINDER_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}_(?P<rest>.+?)\.pdf$",
+    re.IGNORECASE,
 )
+
+# Match longest siglas first so `dif_pts` wins over a hypothetical `dif`,
+# `herramientas_elec` over `herramientas`, etc.
+_SIGLAS_BY_LEN_DESC = sorted(SIGLAS, key=len, reverse=True)
 
 
 @dataclass(frozen=True)
@@ -21,10 +32,17 @@ class GlobCountResult:
 
 def extract_sigla(filename: str) -> str | None:
     """Extract the sigla from a canonical filename like
-    `2026-04-01_art_crs_andamios.pdf`. Returns None if format doesn't match.
+    `2026-04-01_art_crs_andamios.pdf`. Returns None if format doesn't match
+    or no known sigla is present at the start of the remainder.
     """
-    m = _FILENAME_SIGLA_RE.match(filename)
-    return m.group("sigla") if m else None
+    m = _FILENAME_REMAINDER_RE.match(filename)
+    if not m:
+        return None
+    rest = m.group("rest").lower()
+    for sigla in _SIGLAS_BY_LEN_DESC:
+        if rest == sigla or rest.startswith(sigla + "_"):
+            return sigla
+    return None
 
 
 def count_pdfs_by_sigla(folder: Path, *, sigla: str) -> GlobCountResult:
