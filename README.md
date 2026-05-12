@@ -71,3 +71,31 @@ P.{0,2}[gq](?:ina?)?\.?\s*(\d{1,3})\s*\.?\s*de\s*(\d{1,3})
 ```
 
 Matches: "Página 1 de 10", "Pag 1 de 10", "page 1 of 10", etc.
+
+---
+
+## FASE 1 MVP (overhaul branch)
+
+The `research/pixel-density` branch ships a folder-driven overhaul. Open
+a month folder in `A:\informe mensual\<MES>\` and the app enumerates 4
+hospitals × 18 categories, counts documents with filename-glob, and writes
+`RESUMEN_<YYYY>-<MM>.xlsx` to `data/outputs/` (overridable via
+`OVERSEER_OUTPUT_DIR`).
+
+Quick start:
+
+```bash
+python server.py            # backend  → http://localhost:8000
+cd frontend && npm run dev  # frontend → http://localhost:5173
+```
+
+Scope of FASE 1: filename-glob scanners only (no OCR), parallel
+ProcessPoolExecutor scan_month, atomic Excel write through 80 named
+ranges in `data/templates/RESUMEN_template_v1.xlsx`. Manual correction
+UI, OCR for compilation PDFs, and WebSocket scan progress are deferred
+to FASE 2.
+
+For the full design and rationale see
+`docs/superpowers/specs/2026-05-11-pdfoverseer-overhaul-design.md`.
+The implementation plan is at
+`docs/superpowers/plans/2026-05-11-pdfoverseer-overhaul-fase-1.md`.

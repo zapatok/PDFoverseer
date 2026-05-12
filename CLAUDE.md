@@ -162,3 +162,18 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 - **INS_31:** ~~Last-page inference gap~~ FIXED (2026-03-26). Tray UX improvements still pending.
 - **VLM integration:** ~~Attempted~~ REVERTED (2026-03-30). See postmortem in Links.
 - **Browse UX:** `/api/browse` uses server-side tkinter chooser — only works with local display
+
+## FASE 1 MVP — `research/pixel-density` branch (shipped 2026-05-11)
+
+Folder-driven overhaul of the UI: open `A:\informe mensual\<MES>\` and the
+app counts 4 hospitals × 18 categories with filename-glob, then writes
+`RESUMEN_<YYYY>-<MM>.xlsx` via `data/templates/RESUMEN_template_v1.xlsx`.
+The legacy single-PDF API (`api/database.py`, `api/worker.py`,
+`api/websocket.py`, `api/routes/files.py`, `api/routes/pipeline.py`) was
+deleted; the server now boots through `api.main:app`.
+
+- **Spec:** `docs/superpowers/specs/2026-05-11-pdfoverseer-overhaul-design.md`
+- **Plan:** `docs/superpowers/plans/2026-05-11-pdfoverseer-overhaul-fase-1.md`
+- **Tag:** `fase-1-mvp`
+- **Next (FASE 2):** OCR scanners for compilation PDFs + manual correction UI
+  + WebSocket scan progress.
