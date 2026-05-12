@@ -46,4 +46,19 @@ __all__ = [
     "all_siglas",
     "all_scanners",
     "clear",
+    "register_defaults",
 ]
+
+# --- Auto-register default scanners on import ---
+from core.domain import SIGLAS as _SIGLAS  # noqa: E402
+from core.scanners.simple_factory import make_simple_scanner as _make  # noqa: E402
+
+
+def register_defaults() -> None:
+    """Register all 18 sigla scanners. Idempotent — safe to call after clear()."""
+    for sigla in _SIGLAS:
+        if not has(sigla):
+            register(_make(sigla))
+
+
+register_defaults()

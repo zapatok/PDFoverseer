@@ -23,7 +23,7 @@ EXPECTED_PAGES_PER_DOC: dict[str, int] = {
     "charla": 3,
     "chintegral": 8,
     "dif_pts": 3,
-    "art": 4,
+    "art": 10,  # ART forms run up to ~28pp normally (multi-worker sheets)
     "insgral": 3,
     "bodega": 2,
     "maquinaria": 2,
