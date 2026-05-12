@@ -1,79 +1,155 @@
-import os
-import re as _re
-import threading
-import time
-import uuid
+"""SessionManager — bridge between API requests and DB."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
 from pathlib import Path
 
-from fastapi import Header, HTTPException, Query
+from core.db.sessions_repo import (
+    create_session,
+    finalize_session,
+    get_session,
+    update_session_state,
+)
+from core.scanners.base import ScanResult
 
-SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL", "3600"))
-
-_UUID_RE = _re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
-
-class SessionState:
-    def __init__(self, session_id: str):
-        self.session_id = session_id
-        self._lock = threading.Lock()
-        self.running: bool = False
-        self.stop_requested: bool = False
-        self.skip_current: bool = False
-        self.skipped_pdfs: set[str] = set()
-        self.pause_event = threading.Event()
-        self.pause_event.set()
-        self.cancel_event = threading.Event()
-
-        self.pdf_list: list[Path] = []
-
-        # Disk-buffered via database.py
-        self.global_total_pages: int = 0
-        self.global_done_pages: int = 0
-        self.total_docs: int = 0
-        self.total_complete: int = 0
-        self.total_incomplete: int = 0
-        self.total_inferred: int = 0
-        self.issues: list[dict] = []
-        self.issue_counter: int = 0
-        self.start_time: float = 0.0
-        self.pause_start_time: float = 0.0
-        self.total_paused_time: float = 0.0
-        self.confidences: dict[str, float] = {}
-        self.individual_metrics: dict[str, dict] = {}
-        self.page_counts: dict[str, int] = {}
-        self._metrics_dirty: bool = False
-
-        self.last_accessed = time.time()
 
 class SessionManager:
-    def __init__(self):
-        self._sessions: dict[str, SessionState] = {}
-        self._lock = threading.Lock()
+    """Wrap session DB operations + maintain in-memory cell state."""
 
-    def evict_stale(self) -> int:
-        now = time.time()
-        with self._lock:
-            stale = [sid for sid, s in self._sessions.items()
-                     if not s.running and (now - s.last_accessed) > SESSION_TTL_SECONDS]
-            for sid in stale:
-                del self._sessions[sid]
-        return len(stale)
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
 
-    def get_or_create(self, session_id: str = None) -> SessionState:
-        if not session_id:
-            session_id = str(uuid.uuid4())
-        with self._lock:
-            if session_id not in self._sessions:
-                self._sessions[session_id] = SessionState(session_id)
-            self._sessions[session_id].last_accessed = time.time()
-            return self._sessions[session_id]
+    def open_session(
+        self,
+        *,
+        year: int,
+        month: int,
+        month_root: Path,
+    ) -> dict:
+        """Open or create a session for (year, month).
 
-session_manager = SessionManager()
+        Args:
+            year: Calendar year of the session.
+            month: Calendar month (1-12).
+            month_root: Root directory for the monthly report.
 
-async def get_session(
-    x_session_id: str = Header(None),
-    session_id: str = Query(None)
-) -> SessionState:
-    sid = x_session_id or session_id
-    if sid and not _UUID_RE.match(sid):
-        raise HTTPException(400, "Invalid session ID format")
-    return session_manager.get_or_create(sid)
+        Returns:
+            Session state dict with ``session_id``, ``status``, ``month_root``,
+            and ``cells`` keys.
+        """
+        rec = get_session(self._conn, f"{year:04d}-{month:02d}")
+        if rec is None:
+            empty_state = {"month_root": month_root.as_posix(), "cells": {}}
+            rec = create_session(
+                self._conn,
+                year=year,
+                month=month,
+                state_json=json.dumps(empty_state),
+            )
+        state = json.loads(rec.state_json)
+        state["session_id"] = rec.session_id
+        state["status"] = rec.status
+        return state
+
+    def get_session_state(self, session_id: str) -> dict:
+        """Return full session state dict for an existing session.
+
+        Args:
+            session_id: The session identifier (e.g. ``"2026-04"``).
+
+        Returns:
+            Session state dict with ``session_id``, ``status``, ``month_root``,
+            and ``cells`` keys.
+
+        Raises:
+            KeyError: If no session with that ID exists.
+        """
+        rec = get_session(self._conn, session_id)
+        if rec is None:
+            raise KeyError(session_id)
+        state = json.loads(rec.state_json)
+        state["session_id"] = rec.session_id
+        state["status"] = rec.status
+        return state
+
+    def apply_cell_result(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        result: ScanResult,
+    ) -> None:
+        """Persist a scanner result into the session cell grid.
+
+        Args:
+            session_id: Target session identifier.
+            hospital: Hospital key (e.g. ``"HPV"``).
+            sigla: Document type sigla (e.g. ``"art"``).
+            result: The ScanResult to record.
+
+        Raises:
+            KeyError: If no session with that ID exists.
+        """
+        rec = get_session(self._conn, session_id)
+        if rec is None:
+            raise KeyError(session_id)
+        state = json.loads(rec.state_json)
+        cells = state.setdefault("cells", {})
+        hosp_cells = cells.setdefault(hospital, {})
+        hosp_cells[sigla] = {
+            "count": result.count,
+            "confidence": result.confidence.value,
+            "method": result.method,
+            "breakdown": result.breakdown,
+            "flags": result.flags,
+            "errors": result.errors,
+            "duration_ms": result.duration_ms,
+            "files_scanned": result.files_scanned,
+            "user_override": None,
+            "excluded": False,
+        }
+        update_session_state(
+            self._conn,
+            session_id,
+            state_json=json.dumps(state),
+        )
+
+    def apply_user_override(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        override: int | None,
+    ) -> None:
+        """Set a user override count on a cell.
+
+        Args:
+            session_id: Target session identifier.
+            hospital: Hospital key.
+            sigla: Document type sigla.
+            override: User-supplied count, or ``None`` to clear.
+
+        Raises:
+            KeyError: If no session with that ID exists.
+        """
+        rec = get_session(self._conn, session_id)
+        if rec is None:
+            raise KeyError(session_id)
+        state = json.loads(rec.state_json)
+        cell = state["cells"].setdefault(hospital, {}).setdefault(sigla, {})
+        cell["user_override"] = override
+        update_session_state(
+            self._conn,
+            session_id,
+            state_json=json.dumps(state),
+        )
+
+    def finalize(self, session_id: str) -> None:
+        """Mark a session as finalized.
+
+        Args:
+            session_id: Target session identifier.
+        """
+        finalize_session(self._conn, session_id)
