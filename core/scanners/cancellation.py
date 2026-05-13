@@ -1,16 +1,20 @@
 """Cooperative cancellation primitive shared by OCR scanners and the orchestrator.
 
-Plain mutable state — no threading.Event. Workers run in subprocesses and the
-orchestrator iterates `as_completed` on the main thread; the token is set on
-the main thread and read by workers via the subprocess they were dispatched
-into. Each scanner calls `cancel.check()` at natural checkpoints; if cancelled
-the call raises `CancelledError`, which the orchestrator catches and converts
-to a `scan_cancelled` WS event (see Chunk 4).
+Two construction modes:
+
+- ``CancellationToken()`` — plain in-process bool. Use in unit tests.
+- ``CancellationToken.from_event(mp_event)`` — wraps a ``multiprocessing.Event``.
+  Use in production: the orchestrator creates the event, the executor's
+  ``initializer`` injects it into each worker subprocess, and any process
+  observes the cancellation immediately after ``.set()`` is called.
+
+Both modes expose the same ``cancelled`` property + ``cancel()`` + ``check()`` API.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 
 class CancelledError(Exception):
@@ -19,10 +23,25 @@ class CancelledError(Exception):
 
 @dataclass
 class CancellationToken:
-    cancelled: bool = False
+    _event: Any = field(default=None, repr=False)
+    _flag: bool = False
+
+    @classmethod
+    def from_event(cls, event: Any) -> CancellationToken:
+        """Construct a token backed by a multiprocessing.Event (or similar)."""
+        return cls(_event=event)
+
+    @property
+    def cancelled(self) -> bool:
+        if self._event is not None:
+            return bool(self._event.is_set())
+        return self._flag
 
     def cancel(self) -> None:
-        self.cancelled = True
+        if self._event is not None:
+            self._event.set()
+        else:
+            self._flag = True
 
     def check(self) -> None:
         if self.cancelled:
