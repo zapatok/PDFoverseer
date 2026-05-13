@@ -21,7 +21,7 @@ export default function MonthOverview() {
     HOSPITALS.map((h) => {
       const hospCells = cells[h] || {};
       const total = Object.values(hospCells).reduce(
-        (s, cell) => s + (cell.user_override ?? cell.count ?? 0),
+        (s, cell) => s + (cell.user_override ?? cell.ocr_count ?? cell.filename_count ?? cell.count ?? 0),
         0,
       );
       return [h, total];

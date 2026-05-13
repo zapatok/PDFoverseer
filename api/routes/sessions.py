@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -24,6 +25,8 @@ from core.scanners.cancellation import CancellationToken
 # Single thread per session is plenty — Daniel's machine has one user, and
 # scan_cells_ocr already uses a ProcessPoolExecutor internally for parallelism.
 _DISPATCH_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ocr-batch")
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -49,6 +52,7 @@ import fitz  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 
 _MAX_REASONABLE_COUNT = 10_000
+
 
 def _informe_root() -> Path:
     return Path(os.environ.get("INFORME_MENSUAL_ROOT", "A:/informe mensual"))
@@ -154,16 +158,25 @@ def scan_ocr(
 
     app = request.app
 
+    # Cell folder_path is NOT persisted in session state — re-enumerate from the
+    # month_root so OCR scanners receive the real on-disk folder. (Persisting it
+    # would couple session state to a transient filesystem layout.)
+    month_root = Path(state["month_root"])
+    try:
+        inv = enumerate_month(month_root)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    folder_by_key: dict[tuple[str, str], Path] = {
+        (c.hospital, c.sigla): c.folder_path for cell_list in inv.cells.values() for c in cell_list
+    }
+
     cells_with_paths: list[tuple[str, str, Path]] = []
     for pair in cells_pairs:
         if not (isinstance(pair, list) and len(pair) == 2):
             raise HTTPException(400, f"Invalid cell pair: {pair}")
         hosp, sigla = pair
-        cell_state = state.get("cells", {}).get(hosp, {}).get(sigla)
-        if not cell_state:
-            raise HTTPException(404, f"Cell not found: {hosp}/{sigla}")
-        folder_path = Path(cell_state.get("folder_path", ""))
-        if not folder_path.exists():
+        folder_path = folder_by_key.get((hosp, sigla))
+        if folder_path is None or not folder_path.exists():
             raise HTTPException(404, f"Folder missing for {hosp}/{sigla}")
         cells_with_paths.append((hosp, sigla, folder_path))
 
@@ -200,6 +213,23 @@ def scan_ocr(
                 cancel=cancel_token,
                 max_workers=2,
             )
+        except Exception:
+            logger.exception("scan_cells_ocr crashed for session %s", session_id)
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    broadcast(
+                        session_id,
+                        {
+                            "type": "scan_complete",
+                            "scanned": 0,
+                            "errors": len(cells_with_paths),
+                            "cancelled": 0,
+                        },
+                    ),
+                    loop,
+                )
+            except Exception:
+                logger.exception("failed to broadcast scan_complete after crash")
         finally:
             app.state.batches.pop(session_id, None)
 
@@ -214,7 +244,6 @@ def cancel(request: Request, session_id: str) -> dict:
     if handle is not None and handle.cancel_event is not None:
         handle.cancel_event.set()
     return {"ok": True}
-
 
 
 from core.orchestrator import _find_category_folder  # noqa: E402
@@ -278,12 +307,14 @@ def get_cell_files(
         except Exception:  # noqa: BLE001
             page_count = 0
         subfolder = pdf.parent.name if pdf.parent != folder else None
-        out.append({
-            "name": pdf.name,
-            "subfolder": subfolder,
-            "page_count": page_count,
-            "suspect": page_count >= 10,
-        })
+        out.append(
+            {
+                "name": pdf.name,
+                "subfolder": subfolder,
+                "page_count": page_count,
+                "suspect": page_count >= 10,
+            }
+        )
     return out
 
 
