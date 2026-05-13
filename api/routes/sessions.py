@@ -2,14 +2,28 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
+from api.batch import make_handle
+from api.routes.ws import broadcast
 from api.state import SessionManager
-from core.orchestrator import enumerate_month, scan_month
+from core.orchestrator import (
+    enumerate_month,
+    scan_cells_ocr,
+    scan_month,
+)
+from core.scanners.base import ConfidenceLevel, ScanResult
+from core.scanners.cancellation import CancellationToken
+
+# Single thread per session is plenty — Daniel's machine has one user, and
+# scan_cells_ocr already uses a ProcessPoolExecutor internally for parallelism.
+_DISPATCH_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ocr-batch")
 
 router = APIRouter()
 
@@ -109,3 +123,89 @@ def scan(
         "scanned": len(results),
         "summary": {f"{hosp}_{sigla}": r.count for (hosp, sigla), r in results.items()},
     }
+
+
+@router.post("/sessions/{session_id}/scan-ocr")
+def scan_ocr(
+    request: Request,
+    session_id: str,
+    body: dict = Body(...),
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Pase 2 — launch OCR batch for the given cells.
+
+    Body: ``{"cells": [["HPV", "odi"], ["HRB", "art"], ...]}``
+    """
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    try:
+        state = mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, f"Session not found: {session_id}") from exc
+
+    cells_pairs = body.get("cells", [])
+    if not isinstance(cells_pairs, list) or not cells_pairs:
+        raise HTTPException(400, "cells must be a non-empty list of [hospital, sigla] pairs")
+
+    app = request.app
+
+    cells_with_paths: list[tuple[str, str, Path]] = []
+    for pair in cells_pairs:
+        if not (isinstance(pair, list) and len(pair) == 2):
+            raise HTTPException(400, f"Invalid cell pair: {pair}")
+        hosp, sigla = pair
+        cell_state = state.get("cells", {}).get(hosp, {}).get(sigla)
+        if not cell_state:
+            raise HTTPException(404, f"Cell not found: {hosp}/{sigla}")
+        folder_path = Path(cell_state.get("folder_path", ""))
+        if not folder_path.exists():
+            raise HTTPException(404, f"Folder missing for {hosp}/{sigla}")
+        cells_with_paths.append((hosp, sigla, folder_path))
+
+    # Atomic check-then-set: setdefault returns the value already in the dict if
+    # it existed, otherwise installs and returns the new one.
+    handle = make_handle(session_id=session_id, total=len(cells_with_paths))
+    if app.state.batches.setdefault(session_id, handle) is not handle:
+        raise HTTPException(409, "another batch is already running for this session")
+    loop = app.state.loop
+
+    def on_progress(event: dict) -> None:
+        asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
+        if event.get("type") == "cell_done":
+            r = event["result"]
+            result = ScanResult(
+                count=r["ocr_count"],
+                confidence=ConfidenceLevel(r["confidence"]),
+                method=r["method"],
+                breakdown=None,
+                flags=[],
+                errors=[],
+                duration_ms=r["duration_ms_ocr"],
+                files_scanned=1,
+            )
+            mgr.apply_ocr_result(session_id, event["hospital"], event["sigla"], result)
+
+    cancel_token = CancellationToken.from_event(handle.cancel_event)
+
+    def _run():
+        try:
+            scan_cells_ocr(
+                cells_with_paths,
+                on_progress=on_progress,
+                cancel=cancel_token,
+                max_workers=2,
+            )
+        finally:
+            app.state.batches.pop(session_id, None)
+
+    handle.future = _DISPATCH_POOL.submit(_run)
+    return {"accepted": True, "total": len(cells_with_paths)}
+
+
+@router.post("/sessions/{session_id}/cancel")
+def cancel(request: Request, session_id: str) -> dict:
+    """Always returns 200. If a batch is active, sets its cancel event."""
+    handle = request.app.state.batches.get(session_id)
+    if handle is not None and handle.cancel_event is not None:
+        handle.cancel_event.set()
+    return {"ok": True}
