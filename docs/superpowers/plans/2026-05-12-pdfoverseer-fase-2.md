@@ -5269,3 +5269,48 @@ Expected: ~30 commits total covering all 6 chunks, each with a single-purpose co
 ---
 
 ## Done. Total tasks: 34 across 6 chunks.
+
+---
+
+## Known limitations (deferred to FASE 3)
+
+- **Page-level cancellation latency.** In the multi-worker path, a single
+  PDF mid-render can take up to ~30s to abandon (no per-page
+  `cancel.check()`). Spec §3.5 targets `<3s`; the documented gap is
+  acceptable because Daniel's typical cancel-action follows a user error
+  (selected wrong cell), and 30s is tolerable. Fix: thread `cancel`
+  through `header_detect` and `corner_count` page loops.
+- **`cell_scanning` event ordering in multi-worker mode.** Fires
+  alongside `cell_done` (work has already completed by the time
+  `as_completed` yields). Frontend renders both immediately; visually OK
+  but conceptually a stretch.
+- **Single WS client per browser tab.** Reconnect works, but if Daniel
+  opens two tabs against the same session, both receive every event
+  (intentional broadcast). Not a problem in practice.
+- **No retry on OCR failure.** A cell that errors stays in error state
+  until manually re-scanned. FASE 3 may add auto-retry with backoff.
+- **No cancellation of an Excel-in-progress.** `/output` is synchronous;
+  there's no cancel endpoint for it. Generation is fast (<5s for ABRIL)
+  so unlikely to matter.
+- **OCR engines vs real corpus (discovered during execution).**
+  - `header_detect` was built assuming each ODI/IRL document has a
+    unique form-code revision (`F-CRS-ODI/01`, `/02`, ...). Reality: the
+    code identifies the template *revision*, shared across all
+    documents using that form. Fix (commit `6cf1330`): count pages with
+    a header instead of unique codes — works because the header repeats
+    on every page of every document in the corpus we sampled.
+  - `corner_count` assumed ART compilations have "Página N de M" in
+    the upper-right corner. The HLU ABRIL ART compilation (144 pp)
+    does NOT have this pattern. Scanner correctly falls back to
+    filename_glob with `confidence=LOW` + `ocr_failed`. Slow test
+    `test_compilation_pdf_uses_corner_count` is marked `xfail` with a
+    companion test asserting the fallback behaviour. Per-sigla OCR
+    engine refinement against real corpus samples is a deferred
+    post-overhaul pass — FASE 2 ships the scaffolding so each engine
+    can be refined independently later.
+- **PDF fixtures gitignored.** Project-wide `.gitignore` excludes
+  `*.pdf` (line 41). The 4 real compilation fixtures live only on disk;
+  `tools/extract_fase2_fixtures.py` regenerates them from
+  `A:\informe mensual\ABRIL`. Fresh clones must re-run the extractor
+  before running the slow OCR tests.
+
