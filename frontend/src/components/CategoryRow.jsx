@@ -1,27 +1,42 @@
-import ScanIndicator from "./ScanIndicator";
-import ConfidenceBadge from "./ConfidenceBadge";
+import { useSessionStore } from "../store/session";
 
-function deriveStatus(cell) {
-  if (!cell) return "pending";
-  if (cell.user_override != null) return "manual";
-  if (cell.errors?.length) return "error";
-  if (cell.flags?.includes("compilation_suspect")) return "done_review";
-  if (cell.confidence === "high") return "done_high";
-  return "done_review";
-}
+export default function CategoryRow({
+  sigla,
+  cell,
+  selected,
+  onClick,
+  hospital,
+  checked,
+  onCheckChange,
+}) {
+  const { scanningCells } = useSessionStore();
+  const isScanning = scanningCells.has(`${hospital}|${sigla}`);
+  const count =
+    cell?.user_override ?? cell?.ocr_count ?? cell?.filename_count ?? cell?.count ?? 0;
+  const conf = cell?.confidence || "—";
+  const hasErrors = (cell?.errors || []).length > 0;
+  const isSuspect = (cell?.flags || []).includes("compilation_suspect");
 
-export default function CategoryRow({ sigla, cell, selected, onClick }) {
-  const count = cell?.user_override ?? cell?.count ?? 0;
   return (
-    <button
+    <div
       onClick={onClick}
-      className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded transition
-        ${selected ? "bg-slate-800" : "hover:bg-slate-900"}`}
+      className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-sm ${selected ? "bg-slate-800" : "hover:bg-slate-800/50"}`}
     >
-      <ScanIndicator status={deriveStatus(cell)} />
-      <span className="flex-1 text-left font-mono text-sm">{sigla}</span>
-      <ConfidenceBadge confidence={cell?.confidence} />
-      <span className="text-right tabular-nums font-semibold w-16">{count}</span>
-    </button>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => {
+          e.stopPropagation();
+          onCheckChange(e.target.checked);
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+      <span className="flex-1 font-mono">{sigla}</span>
+      <span className="text-xs text-slate-400 uppercase">{conf}</span>
+      <span className="font-mono w-12 text-right">{count}</span>
+      {isScanning && <span className="text-blue-400 animate-pulse">⟳</span>}
+      {hasErrors && <span className="text-red-400">✕</span>}
+      {isSuspect && !isScanning && <span className="text-amber-400">⚠</span>}
+    </div>
   );
 }
