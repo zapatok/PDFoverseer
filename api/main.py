@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -31,6 +32,13 @@ async def lifespan(app: FastAPI):
     init_schema(conn)
     manager = SessionManager(conn=conn)
     app.dependency_overrides[get_manager] = lambda: manager
+    # FASE 2: capture loop for cross-thread WS broadcasts; init batch registry;
+    # expose manager on app.state for tests that need to invoke setters directly
+    # (e.g. Chunk 6 Task 31 history-method tests). Production code still goes
+    # through Depends(get_manager).
+    app.state.loop = asyncio.get_running_loop()
+    app.state.batches = {}
+    app.state.manager = manager
     yield
     close_all()
 
