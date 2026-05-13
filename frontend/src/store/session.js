@@ -1,13 +1,20 @@
 import { create } from "zustand";
 import { api } from "../lib/api";
+import { createWSClient } from "../lib/ws";
 
 export const useSessionStore = create((set, get) => ({
-  view: "month",         // "month" | "hospital"
-  hospital: null,        // currently-selected hospital
+  view: "month",
+  hospital: null,
   months: [],
   session: null,
   loading: false,
   error: null,
+
+  // FASE 2 additions
+  scanningCells: new Set(),            // "HPV|odi" strings, mirrored in CategoryRow
+  scanProgress: null,                  // {done, total, etaMs, terminal?} | null
+  lightbox: null,                      // {hospital, sigla, fileIndex} | null
+  _ws: null,
 
   setView: (view) => set({ view }),
 
@@ -26,7 +33,10 @@ export const useSessionStore = create((set, get) => ({
     try {
       await api.createSession(year, month);
       const session = await api.getSession(sessionId);
-      set({ session, loading: false });
+      // Tear down any prior WS and reconnect for the new session
+      get()._ws?.close();
+      const ws = createWSClient(sessionId, { onEvent: get()._handleWSEvent });
+      set({ session, loading: false, _ws: ws, scanningCells: new Set(), scanProgress: null });
     } catch (error) {
       set({ error: String(error), loading: false });
     }
@@ -45,6 +55,37 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
+  scanOcr: async (sessionId, cellPairs) => {
+    try {
+      await api.scanOcr(sessionId, cellPairs);
+      set({ scanProgress: { done: 0, total: cellPairs.length } });
+    } catch (error) {
+      set({ error: String(error) });
+    }
+  },
+
+  cancelScan: async (sessionId) => {
+    try { await api.cancelScan(sessionId); }
+    catch (error) { set({ error: String(error) }); }
+  },
+
+  saveOverride: async (sessionId, hospital, sigla, value, note) => {
+    try {
+      const result = await api.patchOverride(sessionId, hospital, sigla, value, note);
+      // Patch the local session state in place
+      const { session } = get();
+      if (!session) return;
+      const cells = { ...session.cells };
+      const hosp = { ...cells[hospital] };
+      hosp[sigla] = { ...hosp[sigla], user_override: result.user_override, override_note: result.override_note };
+      cells[hospital] = hosp;
+      set({ session: { ...session, cells } });
+    } catch (error) { set({ error: String(error) }); }
+  },
+
+  openLightbox: (hospital, sigla, fileIndex = 0) => set({ lightbox: { hospital, sigla, fileIndex } }),
+  closeLightbox: () => set({ lightbox: null }),
+
   generateOutput: async (sessionId) => {
     set({ loading: true, error: null });
     try {
@@ -54,6 +95,74 @@ export const useSessionStore = create((set, get) => ({
     } catch (error) {
       set({ error: String(error), loading: false });
       throw error;
+    }
+  },
+
+  // ---------- WS event handler ----------
+  _handleWSEvent: (event) => {
+    const state = get();
+    const cellKey = (h, s) => `${h}|${s}`;
+
+    switch (event.type) {
+      case "cell_scanning": {
+        const next = new Set(state.scanningCells);
+        next.add(cellKey(event.hospital, event.sigla));
+        set({ scanningCells: next });
+        break;
+      }
+      case "cell_done": {
+        const next = new Set(state.scanningCells);
+        next.delete(cellKey(event.hospital, event.sigla));
+        const session = state.session;
+        if (session) {
+          const cells = { ...session.cells };
+          const hosp = { ...cells[event.hospital] };
+          hosp[event.sigla] = {
+            ...hosp[event.sigla],
+            ocr_count: event.result.ocr_count,
+            method: event.result.method,
+            confidence: event.result.confidence,
+            duration_ms_ocr: event.result.duration_ms_ocr,
+          };
+          cells[event.hospital] = hosp;
+          set({ scanningCells: next, session: { ...session, cells } });
+        } else {
+          set({ scanningCells: next });
+        }
+        break;
+      }
+      case "cell_error": {
+        const next = new Set(state.scanningCells);
+        next.delete(cellKey(event.hospital, event.sigla));
+        const session = state.session;
+        if (session) {
+          const cells = { ...session.cells };
+          const hosp = { ...cells[event.hospital] };
+          const prev = hosp[event.sigla] || {};
+          hosp[event.sigla] = { ...prev, errors: [...(prev.errors || []), event.error] };
+          cells[event.hospital] = hosp;
+          set({ scanningCells: next, session: { ...session, cells } });
+        } else {
+          set({ scanningCells: next });
+        }
+        break;
+      }
+      case "scan_progress":
+        set({ scanProgress: { done: event.done, total: event.total, etaMs: event.eta_ms } });
+        break;
+      case "scan_complete":
+        set({ scanProgress: { ...state.scanProgress, terminal: "complete", done: event.scanned, total: event.scanned + (event.errors || 0) } });
+        // Auto-dismiss after 5s
+        setTimeout(() => set((s) => (s.scanProgress?.terminal === "complete" ? { scanProgress: null } : s)), 5000);
+        break;
+      case "scan_cancelled":
+        set({ scanProgress: { ...state.scanProgress, terminal: "cancelled", done: event.scanned, total: event.total } });
+        setTimeout(() => set((s) => (s.scanProgress?.terminal === "cancelled" ? { scanProgress: null } : s)), 5000);
+        break;
+      case "ping":
+        break;     // keepalive — no-op
+      default:
+        // Unknown event types ignored
     }
   },
 }));
