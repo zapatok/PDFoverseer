@@ -45,6 +45,11 @@ _MONTH_NAMES = {
 }
 
 
+import fitz  # noqa: E402
+from fastapi.responses import FileResponse  # noqa: E402
+
+_MAX_REASONABLE_COUNT = 10_000
+
 def _informe_root() -> Path:
     return Path(os.environ.get("INFORME_MENSUAL_ROOT", "A:/informe mensual"))
 
@@ -209,3 +214,115 @@ def cancel(request: Request, session_id: str) -> dict:
     if handle is not None and handle.cancel_event is not None:
         handle.cancel_event.set()
     return {"ok": True}
+
+
+
+from core.orchestrator import _find_category_folder  # noqa: E402
+
+
+@router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/override")
+def patch_override(
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    body: dict = Body(...),
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    value = body.get("value")
+    note = body.get("note")
+    if value is not None:
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise HTTPException(400, "value must be int or null")
+        if value < 0 or value > _MAX_REASONABLE_COUNT:
+            raise HTTPException(400, f"value must be in [0, {_MAX_REASONABLE_COUNT}]")
+    try:
+        mgr.apply_user_override(session_id, hospital, sigla, value=value, note=note)
+        state = mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    cell = state["cells"].get(hospital, {}).get(sigla, {})
+    return {
+        "user_override": cell.get("user_override"),
+        "override_note": cell.get("override_note"),
+    }
+
+
+@router.get("/sessions/{session_id}/cells/{hospital}/{sigla}/files")
+def get_cell_files(
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    mgr: SessionManager = Depends(get_manager),
+) -> list[dict]:
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    try:
+        state = mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, f"Session not found: {session_id}") from exc
+    cell = state.get("cells", {}).get(hospital, {}).get(sigla)
+    if cell is None:
+        raise HTTPException(404, f"Cell not found: {hospital}/{sigla}")
+    month_root = Path(state.get("month_root", ""))
+    hosp_dir = month_root / hospital
+    folder = _find_category_folder(hosp_dir, sigla)
+    if not folder.exists():
+        return []
+    out: list[dict] = []
+    for pdf in sorted(folder.rglob("*.pdf")):
+        try:
+            with fitz.open(pdf) as doc:
+                page_count = doc.page_count
+        except Exception:  # noqa: BLE001
+            page_count = 0
+        subfolder = pdf.parent.name if pdf.parent != folder else None
+        out.append({
+            "name": pdf.name,
+            "subfolder": subfolder,
+            "page_count": page_count,
+            "suspect": page_count >= 10,
+        })
+    return out
+
+
+@router.get("/sessions/{session_id}/cells/{hospital}/{sigla}/pdf")
+def get_cell_pdf(
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    index: int = 0,
+    mgr: SessionManager = Depends(get_manager),
+) -> FileResponse:
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    if index < 0:
+        raise HTTPException(400, "index must be ≥ 0")
+    try:
+        state = mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    cell = state.get("cells", {}).get(hospital, {}).get(sigla)
+    if cell is None:
+        raise HTTPException(404, f"Cell not found: {hospital}/{sigla}")
+    month_root = Path(state.get("month_root", ""))
+    hosp_dir = month_root / hospital
+    folder = _find_category_folder(hosp_dir, sigla)
+    pdfs = sorted(folder.rglob("*.pdf")) if folder.exists() else []
+    if not pdfs:
+        raise HTTPException(404, "no_pdfs_in_cell")
+    if index >= len(pdfs):
+        raise HTTPException(400, f"index out of range: {index} >= {len(pdfs)}")
+
+    pdf_path = pdfs[index].resolve()
+    cell_folder = folder.resolve()
+    informe_root = _informe_root().resolve()
+    # Two layers of containment per spec §4.6: PDF inside cell folder, cell
+    # folder inside INFORME_MENSUAL_ROOT. Both must hold.
+    if not pdf_path.is_relative_to(cell_folder):
+        raise HTTPException(400, "invalid path")
+    if not cell_folder.is_relative_to(informe_root):
+        raise HTTPException(400, "cell folder outside informe root")
+
+    return FileResponse(pdf_path, media_type="application/pdf")
