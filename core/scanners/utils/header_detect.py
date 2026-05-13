@@ -43,7 +43,14 @@ def count_form_codes(
     sigla_code: str,
     dpi: int = 200,
 ) -> HeaderDetectResult:
-    """OCR the top-third of each page; count unique form codes.
+    """OCR the top-third of each page; count documents in a compilation.
+
+    A page is counted as a document boundary when the top region contains a
+    form code ``F-CRS-<sigla>/<NN>``. The form code identifies the template
+    revision (shared across documents that use the same form), so the
+    count equals the number of pages where a header appeared, NOT the
+    number of unique template revisions. The ``matches`` field still
+    reports the distinct codes seen, for debugging.
 
     Args:
         pdf_path: Source PDF.
@@ -52,7 +59,9 @@ def count_form_codes(
         dpi: rendering DPI (default 200 — sufficient for form codes).
 
     Returns:
-        :class:`HeaderDetectResult` with the count of unique codes matched.
+        :class:`HeaderDetectResult` with the count of pages containing a
+        matching form code (= the number of documents in a compilation when
+        each document starts with a form header).
     """
     pages_total = get_page_count(pdf_path)
     pattern = _build_pattern(sigla_code)
@@ -69,7 +78,7 @@ def count_form_codes(
             pages_with_match.append(page_idx)
 
     return HeaderDetectResult(
-        count=len(matches),
+        count=len(pages_with_match),
         matches=sorted(matches),
         pages_with_match=pages_with_match,
         pages_total=pages_total,

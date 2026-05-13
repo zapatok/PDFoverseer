@@ -24,7 +24,7 @@ def test_header_detect_on_hrb_odi_compilation():
     assert all(re.match(r"F-CRS-ODI/\d+", m, re.IGNORECASE) for m in result.matches)
     assert len(result.pages_with_match) <= result.pages_total
     assert all(0 <= p < result.pages_total for p in result.pages_with_match)
-    assert result.count == len(result.matches)  # matches set ↔ count consistency
+    assert result.count == len(result.pages_with_match)  # count ↔ pages_with_match consistency
 
 
 def test_header_detect_on_corrupted_raises():
