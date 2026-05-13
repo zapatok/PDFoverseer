@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from core.domain import CATEGORY_FOLDERS, HOSPITALS, SIGLAS
 
 if TYPE_CHECKING:
     from core.scanners.base import ScanResult
+    from core.scanners.cancellation import CancellationToken
 
 
 @dataclass(frozen=True)
@@ -204,4 +206,196 @@ def scan_month(
     with ProcessPoolExecutor(max_workers=max_workers) as pool:
         for hosp, sigla, r in pool.map(_scan_cell_worker, cell_tuples):
             results[(hosp, sigla)] = r
+    return results
+
+
+# ======================================================================
+# Pase 2 — OCR orchestration
+# ======================================================================
+
+_WORKER_EVENT: Any = None  # set per-subprocess by _init_ocr_worker
+
+
+def _init_ocr_worker(event: Any) -> None:
+    """ProcessPoolExecutor initializer — caches the cancellation event in the
+    subprocess so the worker can build a CancellationToken without re-sending
+    the event with every call."""
+    global _WORKER_EVENT
+    _WORKER_EVENT = event
+
+
+def _ocr_worker(
+    cell_tuple: tuple[str, str, str],
+) -> tuple[str, str, ScanResult | None, str | None]:
+    """Run OCR for a single cell. Runs in a worker subprocess.
+
+    Returns:
+        ``(hospital, sigla, ScanResult | None, error_str | None)`` — exactly
+        one of ScanResult or error_str is non-None.
+    """
+    from core import scanners as scanner_registry  # noqa: E402
+    from core.scanners.cancellation import (  # noqa: E402
+        CancellationToken,
+        CancelledError,
+    )
+
+    hosp, sigla, folder_str = cell_tuple
+    folder = Path(folder_str)
+    scanner = scanner_registry.get(sigla)
+    token = CancellationToken.from_event(_WORKER_EVENT) if _WORKER_EVENT else CancellationToken()
+
+    fn = getattr(scanner, "count_ocr", None)
+    try:
+        if fn is None:
+            result = scanner.count(folder)  # filename_glob fallback
+        else:
+            result = fn(folder, cancel=token)
+    except CancelledError:
+        return (hosp, sigla, None, "cancelled")
+    except Exception as exc:  # noqa: BLE001
+        return (hosp, sigla, None, f"{type(exc).__name__}: {exc}")
+    return (hosp, sigla, result, None)
+
+
+def scan_cells_ocr(
+    cells: list[tuple[str, str, Path]],
+    *,
+    on_progress: Callable[[dict], None],
+    cancel: CancellationToken,
+    max_workers: int = 2,
+) -> dict[tuple[str, str], ScanResult]:
+    """Pase 2 — OCR scan a subset of cells with progress events.
+
+    Args:
+        cells: ``[(hospital, sigla, folder_path), ...]`` to scan.
+        on_progress: Invoked on the orchestrator thread with event dicts.
+            Events: ``cell_scanning`` (before each cell), ``cell_done`` /
+            ``cell_error`` (after each cell), ``scan_progress`` (after each
+            cell), and the terminal ``scan_complete`` or ``scan_cancelled``.
+        cancel: Pre-flight short-circuits with ``scan_cancelled(scanned=0)``.
+        max_workers: ProcessPoolExecutor size. Default 2 (OCR is CPU+RAM
+            heavy). Tests pass ``max_workers=1`` to run synchronously without
+            spawning subprocesses.
+
+    Returns:
+        Dict of successful ``(hospital, sigla) → ScanResult``. Cells that
+        errored or were cancelled are absent from the dict — their state is
+        reported only via events.
+    """
+    from concurrent.futures import (  # noqa: E402
+        ProcessPoolExecutor,
+        as_completed,
+    )
+
+    from core.scanners.cancellation import CancellationToken  # noqa: E402, F401
+
+    results: dict[tuple[str, str], ScanResult] = {}
+    total = len(cells)
+    cell_tuples = [(h, s, str(f)) for (h, s, f) in cells]
+
+    if cancel.cancelled:
+        on_progress({"type": "scan_cancelled", "scanned": 0, "total": total})
+        return results
+
+    if max_workers == 1:
+        scanned = 0
+        errors = 0
+        for ct in cell_tuples:
+            if cancel.cancelled:
+                on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})
+                return results
+            hosp, sigla, _ = ct
+            on_progress({"type": "cell_scanning", "hospital": hosp, "sigla": sigla})
+            h, s, result, err = _ocr_worker(ct)
+            if err == "cancelled":
+                on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})
+                return results
+            if err:
+                errors += 1
+                on_progress({"type": "cell_error", "hospital": h, "sigla": s, "error": err})
+            else:
+                results[(h, s)] = result  # type: ignore[assignment]
+                on_progress(
+                    {
+                        "type": "cell_done",
+                        "hospital": h,
+                        "sigla": s,
+                        "result": {
+                            "ocr_count": result.count,
+                            "method": result.method,
+                            "confidence": result.confidence.value,
+                            "duration_ms_ocr": result.duration_ms,
+                        },
+                    }
+                )
+            scanned += 1
+            on_progress({"type": "scan_progress", "done": scanned, "total": total})
+        on_progress(
+            {
+                "type": "scan_complete",
+                "scanned": scanned,
+                "errors": errors,
+                "cancelled": 0,
+            }
+        )
+        return results
+
+    # Multi-worker path — real ProcessPoolExecutor.
+    event = getattr(cancel, "_event", None)
+    scanned = 0
+    errors = 0
+    cancelled = 0
+    with ProcessPoolExecutor(
+        max_workers=max_workers,
+        initializer=_init_ocr_worker,
+        initargs=(event,),
+    ) as pool:
+        future_to_cell = {pool.submit(_ocr_worker, ct): ct for ct in cell_tuples}
+        for fut in as_completed(future_to_cell):
+            # Cancel-fast: if the user pressed Cancel mid-batch, do NOT wait for
+            # every in-flight future to drain. Workers observe the event and
+            # return err="cancelled" at their next checkpoint (≤ a few seconds);
+            # we just stop processing results and break out. The `with` block
+            # exits and waits for the pool to settle.
+            if cancel.cancelled and cancelled == 0:
+                # First time we notice — request the pool to discard queued
+                # futures (Python 3.9+). In-flight will still need to wind
+                # down at their own next checkpoint.
+                pool.shutdown(wait=False, cancel_futures=True)
+            h, s, result, err = fut.result()
+            on_progress({"type": "cell_scanning", "hospital": h, "sigla": s})
+            if err == "cancelled":
+                cancelled += 1
+            elif err:
+                errors += 1
+                on_progress({"type": "cell_error", "hospital": h, "sigla": s, "error": err})
+            else:
+                results[(h, s)] = result  # type: ignore[assignment]
+                on_progress(
+                    {
+                        "type": "cell_done",
+                        "hospital": h,
+                        "sigla": s,
+                        "result": {
+                            "ocr_count": result.count,
+                            "method": result.method,
+                            "confidence": result.confidence.value,
+                            "duration_ms_ocr": result.duration_ms,
+                        },
+                    }
+                )
+            scanned += 1
+            on_progress({"type": "scan_progress", "done": scanned, "total": total})
+
+    if cancelled > 0:
+        on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})
+    else:
+        on_progress(
+            {
+                "type": "scan_complete",
+                "scanned": scanned,
+                "errors": errors,
+                "cancelled": 0,
+            }
+        )
     return results
