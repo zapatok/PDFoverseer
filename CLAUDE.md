@@ -163,17 +163,28 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 - **VLM integration:** ~~Attempted~~ REVERTED (2026-03-30). See postmortem in Links.
 - **Browse UX:** `/api/browse` uses server-side tkinter chooser — only works with local display
 
-## FASE 1 MVP — `research/pixel-density` branch (shipped 2026-05-11)
+## FASE 2 MVP — `po_overhaul` branch (shipped 2026-05-12)
+
+Pase 1 (filename_glob, ~4s on ABRIL) + pase 2 (OCR per cell, opt-in
+via UI) + manual override + PDF preview lightbox. Cell state stores
+`filename_count`, `ocr_count`, `user_override`, `override_note` as
+independent fields; Excel writer applies the priority cascade. The
+`/output` endpoint now also UPSERTs `historical_counts` with a `method`
+audit (`override` vs OCR technique vs `filename_glob`).
+
+- **Spec:** `docs/superpowers/specs/2026-05-12-fase-2-design.md`
+- **Plan:** `docs/superpowers/plans/2026-05-12-pdfoverseer-fase-2.md`
+- **Tag:** `fase-2-mvp` (local, awaiting push approval)
+- **Next (FASE 3):** auto-retry on OCR failure, page-level cancellation,
+  per-sigla OCR engine refinement against the real corpus (header_detect
+  semantic, ART corner_count gap — see Known Limitations in the plan).
+
+### FASE 1 MVP — predecessor, `research/pixel-density` branch (shipped 2026-05-11)
 
 Folder-driven overhaul of the UI: open `A:\informe mensual\<MES>\` and the
 app counts 4 hospitals × 18 categories with filename-glob, then writes
 `RESUMEN_<YYYY>-<MM>.xlsx` via `data/templates/RESUMEN_template_v1.xlsx`.
-The legacy single-PDF API (`api/database.py`, `api/worker.py`,
-`api/websocket.py`, `api/routes/files.py`, `api/routes/pipeline.py`) was
-deleted; the server now boots through `api.main:app`.
 
 - **Spec:** `docs/superpowers/specs/2026-05-11-pdfoverseer-overhaul-design.md`
 - **Plan:** `docs/superpowers/plans/2026-05-11-pdfoverseer-overhaul-fase-1.md`
 - **Tag:** `fase-1-mvp`
-- **Next (FASE 2):** OCR scanners for compilation PDFs + manual correction UI
-  + WebSocket scan progress.
