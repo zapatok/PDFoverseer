@@ -31,4 +31,29 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     }).then(jsonOrThrow),
+
+  scanOcr: (sessionId, cells) =>
+    fetch(`${BASE}/sessions/${sessionId}/scan-ocr`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cells }),
+    }).then(jsonOrThrow),
+
+  cancelScan: (sessionId) =>
+    fetch(`${BASE}/sessions/${sessionId}/cancel`, {
+      method: "POST",
+    }).then(jsonOrThrow),
+
+  patchOverride: (sessionId, hospital, sigla, value, note) =>
+    fetch(`${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/override`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value, note }),
+    }).then(jsonOrThrow),
+
+  getCellFiles: (sessionId, hospital, sigla) =>
+    fetch(`${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/files`).then(jsonOrThrow),
+
+  cellPdfUrl: (sessionId, hospital, sigla, index = 0) =>
+    `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/pdf?index=${index}`,
 };
