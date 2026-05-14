@@ -117,7 +117,7 @@ Lo que NO cambia: `/sessions` (CRUD), `/output` (Excel), websocket, `core/orches
 | `core/scanners/art_scanner.py`, `charla_scanner.py`, `_header_detect_base.py` | Modifican el loop interno (que ya itera por archivo) para acumular `per_file: dict[str, int]` y exponerlo en ScanResult. Fallback `per_file=None` solo si el OCR falla (error path). |
 | `api/state.py` | (a) `apply_filename_result`, `apply_ocr_result` y el dispatcher legacy `apply_cell_result` (líneas 169–177, deprecated wrapper sobre filename_result) persisten `cell["per_file"] = result.per_file`. (b) Nuevo método `apply_per_file_override(session_id, hospital, sigla, filename, count)`. (c) Función pura `compute_cell_count(cell)` con la jerarquía de precedencia. |
 | `api/routes/sessions.py` | (a) `/files` endpoint joinea `cell.per_file` y `cell.per_file_overrides` con la lista enumerada del disco. (b) Nuevo endpoint `PATCH /sessions/{id}/cells/{h}/{s}/files/{filename}/override`. |
-| `api/routes/history.py` | **NUEVO**. `GET /sessions/{id}/history?n=12` returna `{(hospital, sigla): [(year, month, count, method), ...]}`. Implementación reusa `core/db/historical_repo.fetch_range(from_year, from_month, to_year, to_month)` que ya existe (~línea 99) — query usa el patrón canónico `(year * 12 + month) BETWEEN ?` para cubrir cross-year ranges. **No** se modifica el schema de `historical_counts` (columnas reales: `year INTEGER, month INTEGER, hospital, sigla, count, confidence, method, finalized_at`, PK `(year, month, hospital, sigla)`). |
+| `api/routes/history.py` | **NUEVO**. `GET /sessions/{id}/history?n=12` returna `{(hospital, sigla): [(year, month, count, method), ...]}`. Implementación reusa `core/db/historical_repo.query_range(from_year, from_month, to_year, to_month)` que ya existe (~línea 99) — query usa el patrón canónico `(year * 12 + month) BETWEEN ?` para cubrir cross-year ranges. **No** se modifica el schema de `historical_counts` (columnas reales: `year INTEGER, month INTEGER, hospital, sigla, count, confidence, method, finalized_at`, PK `(year, month, hospital, sigla)`). |
 | `frontend/src/lib/cellCount.js` | **NUEVO**. Función pura `computeCellCount(cell)` espejando 1:1 la lógica de `api/state.py.compute_cell_count`. Sin TypeScript (el repo es 100% `.jsx` + `.js`; no hay TS toolchain). |
 | `core/excel/writer.py` | Verificar con `pytest tests/test_writer.py -k missing_hospital` (test a crear si no existe): cuando un hospital no tiene datos en cell state, las 18 celdas correspondientes salen como 0 o vacías sin error. Tarea PRE-FLIGHT (ver §9.4). |
 | `api/main.py` | Registrar el nuevo router `history`. |
@@ -209,7 +209,7 @@ ORDER BY year, month, hospital, sigla
 
 Cálculo del rango (Python): `from_key = from_year * 12 + from_month`; para 12 meses atrás desde mayo 2026, `from = (2025, 6)` → `from_key = 24306`; `to = (2026, 5)` → `to_key = 24317`.
 
-La función `core/db/historical_repo.fetch_range(from_year, from_month, to_year, to_month)` ya implementa exactamente este patrón — el endpoint `/history` la llama directamente sin SQL nuevo.
+La función `core/db/historical_repo.query_range(from_year, from_month, to_year, to_month)` ya implementa exactamente este patrón — el endpoint `/history` la llama directamente sin SQL nuevo.
 
 Volumen máximo: 12 × 4 × 18 = 864 rows. Query + agrupamiento Python <100ms en local.
 
@@ -231,7 +231,7 @@ Volumen máximo: 12 × 4 × 18 = 864 rows. Query + agrupamiento Python <100ms en
    → focus auto al InlineEditCount de "irl"
 [user] cierra app, F5 → state persiste (BD)
 [user] genera Excel
-   → historical_counts UPSERT vía core/db/historical_repo.upsert(...)
+   → historical_counts UPSERT vía core/db/historical_repo.upsert_count(...)
        (year=2026, month=4, hospital="HLL", sigla="reunion",
         count=12, confidence="manual", method="manual",
         finalized_at=NOW)
@@ -263,7 +263,7 @@ Volumen máximo: 12 × 4 × 18 = 864 rows. Query + agrupamiento Python <100ms en
    → router.replace("?view=history")
    → MonthOverview detecta view, renderea <SparkGrid>
 [useHistoryStore] (si no cacheado) GET /sessions/{id}/history?n=12
-   → api/routes/history.py: llama historical_repo.fetch_range(...), group by (hospital, sigla)
+   → api/routes/history.py: llama historical_repo.query_range(...), group by (hospital, sigla)
    → returns {"HPV|reunion": [{year: 2025, month: 5, count: 8, method: "filename_glob"}, ...], ...}
 [SparkGrid] renderea 18×5 grid
    → cada celda: <Sparkline data={series.map(s => s.count)} tone={anomalyTone(series)} />
@@ -326,7 +326,7 @@ FASE 3 §8 (`docs/superpowers/specs/2026-05-13-fase-3-polish-design.md`) estable
 | Layer | Tool | Cobertura FASE 4 |
 |-------|------|-------------------|
 | Unit Python | pytest + fixtures reales | (a) ScanResult.per_file serializa OK; (b) cada scanner devuelve per_file con keys = filenames; (c) compute_cell_count cubre las ramas (override, per_file mix, fallback); (d) apply_per_file_override flow; (e) apply_override / apply_filename_result / apply_ocr_result preservan `user_override` y `manual_entry` cuando ya existen; (f) writer.py tolera HLL ausente. |
-| Integration Python | pytest + fixtures fase 1 (`data/samples/abril/`) | (a) `scan_month` propaga per_file end-to-end para una cell de 2 archivos; (b) endpoint `/history?n=12` shape correcto con BD pre-poblada SQL; (c) `PATCH /files/{f}/override` actualiza state + emite WebSocket; (d) `historical_repo.fetch_range` integrado con la nueva ruta. |
+| Integration Python | pytest + fixtures fase 1 (`data/samples/abril/`) | (a) `scan_month` propaga per_file end-to-end para una cell de 2 archivos; (b) endpoint `/history?n=12` shape correcto con BD pre-poblada SQL; (c) `PATCH /files/{f}/override` actualiza state + emite WebSocket; (d) `historical_repo.query_range` integrado con la nueva ruta. |
 | Cross-language | pytest + fixtures JSON | `tests/fixtures/cell_count_cases.json` contiene N casos `{cell, expected_count}`. Un test Python valida `compute_cell_count(cell) == expected`. La paridad JS se verifica en el smoke manual cuando el frontend muestra el mismo número que el backend para los mismos cells. |
 | E2E smoke manual | chrome-devtools MCP (Claude maneja) | Recorrer las 3 features, capturar screenshots, encontrar bugs reales, commitearlos. Memoria `feedback_browser_testing_via_devtools`. Cobertura: HLL flow completo (entry + persist + Excel), per-file override (chip change + total recalc + persist), multi-mes toggle (URL state + sparkline tones + tooltip). |
 
@@ -349,7 +349,7 @@ Cada commit debe ser red→green→refactor con verificación visible:
 6. `compute_cell_count(cell)` función pura + tests de las 3 ramas.
 7. `apply_per_file_override` en `state.py`.
 8. Endpoint `PATCH /files/{f}/override`.
-9. Endpoint `GET /history?n=12` (reusa `historical_repo.fetch_range`).
+9. Endpoint `GET /history?n=12` (reusa `historical_repo.query_range`).
 10. Frontend: `frontend/src/lib/cellCount.js` (función pura, tests Python cross-language).
 11. Frontend: `Sparkline` component (smoke manual; no test unit por convención FASE 3).
 12. Frontend: `OriginChip` component.
@@ -363,7 +363,7 @@ Cada commit debe ser red→green→refactor con verificación visible:
 - [ ] Verificar que `historical_counts` se popula al generar Excel hoy (smoke ABRIL → BD inspect → 54 rows esperados con method ∈ los 5 literales del registry §6.3).
 - [ ] Verificar que `core/excel/writer.py` tolera un hospital sin datos: ejecutar `pytest tests/test_writer.py -k missing_hospital` (crear test si no existe; debe pasar). Si el writer falla, fix mínimo antes de tareas FASE 4.
 - [ ] Verificar que AbortController-safe `saveOverride` de FASE 3 sigue intacto en `useSessionStore` (grep el patrón).
-- [ ] Confirmar que `core/db/historical_repo.fetch_range` tiene la signature esperada `(from_year, from_month, to_year, to_month)` — si difiere, ajustar §5.2 antes de implementar.
+- [ ] Confirmar que `core/db/historical_repo.query_range` tiene la signature esperada `(from_year, from_month, to_year, to_month)` — si difiere, ajustar §5.2 antes de implementar.
 
 ## 10. Acceptance criteria
 
