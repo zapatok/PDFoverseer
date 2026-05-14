@@ -1,29 +1,15 @@
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { useSessionStore } from "../store/session";
-import CategoryRow from "../components/CategoryRow";
+import CategoryGroup from "../components/CategoryGroup";
 import FileList from "../components/FileList";
-import OverridePanel from "../components/OverridePanel";
+import DetailPanel from "../components/DetailPanel";
 import ScanControls from "../components/ScanControls";
 
 const SIGLAS = [
-  "reunion",
-  "irl",
-  "odi",
-  "charla",
-  "chintegral",
-  "dif_pts",
-  "art",
-  "insgral",
-  "bodega",
-  "maquinaria",
-  "ext",
-  "senal",
-  "exc",
-  "altura",
-  "caliente",
-  "herramientas_elec",
-  "andamios",
-  "chps",
+  "reunion", "irl", "odi", "charla", "chintegral", "dif_pts",
+  "art", "insgral", "bodega", "maquinaria", "ext", "senal",
+  "exc", "altura", "caliente", "herramientas_elec", "andamios", "chps",
 ];
 
 export default function HospitalDetail({ hospital, onBack }) {
@@ -36,7 +22,9 @@ export default function HospitalDetail({ hospital, onBack }) {
     (s, c) => s + (c.user_override ?? c.ocr_count ?? c.filename_count ?? c.count ?? 0),
     0,
   );
-  const selectedCell = selected ? cells[selected] : null;
+
+  const normalized = SIGLAS.filter((s) => cells[s] && !cells[s].flags?.includes("compilation_suspect"));
+  const compilations = SIGLAS.filter((s) => cells[s] && cells[s].flags?.includes("compilation_suspect"));
 
   const onCheck = (sigla, checked) => {
     setSelectedSet((prev) => {
@@ -50,68 +38,57 @@ export default function HospitalDetail({ hospital, onBack }) {
   return (
     <div>
       <header className="flex items-center gap-4 mb-6">
-        <button onClick={onBack} className="text-sm text-slate-400 hover:text-slate-200">
-          ← Volver
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-1 text-sm text-po-text-muted hover:text-po-text"
+        >
+          <ArrowLeft size={16} strokeWidth={1.75} />
+          Volver
         </button>
         <h2 className="text-xl font-semibold">{hospital}</h2>
-        <span className="text-sm text-slate-400">Total: {total}</span>
+        <span className="text-sm text-po-text-muted">
+          Total: <span className="tabular-nums">{total.toLocaleString()}</span>
+        </span>
         <div className="ml-auto">
           <ScanControls hospital={hospital} selectedSiglas={[...selectedSet]} />
         </div>
       </header>
 
-      <div className="grid gap-6 grid-cols-1 xl:grid-cols-[1fr_1fr_1fr]">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-6">
         <section>
-          <h3 className="text-sm uppercase text-slate-400 mb-2">Categorías</h3>
-          <div className="space-y-0.5">
-            {SIGLAS.map((s) => (
-              <CategoryRow
-                key={s}
-                sigla={s}
-                cell={cells[s]}
-                hospital={hospital}
-                selected={selected === s}
-                onClick={() => setSelected(s)}
-                checked={selectedSet.has(s)}
-                onCheckChange={(c) => onCheck(s, c)}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm uppercase text-slate-400 mb-2">Detalle</h3>
-          {!selectedCell && <p className="text-slate-500">Selecciona una categoría</p>}
-          {selectedCell && (
-            <div className="space-y-3 text-sm">
-              <p>
-                <span className="text-slate-400">Sigla:</span> {selected}
-              </p>
-              <p>
-                <span className="text-slate-400">Filename:</span>{" "}
-                {selectedCell.filename_count ?? selectedCell.count ?? "—"}
-              </p>
-              <p>
-                <span className="text-slate-400">OCR:</span> {selectedCell.ocr_count ?? "—"}{" "}
-                {selectedCell.method && (
-                  <span className="text-xs text-slate-500">via {selectedCell.method}</span>
-                )}
-              </p>
-              <p>
-                <span className="text-slate-400">Confidence:</span> {selectedCell.confidence}
-              </p>
-              {(selectedCell.flags || []).length > 0 && (
-                <p>
-                  <span className="text-slate-400">Flags:</span> {selectedCell.flags.join(", ")}
-                </p>
-              )}
-              <OverridePanel hospital={hospital} sigla={selected} cell={selectedCell} />
-            </div>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mb-3">Categorías</h3>
+          <CategoryGroup
+            title="Normalizadas"
+            cells={normalized.map((s) => ({ sigla: s, ...cells[s] }))}
+            hospital={hospital}
+            selected={selected}
+            onSelect={setSelected}
+            checkedSet={selectedSet}
+            onCheck={onCheck}
+            defaultOpen
+          />
+          {compilations.length > 0 && (
+            <CategoryGroup
+              title="Compilaciones"
+              cells={compilations.map((s) => ({ sigla: s, ...cells[s] }))}
+              hospital={hospital}
+              selected={selected}
+              onSelect={setSelected}
+              checkedSet={selectedSet}
+              onCheck={onCheck}
+              defaultOpen
+              showScanAll
+            />
           )}
         </section>
 
         <section>
-          <h3 className="text-sm uppercase text-slate-400 mb-2">Archivos</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mb-3">Detalle</h3>
+          <DetailPanel hospital={hospital} sigla={selected} cell={selected ? cells[selected] : null} />
+        </section>
+
+        <section>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mb-3">Archivos</h3>
           <FileList hospital={hospital} sigla={selected} />
         </section>
       </div>
