@@ -1,6 +1,25 @@
+@import "@radix-ui/colors/slate-dark.css";
+@import "@radix-ui/colors/slate-dark-alpha.css";
+@import "@radix-ui/colors/indigo-dark.css";
+@import "@radix-ui/colors/indigo-dark-alpha.css";
+@import "@radix-ui/colors/jade-dark.css";
+@import "@radix-ui/colors/jade-dark-alpha.css";
+@import "@radix-ui/colors/amber-dark.css";
+@import "@radix-ui/colors/amber-dark-alpha.css";
+@import "@radix-ui/colors/ruby-dark.css";
+@import "@radix-ui/colors/ruby-dark-alpha.css";
+@import "@radix-ui/colors/iris-dark.css";
+@import "@radix-ui/colors/iris-dark-alpha.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* z-index ladder (per spec §10 risks):
+   z-40 ScanProgress (fixed-bottom)
+   z-50 Dialog Overlay
+   z-51 Dialog Content
+   z-60 Toaster (must overlap Dialog so errors stay visible) */
 
 ::-webkit-scrollbar {
   width: 10px;
