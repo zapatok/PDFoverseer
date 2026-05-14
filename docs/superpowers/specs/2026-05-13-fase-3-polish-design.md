@@ -18,7 +18,7 @@ Transformar la UI actual de FASE 2 — funcionalmente completa pero visualmente 
 **Incluye:**
 
 - Token system semántico en `tailwind.config.js` apoyado en Radix Colors dark scales
-- Adopción de 4 librerías nuevas (`lucide-react`, `@radix-ui/colors`, `@radix-ui/react-{dialog,tooltip,popover}`, `sonner`, `windy-radix-palette`)
+- Adopción de 4 librerías nuevas (`lucide-react`, `@radix-ui/colors`, `@radix-ui/react-{dialog,tooltip}`, `sonner`) más fonts via `@fontsource/inter` + `@fontsource/jetbrains-mono`
 - 7 primitivos compartidos bajo `frontend/src/ui/`
 - Rediseño de los 10 componentes activos preservando comportamiento
 - Agrupamiento de `CategoryRow` en 2 secciones colapsables (Normalizadas / Compilaciones) basado en el flag `compilation_suspect`
@@ -302,13 +302,22 @@ Estado "no normalizado" (HLL):
   <EmptyState
     icon={FolderX}
     title="Sin carpeta normalizada"
-    description={`${hospital} no entrega PDFs por carpeta este mes. Ingresa los conteos a mano.`}
-    action={<Button onClick={openManualEntry}>Ingresar conteos</Button>}
+    description={`${hospital} no entrega PDFs por carpeta este mes. El flujo de ingreso manual estará disponible en una versión próxima.`}
+    action={
+      <Tooltip content="Disponible en FASE 4">
+        <span><Button disabled icon={PenLine}>Ingresar conteos</Button></span>
+      </Tooltip>
+    }
   />
 </div>
 ```
 
-(El flow "Ingresar conteos" puede ser un panel que reuse `OverridePanel` por sigla — implementer decide vs deferir si la complejidad excede el polish pass.)
+**Decisión de scope (resuelta en spec, NO en plan):** el flow completo de manual-entry para hospitales sin carpeta (un panel inline con 18 OverridePanels apilados, o un wizard, o una tabla editable) **se difiere a FASE 4**. FASE 3 entrega un empty state informativo con un Button disabled + tooltip. Razones:
+- FASE 3 es polish de UX existente, no agrega features
+- El flow tiene preguntas de diseño propias (persistencia, validación, UX de un mes sin carpeta para 1 de 4 hospitales) que merecen su propio brainstorm
+- HLL es un caso minoritario; el costo de oportunidad vs polish de la mayoría es alto
+
+Cuando FASE 4 entregue el flow real, este snippet de §5.3 cambia el `disabled` por `onClick={openManualEntry}` — el resto queda igual.
 
 ### 5.4 `HospitalDetail.jsx`
 
@@ -445,6 +454,8 @@ function InlineEditCount({ value, onCommit }) {
 ```
 
 **Comportamiento clave:** Enter dispara save → toast notification opcional; Escape descarta. Indicador visual de "edited but not saved" via dot pulsante hasta que el WS confirme.
+
+**Coordinación con OverridePanel (ver §6.6):** el snippet de arriba muestra `onCommit={v => saveOverride(hospital, sigla, v)}` pero el `saveOverride` invocado es el **del store** (no una función local), que gestiona AbortController, cancela debounces pendientes, y mantiene la pending-save flag global. El componente NO debe llamar directamente a `api.patchOverride`. Implementer: leer §6.6 antes de implementar este componente.
 
 **Constante nueva:** `frontend/src/lib/sigla-labels.js`. **Fuente de verdad: `core/domain.py:CATEGORY_FOLDERS`** — usar los nombres de carpeta limpios (sin prefijo numérico, normalizados con tildes y minúsculas-iniciales). NO inventar significados expandidos.
 
@@ -889,7 +900,7 @@ No agregar `windy-radix-palette` (ver §4.1 — usamos CSS variables directas). 
 16. Store extension: `_pendingSave: Map` + `saveOverride` con AbortController (§6.6)
 17. `MonthOverview.jsx` redesign (sin "FASE 2" subtitle, toast en lugar de alert, copy mejorado)
 18. `HospitalCard.jsx` redesign (ribbon de dots + timestamp + Building2 icon)
-19. `HospitalCard.jsx` empty state HLL (`<FolderX/>` + EmptyState + Button "Ingresar conteos" → comportamiento del CTA: por ahora abre un panel inline con 18 OverridePanels apilados; si excede polish scope, deferir explicitamente con un Button disabled + Tooltip "Disponible en FASE 4" y mover la feature al spec FASE 4 vía PR doc-update separado)
+19. `HospitalCard.jsx` empty state HLL: `<FolderX/>` + EmptyState (título "Sin carpeta normalizada", descripción explicativa) + Button **disabled** envuelto en Tooltip "Disponible en FASE 4". Decisión ya tomada en §5.3 — implementer NO construye el flow de manual-entry, sólo el stub visible.
 20. `HospitalDetail.jsx` header redesign (ArrowLeft icon, Total tabular-nums)
 21. `CategoryGroup.jsx` (nuevo componente) + grouping logic por `compilation_suspect` flag en HospitalDetail
 22. `CategoryRow.jsx` redesign (single-line, Dot + Badge + InlineEditCount con coordinación store)
@@ -904,7 +915,7 @@ No agregar `windy-radix-palette` (ver §4.1 — usamos CSS variables directas). 
 29. **Grep audit gating**: `cd frontend && grep -rE "bg-slate-|bg-indigo-|bg-emerald-|bg-rose-|bg-amber-|border-slate-|border-indigo-|border-emerald-|text-slate-|text-indigo-|text-emerald-" src/**/*.jsx` debe retornar EMPTY. Si encuentra hits, migrar antes de seguir. NO mergeable hasta cero.
 30. Manual smoke test end-to-end (los 15 acceptance criteria de §7), update CLAUDE.md con nueva paleta + nuevas deps, tag `fase-3-polish`.
 
-**Estimado total:** ~30 tareas. SDD con haiku implementers debería tardar 5-7 horas (incluyendo review loops). Chunk 3 task 19 tiene un fork de decisión (HLL CTA — implementar vs deferir) que el plan debe pre-resolver consultando con Daniel.
+**Estimado total:** ~30 tareas. SDD con haiku implementers debería tardar 5-7 horas (incluyendo review loops). Toda decisión de producto está resuelta en spec (HLL CTA → diferido a FASE 4, ver §5.3); el plan no necesita pre-resolver nada.
 
 ---
 
