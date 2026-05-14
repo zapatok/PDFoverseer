@@ -1,47 +1,67 @@
 import { useEffect, useState } from "react";
 import { useSessionStore } from "../store/session";
+import { useDebouncedCallback } from "../lib/hooks/useDebouncedCallback";
+import SaveIndicator from "../ui/SaveIndicator";
 
 export default function OverridePanel({ hospital, sigla, cell }) {
-  const { session, saveOverride } = useSessionStore();
+  const session = useSessionStore((s) => s.session);
+  const saveOverride = useSessionStore((s) => s.saveOverride);
+  const pendingSaves = useSessionStore((s) => s.pendingSaves);
+
+  const cellKey = `${hospital}|${sigla}`;
+  const saveStatus = pendingSaves[cellKey] ?? "idle";
+
   const [value, setValue] = useState(cell?.user_override ?? "");
   const [note, setNote] = useState(cell?.override_note ?? "");
+  const [focused, setFocused] = useState({ value: false, note: false });
 
-  // Reset local state when the selected cell changes
+  // Resync from store when cell changes (e.g., InlineEditCount committed externally),
+  // but ONLY if not currently editing that field.
   useEffect(() => {
-    setValue(cell?.user_override ?? "");
-    setNote(cell?.override_note ?? "");
-  }, [hospital, sigla, cell?.user_override, cell?.override_note]);
+    if (!focused.value) setValue(cell?.user_override ?? "");
+  }, [cell?.user_override, focused.value]);
 
-  const persist = () => {
-    if (!session) return;
-    const v = value === "" ? null : Number.parseInt(value, 10);
-    if (v !== null && (Number.isNaN(v) || v < 0)) return;
-    saveOverride(session.session_id, hospital, sigla, v, note || null);
+  useEffect(() => {
+    if (!focused.note) setNote(cell?.override_note ?? "");
+  }, [cell?.override_note, focused.note]);
+
+  const flushSave = useDebouncedCallback((v, n) => {
+    const numericValue = v === "" || v === null ? null : parseInt(v, 10);
+    saveOverride(session.session_id, hospital, sigla, numericValue, n || null);
+  }, 400);
+
+  const onChangeValue = (e) => {
+    setValue(e.target.value);
+    flushSave(e.target.value, note);
+  };
+  const onChangeNote = (e) => {
+    setNote(e.target.value);
+    flushSave(value, e.target.value);
   };
 
   return (
-    <div className="space-y-2 text-sm">
-      <label className="block">
-        <span className="text-slate-400">Override:</span>
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
         <input
           type="number"
-          min={0}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={persist}
-          className="ml-2 w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1"
+          placeholder={String(cell?.ocr_count ?? cell?.filename_count ?? 0)}
+          onChange={onChangeValue}
+          onFocus={() => setFocused((f) => ({ ...f, value: true }))}
+          onBlur={() => setFocused((f) => ({ ...f, value: false }))}
+          className="w-24 bg-po-bg border border-po-border rounded px-2 py-1.5 text-sm tabular-nums focus:border-po-accent outline-none"
         />
-      </label>
-      <label className="block">
-        <span className="text-slate-400">Nota:</span>
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          onBlur={persist}
-          rows={3}
-          className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1"
-        />
-      </label>
+        <SaveIndicator status={saveStatus} />
+      </div>
+      <textarea
+        value={note}
+        placeholder="Nota (opcional)"
+        onChange={onChangeNote}
+        onFocus={() => setFocused((f) => ({ ...f, note: true }))}
+        onBlur={() => setFocused((f) => ({ ...f, note: false }))}
+        rows={3}
+        className="w-full bg-po-bg border border-po-border rounded px-2 py-1.5 text-sm placeholder-po-text-subtle focus:border-po-accent outline-none resize-none"
+      />
     </div>
   );
 }
