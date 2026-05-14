@@ -2084,7 +2084,7 @@ refactor(hospital-detail): redesign header + grouping (Normalizadas / Compilacio
 - Header: ArrowLeft icon + Volver text-button, tabular-nums total
 - Categorías partitioned into 2 sections by compilation_suspect flag
 - Compilaciones section gets showScanAll prop (button moves out of
-  ScanControls in Task 27)
+  ScanControls in Task 26)
 - Stubs for CategoryGroup and DetailPanel — replaced in Tasks 20 and 22
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
@@ -2501,7 +2501,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
 cd frontend && npm run build
 ```
 
-`npm run dev` → click a sigla → DetailPanel shows: sigla + label + big number + pills + breakdown table + override panel. OverridePanel still the OLD shape (rewritten in Task 26).
+`npm run dev` → click a sigla → DetailPanel shows: sigla + label + big number + pills + breakdown table + override panel. OverridePanel still the OLD shape (rewritten in Task 25).
 
 - [ ] **Step 3: Commit**
 
@@ -3215,7 +3215,7 @@ EOF
 )"
 ```
 
-If no edits needed (audit was clean from the start), no commit — proceed to Task 30.
+If no edits needed (audit was clean from the start), no commit — proceed to Task 29.
 
 ---
 
