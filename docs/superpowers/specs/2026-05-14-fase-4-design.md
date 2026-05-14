@@ -20,8 +20,8 @@ Cerrar tres pendientes UX del roadmap post-FASE 3 que comparten una capa de dise
 
 **Incluye:**
 
-- HLL manual flow: HospitalCard CTA "Llenar todas" en estado empty; HospitalDetail con `mode="manual"`; reusa CategoryRow + InlineEditCount existentes; autoshift de focus al siguiente input al presionar Enter; nuevo valor de `method` en historical_counts: `"manual_entry"`.
-- Per-file: extiende `ScanResult` con `per_file: dict[str, int] | None`; cada scanner (simple_factory + OCR scanners) lo propaga; persiste en cell state; expone en `/files`; nuevo endpoint `PATCH /cells/{h}/{s}/files/{filename}/override`; cell-count derivado de `sum(per_file_overrides | per_file)` cuando hay datos; nuevo valor de `method`: `"per_file_override"`.
+- HLL manual flow: HospitalCard CTA "Llenar manualmente →" en estado empty; HospitalDetail con `mode="manual"`; reusa CategoryRow + InlineEditCount existentes; autoshift de focus al siguiente input al presionar Enter; reusa el literal de `method` `"manual"` que ya existe en FASE 2 (no se inventan valores nuevos).
+- Per-file: extiende `ScanResult` con `per_file: dict[str, int] | None`; cada scanner (simple_factory + OCR scanners) lo propaga; persiste en cell state; expone en `/files`; nuevo endpoint `PATCH /cells/{h}/{s}/files/{filename}/override`; cell-count derivado de `sum(per_file_overrides | per_file)` cuando hay datos; el cell `method` se mantiene como el del scanner subyacente (per-file override es un refinamiento, no un método nuevo); cuando hay overrides el cell también recibe `method="manual"` solo si la suma derivada se vuelve la fuente principal del count (ver §6.3).
 - Frontend per-file: FileList row muestra `Npp + Ndocs + OriginChip (OCR/R1/manual)` con InlineEditCount sobre el badge de docs; chip uniforme tipo Badge primitive de FASE 3 con tres variantes (iris/jade/amber).
 - Multi-mes: toggle `[Mes actual] [Histórico]` en header de MonthOverview con URL state (`?view=history`); nuevo componente `Sparkline` (~50 LoC SVG inline, sin libs externas); nuevo `SparkGrid` 18×4 reusando layout del MonthOverview; tooltip al hover muestra los valores mes-a-mes; anomalías (caída >30% vs promedio 6m, baseline efectivo ≥6 meses) en tone "warn"; nuevo endpoint `GET /sessions/{id}/history?n=12`.
 - Sin schema migrations: todos los nuevos campos en cell state son aditivos vía `setdefault`. `historical_counts` se reusa tal cual.
@@ -56,7 +56,7 @@ Las 3 dimensiones son ortogonales y no se entrelazan en runtime — un cell tien
 │   ├─ [Mes actual]  [Histórico] ◀ toggle NEW                     │
 │   ├─ HospitalCardGrid (mes actual)                              │
 │   │   └─ HospitalCard×4                                         │
-│   │       └─ "Llenar todas →" CTA ◀ NEW (cuando state=empty)    │
+│   │       └─ "Llenar manualmente →" CTA ◀ NEW (cuando state=empty)│
 │   └─ SparkGrid (histórico) ◀ NEW                                │
 │       └─ Sparkline×72                                           │
 │  HospitalDetail                                                 │
@@ -96,16 +96,16 @@ Lo que NO cambia: `/sessions` (CRUD), `/output` (Excel), websocket, `core/orches
 
 | Componente | Acción | Detalle |
 |------------|--------|---------|
-| `HospitalCard` | extiende | Cuando `state==="empty"` (sin folder), reemplaza el placeholder estático por un CTA accionable "Llenar manualmente →" que navega a `/hospital/{code}?mode=manual&focus=reunion`. |
+| `HospitalCard` | extiende | Cuando `state==="empty"` (sin folder), reemplaza el placeholder estático por un CTA accionable "Llenar manualmente →" que navega a `/hospital/{code}?mode=manual&focus=reunion`. (CTA copy idéntico en card y detail header — single string en `frontend/src/lib/constants.js`.) |
 | `HospitalDetail` | extiende | Acepta `mode: "scanned" \| "manual"`. En modo manual: (a) header muestra "N/18 ingresadas" en lugar de "N/18 procesadas"; (b) cada CategoryRow muestra "—" como placeholder del count; (c) focus inicial en el InlineEditCount de la primera sigla; (d) Enter avanza al siguiente input. |
 | `CategoryRow` | extiende | (a) Acepta `mode="manual"` que cambia placeholder y oculta chip de método cuando count es null. (b) Cuando hay `per_file_overrides`, recalcula su display count como `sum(overrides | per_file)`. |
 | `FileList` | extiende | Cada row pasa de `[icono][name][page_count]` a `[icono][name][page_count][badge N docs editable][OriginChip]`. Búsqueda existente sin cambio. Footer muestra "N archivos · M docs total" (M = cell-count). |
 | `OriginChip` | nuevo, interno | ~15 LoC. 3 variantes: `OCR` (po-iris), `R1` (po-jade), `manual` (po-amber). Padding/radius/altura idénticos. No es primitive top-level; vive en `frontend/src/components/`. |
-| `Sparkline` | nuevo | ~50 LoC SVG inline. Props: `data: number[]`, `tone?: "neutral"\|"warn"\|"muted"`. Si `data.length === 0` renderiza dashed line; si `data.length === 1` renderiza solo el punto. Hereda po-* tokens. |
-| `SparkGrid` | nuevo | Vista que reemplaza HospitalCardGrid cuando `?view=history`. Layout: 18 filas (siglas) × 5 columnas (label + 4 hospitales). Cada celda: `<Sparkline data={series} tone={anomalyTone} />` + valor del último mes a la derecha. Hover en celda → Tooltip con la lista de (month, count). |
+| `Sparkline` | nuevo | ~50 LoC SVG inline. Props: `data: number[]`, `tone?: "neutral"\|"warn"\|"muted"`. **Tonto** — no calcula anomalías; solo dibuja según el tone que recibe. Si `data.length === 0` renderiza dashed line; si `data.length === 1` renderiza solo el punto. Hereda po-* tokens. |
+| `SparkGrid` | nuevo | Vista que reemplaza HospitalCardGrid cuando `?view=history`. Layout: 18 filas (siglas) × 5 columnas (label + 4 hospitales). **Computa** `anomalyTone(series)` y lo pasa como prop a `<Sparkline>`. Cada celda: `<Sparkline data={series} tone={anomalyTone(series)} />` + valor del último mes a la derecha. Hover en celda → Tooltip con la lista de (month, count). |
 | `MonthOverview` | extiende | Header agrega switch `[Mes actual] [Histórico]` que escribe a `?view=`. URL state, no Zustand. Recarga preservante. |
 | `useSessionStore` | extiende | Nueva acción `savePerFileOverride(hospital, sigla, filename, count)` siguiendo el patrón AbortController-safe de FASE 3 (`saveOverride`). Key del AbortController: `${hospital}|${sigla}|${filename}`. |
-| `useHistoryStore` | nuevo | Hook + state local (no Zustand global). Fetchea `/history?n=12` una vez; cacheado en memoria; refetch al invalidar (post-Excel). |
+| `useHistoryStore` | nuevo | Hook con **cache módulo-level** (objeto singleton fuera del componente, similar al patrón de `frontend/src/lib/api.js`). Fetchea `/history?n=12` la primera vez que cualquier consumer monta; cachea por `session_id`; expone `invalidate()` que SparkGrid llama cuando recibe el toast post-Excel. Cero deps nuevas (ni Zustand, ni React Query). |
 | `InlineEditCount` | reusa tal cual | Mismo signature: `(value: number, onSave: (v: number) => void)`. Sirve para cell-count (FASE 3) y per-file-count (FASE 4). |
 
 ### 5.2 Backend
@@ -115,10 +115,11 @@ Lo que NO cambia: `/sessions` (CRUD), `/output` (Excel), websocket, `core/orches
 | `core/scanners/base.py` | Agrega `per_file: dict[str, int] \| None = None` al dataclass `ScanResult`. |
 | `core/scanners/simple_factory.py` | Construye `per_file = {filename: 1 for filename in glob}` paralelo al `breakdown` por empresa existente. No remover breakdown. |
 | `core/scanners/art_scanner.py`, `charla_scanner.py`, `_header_detect_base.py` | Modifican el loop interno (que ya itera por archivo) para acumular `per_file: dict[str, int]` y exponerlo en ScanResult. Fallback `per_file=None` solo si el OCR falla (error path). |
-| `api/state.py` | (a) `apply_filename_result` y `apply_ocr_result` persisten `cell["per_file"] = result.per_file`. (b) Nuevo método `apply_per_file_override(session_id, hospital, sigla, filename, count)`. (c) Función pura `compute_cell_count(cell)` con la jerarquía de precedencia. |
+| `api/state.py` | (a) `apply_filename_result`, `apply_ocr_result` y el dispatcher legacy `apply_cell_result` (líneas 169–177, deprecated wrapper sobre filename_result) persisten `cell["per_file"] = result.per_file`. (b) Nuevo método `apply_per_file_override(session_id, hospital, sigla, filename, count)`. (c) Función pura `compute_cell_count(cell)` con la jerarquía de precedencia. |
 | `api/routes/sessions.py` | (a) `/files` endpoint joinea `cell.per_file` y `cell.per_file_overrides` con la lista enumerada del disco. (b) Nuevo endpoint `PATCH /sessions/{id}/cells/{h}/{s}/files/{filename}/override`. |
-| `api/routes/history.py` | **NUEVO**. `GET /sessions/{id}/history?n=12` returna `{(hospital, sigla): [(year_month, count, method), ...]}`. Una sola query SQL. |
-| `core/excel/writer.py` | Verificar (con test): cuando un hospital no tiene datos en cell state, las 18 celdas correspondientes salen como 0 o vacías sin error. Si no se cumple, fix mínimo. |
+| `api/routes/history.py` | **NUEVO**. `GET /sessions/{id}/history?n=12` returna `{(hospital, sigla): [(year, month, count, method), ...]}`. Implementación reusa `core/db/historical_repo.fetch_range(from_year, from_month, to_year, to_month)` que ya existe (~línea 99) — query usa el patrón canónico `(year * 12 + month) BETWEEN ?` para cubrir cross-year ranges. **No** se modifica el schema de `historical_counts` (columnas reales: `year INTEGER, month INTEGER, hospital, sigla, count, confidence, method, finalized_at`, PK `(year, month, hospital, sigla)`). |
+| `frontend/src/lib/cellCount.js` | **NUEVO**. Función pura `computeCellCount(cell)` espejando 1:1 la lógica de `api/state.py.compute_cell_count`. Sin TypeScript (el repo es 100% `.jsx` + `.js`; no hay TS toolchain). |
+| `core/excel/writer.py` | Verificar con `pytest tests/test_writer.py -k missing_hospital` (test a crear si no existe): cuando un hospital no tiene datos en cell state, las 18 celdas correspondientes salen como 0 o vacías sin error. Tarea PRE-FLIGHT (ver §9.4). |
 | `api/main.py` | Registrar el nuevo router `history`. |
 
 ### 5.3 Sin nuevos primitives top-level
@@ -147,7 +148,9 @@ cell = {
     "per_file_overrides": {           # ◀ NEW
         "odi_misc.pdf": 5,
     },
-    "manual_entry": False,            # ◀ NEW (true cuando es HLL flow)
+    "manual_entry": False,            # ◀ NEW (true cuando es HLL flow; usado por
+                                       # frontend para distinguir UI; backend persiste
+                                       # method="manual" en historical_counts)
     "flags": [...],
     "errors": [...],
     "files_scanned": 6,
@@ -179,26 +182,36 @@ def compute_cell_count(cell: dict) -> int:
     return cell.get("ocr_count") or cell.get("filename_count") or 0
 ```
 
-### 6.3 historical_counts.method (audit trail)
+### 6.3 historical_counts.method registry (audit trail)
 
-Valores existentes y nuevos (sin schema migration; column es TEXT):
+Contrato establecido en FASE 2 §4.5 y frozen en `frontend/src/lib/method-labels.js` (comentario: "never invent new tokens here"). FASE 4 **no agrega valores nuevos** — reusa los existentes.
 
-- `"filename_glob"` — régimen 1, sin OCR.
-- `"ocr_<sigla>"` — régimen 2, OCR corrió.
-- `"override"` — usuario sobreescribió el cell-count (FASE 2).
-- `"per_file_override"` ◀ NEW — al menos un archivo del cell tiene override; cell-count es suma derivada.
-- `"manual_entry"` ◀ NEW — HLL flow, datos ingresados sin scan.
+| Literal | Significado | Origen |
+|---------|-------------|--------|
+| `"filename_glob"` | Régimen 1, conteo derivado del nombre de archivo. | FASE 1 |
+| `"header_detect"` | OCR detectó cabeceras de formulario (header_detect scanners). | FASE 2 |
+| `"corner_count"` | OCR detectó "Pagina N de M" en esquina (ART). | FASE 2 |
+| `"page_count_pure"` | Heurística page_count / typical (charla, fallback). | FASE 2 |
+| `"manual"` | Usuario proveyó el valor — cubre **3 casos en FASE 4**: (a) `user_override` post-scan (FASE 2 escape hatch), (b) HLL manual-entry sin scan (FASE 4 nuevo flow), (c) cell donde la suma derivada de `per_file_overrides` es lo que define el count final. |
+
+**Por qué reusar `"manual"` en lugar de inventar `"manual_entry"` o `"per_file_override"`:** mantiene el contrato del frontend (`METHOD_LABEL["manual"] = "Manual"`) intacto; el caso "intervino el usuario" es semánticamente uno solo a nivel del audit trail; el detalle granular (cell-level vs HLL flow vs per-file override mix) ya está representado en otros campos del cell (`user_override`, `manual_entry`, `per_file_overrides`).
 
 ### 6.4 Query histórica
 
+Schema real (`core/db/migrations.py:21-31`): columnas separadas `year INTEGER` y `month INTEGER`, PK `(year, month, hospital, sigla)`. Query canónica con el patrón ya usado en `core/db/historical_repo.py:108`:
+
 ```sql
-SELECT hospital, sigla, year_month, count, method
+SELECT year, month, hospital, sigla, count, confidence, method, finalized_at
 FROM historical_counts
-WHERE year_month >= ?     -- ej. '2025-05' para 12 meses atrás
-ORDER BY hospital, sigla, year_month
+WHERE (year * 12 + month) BETWEEN ? AND ?
+ORDER BY year, month, hospital, sigla
 ```
 
-Volumen máximo: 12 × 4 × 18 = 864 rows. La query completa más el agrupamiento Python costan <100ms en local.
+Cálculo del rango (Python): `from_key = from_year * 12 + from_month`; para 12 meses atrás desde mayo 2026, `from = (2025, 6)` → `from_key = 24306`; `to = (2026, 5)` → `to_key = 24317`.
+
+La función `core/db/historical_repo.fetch_range(from_year, from_month, to_year, to_month)` ya implementa exactamente este patrón — el endpoint `/history` la llama directamente sin SQL nuevo.
+
+Volumen máximo: 12 × 4 × 18 = 864 rows. Query + agrupamiento Python <100ms en local.
 
 ## 7. Data flow
 
@@ -212,13 +225,16 @@ Volumen máximo: 12 × 4 × 18 = 864 rows. La query completa más el agrupamient
 [user] tipea "12" + Enter
    → useSessionStore.saveOverride("HLL", "reunion", 12, manual=True)
    → POST /sessions/{id}/cells/HLL/reunion/override
-       {count: 12, method: "manual_entry"}
+       {count: 12, method: "manual"}     # ver registry §6.3 — reusa literal FASE 2
    → api/state.py: cell.user_override=12, cell.manual_entry=True
    → WebSocket broadcast cell_updated
    → focus auto al InlineEditCount de "irl"
 [user] cierra app, F5 → state persiste (BD)
 [user] genera Excel
-   → historical_counts UPSERT (HLL, reunion, 2026-04, 12, "manual_entry")
+   → historical_counts UPSERT vía core/db/historical_repo.upsert(...)
+       (year=2026, month=4, hospital="HLL", sigla="reunion",
+        count=12, confidence="manual", method="manual",
+        finalized_at=NOW)
    → Excel sale con HLL=12 en row "reunion"
 ```
 
@@ -247,8 +263,8 @@ Volumen máximo: 12 × 4 × 18 = 864 rows. La query completa más el agrupamient
    → router.replace("?view=history")
    → MonthOverview detecta view, renderea <SparkGrid>
 [useHistoryStore] (si no cacheado) GET /sessions/{id}/history?n=12
-   → api/routes/history.py: SQL query, group by (hospital, sigla)
-   → returns {"HPV|reunion": [{year_month: "2025-05", count: 8, method: "filename_glob"}, ...], ...}
+   → api/routes/history.py: llama historical_repo.fetch_range(...), group by (hospital, sigla)
+   → returns {"HPV|reunion": [{year: 2025, month: 5, count: 8, method: "filename_glob"}, ...], ...}
 [SparkGrid] renderea 18×5 grid
    → cada celda: <Sparkline data={series.map(s => s.count)} tone={anomalyTone(series)} />
    → valor del último mes a la derecha
@@ -298,20 +314,21 @@ Volumen máximo: 12 × 4 × 18 = 864 rows. La query completa más el agrupamient
 | historical_counts no se popula como esperaba (bug latente FASE 2). | Media | Pre-flight: smoke ABRIL, BD inspect, verificar 54 rows (3 hospitales × 18). Fix antes de FASE 4 si falla. |
 | Sparkline con 1 punto se ve raro. | Baja | Component renderiza solo el punto si N==1. Test dedicado. |
 | Bundle delta significativo. | Baja (single-user, memoria `feedback_bundle_size_irrelevant_single_user`) | Reportar en commit body para audit. No bloquea. |
-| HLL "Llenar todas" con 100ms de delay por POST. | Baja | Optimistic update + rollback on error (mismo patrón FASE 3). |
-| Cell-count derivado diverge entre frontend y backend. | Media | `compute_cell_count(cell)` función pura idéntica en Python (`api/state.py`) y en TS (`frontend/src/utils/cellCount.ts`). Test cross-language vía fixtures JSON compartidos. |
+| HLL "Llenar manualmente" con 100ms de delay por POST. | Baja | Optimistic update + rollback on error (mismo patrón FASE 3). |
+| Cell-count derivado diverge entre frontend y backend. | Media | `compute_cell_count(cell)` función pura en Python (`api/state.py`) espejada como `computeCellCount(cell)` en JS (`frontend/src/lib/cellCount.js` — siguiendo la convención `lib/` del repo, no TS). Test cross-language vía fixtures JSON compartidos en `tests/fixtures/cell_count_cases.json`. |
 
 ## 9. Testing strategy
 
 ### 9.1 Layers
 
+FASE 3 §8 (`docs/superpowers/specs/2026-05-13-fase-3-polish-design.md`) estableció: **no nuevos tests automatizados de UI** (no vitest, no jest, no testing-library). PDFoverseer es single-user / LAN / batch; el ROI de la toolchain frontend no justifica la setup. FASE 4 mantiene la línea: tests Python automatizados, smoke manual frontend.
+
 | Layer | Tool | Cobertura FASE 4 |
 |-------|------|-------------------|
-| Unit Python | pytest + fixtures reales | (a) ScanResult.per_file serializa OK; (b) cada scanner devuelve per_file con keys = filenames; (c) compute_cell_count cubre las 3 ramas; (d) apply_per_file_override flow; (e) apply_override con manual_entry=true no se machaca con apply_filename_result/apply_ocr_result; (f) writer.py tolera HLL ausente. |
-| Integration Python | pytest + fixtures fase 1 (`data/samples/abril/`) | (a) `scan_month` propaga per_file end-to-end para una cell de 2 archivos; (b) endpoint `/history?n=12` shape correcto con BD pre-poblada SQL; (c) `PATCH /files/{f}/override` actualiza state + emite WebSocket. |
-| Frontend unit | vitest + react-testing-library | (a) Sparkline renderiza N puntos / dashed empty / solo punto cuando N==1; (b) OriginChip variantes; (c) CategoryRow mode="manual" hide chip; (d) useHistoryStore cachea+invalida; (e) compute_cell_count TS cubre 3 ramas. |
-| Frontend integration | vitest + msw | (a) Toggle Histórico cambia URL y renderiza SparkGrid; (b) HLL flow card → detail → ingreso → toast; (c) FileList row override cambia chip y suma cell-total. |
-| E2E smoke manual | chrome-devtools MCP (Claude maneja) | Recorrer las 3 features, capturar screenshots, encontrar bugs reales, commitearlos. Memoria `feedback_browser_testing_via_devtools`. |
+| Unit Python | pytest + fixtures reales | (a) ScanResult.per_file serializa OK; (b) cada scanner devuelve per_file con keys = filenames; (c) compute_cell_count cubre las ramas (override, per_file mix, fallback); (d) apply_per_file_override flow; (e) apply_override / apply_filename_result / apply_ocr_result preservan `user_override` y `manual_entry` cuando ya existen; (f) writer.py tolera HLL ausente. |
+| Integration Python | pytest + fixtures fase 1 (`data/samples/abril/`) | (a) `scan_month` propaga per_file end-to-end para una cell de 2 archivos; (b) endpoint `/history?n=12` shape correcto con BD pre-poblada SQL; (c) `PATCH /files/{f}/override` actualiza state + emite WebSocket; (d) `historical_repo.fetch_range` integrado con la nueva ruta. |
+| Cross-language | pytest + fixtures JSON | `tests/fixtures/cell_count_cases.json` contiene N casos `{cell, expected_count}`. Un test Python valida `compute_cell_count(cell) == expected`. La paridad JS se verifica en el smoke manual cuando el frontend muestra el mismo número que el backend para los mismos cells. |
+| E2E smoke manual | chrome-devtools MCP (Claude maneja) | Recorrer las 3 features, capturar screenshots, encontrar bugs reales, commitearlos. Memoria `feedback_browser_testing_via_devtools`. Cobertura: HLL flow completo (entry + persist + Excel), per-file override (chip change + total recalc + persist), multi-mes toggle (URL state + sparkline tones + tooltip). |
 
 ### 9.2 Fixtures
 
@@ -332,21 +349,21 @@ Cada commit debe ser red→green→refactor con verificación visible:
 6. `compute_cell_count(cell)` función pura + tests de las 3 ramas.
 7. `apply_per_file_override` en `state.py`.
 8. Endpoint `PATCH /files/{f}/override`.
-9. Verificar `writer.py` tolera HLL ausente — agregar test si falta.
-10. Endpoint `GET /history?n=12`.
-11. Frontend: `Sparkline` component + tests.
-12. Frontend: `OriginChip` component + tests.
+9. Endpoint `GET /history?n=12` (reusa `historical_repo.fetch_range`).
+10. Frontend: `frontend/src/lib/cellCount.js` (función pura, tests Python cross-language).
+11. Frontend: `Sparkline` component (smoke manual; no test unit por convención FASE 3).
+12. Frontend: `OriginChip` component.
 13. Frontend: extender `FileList` row con per_file UI.
 14. Frontend: extender `HospitalCard` + `HospitalDetail` para HLL manual flow.
-15. Frontend: `SparkGrid` + toggle en `MonthOverview`.
-16. Frontend: `useHistoryStore` + integración SparkGrid.
-17. Smoke E2E manual con chrome-devtools MCP. Bugs caught → commits adicionales antes de cerrar.
+15. Frontend: `SparkGrid` + toggle en `MonthOverview` + `useHistoryStore` (cache módulo-level).
+16. Smoke E2E manual con chrome-devtools MCP. Bugs caught → commits adicionales antes de cerrar.
 
 ### 9.4 Pre-flight (antes de cualquier código)
 
-- [ ] Verificar que `historical_counts` se popula al generar Excel hoy (smoke ABRIL → BD inspect → 54 rows esperados).
-- [ ] Verificar que `core/excel/writer.py` tolera HLL sin datos (test directo).
-- [ ] Verificar que AbortController-safe `saveOverride` de FASE 3 sigue intacto en `useSessionStore`.
+- [ ] Verificar que `historical_counts` se popula al generar Excel hoy (smoke ABRIL → BD inspect → 54 rows esperados con method ∈ los 5 literales del registry §6.3).
+- [ ] Verificar que `core/excel/writer.py` tolera un hospital sin datos: ejecutar `pytest tests/test_writer.py -k missing_hospital` (crear test si no existe; debe pasar). Si el writer falla, fix mínimo antes de tareas FASE 4.
+- [ ] Verificar que AbortController-safe `saveOverride` de FASE 3 sigue intacto en `useSessionStore` (grep el patrón).
+- [ ] Confirmar que `core/db/historical_repo.fetch_range` tiene la signature esperada `(from_year, from_month, to_year, to_month)` — si difiere, ajustar §5.2 antes de implementar.
 
 ## 10. Acceptance criteria
 
@@ -357,7 +374,7 @@ Cada commit debe ser red→green→refactor con verificación visible:
 - F5 después de ingresar 5 categorías mantiene los 5 valores.
 - Generar Excel con HLL=valores ingresados; las 18 celdas del Excel reflejan los valores; las no-ingresadas salen como 0.
 - Generar Excel sin ingresar nada genera HLL en 0 sin error.
-- `historical_counts` registra entries con `method="manual_entry"`.
+- `historical_counts` registra entries con `method="manual"` (literal FASE 2 reusado, ver registry §6.3).
 
 **AC2 — Per-file docs:**
 - FileList row para un cell con OCR muestra `Npp + N docs + chip OCR` (azul outlined badge + chip iris).
@@ -366,7 +383,7 @@ Cada commit debe ser red→green→refactor con verificación visible:
 - Tras override: badge cambia a fondo ámbar, chip cambia a "manual", cell-total recalcula como suma derivada y CategoryRow refleja el nuevo total inmediatamente.
 - Toast Sonner confirma cada override.
 - BD persiste `per_file_overrides`; F5 mantiene los overrides.
-- `historical_counts` registra entries con `method="per_file_override"` cuando hay al menos un override per-file.
+- `historical_counts` registra entries con `method="manual"` cuando el cell-count final viene de overrides per-file (registry §6.3 caso (c)). Si todos los archivos del cell mantienen el valor inferido por OCR (sin override), el `method` queda como el del scanner (`header_detect`/`corner_count`/`page_count_pure`).
 
 **AC3 — Multi-mes:**
 - MonthOverview header tiene toggle `[Mes actual] [Histórico]` que cambia `?view=`.
