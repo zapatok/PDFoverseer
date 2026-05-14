@@ -1,74 +1,102 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { FileText, FileStack, FileX, MousePointer2 } from "lucide-react";
 import { useSessionStore } from "../store/session";
+import { api } from "../lib/api";
+import EmptyState from "../ui/EmptyState";
+import Skeleton from "../ui/Skeleton";
+import Tooltip from "../ui/Tooltip";
 
 export default function FileList({ hospital, sigla }) {
-  const { session, openLightbox } = useSessionStore();
+  const session = useSessionStore((s) => s.session);
+  const openLightbox = useSessionStore((s) => s.openLightbox);
   const [files, setFiles] = useState(null);
-  const [error, setError] = useState(null);
-  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
-    if (!session || !hospital || !sigla) {
+    if (!session?.session_id || !hospital || !sigla) {
       setFiles(null);
       return;
     }
-    setError(null);
-    let cancelled = false; // ignore stale responses when the user
-    // rapidly clicks between cells
-    api
-      .getCellFiles(session.session_id, hospital, sigla)
-      .then((data) => {
-        if (!cancelled) setFiles(data);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
+    setFiles(null);
+    api.getCellFiles(session.session_id, hospital, sigla)
+      .then(setFiles)
+      .catch((err) => setFiles({ error: String(err) }));
   }, [session?.session_id, hospital, sigla]);
 
-  if (!hospital || !sigla)
-    return <p className="text-slate-500 text-sm">Selecciona una categoría</p>;
-  if (error) return <p className="text-red-400 text-sm">{error}</p>;
-  if (!files) return <p className="text-slate-500 text-sm">Cargando…</p>;
-  if (files.length === 0) return <p className="text-slate-500 text-sm">Sin PDFs</p>;
+  if (!sigla) {
+    return (
+      <EmptyState
+        icon={MousePointer2}
+        title="Selecciona una categoría"
+        description="Elige una sigla para ver los archivos PDF asociados."
+      />
+    );
+  }
 
-  const filtered = query
-    ? files.filter((f) => f.name.toLowerCase().includes(query.toLowerCase()))
-    : files;
+  if (files === null) {
+    return (
+      <div className="space-y-2">
+        {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10" />)}
+      </div>
+    );
+  }
+
+  if (files?.error) {
+    return (
+      <EmptyState
+        icon={FileX}
+        title="No se pudieron cargar los archivos"
+        description={files.error}
+      />
+    );
+  }
+
+  if (files.length === 0) {
+    return (
+      <EmptyState
+        icon={FileX}
+        title="Sin archivos"
+        description="Esta categoría no tiene archivos PDF en este mes."
+      />
+    );
+  }
+
+  const filtered = files.filter((f) =>
+    f.name.toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
-    <div className="space-y-2">
-      <input
-        type="search"
-        placeholder="buscar…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
-      />
-      <ul className="space-y-0.5 max-h-[60vh] overflow-y-auto">
-        {filtered.map((f) => {
-          const actualIndex = files.indexOf(f);
-          return (
-            <li key={f.name}>
-              <button
-                onClick={() => openLightbox(hospital, sigla, actualIndex)}
-                className="w-full text-left text-xs px-2 py-1 rounded hover:bg-slate-800 font-mono"
-              >
-                {f.subfolder && <span className="text-slate-500">{f.subfolder}/</span>}
-                {f.name}
-                <span className="ml-2 text-slate-500">· {f.page_count}pp</span>
-                {f.suspect && <span className="ml-1 text-amber-400">⚠</span>}
-              </button>
-            </li>
-          );
-        })}
+    <div className="rounded-xl bg-po-panel border border-po-border overflow-hidden">
+      <div className="p-2 border-b border-po-border">
+        <input
+          placeholder="Buscar archivo…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full bg-transparent text-sm text-po-text placeholder-po-text-subtle focus:outline-none px-2 py-1"
+        />
+      </div>
+      <ul className="max-h-[60vh] overflow-y-auto">
+        {filtered.map((f, i) => (
+          <li key={`${f.name}-${i}`}>
+            <button
+              onClick={() => openLightbox(hospital, sigla, files.indexOf(f))}
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-po-panel-hover text-left transition"
+            >
+              <FileText size={14} strokeWidth={1.75} className="text-po-text-muted shrink-0" />
+              <span className="font-mono text-xs text-po-text truncate flex-1">{f.name}</span>
+              <span className="text-xs tabular-nums text-po-text-muted shrink-0">{f.page_count}pp</span>
+              {f.suspect && (
+                <Tooltip content="Probable compilación">
+                  <span><FileStack size={14} strokeWidth={1.75} className="text-po-suspect shrink-0" /></span>
+                </Tooltip>
+              )}
+            </button>
+          </li>
+        ))}
       </ul>
-      <p className="text-xs text-slate-500">
+      <div className="px-3 py-2 text-xs text-po-text-muted border-t border-po-border">
         {filtered.length} de {files.length}
-      </p>
+      </div>
     </div>
   );
 }
