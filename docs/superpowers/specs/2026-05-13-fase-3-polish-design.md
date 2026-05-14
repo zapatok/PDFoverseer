@@ -854,7 +854,7 @@ Una sesión manual del implementer al final del plan debe verificar:
 - **Layering: Dialog / Toaster / ScanProgress z-index**: 3 surfaces flotantes coexisten. Orden explícito requerido en `index.css` o como prop. Ladder: `z-40` ScanProgress (fixed-bottom), `z-50` Dialog Overlay, `z-51` Dialog Content, `z-60` Toaster (debe estar sobre el Dialog para mostrar errores aún en flow con modal abierto). Implementer wire este ladder en Chunk 1 task 4 cuando setea Toaster.
 - **Bundle baseline**: AC10 referencia "baseline + 25 KB" pero el baseline necesita medirse. Chunk 1 task 0: `cd frontend && npm run build` antes de instalar deps; copiar `dist/assets/index-*.js` gzip size a un block "Bundle baseline: NN KB" al final de §10 mediante commit. Plan implementer reemplaza el placeholder.
 
-**Bundle baseline (medido en Chunk 1):** _<placeholder — implementer measures and commits actual gzipped size of `frontend/dist/assets/index-*.js` on tip-of-`po_overhaul` before Chunk 1 installs>_
+**Bundle baseline (medido en Chunk 1):** **51.30 kB** gzipped (`frontend/dist/assets/index-*.js` on tip-of-`po_overhaul` commit `ca2d75c`, measured 2026-05-13).
 
 ## 11. Dependencies (new)
 
