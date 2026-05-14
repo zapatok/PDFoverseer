@@ -72,6 +72,12 @@ export default function PDFLightbox() {
 
   return (
     <Dialog open={!!lightbox} onOpenChange={(o) => !o && closeLightbox()}>
+      <Dialog.Title className="sr-only">
+        Vista previa de PDF: {lightbox.hospital} / {lightbox.sigla} / {filename}
+      </Dialog.Title>
+      <Dialog.Description className="sr-only">
+        Documento PDF con {pageCount ?? "?"} páginas. Use el panel derecho para ajustar el conteo manual o agregar una nota.
+      </Dialog.Description>
       <Dialog.Header>
         <div className="flex items-center gap-2 text-sm">
           <span className="font-mono text-po-text-muted">{lightbox.hospital}</span>
