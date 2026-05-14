@@ -1,6 +1,9 @@
 import { useEffect } from "react";
+import { Calendar, RefreshCw, FileSpreadsheet } from "lucide-react";
+import { toast } from "sonner";
 import { useSessionStore } from "../store/session";
 import HospitalCard from "../components/HospitalCard";
+import Button from "../ui/Button";
 
 const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
 
@@ -28,21 +31,32 @@ export default function MonthOverview() {
     }),
   );
 
+  const onGenerate = async () => {
+    try {
+      const r = await generateOutput(session.session_id);
+      toast.success(`Excel guardado en ${r.output_path}`, { icon: <FileSpreadsheet size={16} /> });
+    } catch (err) {
+      toast.error(`No se pudo generar el Excel: ${String(err)}`);
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <section>
-        <h2 className="text-sm uppercase text-slate-400 mb-2">Mes</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mb-3">Mes</h2>
         <div className="flex gap-2 flex-wrap">
           {months.map((m) => (
             <button
               key={m.session_id}
               onClick={() => openMonth(m.session_id, m.year, m.month)}
-              className={`px-3 py-1.5 rounded text-sm border transition
-                ${activeMonth === m.session_id
-                  ? "bg-indigo-600 border-indigo-500"
-                  : "bg-slate-900 border-slate-700 hover:bg-slate-800"
-                }`}
+              className={[
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border transition",
+                activeMonth === m.session_id
+                  ? "bg-po-accent text-white border-po-accent"
+                  : "bg-po-panel border-po-border hover:border-po-border-strong text-po-text",
+              ].join(" ")}
             >
+              <Calendar size={14} strokeWidth={1.75} />
               {m.name} {m.year}
             </button>
           ))}
@@ -52,33 +66,32 @@ export default function MonthOverview() {
       {session && (
         <>
           <section className="flex gap-3">
-            <button
+            <Button
+              variant="primary"
+              icon={RefreshCw}
+              disabled={loading}
               onClick={() => runScan(session.session_id)}
-              disabled={loading}
-              className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50"
             >
-              {loading ? "Escaneando…" : "Escanear todo"}
-            </button>
-            <button
-              onClick={async () => {
-                const r = await generateOutput(session.session_id);
-                alert(`Generado: ${r.output_path}`);
-              }}
+              {loading ? "Escaneando…" : "Escanear todos los hospitales"}
+            </Button>
+            <Button
+              icon={FileSpreadsheet}
               disabled={loading}
-              className="px-4 py-2 rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50"
+              onClick={onGenerate}
             >
-              Generar Resumen
-            </button>
+              Generar Excel del mes
+            </Button>
           </section>
 
           <section>
-            <h2 className="text-sm uppercase text-slate-400 mb-2">Hospitales</h2>
-            <div className="grid grid-cols-4 gap-4">
+            <h2 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mb-3">Hospitales</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               {HOSPITALS.map((h) => (
                 <HospitalCard
                   key={h}
                   hospital={h}
                   total={totalsByHospital[h]}
+                  cells={cells[h]}
                   status={cells[h] ? "present" : "missing"}
                   onClick={() => selectHospital(h)}
                 />
@@ -88,7 +101,7 @@ export default function MonthOverview() {
         </>
       )}
 
-      {error && <p className="text-red-400">{error}</p>}
+      {error && <p className="text-po-error">{error}</p>}
     </div>
   );
 }
