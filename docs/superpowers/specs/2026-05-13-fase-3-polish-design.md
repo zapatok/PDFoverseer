@@ -56,38 +56,55 @@ La UI actual mezcla las 18 siglas en una lista plana. Eso esconde el modelo. La 
 
 ### 4.1 Color tokens (Radix Colors → semantic)
 
-Adoptar `@radix-ui/colors` para tener una escala de 12 pasos con propósito documentado por step. Mapear via `windy-radix-palette` Tailwind plugin para usarlos como clases (`bg-jadeDark-9` etc.). Sobre esa base, definir tokens **semánticos** en `tailwind.config.js`:
+Adoptar `@radix-ui/colors` para tener una escala de 12 pasos con propósito documentado por step. **No usar `windy-radix-palette`** — su versión 2.x no documenta compat con Tailwind 3 y es redundante con la estrategia de importar las variables CSS directamente (este enfoque también es más liviano: cero plugins). Mecánica:
+
+1. En `frontend/src/index.css` agregar (top of file, antes de `@tailwind`):
+
+```css
+@import "@radix-ui/colors/slate-dark.css";
+@import "@radix-ui/colors/indigo-dark.css";
+@import "@radix-ui/colors/jade-dark.css";
+@import "@radix-ui/colors/amber-dark.css";
+@import "@radix-ui/colors/ruby-dark.css";
+@import "@radix-ui/colors/iris-dark.css";
+```
+
+Esto expone variables CSS `--slate-1`...`--slate-12`, `--indigo-1`...`--indigo-12`, etc. (sin sufijo `Dark` — el sufijo está en el nombre del archivo CSS importado).
+
+2. En `tailwind.config.js` definir tokens **semánticos** referenciando esas variables:
 
 ```js
 // tailwind.config.js — theme.extend.colors
 {
-  'po-bg':              'var(--slateDark-1)',     // #111113
-  'po-panel':           'var(--slateDark-2)',     // #18191b
-  'po-panel-hover':     'var(--slateDark-3)',     // #1d1e1f
-  'po-border':          'var(--slateDark-6)',     // #2a2b2e
-  'po-border-strong':   'var(--slateDark-7)',     // #36373a
-  'po-text':            'var(--slateDark-12)',    // #edeef0
-  'po-text-muted':      'var(--slateDark-11)',    // #b0b4ba
-  'po-text-subtle':     'var(--slateDark-10)',    // #7e8389
+  'po-bg':              'var(--slate-1)',
+  'po-panel':           'var(--slate-2)',
+  'po-panel-hover':     'var(--slate-3)',
+  'po-border':          'var(--slate-6)',
+  'po-border-strong':   'var(--slate-7)',
+  'po-text':            'var(--slate-12)',
+  'po-text-muted':      'var(--slate-11)',
+  'po-text-subtle':     'var(--slate-10)',
 
-  'po-confidence-high': 'var(--jadeDark-11)',     // #3dd68c
-  'po-confidence-low':  'var(--amberDark-11)',    // #f1a10d
+  'po-confidence-high': 'var(--jade-11)',
+  'po-confidence-low':  'var(--amber-11)',
 
-  'po-suspect':         'var(--amberDark-9)',     // #ffb224
-  'po-suspect-bg':      'var(--amberDark-3)',     // amberDark.3
-  'po-error':           'var(--rubyDark-11)',     // #ff8b9c
-  'po-error-bg':        'var(--rubyDark-3)',
-  'po-scanning':        'var(--indigoDark-10)',   // pulsing
-  'po-override':        'var(--irisDark-11)',     // #b1a9ff
-  'po-override-bg':     'var(--irisDark-3)',
-  'po-success':         'var(--jadeDark-11)',
+  'po-suspect':         'var(--amber-9)',
+  'po-suspect-bg':      'var(--amber-3)',
+  'po-error':           'var(--ruby-11)',
+  'po-error-bg':        'var(--ruby-3)',
+  'po-scanning':        'var(--indigo-10)',
+  'po-override':        'var(--iris-11)',
+  'po-override-bg':     'var(--iris-3)',
+  'po-success':         'var(--jade-11)',
 
-  'po-accent':          'var(--indigoDark-9)',    // #3e63dd primary CTA
-  'po-accent-hover':    'var(--indigoDark-10)',
+  'po-accent':          'var(--indigo-9)',
+  'po-accent-hover':    'var(--indigo-10)',
 }
 ```
 
-**Regla:** ninguna clase Tailwind `bg-slate-*`, `bg-indigo-*`, `bg-emerald-*` etc. directa en JSX. Todo color pasa por un token `po-*`. Un linter check del implementer puede grep-buscar `bg-slate-` post-implementación para verificar.
+Implementer puede leer los hex exactos en cada Radix scale doc (`https://www.radix-ui.com/colors/docs/palette-composition/scales`) si necesita pegar valores en mockups.
+
+**Regla:** ninguna clase Tailwind `bg-slate-*`, `bg-indigo-*`, `bg-emerald-*`, `border-slate-*`, `text-slate-*` directa en JSX nuevo o migrado. Todo color pasa por un token `po-*`. Verificación al cierre (ver §7 AC9).
 
 ### 4.2 Tipografía
 
@@ -147,21 +164,47 @@ Tres niveles de primitivo:
 
 **Hand-rolled (sin deps):**
 
-1. **`Badge.jsx`** — `<Badge variant="confidence-high" icon={CheckCircle2}>Alta</Badge>`. Variants: `confidence-high`, `confidence-low`, `state-suspect`, `state-scanning`, `state-error`, `state-override`, `neutral`. Forma: `rounded-full px-2 py-0.5 text-[11px] font-medium inline-flex items-center gap-1 border`.
+1. **`Button.jsx`** — primitivo central. API:
 
-2. **`Dot.jsx`** — `<Dot variant="confidence-high" />`. 8×8 `rounded-full` solid color. Used in CategoryRow + HospitalCard ribbon.
+   ```jsx
+   <Button
+     variant="primary" | "secondary" | "ghost" | "destructive"
+     size="sm" | "md"
+     icon={LucideComponent}    // optional, renders 16px before label
+     disabled
+     onClick
+   >Label</Button>
+   ```
 
-3. **`SaveIndicator.jsx`** — controlled prop `status: 'idle' | 'saving' | 'saved' | 'error'`. Idle: nothing rendered. Saving: `<Loader2 size={12} className="animate-spin" /> Guardando…` en `text-po-text-muted`. Saved: `<CheckCircle2 size={12} className="text-po-success" /> Guardado` fades after 2s. Error: `<AlertCircle size={12} className="text-po-error" /> No se pudo guardar`.
+   Base classes (siempre): `inline-flex items-center gap-1.5 rounded-md font-medium transition disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-po-accent`.
 
-4. **`EmptyState.jsx`** — `<EmptyState icon={FileX} title="..." description="..." action={<Button>...</Button>} />`. Geist recipe.
+   Por size:
+   - `sm`: `text-xs px-2.5 py-1`
+   - `md`: `text-sm px-3 py-1.5`
 
-5. **`Skeleton.jsx`** — `<Skeleton className="h-4 w-12" />`. `bg-po-panel-hover animate-pulse rounded`.
+   Por variant:
+   - `primary`: `bg-po-accent text-white hover:bg-po-accent-hover`
+   - `secondary`: `bg-po-panel border border-po-border hover:border-po-border-strong text-po-text`
+   - `ghost`: `text-po-text-muted hover:text-po-text hover:bg-po-panel-hover`
+   - `destructive`: `border border-po-error text-po-error hover:bg-po-error-bg`
+
+   Default size si no se pasa: `md`. Default variant: `secondary`. Icon size always 16 with `strokeWidth={1.75}`.
+
+2. **`Badge.jsx`** — `<Badge variant="confidence-high" icon={CheckCircle2}>Alta</Badge>`. Variants: `confidence-high`, `confidence-low`, `state-suspect`, `state-scanning`, `state-error`, `state-override`, `neutral`. Forma: `rounded-full px-2 py-0.5 text-[11px] font-medium inline-flex items-center gap-1 border`.
+
+3. **`Dot.jsx`** — `<Dot variant="confidence-high" />`. 8×8 `rounded-full` solid color. Used in CategoryRow + HospitalCard ribbon.
+
+4. **`SaveIndicator.jsx`** — controlled prop `status: 'idle' | 'saving' | 'saved' | 'error'`. Idle: nothing rendered. Saving: `<Loader2 size={12} className="animate-spin" /> Guardando…` en `text-po-text-muted`. Saved: `<CheckCircle2 size={12} className="text-po-success" /> Guardado` fades after 2s. Error: `<AlertCircle size={12} className="text-po-error" /> No se pudo guardar`.
+
+5. **`EmptyState.jsx`** — `<EmptyState icon={FileX} title="..." description="..." action={<Button>...</Button>} />`. Geist recipe.
+
+6. **`Skeleton.jsx`** — `<Skeleton className="h-4 w-12" />`. `bg-po-panel-hover animate-pulse rounded`.
 
 **Radix-wrapped (a11y critical):**
 
-6. **`Tooltip.jsx`** — wraps `@radix-ui/react-tooltip`. API: `<Tooltip content="...">{trigger}</Tooltip>`. Provider sits at App level with `delayDuration={300}`.
+7. **`Tooltip.jsx`** — wraps `@radix-ui/react-tooltip`. API: `<Tooltip content="...">{trigger}</Tooltip>`. Provider sits at App level with `delayDuration={300}`.
 
-7. **`Dialog.jsx`** — wraps `@radix-ui/react-dialog`. API: `<Dialog open={...} onOpenChange={...}><Dialog.Header>...</Dialog.Header><Dialog.Body>...</Dialog.Body></Dialog>`. Used by PDFLightbox.
+8. **`Dialog.jsx`** — wraps `@radix-ui/react-dialog`. API: `<Dialog open={...} onOpenChange={...}><Dialog.Header>...</Dialog.Header><Dialog.Body>...</Dialog.Body></Dialog>`. Used by PDFLightbox.
 
 **Toast (external):**
 
@@ -403,32 +446,36 @@ function InlineEditCount({ value, onCommit }) {
 
 **Comportamiento clave:** Enter dispara save → toast notification opcional; Escape descarta. Indicador visual de "edited but not saved" via dot pulsante hasta que el WS confirme.
 
-**Constante nueva:** `frontend/src/lib/sigla-labels.js`:
+**Constante nueva:** `frontend/src/lib/sigla-labels.js`. **Fuente de verdad: `core/domain.py:CATEGORY_FOLDERS`** — usar los nombres de carpeta limpios (sin prefijo numérico, normalizados con tildes y minúsculas-iniciales). NO inventar significados expandidos.
 
 ```js
+// Derived from core/domain.py CATEGORY_FOLDERS (prefix N.- stripped, tildes added).
+// If a label reads awkwardly in tooltips, the implementer MUST confirm with
+// Daniel before changing it. NEVER fabricate domain meaning — the folder name
+// IS the domain label.
 export const SIGLA_LABELS = {
-  reunion: "Acta de reunión",
-  irl: "Inspección reglamentaria de luminarias",
-  odi: "Observación de inspección",
-  charla: "Charla de seguridad",
+  reunion: "Reunión de prevención",
+  irl: "Inducción IRL",
+  odi: "ODI Visitas",
+  charla: "Charlas",
   chintegral: "Charla integral",
-  dif_pts: "Difusión de puntos",
-  art: "Análisis de riesgo de trabajo",
-  insgral: "Inspección general",
-  bodega: "Inspección de bodega",
+  dif_pts: "Difusión PTS",
+  art: "ART",
+  insgral: "Inspecciones generales",
+  bodega: "Inspección bodega",
   maquinaria: "Inspección de maquinaria",
-  ext: "Inspección de extintores",
-  senal: "Inspección de señalización",
-  exc: "Excavación",
-  altura: "Trabajo en altura",
-  caliente: "Trabajo en caliente",
-  herramientas_elec: "Herramientas eléctricas",
+  ext: "Extintores",
+  senal: "Señaléticas",
+  exc: "Excavaciones y vanos",
+  altura: "Trabajos en altura",
+  caliente: "Inspección trabajos en caliente",
+  herramientas_elec: "Inspección herramientas eléctricas",
   andamios: "Andamios",
-  chps: "Charla preventiva semanal",
+  chps: "CHPS",
 };
 ```
 
-(Implementer: si una etiqueta no es exacta, consultar con Daniel o dejar como placeholder con un TODO inline — pero NO inventar significados).
+Las siglas que son ya acrónimos canónicos (ART, ODI, IRL, PTS, CHPS) **NO se expanden** en este label — Daniel los usa como acrónimos. La expansión completa, si existiera, va en el tooltip o en un futuro glosario. Implementer: si una de estas etiquetas no aparece bien en el panel Detalle (porque la sigla ya es muy descriptiva, p.ej. `senal: "Señaléticas"` rinde redundante), considerar omitir el separador `·` y la etiqueta cuando label.toLowerCase() === sigla.toLowerCase().
 
 ### 5.6 Detail section (panel central)
 
@@ -727,6 +774,29 @@ Mantiene posición fixed-bottom y comportamiento de auto-dismiss. Cambios:
 - "Compilaciones" group header tiene action button `Escanear todas` (se passa la lista de compilación como cells)
 - Si no hay compilaciones, no renderear la sección "Compilaciones"
 
+### 6.6 Coordinación InlineEditCount ↔ OverridePanel (sin race conditions)
+
+Ambos componentes escriben en el mismo campo: `cell.user_override`. La coordinación es **a través del store**, no entre componentes. Reglas:
+
+1. **Único path de escritura**: `store.saveOverride(sessionId, hospital, sigla, value, note)`. Cualquier write desde cualquier componente pasa por aquí.
+
+2. **Single pending-save por cell**: el store mantiene `_pendingSave: Map<string, AbortController>` keyed por `${hospital}|${sigla}`. Cualquier nueva llamada a `saveOverride` para esa key:
+   - Aborta el debounce/in-flight previo
+   - Cancela el `AbortController` previo (si el HTTP request ya estaba en flight, queda discardado al volver)
+   - Instala el nuevo
+
+3. **State source de OverridePanel**: el `value` y `note` del componente son **derived from `cell`** (`useEffect` que resincroniza cuando `cell.user_override` cambia, salvo si el usuario está activamente editando — detectado con un `isFocused` flag). Esto significa que un commit desde InlineEditCount actualiza `cell.user_override` vía store, el componente OverridePanel ve el cambio y resyncrioniza su input — no hay valor stale.
+
+4. **Cancel de debounce en commit explícito**: cuando InlineEditCount llama a `onCommit` (Enter), llama directamente a `store.saveOverride` sin debounce y este cancela cualquier debounce pendiente de OverridePanel para esa key.
+
+5. **Visual pending indicator**: el "estoy guardando" lo dibuja `SaveIndicator` en OverridePanel (Y el dot violeta pulsante en CategoryRow si el cell está mid-save). Ambos leen del mismo store flag `state.pendingSaves[key]: 'saving' | 'saved' | 'error' | undefined`.
+
+6. **OverridePanel onBlur ≠ commit**: tipo en el input → debounce 400ms → save. Blur SOLO previene que el `isFocused` flag mantenga el valor stale; NO dispara un save adicional.
+
+7. **InlineEditCount onBlur ≠ commit**: blur descarta el draft, NO guarda. El usuario tiene que apretar Enter explícitamente. Esto es consistente con el patrón Retool (Enter = commit, Esc/blur = cancel).
+
+Resultado: si Daniel está editando en OverridePanel y simultáneamente alguien (o un retry de scan) cambia `cell.user_override`, su input local NO se sobrescribe mientras el campo tenga focus. Cuando hace blur, el componente resyncroniza con el último valor del store (su edición se pierde si no hizo blur con un debounce-flush — pero el debounce de 400ms suele ser suficiente, y el caso de race con write externo es marginal).
+
 ## 7. Acceptance criteria
 
 Una sesión manual del implementer al final del plan debe verificar:
@@ -739,8 +809,8 @@ Una sesión manual del implementer al final del plan debe verificar:
 6. Click en un PDF en FileList → Radix Dialog abre, focus trap funciona (Tab dentro del modal). Escape cierra. Click overlay cierra.
 7. "Generar Excel del mes" → toast bottom-right "Excel guardado en {path}".
 8. Trigger un OCR fallido (folder no exists) → toast error.
-9. Verificar grep `bg-slate-` y `bg-indigo-` en JSX retorna **0 matches** en componentes nuevos.
-10. Verificar bundle size con `npm run build`: total bundle gzipped ≤ current + 25 KB.
+9. Grep audit final sobre **todo `frontend/src/**/*.jsx`** retorna **0 matches** para los patrones: `bg-slate-`, `bg-indigo-`, `bg-emerald-`, `bg-rose-`, `bg-amber-`, `border-slate-`, `border-indigo-`, `border-emerald-`, `text-slate-`, `text-indigo-`, `text-emerald-`. Es decir: cero clases de paleta cruda en TODO el frontend (no sólo componentes nuevos). Excepciones explícitas: `index.css` puede usar nombres Radix `var(--slate-*)` directamente porque ahí están definidas las variables, no son clases Tailwind. Si una clase legacy queda en un componente NO tocado por FASE 3, el implementer debe migrarla aunque sea un componente de borde — no hay Frankenstein theme. (Verificación al final del Chunk 4 como gating task.)
+10. Verificar bundle size con `npm run build`: total gzipped del bundle main ≤ **baseline + 25 KB**. El baseline se mide en Chunk 1 task 0 antes de instalar deps nuevas y se commitea al spec en una nota al final de §10.
 11. Sin errores en consola del browser durante el flow completo.
 12. Inspección visual: ninguna emoji o glyph unicode visible (`⚠ ⟳ ✕ ✓ ○ ●` etc.); todos reemplazados por lucide icons.
 13. Tooltips funcionan con delay 300ms.
@@ -767,8 +837,13 @@ Una sesión manual del implementer al final del plan debe verificar:
 
 - **Bundle bloat**: Radix + sonner + lucide ~23 KB gzipped. Mitigación: tree-shake imports, `lucide-react` per-icon imports, no importar `@radix-ui/themes` (solo primitives).
 - **Inline-edit UX confusion**: si Daniel está acostumbrado a abrir lightbox para corregir, inline-edit puede tomar tiempo aprender. Mitigación: el override panel sigue ahí para casos donde quiera ver el PDF antes de editar.
-- **Microcopy gaps**: si una sigla no tiene label en `SIGLA_LABELS`, queda vacío. Mitigación: TODO inline en la constante; implementer verifica con Daniel siglas dudosas.
+- **Microcopy gaps**: si una sigla no tiene label en `SIGLA_LABELS`, queda vacío. Mitigación: ground-truth desde `core/domain.py:CATEGORY_FOLDERS`; implementer verifica con Daniel cualquier label que rinda raro.
 - **Radix bundle imports**: importar `@radix-ui/react-dialog` por sí solo (NO el paquete `@radix-ui/themes`) para mantener bundle chico.
+- **Token rename ripple**: cada componente existente (no sólo los redesignados) usa clases Tailwind crudas de paleta (`bg-slate-800`, `bg-indigo-600`, etc.). Si la migración a `po-*` queda a medias y conviven clases crudas con tokens, la app se ve Frankenstein. Mitigación: AC9 endurecida (§7) hace un grep audit final sobre todo `frontend/src/**/*.jsx` que falla si queda CUALQUIER clase cruda. Chunk 4 incluye una task gating de "grep audit zero raw palette classes".
+- **Layering: Dialog / Toaster / ScanProgress z-index**: 3 surfaces flotantes coexisten. Orden explícito requerido en `index.css` o como prop. Ladder: `z-40` ScanProgress (fixed-bottom), `z-50` Dialog Overlay, `z-51` Dialog Content, `z-60` Toaster (debe estar sobre el Dialog para mostrar errores aún en flow con modal abierto). Implementer wire este ladder en Chunk 1 task 4 cuando setea Toaster.
+- **Bundle baseline**: AC10 referencia "baseline + 25 KB" pero el baseline necesita medirse. Chunk 1 task 0: `cd frontend && npm run build` antes de instalar deps; copiar `dist/assets/index-*.js` gzip size a un block "Bundle baseline: NN KB" al final de §10 mediante commit. Plan implementer reemplaza el placeholder.
+
+**Bundle baseline (medido en Chunk 1):** _<placeholder — implementer measures and commits actual gzipped size of `frontend/dist/assets/index-*.js` on tip-of-`po_overhaul` before Chunk 1 installs>_
 
 ## 11. Dependencies (new)
 
@@ -782,49 +857,54 @@ A agregar a `frontend/package.json`:
   "@radix-ui/react-dialog": "^1.0.0",
   "@radix-ui/react-tooltip": "^1.0.0",
   "lucide-react": "^0.400.0",
-  "sonner": "^1.0.0",
-  "windy-radix-palette": "^2.0.0",
-  "use-debounce": "^10.0.0"
+  "sonner": "^1.0.0"
 }
 ```
 
-(`use-debounce` para el debounce 400ms en OverridePanel autosave; alternativamente hand-roll un hook si Daniel prefiere zero-dep.)
+No agregar `windy-radix-palette` (ver §4.1 — usamos CSS variables directas). No agregar `use-debounce` — hand-rollear un `useDebouncedCallback` hook de ~10 líneas en `lib/hooks/useDebouncedCallback.js` para evitar la dep.
 
 ## 12. Implementation chunks
 
-**Chunk 1 — Cleanup + foundation (~4 tasks)**
+**Chunk 1 — Cleanup + foundation (~6 tasks)**
+0. **Measure bundle baseline**: `cd frontend && npm run build`, anotar gzipped size de `dist/assets/index-*.js` y commitear ese número reemplazando el placeholder en §10. Esto es task 0 — antes de instalar nada.
 1. Delete dead components: `HeaderBar.jsx`, `Sidebar.jsx`, `ProgressBar.jsx`, `ScanIndicator.jsx`, `components/README.md`
 2. Delete dead exports en `lib/constants.js` (SPINNER, IMPACT_LABELS, formatTime)
-3. Install new deps + wire fonts via `@fontsource/*` in `main.jsx`
-4. Wire `tailwind.config.js` con Radix Colors via `windy-radix-palette` + tokens semánticos `po-*`. Add Toaster en App.jsx.
+3. Install new deps via `npm install` (sin `windy-radix-palette` ni `use-debounce`)
+4. Wire fonts via `@fontsource/inter` + `@fontsource/jetbrains-mono` in `main.jsx`
+5. Wire `frontend/src/index.css` con `@import "@radix-ui/colors/<name>-dark.css"` (6 paletas) + `tailwind.config.js` con tokens semánticos `po-*` referenciando `var(--<scale>-N)`. Add `<Toaster position="bottom-right" theme="dark" />` en App.jsx con z-60. Define z-index ladder en CSS layer.
 
-**Chunk 2 — UI primitives (~7 tasks, una por primitivo)**
-5. `ui/Badge.jsx`
-6. `ui/Dot.jsx`
-7. `ui/SaveIndicator.jsx`
-8. `ui/EmptyState.jsx`
-9. `ui/Skeleton.jsx`
-10. `ui/Tooltip.jsx` (wraps Radix)
-11. `ui/Dialog.jsx` (wraps Radix)
+**Chunk 2 — UI primitives (~8 tasks, una por primitivo)**
+6. `ui/Button.jsx` (primer primitivo — bloquea a varios otros)
+7. `ui/Badge.jsx`
+8. `ui/Dot.jsx`
+9. `ui/SaveIndicator.jsx`
+10. `ui/EmptyState.jsx` (depende de Button)
+11. `ui/Skeleton.jsx`
+12. `ui/Tooltip.jsx` (wraps Radix Tooltip)
+13. `ui/Dialog.jsx` (wraps Radix Dialog)
 
-**Chunk 3 — Components redesign (~10 tasks)**
-12. `lib/sigla-labels.js` + `lib/method-labels.js`
-13. `MonthOverview.jsx` redesign (sin FASE 2, toast en lugar de alert, copy mejorado)
-14. `HospitalCard.jsx` redesign (ribbon de dots + timestamp)
-15. `HospitalCard.jsx` empty state HLL
-16. `HospitalDetail.jsx` header redesign
-17. `CategoryGroup.jsx` (nuevo) + grouping logic en HospitalDetail
-18. `CategoryRow.jsx` redesign (single-line, Dot + Badge + InlineEditCount)
-19. Detail section (Notion-style con number + breakdown + OverridePanel)
-20. `FileList.jsx` redesign
-21. `PDFLightbox.jsx` redesign (Radix Dialog wrap)
+**Chunk 3 — Constants + Components redesign (~11 tasks)**
+14. `lib/sigla-labels.js` + `lib/method-labels.js` (con confidence labels)
+15. `lib/hooks/useDebouncedCallback.js` (hand-rolled, ~10 líneas)
+16. Store extension: `_pendingSave: Map` + `saveOverride` con AbortController (§6.6)
+17. `MonthOverview.jsx` redesign (sin "FASE 2" subtitle, toast en lugar de alert, copy mejorado)
+18. `HospitalCard.jsx` redesign (ribbon de dots + timestamp + Building2 icon)
+19. `HospitalCard.jsx` empty state HLL (`<FolderX/>` + EmptyState + Button "Ingresar conteos" → comportamiento del CTA: por ahora abre un panel inline con 18 OverridePanels apilados; si excede polish scope, deferir explicitamente con un Button disabled + Tooltip "Disponible en FASE 4" y mover la feature al spec FASE 4 vía PR doc-update separado)
+20. `HospitalDetail.jsx` header redesign (ArrowLeft icon, Total tabular-nums)
+21. `CategoryGroup.jsx` (nuevo componente) + grouping logic por `compilation_suspect` flag en HospitalDetail
+22. `CategoryRow.jsx` redesign (single-line, Dot + Badge + InlineEditCount con coordinación store)
+23. Detail section reimplementación (Notion-style: número grande + breakdown table + pills + OverridePanel)
+24. `FileList.jsx` redesign (Skeleton loaders, EmptyState, FileText icons, font-mono filenames con truncate)
+25. `PDFLightbox.jsx` redesign (wraps Radix Dialog — focus trap + a11y; header 2-line; right panel mirrors Detail layout)
 
-**Chunk 4 — Polish + smoke (~3 tasks)**
-22. `OverridePanel.jsx` con SaveIndicator + debounce
-23. `ScanControls.jsx` + `ScanProgress.jsx` redesign
-24. Manual smoke test end-to-end + actualizar CLAUDE.md con nueva paleta + tag `fase-3-polish`
+**Chunk 4 — Polish + audit + smoke (~5 tasks)**
+26. `OverridePanel.jsx` redesign con SaveIndicator integrado + debounce + store coordination
+27. `ScanControls.jsx` redesign (copy pluralizado; mover "OCR suspects" → header de CategoryGroup "Compilaciones")
+28. `ScanProgress.jsx` redesign (icons, Badge, ETA, destructive Cancel button, z-40)
+29. **Grep audit gating**: `cd frontend && grep -rE "bg-slate-|bg-indigo-|bg-emerald-|bg-rose-|bg-amber-|border-slate-|border-indigo-|border-emerald-|text-slate-|text-indigo-|text-emerald-" src/**/*.jsx` debe retornar EMPTY. Si encuentra hits, migrar antes de seguir. NO mergeable hasta cero.
+30. Manual smoke test end-to-end (los 15 acceptance criteria de §7), update CLAUDE.md con nueva paleta + nuevas deps, tag `fase-3-polish`.
 
-**Estimado total:** ~24 tareas. SDD con haiku implementers debería tardar 4-6 horas.
+**Estimado total:** ~30 tareas. SDD con haiku implementers debería tardar 5-7 horas (incluyendo review loops). Chunk 3 task 19 tiene un fork de decisión (HLL CTA — implementar vs deferir) que el plan debe pre-resolver consultando con Daniel.
 
 ---
 
