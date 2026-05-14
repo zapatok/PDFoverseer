@@ -16,6 +16,12 @@ export const useSessionStore = create((set, get) => ({
   lightbox: null,                      // {hospital, sigla, fileIndex} | null
   _ws: null,
 
+  // FASE 3 — pending-save coordination (see spec §6.6).
+  // Map keyed by `${hospital}|${sigla}` → { controller: AbortController, status: 'saving' }
+  _pendingSave: new Map(),
+  // Public read view for components — keyed identically. Values: 'saving' | 'saved' | 'error'.
+  pendingSaves: {},
+
   setView: (view) => set({ view }),
 
   loadMonths: async () => {
@@ -70,17 +76,83 @@ export const useSessionStore = create((set, get) => ({
   },
 
   saveOverride: async (sessionId, hospital, sigla, value, note) => {
+    const key = `${hospital}|${sigla}`;
+    const controller = new AbortController();
+
+    // 1+2 combined in a functional set() so reads + writes happen atomically.
+    // This prevents the stale-read race when two rapid calls overlap: both
+    // would read state._pendingSave before either set()ted, and both would
+    // think they are 'first'. Functional setState gives us the prev state
+    // synchronously inside the updater.
+    set((prev) => {
+      const existing = prev._pendingSave.get(key);
+      if (existing?.controller) {
+        existing.controller.abort();
+      }
+      const nextPending = new Map(prev._pendingSave);
+      nextPending.set(key, { controller });
+      return {
+        _pendingSave: nextPending,
+        pendingSaves: { ...prev.pendingSaves, [key]: "saving" },
+      };
+    });
+
     try {
-      const result = await api.patchOverride(sessionId, hospital, sigla, value, note);
-      // Patch the local session state in place
-      const { session } = get();
-      if (!session) return;
-      const cells = { ...session.cells };
-      const hosp = { ...cells[hospital] };
-      hosp[sigla] = { ...hosp[sigla], user_override: result.user_override, override_note: result.override_note };
-      cells[hospital] = hosp;
-      set({ session: { ...session, cells } });
-    } catch (error) { set({ error: String(error) }); }
+      const result = await api.patchOverride(
+        sessionId, hospital, sigla, value, note,
+        { signal: controller.signal },
+      );
+
+      // If our controller was aborted while in flight, the newer save wins.
+      if (controller.signal.aborted) return;
+
+      // Atomically patch session.cells + clear pending.
+      set((prev) => {
+        if (!prev.session) return {};
+        const cells = { ...prev.session.cells };
+        const hosp = { ...cells[hospital] };
+        hosp[sigla] = {
+          ...hosp[sigla],
+          user_override: result.user_override,
+          override_note: result.override_note,
+        };
+        cells[hospital] = hosp;
+        const cleanedPending = new Map(prev._pendingSave);
+        // Only drop OUR controller — if a newer save raced in, leave it alone.
+        if (cleanedPending.get(key)?.controller === controller) {
+          cleanedPending.delete(key);
+        }
+        return {
+          session: { ...prev.session, cells },
+          _pendingSave: cleanedPending,
+          pendingSaves: { ...prev.pendingSaves, [key]: "saved" },
+        };
+      });
+
+      // Auto-flush 'saved' state after 2s — but only if status is still
+      // 'saved' (not overwritten by a newer 'saving' from another commit).
+      setTimeout(() => {
+        set((prev) => {
+          if (prev.pendingSaves[key] !== "saved") return {};
+          const np = { ...prev.pendingSaves };
+          delete np[key];
+          return { pendingSaves: np };
+        });
+      }, 2000);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      set((prev) => {
+        const cleanedPending = new Map(prev._pendingSave);
+        if (cleanedPending.get(key)?.controller === controller) {
+          cleanedPending.delete(key);
+        }
+        return {
+          _pendingSave: cleanedPending,
+          pendingSaves: { ...prev.pendingSaves, [key]: "error" },
+          error: String(error),
+        };
+      });
+    }
   },
 
   openLightbox: (hospital, sigla, fileIndex = 0) => set({ lightbox: { hospital, sigla, fileIndex } }),

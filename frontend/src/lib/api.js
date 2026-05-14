@@ -44,11 +44,12 @@ export const api = {
       method: "POST",
     }).then(jsonOrThrow),
 
-  patchOverride: (sessionId, hospital, sigla, value, note) =>
+  patchOverride: (sessionId, hospital, sigla, value, note, { signal } = {}) =>
     fetch(`${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/override`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ value, note }),
+      signal,
     }).then(jsonOrThrow),
 
   getCellFiles: (sessionId, hospital, sigla) =>
