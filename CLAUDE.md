@@ -163,7 +163,38 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 - **VLM integration:** ~~Attempted~~ REVERTED (2026-03-30). See postmortem in Links.
 - **Browse UX:** `/api/browse` uses server-side tkinter chooser — only works with local display
 
-## FASE 2 MVP — `po_overhaul` branch (shipped 2026-05-12)
+## FASE 3 polish — `po_overhaul` branch (shipped 2026-05-13)
+
+UI polish pass on top of FASE 2: design system with Radix Color tokens
++ lucide-react icons, 8 shared primitives under `frontend/src/ui/`,
+inline-edit count cells, visible autosave indicator, Radix Dialog wrap
+for PDFLightbox (a11y), sonner toasts, full Spanish microcopy.
+
+- **Spec:** `docs/superpowers/specs/2026-05-13-fase-3-polish-design.md`
+- **Plan:** `docs/superpowers/plans/2026-05-13-pdfoverseer-fase-3.md`
+- **Tag:** `fase-3-polish` (local, awaiting push approval)
+- **Bundle delta:** +38.93 kB gzipped (baseline 51.30 kB → 90.23 kB).
+  Over the AC10 target of +25 kB; driven by Radix Dialog + Tooltip +
+  sonner + lucide icons. Surfaced for Daniel to decide if optimization
+  pass (icon barrel imports, dialog/tooltip code-split) is worth it
+  before push.
+- **New deps:** `lucide-react`, `@radix-ui/colors`, `@radix-ui/react-dialog`,
+  `@radix-ui/react-tooltip`, `sonner`, `@fontsource/inter`,
+  `@fontsource/jetbrains-mono`
+
+### Design tokens
+Defined in `frontend/tailwind.config.js`. Always use `po-*` tokens in JSX,
+never raw `bg-slate-*` / `bg-indigo-*` / etc. (grep audit enforced at
+commit-time; see CategoryRow + DetailPanel for reference usage).
+
+### Next (FASE 4)
+- Per-sigla OCR engine refinement against the real corpus
+- Page-level cancellation (target <3s)
+- HLL manual-entry flow (the disabled CTA on HospitalCard)
+- Mostrar docs encontrados por archivo en FileList
+- Multi-month overview
+
+### FASE 2 MVP — predecessor, `po_overhaul` branch (shipped 2026-05-12)
 
 Pase 1 (filename_glob, ~4s on ABRIL) + pase 2 (OCR per cell, opt-in
 via UI) + manual override + PDF preview lightbox. Cell state stores
@@ -175,7 +206,7 @@ audit (`override` vs OCR technique vs `filename_glob`).
 - **Spec:** `docs/superpowers/specs/2026-05-12-fase-2-design.md`
 - **Plan:** `docs/superpowers/plans/2026-05-12-pdfoverseer-fase-2.md`
 - **Tag:** `fase-2-mvp` (local, awaiting push approval)
-- **Next (FASE 3):** auto-retry on OCR failure, page-level cancellation,
+- **FASE 3 polished it (above):** auto-retry on OCR failure, page-level cancellation,
   per-sigla OCR engine refinement against the real corpus (header_detect
   semantic, ART corner_count gap — see Known Limitations in the plan).
 
