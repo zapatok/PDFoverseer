@@ -157,9 +157,14 @@ cd frontend && rm -rf dist node_modules/.vite && npm run build
 
 Expected: exit 0, line `✓ built in <time>`, plus a line like `dist/assets/index-XXXX.js  161.42 kB │ gzip: 51.85 kB`.
 
-- [ ] **Step 2: Capture the gzipped size**
+- [ ] **Step 2: Capture the gzipped JS bundle size**
 
-Read the build output. The number after `gzip:` for the `index-*.js` line is the baseline. Note it down (example: 51.85 kB).
+The baseline measured for AC10 is the **gzipped main JS bundle only** (`dist/assets/index-*.js` after `gzip:`). It does NOT include:
+- WOFF2 font files added via `@fontsource/*` (those are separate static assets the browser caches independently, not part of the JS bundle)
+- Other separate CSS chunks if Vite splits them
+- Source maps (dev only)
+
+Read the build output. The number after `gzip:` for the single `index-*.js` line is the baseline. Note it down (example: 51.85 kB). If Vite emits multiple `index-*.js` files (code-splitting), sum their gzipped sizes.
 
 - [ ] **Step 3: Update spec §10 placeholder**
 
@@ -203,15 +208,16 @@ EOF
 
 These components are documented as dead code in the audit (audit doc §1, lines 35-38). None are imported anywhere. The README describes a different application entirely.
 
-- [ ] **Step 1: Confirm zero imports**
+- [ ] **Step 1: Confirm zero imports + zero doc references to the README**
 
 ```bash
 grep -rE "from .*/(HeaderBar|Sidebar|ProgressBar|ScanIndicator)" frontend/src/
+grep -rE "components/README" frontend/src/ docs/
 ```
 
-Expected: empty output (no imports found).
+Expected: both empty.
 
-If ANY import is found, STOP and surface — the audit's "dead code" claim is wrong and these files need migration, not deletion.
+If ANY import or doc reference is found, STOP and surface — the audit's "dead code" claim is wrong and these files need migration, not deletion.
 
 - [ ] **Step 2: Delete the 5 files**
 
@@ -465,11 +471,17 @@ Replace the file with:
 
 ```css
 @import "@radix-ui/colors/slate-dark.css";
+@import "@radix-ui/colors/slate-dark-alpha.css";
 @import "@radix-ui/colors/indigo-dark.css";
+@import "@radix-ui/colors/indigo-dark-alpha.css";
 @import "@radix-ui/colors/jade-dark.css";
+@import "@radix-ui/colors/jade-dark-alpha.css";
 @import "@radix-ui/colors/amber-dark.css";
+@import "@radix-ui/colors/amber-dark-alpha.css";
 @import "@radix-ui/colors/ruby-dark.css";
+@import "@radix-ui/colors/ruby-dark-alpha.css";
 @import "@radix-ui/colors/iris-dark.css";
+@import "@radix-ui/colors/iris-dark-alpha.css";
 
 @tailwind base;
 @tailwind components;
@@ -524,17 +536,42 @@ export default {
         "po-text-muted":   "var(--slate-11)",
         "po-text-subtle":  "var(--slate-10)",
 
-        // Semantic states
-        "po-confidence-high": "var(--jade-11)",
-        "po-confidence-low":  "var(--amber-11)",
-        "po-suspect":         "var(--amber-9)",
-        "po-suspect-bg":      "var(--amber-3)",
-        "po-error":           "var(--ruby-11)",
-        "po-error-bg":        "var(--ruby-3)",
-        "po-scanning":        "var(--indigo-10)",
-        "po-override":        "var(--iris-11)",
-        "po-override-bg":     "var(--iris-3)",
-        "po-success":         "var(--jade-11)",
+        // Semantic state foregrounds (text in pills)
+        "po-confidence-high":   "var(--jade-11)",
+        "po-confidence-low":    "var(--amber-11)",
+        "po-suspect":           "var(--amber-11)",
+        "po-error":             "var(--ruby-11)",
+        "po-scanning":          "var(--indigo-11)",
+        "po-override":          "var(--iris-11)",
+        "po-success":           "var(--jade-11)",
+
+        // Semantic state backgrounds (subtle fills for pills) — use the
+        // ALPHA scales (step 3) so they composite correctly over any
+        // panel/canvas background. NEVER use Tailwind's /opacity modifier
+        // on the `po-*` tokens — those resolve to hex via CSS var and
+        // Tailwind can't inject an alpha channel.
+        "po-confidence-high-bg":  "var(--jade-a3)",
+        "po-confidence-low-bg":   "var(--amber-a3)",
+        "po-suspect-bg":          "var(--amber-a3)",
+        "po-error-bg":            "var(--ruby-a3)",
+        "po-scanning-bg":         "var(--indigo-a3)",
+        "po-override-bg":         "var(--iris-a3)",
+
+        // Semantic state borders (step 7 alpha for the pill outlines)
+        "po-confidence-high-border": "var(--jade-a7)",
+        "po-confidence-low-border":  "var(--amber-a7)",
+        "po-suspect-border":         "var(--amber-a7)",
+        "po-error-border":           "var(--ruby-a7)",
+        "po-scanning-border":        "var(--indigo-a7)",
+        "po-override-border":        "var(--iris-a7)",
+
+        // Dot solids (step 9 of base scale — the canonical solid)
+        "po-dot-high":     "var(--jade-9)",
+        "po-dot-low":      "var(--amber-9)",
+        "po-dot-suspect":  "var(--amber-9)",
+        "po-dot-error":    "var(--ruby-9)",
+        "po-dot-scanning": "var(--indigo-9)",
+        "po-dot-override": "var(--iris-9)",
 
         // Accent (primary CTA)
         "po-accent":       "var(--indigo-9)",
@@ -762,12 +799,12 @@ Write `frontend/src/ui/Badge.jsx`:
 
 ```jsx
 const VARIANTS = {
-  "confidence-high": "bg-po-confidence-high/10 text-po-confidence-high border border-po-confidence-high/30",
-  "confidence-low":  "bg-po-confidence-low/10 text-po-confidence-low border border-po-confidence-low/30",
-  "state-suspect":   "bg-po-suspect-bg text-po-suspect border border-po-suspect/40",
-  "state-scanning":  "bg-po-scanning/10 text-po-scanning border border-po-scanning/30",
-  "state-error":     "bg-po-error-bg text-po-error border border-po-error/40",
-  "state-override":  "bg-po-override-bg text-po-override border border-po-override/40",
+  "confidence-high": "bg-po-confidence-high-bg text-po-confidence-high border border-po-confidence-high-border",
+  "confidence-low":  "bg-po-confidence-low-bg text-po-confidence-low border border-po-confidence-low-border",
+  "state-suspect":   "bg-po-suspect-bg text-po-suspect border border-po-suspect-border",
+  "state-scanning":  "bg-po-scanning-bg text-po-scanning border border-po-scanning-border",
+  "state-error":     "bg-po-error-bg text-po-error border border-po-error-border",
+  "state-override":  "bg-po-override-bg text-po-override border border-po-override-border",
   "neutral":         "bg-po-panel-hover text-po-text-muted border border-po-border",
 };
 
@@ -788,7 +825,7 @@ export default function Badge({ variant = "neutral", icon: Icon, children, class
 }
 ```
 
-Note the Tailwind `/10` and `/30` opacity modifiers — these work because we declared the colors via `var(--<scale>-N)` in the config. Tailwind's `bg-<color>/<opacity>` parses opacity for arbitrary colors.
+Note: every color class here is a pre-composed semantic token (`po-confidence-high-bg`, `po-confidence-high-border`) — there are NO Tailwind opacity modifiers like `/10` or `/30`. Those don't work with `var(--*)`-backed colors because Tailwind can't inject an alpha channel into a CSS variable that resolves to a hex string. The Radix `*-a3` and `*-a7` alpha scales (imported in Task 5) ARE pre-multiplied alpha values, so they composite correctly over any background.
 
 - [ ] **Step 2: Verify build**
 
@@ -829,12 +866,12 @@ Write `frontend/src/ui/Dot.jsx`:
 
 ```jsx
 const VARIANTS = {
-  "confidence-high": "bg-po-confidence-high",
-  "confidence-low":  "bg-po-confidence-low",
-  "state-suspect":   "bg-po-suspect",
-  "state-scanning":  "bg-po-scanning animate-pulse",
-  "state-error":     "bg-po-error",
-  "state-override":  "bg-po-override",
+  "confidence-high": "bg-po-dot-high",
+  "confidence-low":  "bg-po-dot-low",
+  "state-suspect":   "bg-po-dot-suspect",
+  "state-scanning":  "bg-po-dot-scanning animate-pulse",
+  "state-error":     "bg-po-dot-error",
+  "state-override":  "bg-po-dot-override",
   "neutral":         "bg-po-text-subtle",
 };
 
@@ -1453,34 +1490,39 @@ Apply these edits to `frontend/src/store/session.js`:
 ```js
   saveOverride: async (sessionId, hospital, sigla, value, note) => {
     const key = `${hospital}|${sigla}`;
-    const state = get();
-
-    // 1. Abort any in-flight HTTP for this cell.
-    const existing = state._pendingSave.get(key);
-    if (existing?.controller) {
-      existing.controller.abort();
-    }
-
-    // 2. Install new pending entry + visible 'saving' flag.
     const controller = new AbortController();
-    const nextPending = new Map(state._pendingSave);
-    nextPending.set(key, { controller });
-    set({
-      _pendingSave: nextPending,
-      pendingSaves: { ...state.pendingSaves, [key]: "saving" },
+
+    // 1+2 combined in a functional set() so reads + writes happen atomically.
+    // This prevents the stale-read race when two rapid calls overlap: both
+    // would read state._pendingSave before either set()ted, and both would
+    // think they are 'first'. Functional setState gives us the prev state
+    // synchronously inside the updater.
+    set((prev) => {
+      const existing = prev._pendingSave.get(key);
+      if (existing?.controller) {
+        existing.controller.abort();
+      }
+      const nextPending = new Map(prev._pendingSave);
+      nextPending.set(key, { controller });
+      return {
+        _pendingSave: nextPending,
+        pendingSaves: { ...prev.pendingSaves, [key]: "saving" },
+      };
     });
 
     try {
-      const result = await api.patchOverride(sessionId, hospital, sigla, value, note, { signal: controller.signal });
+      const result = await api.patchOverride(
+        sessionId, hospital, sigla, value, note,
+        { signal: controller.signal },
+      );
 
-      // If our controller got aborted between request start and now, the
-      // newer save wins — bail without touching state.
+      // If our controller was aborted while in flight, the newer save wins.
       if (controller.signal.aborted) return;
 
-      // Patch local cell state.
-      const cur = get();
-      if (cur.session) {
-        const cells = { ...cur.session.cells };
+      // Atomically patch session.cells + clear pending.
+      set((prev) => {
+        if (!prev.session) return {};
+        const cells = { ...prev.session.cells };
         const hosp = { ...cells[hospital] };
         hosp[sigla] = {
           ...hosp[sigla],
@@ -1488,36 +1530,49 @@ Apply these edits to `frontend/src/store/session.js`:
           override_note: result.override_note,
         };
         cells[hospital] = hosp;
-        const cleanedPending = new Map(cur._pendingSave);
-        cleanedPending.delete(key);
-        set({
-          session: { ...cur.session, cells },
+        const cleanedPending = new Map(prev._pendingSave);
+        // Only drop OUR controller — if a newer save raced in, leave it alone.
+        if (cleanedPending.get(key)?.controller === controller) {
+          cleanedPending.delete(key);
+        }
+        return {
+          session: { ...prev.session, cells },
           _pendingSave: cleanedPending,
-          pendingSaves: { ...cur.pendingSaves, [key]: "saved" },
+          pendingSaves: { ...prev.pendingSaves, [key]: "saved" },
+        };
+      });
+
+      // Auto-flush 'saved' state after 2s — but only if status is still
+      // 'saved' (not overwritten by a newer 'saving' from another commit).
+      setTimeout(() => {
+        set((prev) => {
+          if (prev.pendingSaves[key] !== "saved") return {};
+          const np = { ...prev.pendingSaves };
+          delete np[key];
+          return { pendingSaves: np };
         });
-        // Auto-flush 'saved' state after 2s.
-        setTimeout(() => {
-          const s = get();
-          if (s.pendingSaves[key] === "saved") {
-            const np = { ...s.pendingSaves };
-            delete np[key];
-            set({ pendingSaves: np });
-          }
-        }, 2000);
-      }
+      }, 2000);
     } catch (error) {
       if (controller.signal.aborted) return;
-      const cur = get();
-      const cleanedPending = new Map(cur._pendingSave);
-      cleanedPending.delete(key);
-      set({
-        _pendingSave: cleanedPending,
-        pendingSaves: { ...cur.pendingSaves, [key]: "error" },
-        error: String(error),
+      set((prev) => {
+        const cleanedPending = new Map(prev._pendingSave);
+        if (cleanedPending.get(key)?.controller === controller) {
+          cleanedPending.delete(key);
+        }
+        return {
+          _pendingSave: cleanedPending,
+          pendingSaves: { ...prev.pendingSaves, [key]: "error" },
+          error: String(error),
+        };
       });
     }
   },
 ```
+
+Key invariants in the code above:
+1. Every `set()` uses the **functional updater form** `set((prev) => ...)` so reads + writes are atomic within a single Zustand update. No stale-read.
+2. Cleanup paths only delete the pending entry if **our** controller is the one still installed (`if (cleanedPending.get(key)?.controller === controller)`) — protects against clobbering a newer save that raced in.
+3. `controller.signal.aborted` check immediately after `await` short-circuits clean — newer save wins.
 
 **Edit 3:** Update `api.patchOverride` signature to accept the AbortController signal. In `frontend/src/lib/api.js`, find `patchOverride` and ensure it forwards `signal`:
 
@@ -1546,21 +1601,29 @@ Expected: green.
 
 - [ ] **Step 4: Smoke test the API change manually**
 
-```bash
-# Backend already running per Chunk 1 smoke, or restart:
-.venv-cuda/Scripts/python.exe server.py &
-cd frontend && npm run dev &
+Start backend + frontend in separate terminals (Windows-friendly — do NOT use `&`):
 
-# Wait for both. Then in browser at localhost:5173:
-# 1. Open ABRIL
-# 2. Click HPV
-# 3. Click a sigla (e.g. reunion)
-# 4. In OverridePanel, type a number → blur
-# 5. Watch network panel: PATCH /api/sessions/2026-04/cells/HPV/reunion/override → 200
-# 6. Refresh page → override persisted
+```
+# Terminal A
+.venv-cuda/Scripts/python.exe server.py
 ```
 
-If PATCH errors, the signal wiring is broken — debug.
+```
+# Terminal B
+cd frontend && npm run dev
+```
+
+In browser at `localhost:5173`:
+1. Open ABRIL
+2. Click HPV
+3. Click a sigla (e.g. reunion)
+4. In OverridePanel, type a number → blur
+5. Watch network panel: PATCH `/api/sessions/2026-04/cells/HPV/reunion/override` → 200
+6. Refresh page → override persisted
+
+**Rapid-typing race test:** type 10 characters rapidly in the override input. Watch the network panel — only ONE PATCH should land (the debounce coalesces 9 of them; the AbortController would abort an earlier in-flight if a second flushed while the first was mid-request, but the debounce should prevent that). If you see multiple PATCHes with overlapping timestamps, the race is real — debug before commit.
+
+If PATCH errors at all, the signal wiring is broken — debug.
 
 - [ ] **Step 5: Commit**
 
@@ -1744,7 +1807,7 @@ EOF
 **Files:**
 - Modify: `frontend/src/components/HospitalCard.jsx`
 
-Spec §5.3 (present state). The empty/missing state (HLL) is in Task 19.
+Spec §5.3. Covers both present state (HPV/HRB/HLU) and missing/HLL empty state in a single file.
 
 - [ ] **Step 1: Identify the 18 sigla keys**
 
@@ -2190,7 +2253,7 @@ function InlineEditCount({ value, onCommit }) {
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
-          const v = parseInt(draft);
+          const v = parseInt(draft, 10);
           if (!Number.isNaN(v)) onCommit(v);
           setEditing(false);
         } else if (e.key === "Escape") {
@@ -2592,7 +2655,7 @@ export default function FileList({ hospital, sigla }) {
 cd frontend && npm run build
 ```
 
-`npm run dev` → click HPV → click a sigla with files → FileList shows search input + scrollable file rows + footer count. Click a file → PDFLightbox opens (still old, redesigned in Task 25).
+`npm run dev` → click HPV → click a sigla with files → FileList shows search input + scrollable file rows + footer count. Click a file → PDFLightbox opens (still old, redesigned in Task 24).
 
 - [ ] **Step 4: Commit**
 
@@ -2792,7 +2855,7 @@ After Tasks 14-24 commit cleanly:
 
 5 tasks: OverridePanel SaveIndicator wiring, ScanControls trim, ScanProgress redesign, grep audit gating, manual smoke + tag.
 
-### Task 26: `OverridePanel.jsx` redesign with `SaveIndicator` + debounce
+### Task 25: `OverridePanel.jsx` redesign with `SaveIndicator` + debounce
 
 **Files:**
 - Modify: `frontend/src/components/OverridePanel.jsx`
@@ -2830,7 +2893,7 @@ export default function OverridePanel({ hospital, sigla, cell }) {
   }, [cell?.override_note, focused.note]);
 
   const flushSave = useDebouncedCallback((v, n) => {
-    const numericValue = v === "" || v === null ? null : parseInt(v);
+    const numericValue = v === "" || v === null ? null : parseInt(v, 10);
     saveOverride(session.session_id, hospital, sigla, numericValue, n || null);
   }, 400);
 
@@ -2906,7 +2969,7 @@ EOF
 
 ---
 
-### Task 27: `ScanControls.jsx` redesign + move 'OCR suspects' out
+### Task 26: `ScanControls.jsx` redesign + move 'OCR suspects' out
 
 **Files:**
 - Modify: `frontend/src/components/ScanControls.jsx`
@@ -2979,7 +3042,7 @@ EOF
 
 ---
 
-### Task 28: `ScanProgress.jsx` redesign
+### Task 27: `ScanProgress.jsx` redesign
 
 **Files:**
 - Modify: `frontend/src/components/ScanProgress.jsx`
@@ -3086,7 +3149,7 @@ EOF
 
 ---
 
-### Task 29: Grep audit gating — zero raw palette classes
+### Task 28: Grep audit gating — zero raw palette classes
 
 **Files:**
 - Verify only — no edits unless audit fails.
@@ -3156,23 +3219,35 @@ If no edits needed (audit was clean from the start), no commit — proceed to Ta
 
 ---
 
-### Task 30: Final smoke test + CLAUDE.md + tag
+### Task 29: Final smoke test + CLAUDE.md + tag
 
 **Files:**
 - Modify: `a:/PROJECTS/PDFoverseer/CLAUDE.md` — add FASE 3 section
 - Tag: `fase-3-polish` (local only — push pending Daniel approval)
 
-- [ ] **Step 1: Backend + frontend smoke**
+- [ ] **Step 1: Smoke pre-flight + start backend + frontend**
 
-Start both servers:
+**Pre-flight — verify env vars are set:**
 
 ```bash
+.venv-cuda/Scripts/python.exe -c "import os; assert os.environ.get('INFORME_MENSUAL_ROOT'), 'INFORME_MENSUAL_ROOT not set — point it at A:/informe mensual'; assert os.path.exists(os.environ['INFORME_MENSUAL_ROOT']), f\"path does not exist: {os.environ['INFORME_MENSUAL_ROOT']}\"; print('OK', os.environ['INFORME_MENSUAL_ROOT'])"
+```
+
+Expected: prints `OK A:/informe mensual` (or wherever the corpus lives). If it asserts, set the env var before starting the server.
+
+**Start backend + frontend in separate terminals** (do NOT use `&` background — Windows PowerShell doesn't support it; foreground each in its own terminal):
+
+```
 # Terminal 1
 .venv-cuda/Scripts/python.exe server.py
+```
 
+```
 # Terminal 2
 cd frontend && npm run dev
 ```
+
+Wait for both: `uvicorn running on http://127.0.0.1:8000` from terminal 1, and `Local: http://localhost:5173` from terminal 2.
 
 Open `localhost:5173`. Walk through the 15 acceptance criteria from spec §7:
 
@@ -3185,7 +3260,7 @@ Open `localhost:5173`. Walk through the 15 acceptance criteria from spec §7:
 7. **"Generar Excel del mes"** → toast bottom-right "Excel guardado en …"
 8. **Trigger OCR fail** (e.g., delete a folder mid-scan or use a missing path) → toast error
 9. **Grep `bg-slate-` and `bg-indigo-` in JSX** — empty
-10. **Bundle size** — `npm run build`, compare to baseline; should be ≤ baseline + 25 KB
+10. **Bundle size** — `cd frontend && npm run build`, sum the `gzip:` sizes of every `dist/assets/index-*.js` file (the JS bundle). Compare to the baseline measured in Task 0. Delta should be ≤ +25 KB gzipped. WOFF2 font files DO NOT count toward this measurement (they're separate cacheable assets, not part of the JS bundle).
 11. **No console errors** during flow
 12. **Visual: no emoji/unicode glyphs** anywhere (⚠ ⟳ ✕ ✓ ○ ●)
 13. **Tooltips** delay 300ms — hover a sigla → label appears after ~300ms
@@ -3246,10 +3321,10 @@ EOF
 
 ```bash
 git tag fase-3-polish
-git tag --list | grep fase
+git tag --list
 ```
 
-Expected: `fase-1-mvp`, `fase-2-mvp`, `fase-3-polish`.
+Expected output includes: `fase-1-mvp`, `fase-2-mvp`, `fase-3-polish`.
 
 **STOP HERE.** Do NOT run `git push origin po_overhaul` or `git push origin fase-3-polish`. The push gate is the controller's job after Daniel approves the manual smoke test.
 
@@ -3261,9 +3336,9 @@ Surface the following message to the controller:
 
 ### Chunk 4 review checkpoint
 
-After Tasks 26-30 commit cleanly:
+After Tasks 25-29 commit cleanly:
 
-- [ ] All 30 commits visible on `po_overhaul` (Tasks 0-30 minus the one-off bundle measurement)
+- [ ] ~29 commits visible on `po_overhaul` (Tasks 0-29, some bundled into single commits per task instructions)
 - [ ] Tag `fase-3-polish` exists locally
 - [ ] `git log --oneline po_overhaul ^master | wc -l` — adds ~30 to whatever count was on top of FASE 2 (so ~100 total commits ahead of master)
 - [ ] **Dispatch chunk-4 plan-reviewer subagent.** Pass: chunk 4 content + spec path. Fix any blocking findings.
