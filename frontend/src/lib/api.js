@@ -52,6 +52,20 @@ export const api = {
       signal,
     }).then(jsonOrThrow),
 
+  patchPerFileOverride: async (sessionId, hospital, sigla, filename, count, opts = {}) => {
+    const r = await fetch(
+      `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/files/${encodeURIComponent(filename)}/override`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count }),
+        signal: opts.signal,
+      }
+    );
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+
   getCellFiles: (sessionId, hospital, sigla) =>
     fetch(`${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/files`).then(jsonOrThrow),
 

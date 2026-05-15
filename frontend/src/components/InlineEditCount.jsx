@@ -1,11 +1,15 @@
 // Extracted from CategoryRow.jsx (FASE 4 Task 2.5). Refactor puro: no
 // behavior change. Reusado en FileList row para per-file overrides.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function InlineEditCount({ value, onCommit }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
 
   if (!editing) {
     return (
