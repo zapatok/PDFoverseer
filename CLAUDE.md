@@ -163,9 +163,51 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 - **VLM integration:** ~~Attempted~~ REVERTED (2026-03-30). See postmortem in Links.
 - **Browse UX:** `/api/browse` uses server-side tkinter chooser — only works with local display
 
-## FASE 3 polish — `po_overhaul` branch (shipped 2026-05-13)
+## FASE 4 UX slice — `po_overhaul` branch (shipped 2026-05-14)
 
-UI polish pass on top of FASE 2: design system with Radix Color tokens
+Slice UX cerrando 3 pendientes del roadmap post-FASE 3:
+
+1. **HLL manual-entry**: HospitalCard CTA "Llenar manualmente →" cuando
+   `state==="missing"`, HospitalDetail `mode="manual"` (Zustand-based, no
+   router), focus auto-shift en Enter, 18 siglas siempre visibles, audit
+   trail con `method="manual"` (literal FASE 2 reusado).
+2. **Docs por archivo en FileList**: `ScanResult.per_file` propagado por
+   scanners (simple_factory, art, charla, _header_detect_base); FileList
+   row con `Npp + Ndocs editable + OriginChip` (OCR/R1/manual);
+   `compute_cell_count` Python + `cellCount.js` JS espejados con fixture
+   compartido en `tests/fixtures/cell_count_cases.json`.
+3. **Multi-mes tendencia**: Toggle [Mes actual]/[Histórico] en
+   MonthOverview (state Zustand, sin URL); SparkGrid 18×4 con sparklines
+   de 12 meses sobre `historical_counts` via `query_range`; anomalías
+   >30% en ámbar (`po-suspect`, baseline ≥6); `useHistoryStore` con cache
+   módulo-level singleton.
+
+- **Spec:** `docs/superpowers/specs/2026-05-14-fase-4-design.md`
+- **Plan:** `docs/superpowers/plans/2026-05-14-pdfoverseer-fase-4.md`
+- **Tag:** `fase-4-mvp` (local, awaiting push approval)
+- **Bundle delta:** +2.17 kB gzipped (baseline FASE 3 90.23 kB → 92.40 kB).
+  Casi todo construido sobre primitives FASE 3, sin nuevas deps.
+- **New deps:** ninguna
+
+### Smoke bugs caught (commit cf5e1cb)
+1. `HospitalCard` referenced `<Tooltip>` sin importarlo (latent FASE 3 bug).
+2. `HospitalDetail` filtraba siglas con `cells[s]` truthy → HLL manual mode
+   landing en lista vacía. Fix: en `mode="manual"` siempre 18 rows.
+3. `FileList` no refrescaba el row tras `savePerFileOverride` (cell state
+   updated, files-state stale). Fix: optimistic local update en `onCommit`.
+
+### Next (FASE 5)
+- Per-sigla OCR engine refinement contra el corpus real
+- Page-level cancellation (target <3s)
+- Drill-in del histórico (vista detalle de serie completa con números
+  mes-a-mes)
+- Auto-retry on OCR failure
+- Refactor: extract `SIGLAS` a `frontend/src/lib/sigla-labels.js` (3 copias
+  duplicadas en HospitalCard, HospitalDetail, SparkGrid)
+
+### FASE 3 polish — predecessor, `po_overhaul` branch (shipped 2026-05-13)
+
+UI polish pass on top of FASE 2: design system con Radix Color tokens
 + lucide-react icons, 8 shared primitives under `frontend/src/ui/`,
 inline-edit count cells, visible autosave indicator, Radix Dialog wrap
 for PDFLightbox (a11y), sonner toasts, full Spanish microcopy.
@@ -174,25 +216,16 @@ for PDFLightbox (a11y), sonner toasts, full Spanish microcopy.
 - **Plan:** `docs/superpowers/plans/2026-05-13-pdfoverseer-fase-3.md`
 - **Tag:** `fase-3-polish` (local, awaiting push approval)
 - **Bundle delta:** +38.93 kB gzipped (baseline 51.30 kB → 90.23 kB).
-  Over the AC10 target of +25 kB; driven by Radix Dialog + Tooltip +
-  sonner + lucide icons. Surfaced for Daniel to decide if optimization
-  pass (icon barrel imports, dialog/tooltip code-split) is worth it
-  before push.
 - **New deps:** `lucide-react`, `@radix-ui/colors`, `@radix-ui/react-dialog`,
   `@radix-ui/react-tooltip`, `sonner`, `@fontsource/inter`,
   `@fontsource/jetbrains-mono`
 
-### Design tokens
+#### Design tokens
 Defined in `frontend/tailwind.config.js`. Always use `po-*` tokens in JSX,
 never raw `bg-slate-*` / `bg-indigo-*` / etc. (grep audit enforced at
-commit-time; see CategoryRow + DetailPanel for reference usage).
-
-### Next (FASE 4)
-- Per-sigla OCR engine refinement against the real corpus
-- Page-level cancellation (target <3s)
-- HLL manual-entry flow (the disabled CTA on HospitalCard)
-- Mostrar docs encontrados por archivo en FileList
-- Multi-month overview
+commit-time; see CategoryRow + DetailPanel for reference usage). FASE 4
+extendió `Badge.jsx` con tones `iris/jade/amber` mapeados a `po-override-*`
+/ `po-confidence-high-*` / `po-suspect-*` ya existentes (sin nuevos tokens).
 
 ### FASE 2 MVP — predecessor, `po_overhaul` branch (shipped 2026-05-12)
 
