@@ -116,6 +116,12 @@ viene en el payload pero no se muestra).
 - La función `anomalyTone(series)` ya existente se reutiliza tanto para el tono de
   la celda como para el del drawer — el `HistoryDrawer` la importa o se extrae a un
   helper compartido si conviene (decisión del plan).
+  - **Nota:** `anomalyTone` es un detector de *caída* (devuelve `"warn"` cuando el
+    último mes cae bajo 0.7× el promedio de los 6 previos, con guarda
+    `length >= 7`). No marca picos hacia arriba. El drawer hereda esa semántica:
+    su "línea ámbar" / fila resaltada aparece solo en caídas, igual que el
+    SparkGrid. Es consistente, no un bug — pero el plan lo deja explícito para que
+    no sorprenda en el smoke.
 
 ### State (Zustand)
 
@@ -184,8 +190,11 @@ cambio; el gap real son las utils OCR de FASE 4 sin checkpoint.)
   de páginas puro sin loop de OCR — si no itera páginas, no requiere checkpoint, lo
   confirma el plan).
 - Dentro de esos loops, chequear el token cada página (o cada 1–2 páginas) y
-  abortar limpiamente — levantando `CancelledError` o devolviendo un resultado
-  centinela que el scanner traduzca a `err="cancelled"`.
+  abortar **levantando `CancelledError`** (`core/scanners/cancellation.py`). Se
+  descarta la opción de un resultado centinela: como el loop construye la serie
+  incrementalmente, devolver a mitad daría un subconteo parcial; y los scanners ya
+  hacen `except CancelledError: raise`, así que la excepción se propaga limpia
+  hasta el worker, que la traduce a `err="cancelled"`.
 - Los scanners (`art_scanner`, `charla_scanner`, `_header_detect_base`) pasan su
   `cancel` recibido hacia estas utils.
 
@@ -232,7 +241,11 @@ nulo (y distinto de `"cancelled"`), la celda se reporta directamente como
   barato e inocuo; agregar un clasificador no se justifica.
 - **Interacción con cancelación:** si el token de cancelación está activo, no se
   reintenta — un `err="cancelled"` nunca dispara retry, y un cancel que llega
-  durante la ventana de reintentos corta el ciclo.
+  durante la ventana de reintentos corta el ciclo. En el camino multi-worker esto
+  es crítico: tras un cancel, el orquestador ya llamó
+  `pool.shutdown(wait=False, cancel_futures=True)`, y re-submitir una celda a un
+  pool apagado levanta `RuntimeError`. El ciclo de retry DEBE chequear
+  `cancel.cancelled` *antes* de re-submitir, no después.
 
 Aplica a ambos caminos de `scan_cells_ocr`: el sincrónico (`max_workers==1`, usado
 en tests) y el multi-worker (`ProcessPoolExecutor`). En el camino multi-worker, el
