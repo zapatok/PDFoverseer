@@ -52,6 +52,7 @@ class SimpleFilenameScanner:
             errors=[],
             duration_ms=duration_ms,
             files_scanned=glob_result.files_scanned,
+            per_file={fn: 1 for fn in glob_result.matched_filenames},
         )
 
 
