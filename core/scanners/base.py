@@ -25,6 +25,7 @@ class ScanResult:
     errors: list[str]
     duration_ms: int
     files_scanned: int
+    per_file: dict[str, int] | None = None
 
 
 @runtime_checkable
