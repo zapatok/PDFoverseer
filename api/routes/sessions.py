@@ -328,6 +328,18 @@ def get_cell_files(
     folder = _find_category_folder(hosp_dir, sigla)
     if not folder.exists():
         return []
+    per_file = cell.get("per_file") or {}
+    per_file_overrides = cell.get("per_file_overrides") or {}
+    cell_method = cell.get("method") or "filename_glob"
+
+    def _origin_for(filename: str, override: int | None) -> str:
+        """OriginChip variant: manual if override, OCR if scanner ran, else R1."""
+        if override is not None:
+            return "manual"
+        if cell_method in ("header_detect", "corner_count", "page_count_pure"):
+            return "OCR"
+        return "R1"
+
     out: list[dict] = []
     for pdf in sorted(folder.rglob("*.pdf")):
         try:
@@ -336,12 +348,20 @@ def get_cell_files(
         except Exception:  # noqa: BLE001
             page_count = 0
         subfolder = pdf.parent.name if pdf.parent != folder else None
+        override = per_file_overrides.get(pdf.name)
+        inferred = per_file.get(pdf.name)
         out.append(
             {
                 "name": pdf.name,
                 "subfolder": subfolder,
                 "page_count": page_count,
                 "suspect": page_count >= 10,
+                "per_file_count": inferred,
+                "override_count": override,
+                "effective_count": override
+                if override is not None
+                else (inferred if inferred is not None else 1),
+                "origin": _origin_for(pdf.name, override),
             }
         )
     return out
