@@ -1,0 +1,73 @@
+[
+  {
+    "name": "user_override_wins",
+    "cell": {
+      "user_override": 99,
+      "per_file": {"a.pdf": 5},
+      "per_file_overrides": {"a.pdf": 3},
+      "ocr_count": 10,
+      "filename_count": 2
+    },
+    "expected": 99
+  },
+  {
+    "name": "per_file_overrides_compose",
+    "cell": {
+      "user_override": null,
+      "per_file": {"a.pdf": 5, "b.pdf": 3},
+      "per_file_overrides": {"a.pdf": 7},
+      "ocr_count": 99
+    },
+    "expected": 10
+  },
+  {
+    "name": "per_file_only",
+    "cell": {
+      "user_override": null,
+      "per_file": {"a.pdf": 24, "b.pdf": 1},
+      "per_file_overrides": {},
+      "ocr_count": 99
+    },
+    "expected": 25
+  },
+  {
+    "name": "override_adds_unknown_file",
+    "cell": {
+      "user_override": null,
+      "per_file": {"a.pdf": 5},
+      "per_file_overrides": {"b.pdf": 3}
+    },
+    "expected": 8
+  },
+  {
+    "name": "fallback_ocr_count",
+    "cell": {
+      "user_override": null,
+      "per_file": null,
+      "per_file_overrides": null,
+      "ocr_count": 24,
+      "filename_count": 5
+    },
+    "expected": 24
+  },
+  {
+    "name": "fallback_filename_count",
+    "cell": {
+      "user_override": null,
+      "per_file": null,
+      "per_file_overrides": null,
+      "ocr_count": null,
+      "filename_count": 5
+    },
+    "expected": 5
+  },
+  {
+    "name": "all_null_returns_zero",
+    "cell": {
+      "user_override": null,
+      "ocr_count": null,
+      "filename_count": null
+    },
+    "expected": 0
+  }
+]
