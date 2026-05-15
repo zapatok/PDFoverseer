@@ -3,13 +3,8 @@ import Dot from "../ui/Dot";
 import EmptyState from "../ui/EmptyState";
 import Tooltip from "../ui/Tooltip";
 import { CTA_LLENAR_MANUAL } from "../lib/constants";
+import { SIGLAS } from "../lib/sigla-labels";
 import { useSessionStore } from "../store/session";
-
-const SIGLAS = [
-  "reunion", "irl", "odi", "charla", "chintegral", "dif_pts",
-  "art", "insgral", "bodega", "maquinaria", "ext", "senal",
-  "exc", "altura", "caliente", "herramientas_elec", "andamios", "chps",
-];
 
 function dotVariantFor(cell) {
   if (!cell) return "neutral";

@@ -24,3 +24,12 @@ export const SIGLA_LABELS = {
   andamios: "Andamios",
   chps: "CHPS",
 };
+
+// Canonical sigla order — the 18 categories in the order they appear in the
+// monthly Excel. Single source of truth for HospitalCard, HospitalDetail
+// and SparkGrid.
+export const SIGLAS = [
+  "reunion", "irl", "odi", "charla", "chintegral", "dif_pts",
+  "art", "insgral", "bodega", "maquinaria", "ext", "senal",
+  "exc", "altura", "caliente", "herramientas_elec", "andamios", "chps",
+];

@@ -1,12 +1,6 @@
 import Sparkline from "./Sparkline";
 import Tooltip from "../ui/Tooltip";
-
-// Canonical sigla order — mirrors HospitalCard.jsx and HospitalDetail.jsx.
-const SIGLAS = [
-  "reunion", "irl", "odi", "charla", "chintegral", "dif_pts",
-  "art", "insgral", "bodega", "maquinaria", "ext", "senal",
-  "exc", "altura", "caliente", "herramientas_elec", "andamios", "chps",
-];
+import { SIGLAS } from "../lib/sigla-labels";
 
 const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
 

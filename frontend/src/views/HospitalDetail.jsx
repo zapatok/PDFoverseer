@@ -5,12 +5,7 @@ import CategoryGroup from "../components/CategoryGroup";
 import FileList from "../components/FileList";
 import DetailPanel from "../components/DetailPanel";
 import ScanControls from "../components/ScanControls";
-
-const SIGLAS = [
-  "reunion", "irl", "odi", "charla", "chintegral", "dif_pts",
-  "art", "insgral", "bodega", "maquinaria", "ext", "senal",
-  "exc", "altura", "caliente", "herramientas_elec", "andamios", "chps",
-];
+import { SIGLAS } from "../lib/sigla-labels";
 
 export default function HospitalDetail({ hospital, onBack }) {
   const { session } = useSessionStore();
