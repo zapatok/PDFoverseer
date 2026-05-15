@@ -2151,10 +2151,13 @@ EOF
 
 **Files:**
 - Modify: `frontend/src/components/FileList.jsx`
+- Modify: `frontend/src/components/InlineEditCount.jsx` (fix latent draft/value desync — ver nota abajo)
 - Modify: `frontend/src/store/session.js` (nueva action `savePerFileOverride`)
 - Modify: `frontend/src/lib/api.js` (nueva función `patchPerFileOverride`)
 
 Spec §5.1 + §7.2.
+
+> **Latent bug to fix here (surfaced en Task 2.5 code review):** `InlineEditCount.jsx` usa `useState(value)` que inicializa `draft` solo en mount. En CategoryRow nunca importó (cada row tiene mount estable), pero en FileList el MISMO componente puede recibir un `value` nuevo (ej. WebSocket cell_updated tras OCR background). Fix mínimo en `InlineEditCount.jsx`: agregar `useEffect(() => { if (!editing) setDraft(value); }, [value])` — solo resetea si NO está editing (no machaca la edición en curso). Test manual: abrir lightbox de un archivo, cambiar override en otra ventana → al cerrar lightbox, el badge debe mostrar el valor nuevo, no el viejo.
 
 - [ ] **Step 1: Add patchPerFileOverride to api.js**
 
