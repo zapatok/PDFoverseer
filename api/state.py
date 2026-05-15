@@ -125,6 +125,9 @@ class SessionManager:
         cell["errors"] = list(result.errors)
         cell["files_scanned"] = result.files_scanned
         cell["duration_ms_filename"] = result.duration_ms
+        cell["per_file"] = result.per_file
+        cell.setdefault("per_file_overrides", {})
+        cell.setdefault("manual_entry", False)
         cell.setdefault("ocr_count", None)
         cell.setdefault("user_override", None)
         cell.setdefault("override_note", None)
@@ -153,6 +156,9 @@ class SessionManager:
         cell["flags"] = list(result.flags)
         cell["errors"] = list(result.errors)
         cell["duration_ms_ocr"] = result.duration_ms
+        cell["per_file"] = result.per_file
+        cell.setdefault("per_file_overrides", {})
+        cell.setdefault("manual_entry", False)
         cell.setdefault("filename_count", None)
         cell.setdefault("user_override", None)
         cell.setdefault("override_note", None)
