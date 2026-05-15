@@ -14,6 +14,8 @@ const SIGLAS = [
 
 export default function HospitalDetail({ hospital, onBack }) {
   const { session } = useSessionStore();
+  const hospitalMode = useSessionStore((s) => s.hospitalMode);
+  const focusSigla = useSessionStore((s) => s.focusSigla);
   const [selected, setSelected] = useState(null);
   const [selectedSet, setSelectedSet] = useState(new Set());
 
@@ -35,6 +37,15 @@ export default function HospitalDetail({ hospital, onBack }) {
     });
   };
 
+  // Advance focus to the next sigla in canonical order.
+  const focusNextSigla = (currentSigla) => {
+    const idx = SIGLAS.indexOf(currentSigla);
+    const next = SIGLAS[idx + 1];
+    if (next) useSessionStore.setState({ focusSigla: next });
+  };
+
+  const headerCountLabel = hospitalMode === "manual" ? "ingresadas" : "detectados";
+
   return (
     <div>
       <header className="flex items-center gap-4 mb-6">
@@ -47,7 +58,8 @@ export default function HospitalDetail({ hospital, onBack }) {
         </button>
         <h2 className="text-xl font-semibold">{hospital}</h2>
         <span className="text-sm text-po-text-muted">
-          Total: <span className="tabular-nums">{total.toLocaleString()}</span>
+          Total: <span className="tabular-nums">{total.toLocaleString()}</span>{" "}
+          {headerCountLabel}
         </span>
         <div className="ml-auto">
           <ScanControls hospital={hospital} selectedSiglas={[...selectedSet]} />
@@ -66,6 +78,9 @@ export default function HospitalDetail({ hospital, onBack }) {
             checkedSet={selectedSet}
             onCheck={onCheck}
             defaultOpen
+            mode={hospitalMode}
+            focusSigla={focusSigla}
+            onCommitNext={focusNextSigla}
           />
           {compilations.length > 0 && (
             <CategoryGroup
@@ -78,6 +93,9 @@ export default function HospitalDetail({ hospital, onBack }) {
               onCheck={onCheck}
               defaultOpen
               showScanAll
+              mode={hospitalMode}
+              focusSigla={focusSigla}
+              onCommitNext={focusNextSigla}
             />
           )}
         </section>

@@ -31,6 +31,9 @@ export default function CategoryRow({
   onSelect,
   checked,
   onCheckChange,
+  mode = "scanned",
+  autoFocus = false,
+  onCommitNext,
 }) {
   const scanningCells = useSessionStore((s) => s.scanningCells);
   const pendingSaves = useSessionStore((s) => s.pendingSaves);
@@ -43,9 +46,12 @@ export default function CategoryRow({
   const hasOverride = cell?.user_override !== null && cell?.user_override !== undefined;
   const isCompilationSuspect = cell?.flags?.includes("compilation_suspect");
   const hasError = cell?.errors?.length > 0;
+  const showMethodChip = mode === "scanned" && cell?.count != null;
+  const placeholder = mode === "manual" ? "—" : null;
 
   const onCommitCount = (v) => {
-    saveOverride(session.session_id, hospital, sigla, v, cell?.override_note ?? null);
+    saveOverride(session.session_id, hospital, sigla, v, cell?.override_note ?? null, { manual: mode === "manual" });
+    if (mode === "manual") onCommitNext?.();
   };
 
   return (
@@ -79,13 +85,18 @@ export default function CategoryRow({
                 <span><Badge variant="state-error" icon={AlertCircle}>Error</Badge></span>
               </Tooltip>
             )}
-            {hasOverride && <Badge variant="state-override" icon={PenLine}>Manual</Badge>}
-            {isCompilationSuspect && !hasOverride && (
+            {showMethodChip && hasOverride && <Badge variant="state-override" icon={PenLine}>Manual</Badge>}
+            {showMethodChip && isCompilationSuspect && !hasOverride && (
               <Tooltip content="Probable compilación (PDF con >5× páginas esperadas)">
                 <span><Badge variant="state-suspect" icon={FileStack}>Compilación</Badge></span>
               </Tooltip>
             )}
-            <InlineEditCount value={effectiveCount(cell)} onCommit={onCommitCount} />
+            <InlineEditCount
+              value={effectiveCount(cell)}
+              onCommit={onCommitCount}
+              placeholder={placeholder}
+              autoFocus={autoFocus}
+            />
           </>
         )}
       </div>

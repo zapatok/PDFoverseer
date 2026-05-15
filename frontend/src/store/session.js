@@ -5,6 +5,8 @@ import { createWSClient } from "../lib/ws";
 export const useSessionStore = create((set, get) => ({
   view: "month",
   hospital: null,
+  hospitalMode: "scanned",
+  focusSigla: null,
   months: [],
   session: null,
   loading: false,
@@ -22,7 +24,10 @@ export const useSessionStore = create((set, get) => ({
   // Public read view for components — keyed identically. Values: 'saving' | 'saved' | 'error'.
   pendingSaves: {},
 
-  setView: (view) => set({ view }),
+  setView: (view) => set({
+    view,
+    ...(view !== "hospital" && { hospitalMode: "scanned", focusSigla: null }),
+  }),
 
   loadMonths: async () => {
     set({ loading: true, error: null });
@@ -48,7 +53,12 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
-  selectHospital: (hospital) => set({ view: "hospital", hospital }),
+  selectHospital: (hospital, opts = {}) => set({
+    view: "hospital",
+    hospital,
+    hospitalMode: opts.mode ?? "scanned",
+    focusSigla: opts.focus ?? null,
+  }),
 
   runScan: async (sessionId) => {
     set({ loading: true, error: null });
@@ -75,7 +85,7 @@ export const useSessionStore = create((set, get) => ({
     catch (error) { set({ error: String(error) }); }
   },
 
-  saveOverride: async (sessionId, hospital, sigla, value, note) => {
+  saveOverride: async (sessionId, hospital, sigla, value, note, opts = {}) => {
     const key = `${hospital}|${sigla}`;
     const controller = new AbortController();
 
@@ -100,7 +110,7 @@ export const useSessionStore = create((set, get) => ({
     try {
       const result = await api.patchOverride(
         sessionId, hospital, sigla, value, note,
-        { signal: controller.signal },
+        { signal: controller.signal, manual: opts.manual },
       );
 
       // If our controller was aborted while in flight, the newer save wins.

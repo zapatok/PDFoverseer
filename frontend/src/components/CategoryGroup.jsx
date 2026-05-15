@@ -14,6 +14,9 @@ export default function CategoryGroup({
   onCheck,
   defaultOpen = true,
   showScanAll = false,
+  mode = "scanned",
+  focusSigla = null,
+  onCommitNext,
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const session = useSessionStore((s) => s.session);
@@ -53,6 +56,9 @@ export default function CategoryGroup({
               onSelect={() => onSelect(cell.sigla)}
               checked={checkedSet.has(cell.sigla)}
               onCheckChange={(c) => onCheck(cell.sigla, c)}
+              mode={mode}
+              autoFocus={focusSigla === cell.sigla}
+              onCommitNext={onCommitNext ? () => onCommitNext(cell.sigla) : undefined}
             />
           ))}
         </div>

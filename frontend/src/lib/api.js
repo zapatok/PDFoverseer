@@ -44,13 +44,21 @@ export const api = {
       method: "POST",
     }).then(jsonOrThrow),
 
-  patchOverride: (sessionId, hospital, sigla, value, note, { signal } = {}) =>
-    fetch(`${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/override`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value, note }),
-      signal,
-    }).then(jsonOrThrow),
+  patchOverride: async (sessionId, hospital, sigla, value, note, opts = {}) => {
+    const body = { value, note };
+    if (opts.manual) body.manual = true;
+    const r = await fetch(
+      `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/override`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: opts.signal,
+      }
+    );
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
 
   patchPerFileOverride: async (sessionId, hospital, sigla, filename, count, opts = {}) => {
     const r = await fetch(

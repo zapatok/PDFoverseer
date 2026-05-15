@@ -1,8 +1,8 @@
-import { Building2, FolderX, PenLine } from "lucide-react";
+import { Building2, FolderX } from "lucide-react";
 import Dot from "../ui/Dot";
-import Button from "../ui/Button";
 import EmptyState from "../ui/EmptyState";
-import Tooltip from "../ui/Tooltip";
+import { CTA_LLENAR_MANUAL } from "../lib/constants";
+import { useSessionStore } from "../store/session";
 
 const SIGLAS = [
   "reunion", "irl", "odi", "charla", "chintegral", "dif_pts",
@@ -21,6 +21,8 @@ function dotVariantFor(cell) {
 }
 
 export default function HospitalCard({ hospital, total, cells, status, onClick }) {
+  const selectHospital = useSessionStore((s) => s.selectHospital);
+
   if (status === "missing") {
     return (
       <div className="rounded-xl bg-po-panel border border-po-border p-5">
@@ -31,13 +33,15 @@ export default function HospitalCard({ hospital, total, cells, status, onClick }
         <EmptyState
           icon={FolderX}
           title="Sin carpeta normalizada"
-          description={`${hospital} no entrega PDFs por carpeta este mes. El flujo de ingreso manual estará disponible en una versión próxima.`}
+          description={`${hospital} no entrega PDFs por carpeta este mes. Ingresá los conteos manualmente.`}
           action={
-            <Tooltip content="Disponible en FASE 4">
-              <span>
-                <Button disabled icon={PenLine}>Ingresar conteos</Button>
-              </span>
-            </Tooltip>
+            <button
+              type="button"
+              onClick={() => selectHospital(hospital, { mode: "manual", focus: "reunion" })}
+              className="inline-flex items-center gap-1 text-xs text-po-accent hover:text-po-accent-hover px-2 py-1 rounded hover:bg-po-panel-hover transition"
+            >
+              {CTA_LLENAR_MANUAL}
+            </button>
           }
         />
       </div>
