@@ -17,6 +17,25 @@ from core.scanners.base import ScanResult
 from core.state.migrations import migrate_state_v1_to_v2
 
 
+def compute_cell_count(cell: dict) -> int:
+    """Cell count derivation per FASE 4 §6.2 precedence.
+
+    1. user_override (FASE 2 escape hatch) wins absolutely.
+    2. per_file_overrides ∪ per_file → suma derivada.
+    3. Fallback: ocr_count or filename_count or 0.
+    """
+    if cell.get("user_override") is not None:
+        return cell["user_override"]
+
+    per_file = cell.get("per_file") or {}
+    per_file_overrides = cell.get("per_file_overrides") or {}
+    if per_file or per_file_overrides:
+        all_files = set(per_file) | set(per_file_overrides)
+        return sum(per_file_overrides.get(f, per_file.get(f, 0)) for f in all_files)
+
+    return cell.get("ocr_count") or cell.get("filename_count") or 0
+
+
 class SessionManager:
     """Wrap session DB operations + maintain in-memory cell state."""
 
@@ -73,9 +92,7 @@ class SessionManager:
         state["status"] = rec.status
         return state
 
-    def _load_and_migrate(
-        self, session_id: str
-    ) -> tuple[dict, SessionRecord]:
+    def _load_and_migrate(self, session_id: str) -> tuple[dict, SessionRecord]:
         """Load session state, run lazy migration, return (state, record).
 
         Internal helper used by all setters + getter. Persists migrated state
