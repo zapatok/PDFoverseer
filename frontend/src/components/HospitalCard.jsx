@@ -1,6 +1,7 @@
 import { Building2, FolderX } from "lucide-react";
 import Dot from "../ui/Dot";
 import EmptyState from "../ui/EmptyState";
+import Tooltip from "../ui/Tooltip";
 import { CTA_LLENAR_MANUAL } from "../lib/constants";
 import { useSessionStore } from "../store/session";
 

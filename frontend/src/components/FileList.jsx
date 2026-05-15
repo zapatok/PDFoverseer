@@ -99,9 +99,16 @@ export default function FileList({ hospital, sigla }) {
               <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                 <InlineEditCount
                   value={f.effective_count ?? 1}
-                  onCommit={(newCount) =>
-                    savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount)
-                  }
+                  onCommit={(newCount) => {
+                    setFiles((prev) =>
+                      prev.map((row) =>
+                        row.name === f.name
+                          ? { ...row, effective_count: newCount, override_count: newCount, origin: "manual" }
+                          : row,
+                      ),
+                    );
+                    savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount);
+                  }}
                 />
                 <OriginChip origin={f.origin ?? "R1"} />
               </div>

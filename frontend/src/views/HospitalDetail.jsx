@@ -25,8 +25,14 @@ export default function HospitalDetail({ hospital, onBack }) {
     0,
   );
 
-  const normalized = SIGLAS.filter((s) => cells[s] && !cells[s].flags?.includes("compilation_suspect"));
-  const compilations = SIGLAS.filter((s) => cells[s] && cells[s].flags?.includes("compilation_suspect"));
+  const normalized =
+    hospitalMode === "manual"
+      ? SIGLAS
+      : SIGLAS.filter((s) => cells[s] && !cells[s].flags?.includes("compilation_suspect"));
+  const compilations =
+    hospitalMode === "manual"
+      ? []
+      : SIGLAS.filter((s) => cells[s] && cells[s].flags?.includes("compilation_suspect"));
 
   const onCheck = (sigla, checked) => {
     setSelectedSet((prev) => {
