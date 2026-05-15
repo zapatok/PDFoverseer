@@ -173,6 +173,7 @@ class SessionManager:
         *,
         value: int | None,
         note: str | None,
+        manual: bool = False,
     ) -> None:
         """Set or clear the user override + note.
 
@@ -180,6 +181,16 @@ class SessionManager:
         forced to None regardless of the ``note`` parameter (a note without
         an override is meaningless). When ``value`` is an int, ``note`` is
         persisted verbatim (may be None or a string).
+
+        Args:
+            session_id: Target session identifier.
+            hospital: Hospital code (e.g. ``"HLL"``).
+            sigla: Category code (e.g. ``"reunion"``).
+            value: Override count (int) or None to clear.
+            note: Optional override note string.
+            manual: When True, marks ``cell.manual_entry = True`` to indicate
+                the value was entered via the HLL manual-entry flow (no scan
+                data available). Defaults to False, preserving FASE 2 behavior.
         """
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
@@ -188,6 +199,9 @@ class SessionManager:
         cell.setdefault("filename_count", None)
         cell.setdefault("ocr_count", None)
         cell.setdefault("excluded", False)
+        cell.setdefault("manual_entry", False)
+        if manual:
+            cell["manual_entry"] = True
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     def apply_per_file_override(

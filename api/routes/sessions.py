@@ -262,13 +262,14 @@ def patch_override(
         raise HTTPException(400, f"Invalid session_id: {session_id}")
     value = body.get("value")
     note = body.get("note")
+    manual = bool(body.get("manual", False))
     if value is not None:
         if not isinstance(value, int) or isinstance(value, bool):
             raise HTTPException(400, "value must be int or null")
         if value < 0 or value > _MAX_REASONABLE_COUNT:
             raise HTTPException(400, f"value must be in [0, {_MAX_REASONABLE_COUNT}]")
     try:
-        mgr.apply_user_override(session_id, hospital, sigla, value=value, note=note)
+        mgr.apply_user_override(session_id, hospital, sigla, value=value, note=note, manual=manual)
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
