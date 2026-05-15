@@ -28,6 +28,7 @@ class GlobCountResult:
     method: str
     files_scanned: int
     flags: list[str] = field(default_factory=list)
+    matched_filenames: list[str] = field(default_factory=list)
 
 
 def extract_sigla(filename: str) -> str | None:
@@ -62,6 +63,7 @@ def count_pdfs_by_sigla(folder: Path, *, sigla: str) -> GlobCountResult:
             method="filename_glob",
             files_scanned=0,
             flags=["folder_missing"],
+            matched_filenames=[],
         )
     pdfs = list(folder.rglob("*.pdf"))
     matched = [p for p in pdfs if extract_sigla(p.name) == sigla]
@@ -75,6 +77,7 @@ def count_pdfs_by_sigla(folder: Path, *, sigla: str) -> GlobCountResult:
         method="filename_glob",
         files_scanned=len(pdfs),
         flags=flags,
+        matched_filenames=[p.name for p in matched],
     )
 
 
