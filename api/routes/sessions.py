@@ -10,10 +10,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from pydantic import BaseModel
 
 from api.batch import make_handle
 from api.routes.ws import broadcast
-from api.state import SessionManager
+from api.state import SessionManager, compute_cell_count
 from core.orchestrator import (
     enumerate_month,
     scan_cells_ocr,
@@ -275,6 +276,34 @@ def patch_override(
     return {
         "user_override": cell.get("user_override"),
         "override_note": cell.get("override_note"),
+    }
+
+
+class PerFileOverrideRequest(BaseModel):
+    count: int
+
+
+@router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/files/{filename:path}/override")
+def patch_per_file_override(
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    filename: str,
+    body: PerFileOverrideRequest,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Persist per-file count override. Spec §5.2 + §7.2."""
+    try:
+        mgr.apply_per_file_override(session_id, hospital, sigla, filename, body.count)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    state, _ = mgr._load_and_migrate(session_id)
+    cell = state["cells"][hospital][sigla]
+    return {
+        "filename": filename,
+        "count": body.count,
+        "new_cell_count": compute_cell_count(cell),
     }
 
 
