@@ -72,6 +72,7 @@ class CharlaScanner:
             errors=[],
             duration_ms=duration_ms,
             files_scanned=1,
+            per_file={pdfs[0].name: ocr.count},
         )
 
     def _filename_glob(self, folder: Path) -> ScanResult:
@@ -87,4 +88,5 @@ class CharlaScanner:
             errors=[*base.errors, error],
             duration_ms=base.duration_ms,
             files_scanned=base.files_scanned,
+            per_file=base.per_file,
         )
