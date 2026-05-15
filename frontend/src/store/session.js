@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { api } from "../lib/api";
 import { createWSClient } from "../lib/ws";
+import { invalidateHistory } from "../lib/useHistoryStore";
 
 export const useSessionStore = create((set, get) => ({
   view: "month",
@@ -11,6 +12,7 @@ export const useSessionStore = create((set, get) => ({
   session: null,
   loading: false,
   error: null,
+  historyView: false,
 
   // FASE 2 additions
   scanningCells: new Set(),            // "HPV|odi" strings, mirrored in CategoryRow
@@ -28,6 +30,9 @@ export const useSessionStore = create((set, get) => ({
     view,
     ...(view !== "hospital" && { hospitalMode: "scanned", focusSigla: null }),
   }),
+
+  toggleHistoryView: () => set((s) => ({ historyView: !s.historyView })),
+  setHistoryView: (v) => set({ historyView: !!v }),
 
   loadMonths: async () => {
     set({ loading: true, error: null });
@@ -243,6 +248,7 @@ export const useSessionStore = create((set, get) => ({
     try {
       const result = await api.generateOutput(sessionId);
       set({ loading: false });
+      invalidateHistory(sessionId);
       return result;
     } catch (error) {
       set({ error: String(error), loading: false });
