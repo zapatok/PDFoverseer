@@ -190,6 +190,35 @@ class SessionManager:
         cell.setdefault("excluded", False)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    def apply_per_file_override(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        filename: str,
+        count: int,
+    ) -> None:
+        """Persist per-file count override. Spec §5.2.
+
+        Args:
+            session_id: Target session identifier.
+            hospital: Hospital code (e.g. ``"HRB"``).
+            sigla: Category code (e.g. ``"odi"``).
+            filename: PDF filename to override.
+            count: New count value (0 is valid — discards the file's contribution).
+
+        Raises:
+            KeyError: if (hospital, sigla) cell is not in session state.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        cells = state.setdefault("cells", {})
+        if hospital not in cells or sigla not in cells.get(hospital, {}):
+            raise KeyError(f"Cell ({hospital}, {sigla}) not in session {session_id}")
+        cell = cells[hospital][sigla]
+        cell.setdefault("per_file_overrides", {})
+        cell["per_file_overrides"][filename] = count
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
     def apply_cell_result(
         self,
         session_id: str,
