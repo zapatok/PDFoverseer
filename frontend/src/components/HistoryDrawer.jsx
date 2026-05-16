@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import Drawer from "../ui/Drawer";
 import OriginChip from "./OriginChip";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
@@ -48,18 +49,28 @@ function SeriesChart({ counts, tone }) {
  *   onClose   — () => void
  */
 export default function HistoryDrawer({ open, hospital, sigla, series, onClose }) {
-  const points = series ?? [];
+  // Al cerrar, MonthOverview pasa hospital/sigla/series en null. Sin esto, el
+  // panel mostraría el estado vacío durante los 200 ms de la animación de
+  // salida: congelamos el último contenido real y lo seguimos mostrando
+  // mientras el drawer se desliza fuera de pantalla.
+  const shown = useRef({ hospital, sigla, series });
+  if (hospital != null) {
+    shown.current = { hospital, sigla, series };
+  }
+  const view = shown.current;
+
+  const points = view.series ?? [];
   const counts = points.map((p) => p.count);
   const tone = anomalyTone(points);
 
   const title = (
     <div>
       <div className="text-sm font-semibold text-po-text">
-        {hospital} · {sigla}
+        {view.hospital} · {view.sigla}
       </div>
-      {sigla && (
+      {view.sigla && (
         <div className="text-xs text-po-text-muted truncate">
-          {SIGLA_LABELS[sigla] ?? sigla}
+          {SIGLA_LABELS[view.sigla] ?? view.sigla}
         </div>
       )}
     </div>
