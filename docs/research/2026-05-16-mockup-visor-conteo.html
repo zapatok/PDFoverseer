@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feature 1 · Visor en modo contar</title>
+<style>
+  body { background:#0d0d10; color:#e9e9ec; font-family:'Inter',system-ui,-apple-system,Segoe UI,sans-serif; margin:0; padding:40px 24px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h2 { font-size:22px; font-weight:600; margin:0 0 7px; letter-spacing:-.01em; }
+  .subtitle { color:#8b8b95; font-size:13.5px; line-height:1.62; margin:0 0 22px; }
+  .subtitle b { color:#e9e9ec; font-weight:600; }
+  .subtitle i { color:#76767f; }
+  .mockup { border:1px solid #2b2b33; border-radius:12px; overflow:hidden; background:#101013; }
+  .mockup-header { font-size:10.5px; text-transform:uppercase; letter-spacing:.11em; color:#6a6a74; padding:11px 16px; border-bottom:1px solid #2b2b33; background:#161619; }
+
+  .cv {
+    --bg:#0b0b0e; --panel:#161619; --border:#2b2b33; --text:#e9e9ec;
+    --muted:#8b8b95; --subtle:#5f5f68; --accent:#5b6cf0; --jade:#3fae7d;
+    font-family:'Inter',system-ui,sans-serif;
+    background:var(--bg); border:1px solid var(--border); border-radius:10px;
+    overflow:hidden; display:flex; flex-direction:column; height:548px; color:var(--text);
+  }
+  .cv-top {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 16px; height:40px; background:var(--panel);
+    border-bottom:1px solid var(--border); font-size:13px; flex:none;
+  }
+  .cv-top b { color:var(--text); font-weight:600; }
+  .cv-top-l { color:var(--muted); }
+  .cv-top-r { color:var(--subtle); font-size:12px; }
+  .cv-main { flex:1; display:flex; min-height:0; }
+  .cv-stage {
+    flex:1; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 38%, #15151b 0%, #0b0b0e 72%);
+    position:relative;
+  }
+  .cv-page {
+    width:330px; height:446px; background:#f5f4ef; border-radius:3px;
+    box-shadow:0 14px 36px rgba(0,0,0,.6); position:relative;
+    padding:18px 21px; box-sizing:border-box; color:#222;
+  }
+  .cv-doc-h { font-size:9.5px; font-weight:700; letter-spacing:.04em; text-align:center; color:#1c1c1c; }
+  .cv-doc-sub { font-size:7px; text-align:center; color:#6c6c6c; margin:3px 0 11px; letter-spacing:.04em; }
+  .cv-table { border:1px solid #c7c5bc; border-radius:2px; }
+  .cv-row { display:grid; grid-template-columns:16px 1fr 56px 54px 42px; height:23px; border-bottom:1px solid #d8d6cc; }
+  .cv-row:last-child { border-bottom:none; }
+  .cv-row > div { border-right:1px solid #d8d6cc; display:flex; align-items:center; padding:0 5px; }
+  .cv-row > div:last-child { border-right:none; }
+  .cv-hrow { background:#ebe9e0; height:19px; }
+  .cv-hrow > div { font-size:6px; font-weight:700; color:#3a3a35; letter-spacing:.02em; }
+  .cv-num { font-size:7.5px; color:#9a9890; justify-content:center; }
+  .ink { height:6px; border-radius:3px; background:#3a4255; opacity:.6; }
+  .scrib { height:11px; background:repeating-linear-gradient(115deg,#2f3647 0 2px,transparent 2px 4px); opacity:.5; border-radius:2px; }
+  .cv-bubble {
+    position:absolute; right:-21px; top:50%; transform:translateY(-50%);
+    width:58px; height:58px; border-radius:50%;
+    background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:24px; font-weight:700; font-variant-numeric:tabular-nums;
+    box-shadow:0 6px 20px rgba(91,108,240,.55), 0 0 0 4px rgba(11,11,14,.92);
+  }
+  .cv-hud {
+    width:250px; flex:none; background:var(--panel); border-left:1px solid var(--border);
+    padding:17px 16px; display:flex; flex-direction:column; gap:15px; box-sizing:border-box;
+  }
+  .cv-label { font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--subtle); margin-bottom:5px; }
+  .cv-total { font-size:41px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
+  .cv-file { font-size:13px; font-weight:600; font-family:'JetBrains Mono',ui-monospace,monospace; }
+  .cv-metrics {
+    display:grid; grid-template-columns:repeat(3,1fr);
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:7px; overflow:hidden; margin-top:8px;
+  }
+  .cv-metric {
+    padding:9px 6px 10px; text-align:center;
+    display:flex; flex-direction:column; gap:5px;
+  }
+  .cv-metric + .cv-metric { border-left:1px solid var(--border); }
+  .cv-metric-l {
+    font-size:8px; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--subtle); font-weight:600;
+  }
+  .cv-metric-v {
+    font-size:15px; font-weight:600; color:var(--text);
+    font-variant-numeric:tabular-nums; line-height:1;
+  }
+  .cv-mic {
+    display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text);
+    background:rgba(91,108,240,.12); border:1px solid rgba(91,108,240,.32);
+    padding:8px 11px; border-radius:7px;
+  }
+  .cv-mic-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 4px rgba(91,108,240,.2); }
+  .cv-marks { display:flex; flex-direction:column; gap:3px; }
+  .cv-mark { display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted); padding:4px 8px; border-radius:5px; }
+  .cv-mark b { font-variant-numeric:tabular-nums; }
+  .cv-mark-now { background:rgba(91,108,240,.15); color:var(--text); }
+  .cv-spacer { flex:1; }
+  .cv-done {
+    text-align:center; font-size:12px; font-weight:600; color:var(--jade);
+    border:1px solid rgba(63,174,125,.4); background:rgba(63,174,125,.1);
+    padding:9px; border-radius:7px;
+  }
+  .cv-bottom {
+    height:32px; flex:none; background:var(--panel); border-top:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center; gap:15px;
+    font-size:11px; color:var(--subtle);
+  }
+  .cv-bottom b { color:var(--muted); font-family:'JetBrains Mono',ui-monospace,monospace; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>El visor en modo "contar trabajadores"</h2>
+  <p class="subtitle">La forma general de la pantalla donde vas a contar. Validemos el esqueleto; la burbuja, sus estados y el micrófono los afinamos en pantallas aparte.</p>
+
+  <div class="mockup">
+    <div class="mockup-header">Visor · modo contar trabajadores</div>
+    <div class="mockup-body" style="padding:18px; background:#070708;">
+      <div class="cv">
+        <div class="cv-top">
+          <span class="cv-top-l"><b>HLL</b> &nbsp;·&nbsp; charla &nbsp;·&nbsp; contando trabajadores</span>
+          <span class="cv-top-r">Salir &#10005;</span>
+        </div>
+        <div class="cv-main">
+          <div class="cv-stage">
+            <div class="cv-page">
+              <div class="cv-doc-h">REGISTRO DE FORMACIÓN E INFORMACIÓN</div>
+              <div class="cv-doc-sub">CONSTRUCTORA &mdash; CHARLA: TRABAJO EN ALTURA</div>
+              <div class="cv-table">
+                <div class="cv-row cv-hrow"><div>N&deg;</div><div>NOMBRE Y APELLIDOS</div><div>EMPRESA</div><div>RUT</div><div>FIRMA</div></div>
+                <div class="cv-row"><div class="cv-num">1</div><div><span class="ink" style="width:84%"></span></div><div><span class="ink" style="width:60%;height:5px"></span></div><div><span class="ink" style="width:78%;height:5px"></span></div><div><span class="scrib" style="width:36px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">2</div><div><span class="ink" style="width:71%"></span></div><div><span class="ink" style="width:72%;height:5px"></span></div><div><span class="ink" style="width:70%;height:5px"></span></div><div><span class="scrib" style="width:30px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">3</div><div><span class="ink" style="width:90%"></span></div><div><span class="ink" style="width:55%;height:5px"></span></div><div><span class="ink" style="width:82%;height:5px"></span></div><div><span class="scrib" style="width:40px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">4</div><div><span class="ink" style="width:64%"></span></div><div><span class="ink" style="width:68%;height:5px"></span></div><div><span class="ink" style="width:66%;height:5px"></span></div><div><span class="scrib" style="width:28px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">5</div><div><span class="ink" style="width:80%"></span></div><div><span class="ink" style="width:63%;height:5px"></span></div><div><span class="ink" style="width:75%;height:5px"></span></div><div><span class="scrib" style="width:34px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">6</div><div><span class="ink" style="width:88%"></span></div><div><span class="ink" style="width:58%;height:5px"></span></div><div><span class="ink" style="width:80%;height:5px"></span></div><div><span class="scrib" style="width:38px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">7</div><div><span class="ink" style="width:73%"></span></div><div><span class="ink" style="width:70%;height:5px"></span></div><div><span class="ink" style="width:68%;height:5px"></span></div><div><span class="scrib" style="width:32px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">8</div><div><span class="ink" style="width:67%"></span></div><div><span class="ink" style="width:62%;height:5px"></span></div><div><span class="ink" style="width:77%;height:5px"></span></div><div><span class="scrib" style="width:30px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">9</div><div><span class="ink" style="width:85%"></span></div><div><span class="ink" style="width:66%;height:5px"></span></div><div><span class="ink" style="width:72%;height:5px"></span></div><div><span class="scrib" style="width:37px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">10</div><div><span class="ink" style="width:77%"></span></div><div><span class="ink" style="width:59%;height:5px"></span></div><div><span class="ink" style="width:79%;height:5px"></span></div><div><span class="scrib" style="width:33px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">11</div><div><span class="ink" style="width:82%"></span></div><div><span class="ink" style="width:64%;height:5px"></span></div><div><span class="ink" style="width:71%;height:5px"></span></div><div><span class="scrib" style="width:35px"></span></div></div>
+                <div class="cv-row"><div class="cv-num">12</div><div></div><div></div><div></div><div></div></div>
+                <div class="cv-row"><div class="cv-num">13</div><div></div><div></div><div></div><div></div></div>
+              </div>
+              <div class="cv-bubble">11</div>
+            </div>
+          </div>
+          <aside class="cv-hud">
+            <div>
+              <div class="cv-label">Trabajadores &middot; celda</div>
+              <div class="cv-total">312</div>
+            </div>
+            <div>
+              <div class="cv-label">Archivo actual</div>
+              <div class="cv-file">charla_03.pdf</div>
+              <div class="cv-metrics">
+                <div class="cv-metric"><span class="cv-metric-l">Archivo</span><span class="cv-metric-v">3 / 7</span></div>
+                <div class="cv-metric"><span class="cv-metric-l">P&aacute;gina</span><span class="cv-metric-v">5 / 12</span></div>
+                <div class="cv-metric"><span class="cv-metric-l">Subtotal</span><span class="cv-metric-v">41</span></div>
+              </div>
+            </div>
+            <div class="cv-mic"><span class="cv-mic-dot"></span> Micrófono escuchando&hellip;</div>
+            <div>
+              <div class="cv-label">Marcas recientes</div>
+              <div class="cv-marks">
+                <div class="cv-mark"><span>página 3</span><b>16</b></div>
+                <div class="cv-mark cv-mark-now"><span>página 5 &middot; actual</span><b>11</b></div>
+              </div>
+            </div>
+            <div class="cv-spacer"></div>
+            <div class="cv-done">&#10003; Terminé esta categoría</div>
+          </aside>
+        </div>
+        <div class="cv-bottom">
+          <span><b>PgDn</b> fija y avanza</span>
+          <span><b>PgUp</b> atrás</span>
+          <span><b>Supr</b> borrar marca</span>
+          <span><b>E</b> editar a mano</span>
+          <span><b>M</b> pausa el micr&oacute;fono</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="subtitle" style="margin-top:20px">
+    <b>Qué validar:</b> ¿la forma general te sirve? El PDF grande al centro, la burbuja flotando a la derecha-media de la hoja, y a la derecha el panel con el total de la celda, el archivo actual + subtotal, la posición, el micrófono, las marcas recientes y el botón "Terminé". Abajo, los atajos. Dime qué sobra, qué falta y qué moverías. <i>(El disparo del micrófono y los estados de la burbuja &mdash;pendiente vs. fijada&mdash; van en la pantalla siguiente.)</i>
+  </p>
+</div>
+</body>
+</html>

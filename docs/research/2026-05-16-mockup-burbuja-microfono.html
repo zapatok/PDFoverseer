@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feature 1 · Burbuja y micrófono</title>
+<style>
+  body { background:#0d0d10; color:#e9e9ec; font-family:'Inter',system-ui,-apple-system,Segoe UI,sans-serif; margin:0; padding:40px 24px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h2 { font-size:22px; font-weight:600; margin:0 0 7px; letter-spacing:-.01em; }
+  .subtitle { color:#8b8b95; font-size:13.5px; line-height:1.62; margin:0 0 22px; }
+  .subtitle b { color:#e9e9ec; font-weight:600; }
+  .subtitle i { color:#76767f; }
+  .mockup { border:1px solid #2b2b33; border-radius:12px; overflow:hidden; background:#101013; }
+  .mockup-header { font-size:10.5px; text-transform:uppercase; letter-spacing:.11em; color:#6a6a74; padding:11px 16px; border-bottom:1px solid #2b2b33; background:#161619; }
+
+  .bm {
+    --bg:#0b0b0e; --panel:#161619; --border:#2b2b33; --text:#e9e9ec;
+    --muted:#8b8b95; --subtle:#5f5f68; --accent:#5b6cf0; --jade:#3fae7d;
+    padding:20px 18px; background:#070708;
+  }
+  .bm-frames { display:flex; gap:14px; }
+  .bm-frame { flex:1; display:flex; flex-direction:column; }
+  .bm-stage {
+    background:radial-gradient(circle at 50% 42%, #15151b 0%, #0b0b0e 75%);
+    border:1px solid var(--border); border-radius:9px;
+    height:236px; display:flex; align-items:center; justify-content:center;
+    position:relative; overflow:hidden;
+  }
+  .bm-step {
+    position:absolute; top:9px; left:10px;
+    width:19px; height:19px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    font-size:10px; font-weight:700; color:var(--muted);
+  }
+  .bm-ghost {
+    position:absolute; right:0; top:50%; transform:translateY(-50%);
+    width:24px; height:184px; background:#f5f4ef; opacity:.14;
+    border-radius:2px 0 0 2px;
+  }
+  .bm-page {
+    width:150px; height:184px; background:#f5f4ef; border-radius:2px;
+    box-shadow:0 10px 26px rgba(0,0,0,.6); position:relative;
+    padding:11px 12px; box-sizing:border-box;
+  }
+  .bm-ph { height:7px; width:74%; margin:0 auto 4px; background:#cdcbc1; border-radius:2px; }
+  .bm-psub { height:4px; width:50%; margin:0 auto 9px; background:#dedcd2; border-radius:2px; }
+  .bm-pt { border:1px solid #c7c5bc; border-radius:2px; }
+  .bm-pr { display:flex; align-items:center; gap:6px; height:17px; padding:0 6px; border-bottom:1px solid #d8d6cc; }
+  .bm-pr:last-child { border-bottom:none; }
+  .bm-pr.h { background:#ebe9e0; height:13px; }
+  .bm-pn { width:9px; height:5px; background:#cbc9bf; border-radius:1px; flex:none; }
+  .bm-pr i { height:5px; background:#3a4255; opacity:.5; border-radius:2px; }
+
+  .bm-bub {
+    position:absolute; right:-19px; top:50%; transform:translateY(-50%);
+    width:52px; height:52px; border-radius:50%; box-sizing:border-box;
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; font-weight:700; font-variant-numeric:tabular-nums;
+  }
+  .bm-bub-empty {
+    background:rgba(255,255,255,.025); border:2px dashed var(--subtle);
+    box-shadow:0 0 0 4px rgba(11,11,14,.92);
+  }
+  .bm-bub-pending {
+    background:rgba(91,108,240,.17); border:2px dashed var(--accent);
+    color:var(--accent); box-shadow:0 0 0 4px rgba(11,11,14,.92);
+  }
+  .bm-bub-fixed {
+    background:var(--accent); border:2px solid var(--accent); color:#fff;
+    box-shadow:0 6px 18px rgba(91,108,240,.55), 0 0 0 4px rgba(11,11,14,.92);
+  }
+
+  .bm-mic {
+    display:flex; align-items:center; gap:7px; font-size:11px;
+    padding:7px 10px; border-radius:7px; margin-top:9px; box-sizing:border-box;
+    background:rgba(91,108,240,.1); border:1px solid rgba(91,108,240,.26);
+    color:var(--muted);
+  }
+  .bm-mic-dot { width:7px; height:7px; border-radius:50%; background:var(--accent); flex:none; }
+  .bm-mic.heard {
+    background:rgba(91,108,240,.2); border-color:rgba(91,108,240,.55); color:var(--text);
+  }
+  .bm-mic.heard .bm-mic-dot { box-shadow:0 0 0 3px rgba(91,108,240,.32); }
+  .bm-mic b { color:var(--text); font-weight:600; }
+  .bm-mic.off {
+    background:rgba(255,255,255,.03); border-color:#34343d; color:var(--subtle);
+  }
+  .bm-mic.off .bm-mic-dot { background:var(--subtle); box-shadow:none; }
+
+  .bm-toggle {
+    margin-top:16px; border:1px solid #2b2b33; border-radius:10px;
+    background:#141417; padding:14px 16px;
+  }
+  .bm-toggle-h {
+    font-size:10.5px; text-transform:uppercase; letter-spacing:.1em;
+    color:#6a6a74; margin-bottom:12px;
+  }
+  .bm-toggle-chips { display:flex; align-items:center; gap:12px; margin-bottom:11px; }
+  .bm-toggle .bm-mic { margin-top:0; }
+  .bm-toggle-sep { color:#5f5f68; font-size:15px; }
+  .bm-toggle-d { font-size:12px; color:#9b9ba4; line-height:1.55; }
+  .bm-toggle-d b { color:#cdcdd4; font-weight:600; }
+
+  .bm-cap { padding:12px 3px 0; }
+  .bm-cap-t { font-size:13.5px; font-weight:600; color:var(--text); margin-bottom:5px; }
+  .bm-cap-d { font-size:11.5px; color:var(--muted); line-height:1.52; }
+  .bm-cap-d b { color:var(--text); font-weight:600; }
+
+  .bm-notes {
+    margin-top:18px; border:1px solid #2b2b33; border-radius:10px;
+    background:#141417; overflow:hidden;
+  }
+  .bm-notes-h {
+    font-size:10.5px; text-transform:uppercase; letter-spacing:.1em;
+    color:#6a6a74; padding:11px 15px; border-bottom:1px solid #2b2b33;
+  }
+  .bm-note {
+    display:grid; grid-template-columns:152px 1fr; gap:14px;
+    padding:11px 15px; font-size:12.5px; line-height:1.55;
+    border-bottom:1px solid #212128;
+  }
+  .bm-note:last-child { border-bottom:none; }
+  .bm-note-k { color:#e9e9ec; font-weight:600; }
+  .bm-note-v { color:#9b9ba4; }
+  .bm-note-v b { color:#cdcdd4; font-weight:600; }
+  kbd {
+    font-family:'JetBrains Mono',ui-monospace,monospace; font-size:10.5px;
+    background:#222228; border:1px solid #34343d; border-radius:4px;
+    padding:1px 5px; color:#c9c9d0;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>La burbuja y el micr&oacute;fono</h2>
+  <p class="subtitle">C&oacute;mo se marca una p&aacute;gina, paso a paso. El micr&oacute;fono escucha solo; t&uacute; dictas, revisas el n&uacute;mero y lo confirmas con PgDn. <i>La diferencia entre burbuja pendiente y fijada es lo que conviene validar aqu&iacute;.</i></p>
+
+  <div class="mockup">
+    <div class="mockup-header">Visor &middot; estados de la burbuja y del micr&oacute;fono</div>
+    <div class="bm">
+      <div class="bm-frames">
+
+        <div class="bm-frame">
+          <div class="bm-stage">
+            <div class="bm-step">1</div>
+            <div class="bm-page">
+              <div class="bm-ph"></div>
+              <div class="bm-psub"></div>
+              <div class="bm-pt">
+                <div class="bm-pr h"><span class="bm-pn"></span><i style="width:58%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:80%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:66%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:74%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:58%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:70%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:63%"></i></div>
+              </div>
+              <div class="bm-bub bm-bub-empty"></div>
+            </div>
+          </div>
+          <div class="bm-mic"><span class="bm-mic-dot"></span> Micr&oacute;fono escuchando&hellip;</div>
+          <div class="bm-cap">
+            <div class="bm-cap-t">Llegas a la p&aacute;gina</div>
+            <div class="bm-cap-d">El micr&oacute;fono ya escucha. La burbuja est&aacute; en blanco y punteada, esperando el n&uacute;mero.</div>
+          </div>
+        </div>
+
+        <div class="bm-frame">
+          <div class="bm-stage">
+            <div class="bm-step">2</div>
+            <div class="bm-page">
+              <div class="bm-ph"></div>
+              <div class="bm-psub"></div>
+              <div class="bm-pt">
+                <div class="bm-pr h"><span class="bm-pn"></span><i style="width:58%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:80%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:66%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:74%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:58%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:70%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:63%"></i></div>
+              </div>
+              <div class="bm-bub bm-bub-pending">23</div>
+            </div>
+          </div>
+          <div class="bm-mic heard"><span class="bm-mic-dot"></span> Escuch&eacute; <b>&laquo;23&raquo;</b></div>
+          <div class="bm-cap">
+            <div class="bm-cap-t">Dictas &laquo;veintitr&eacute;s&raquo;</div>
+            <div class="bm-cap-d">La burbuja se llena: <b>23</b> en estado <b>pendiente</b>, con borde punteado. A&uacute;n no se guarda &mdash; puedes corregirla.</div>
+          </div>
+        </div>
+
+        <div class="bm-frame">
+          <div class="bm-stage">
+            <div class="bm-step">3</div>
+            <div class="bm-ghost"></div>
+            <div class="bm-page">
+              <div class="bm-ph"></div>
+              <div class="bm-psub"></div>
+              <div class="bm-pt">
+                <div class="bm-pr h"><span class="bm-pn"></span><i style="width:58%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:80%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:66%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:74%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:58%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:70%"></i></div>
+                <div class="bm-pr"><span class="bm-pn"></span><i style="width:63%"></i></div>
+              </div>
+              <div class="bm-bub bm-bub-fixed">23</div>
+            </div>
+          </div>
+          <div class="bm-mic"><span class="bm-mic-dot"></span> Micr&oacute;fono escuchando&hellip;</div>
+          <div class="bm-cap">
+            <div class="bm-cap-t">Confirmas con PgDn</div>
+            <div class="bm-cap-d">La marca queda <b>fijada</b> &mdash;burbuja s&oacute;lida&mdash; y el visor salta a la p&aacute;gina siguiente.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="bm-toggle">
+        <div class="bm-toggle-h">El micr&oacute;fono se puede pausar</div>
+        <div class="bm-toggle-chips">
+          <div class="bm-mic"><span class="bm-mic-dot"></span> Micr&oacute;fono escuchando&hellip;</div>
+          <span class="bm-toggle-sep">&harr;</span>
+          <div class="bm-mic off"><span class="bm-mic-dot"></span> Micr&oacute;fono en pausa</div>
+        </div>
+        <div class="bm-toggle-d">Un clic en el chip &mdash;o la tecla <kbd>M</kbd>&mdash; alterna entre escuchar y pausar. En pausa no se capta nada: puedes conversar con alguien sin marcar de m&aacute;s.</div>
+      </div>
+
+      <div class="bm-notes">
+        <div class="bm-notes-h">Casos que conviene tener claros</div>
+        <div class="bm-note">
+          <div class="bm-note-k">Escuch&oacute; mal</div>
+          <div class="bm-note-v">Vuelve a dictar: el n&uacute;mero nuevo reemplaza lo pendiente. O presiona <kbd>E</kbd> y escr&iacute;belo. Nada se guarda hasta el <kbd>PgDn</kbd>.</div>
+        </div>
+        <div class="bm-note">
+          <div class="bm-note-k">P&aacute;gina sin tabla</div>
+          <div class="bm-note-v">Presiona <kbd>PgDn</kbd> sin dictar: el visor avanza, no deja burbuja y la p&aacute;gina cuenta como <b>0</b>.</div>
+        </div>
+        <div class="bm-note">
+          <div class="bm-note-k">Corregir algo ya fijado</div>
+          <div class="bm-note-v">Regresa con <kbd>PgUp</kbd>. <kbd>Supr</kbd> borra la marca; <kbd>E</kbd> la reescribe.</div>
+        </div>
+        <div class="bm-note">
+          <div class="bm-note-k">El micr&oacute;fono</div>
+          <div class="bm-note-v">Escucha de corrido mientras cuentas &mdash; no hay que apretar nada para hablar. Lo dictado entra solo como <b>pendiente</b>: el <kbd>PgDn</kbd> es lo que confirma.</div>
+        </div>
+        <div class="bm-note">
+          <div class="bm-note-k">Teclado</div>
+          <div class="bm-note-v">Teclear el n&uacute;mero hace lo mismo que dictarlo: queda pendiente hasta el <kbd>PgDn</kbd>. Es el camino s&oacute;lido si el micr&oacute;fono se confunde.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="subtitle" style="margin-top:20px">
+    <b>Qu&eacute; validar:</b> el micr&oacute;fono escucha de corrido &mdash; dictas y la burbuja queda <b>pendiente</b> (punteada); el <kbd>PgDn</kbd> la <b>fija</b> (s&oacute;lida) y avanza. No hay un paso aparte de "confirmar": ver el n&uacute;mero pendiente y apretar PgDn <i>es</i> la confirmaci&oacute;n. Dime si la diferencia pendiente vs. fijada se lee clara, y si el micr&oacute;fono siempre encendido te acomoda o preferir&iacute;as mantener una tecla apretada para hablar.
+  </p>
+</div>
+</body>
+</html>
