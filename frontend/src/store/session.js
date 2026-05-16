@@ -313,12 +313,23 @@ export const useSessionStore = create((set, get) => ({
         set({ scanProgress: { done: event.done, total: event.total, etaMs: event.eta_ms } });
         break;
       case "scan_complete":
-        set({ scanProgress: { ...state.scanProgress, terminal: "complete", done: event.scanned, total: event.scanned + (event.errors || 0) } });
+        // Scan run terminated → no cell can still be scanning. Defensive:
+        // clears any cell that never emitted its own cell_done/cell_error.
+        set({
+          scanningCells: new Set(),
+          scanProgress: { ...state.scanProgress, terminal: "complete", done: event.scanned, total: event.scanned + (event.errors || 0) },
+        });
         // Auto-dismiss after 5s
         setTimeout(() => set((s) => (s.scanProgress?.terminal === "complete" ? { scanProgress: null } : s)), 5000);
         break;
       case "scan_cancelled":
-        set({ scanProgress: { ...state.scanProgress, terminal: "cancelled", done: event.scanned, total: event.total } });
+        // Scan run terminated → clear scanningCells. The interrupted cell
+        // never emits cell_done/cell_error; without this it stays stuck
+        // on "Escaneando…" forever (bug caught in the FASE 5 smoke).
+        set({
+          scanningCells: new Set(),
+          scanProgress: { ...state.scanProgress, terminal: "cancelled", done: event.scanned, total: event.total },
+        });
         setTimeout(() => set((s) => (s.scanProgress?.terminal === "cancelled" ? { scanProgress: null } : s)), 5000);
         break;
       case "ping":
