@@ -29,7 +29,7 @@ export default function HospitalCard({ hospital, total, cells, status, onClick }
         <EmptyState
           icon={FolderX}
           title="Sin carpeta normalizada"
-          description={`${hospital} no entrega PDFs por carpeta este mes. Ingresá los conteos manualmente.`}
+          description={`${hospital} no entrega PDFs por carpeta este mes. Ingresa los conteos manualmente.`}
           action={
             <button
               type="button"
