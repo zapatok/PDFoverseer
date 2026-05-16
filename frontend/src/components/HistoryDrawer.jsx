@@ -11,7 +11,7 @@ function methodToOrigin(method) {
   return "OCR"; // header_detect / corner_count / page_count_pure
 }
 
-const MES = (p) => `${String(p.month).padStart(2, "0")}/${p.year}`;
+const MES = (p) => `${String(p.month ?? "??").padStart(2, "0")}/${p.year ?? "????"}`;
 
 // Gráfico de línea inline — 12 puntos, último resaltado.
 function SeriesChart({ counts, tone }) {
@@ -30,7 +30,14 @@ function SeriesChart({ counts, tone }) {
   const fill = tone === "warn" ? "fill-po-suspect" : "fill-po-accent";
   const lastIdx = counts.length - 1;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="block">
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      width="100%"
+      height={H}
+      className="block"
+      role="img"
+      aria-label="Gráfico de tendencia"
+    >
       <polyline fill="none" strokeWidth={2} className={stroke} points={points} />
       <circle cx={xFor(lastIdx)} cy={yFor(counts[lastIdx])} r={3.5} className={fill} />
     </svg>
