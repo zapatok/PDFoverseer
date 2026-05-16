@@ -15,6 +15,11 @@ TESS_CONFIG      = "--psm 6 --oem 1"
 PARALLEL_WORKERS = 6      # concurrent Tesseract subprocesses
 BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
 
+# OCR auto-retry (FASE 5) — el orquestador reintenta un scan de celda fallido
+# en silencio antes de reportar el error.
+OCR_RETRY_COUNT = 2          # reintentos tras el intento inicial (3 intentos totales)
+OCR_RETRY_BACKOFF_S = 0.5    # pausa entre intentos
+
 MIN_CONF_FOR_NEW_DOC = 0.55   # sweep2 (2026-03-24, 40 fixtures incl. degraded)
 ANOMALY_DROPOUT      = 0.0
 PHASE4_FALLBACK_CONF = 0.15  # re-enabled: recovers pages the gap solver missed

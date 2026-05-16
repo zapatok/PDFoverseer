@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -229,15 +230,17 @@ def _ocr_worker(
 ) -> tuple[str, str, ScanResult | None, str | None]:
     """Run OCR for a single cell. Runs in a worker subprocess.
 
-    Returns:
-        ``(hospital, sigla, ScanResult | None, error_str | None)`` — exactly
-        one of ScanResult or error_str is non-None.
+    On a transient failure the scan is retried up to ``OCR_RETRY_COUNT`` times
+    with a short backoff (FASE 5 Feature 3). A cancelled token never triggers a
+    retry. Returns ``(hospital, sigla, ScanResult | None, error_str | None)`` —
+    exactly one of ScanResult or error_str is non-None.
     """
     from core import scanners as scanner_registry  # noqa: E402
     from core.scanners.cancellation import (  # noqa: E402
         CancellationToken,
         CancelledError,
     )
+    from core.utils import OCR_RETRY_BACKOFF_S, OCR_RETRY_COUNT  # noqa: E402
 
     hosp, sigla, folder_str = cell_tuple
     folder = Path(folder_str)
@@ -245,16 +248,28 @@ def _ocr_worker(
     token = CancellationToken.from_event(_WORKER_EVENT) if _WORKER_EVENT else CancellationToken()
 
     fn = getattr(scanner, "count_ocr", None)
-    try:
-        if fn is None:
-            result = scanner.count(folder)  # filename_glob fallback
-        else:
+    if fn is None:
+        # No OCR technique for this sigla — single filename_glob attempt, no retry.
+        try:
+            result = scanner.count(folder)
+        except Exception as exc:  # noqa: BLE001
+            return (hosp, sigla, None, f"{type(exc).__name__}: {exc}")
+        return (hosp, sigla, result, None)
+
+    last_err: str | None = None
+    for attempt in range(OCR_RETRY_COUNT + 1):
+        if token.cancelled:
+            return (hosp, sigla, None, "cancelled")
+        try:
             result = fn(folder, cancel=token)
-    except CancelledError:
-        return (hosp, sigla, None, "cancelled")
-    except Exception as exc:  # noqa: BLE001
-        return (hosp, sigla, None, f"{type(exc).__name__}: {exc}")
-    return (hosp, sigla, result, None)
+            return (hosp, sigla, result, None)
+        except CancelledError:
+            return (hosp, sigla, None, "cancelled")
+        except Exception as exc:  # noqa: BLE001
+            last_err = f"{type(exc).__name__}: {exc}"
+            if attempt < OCR_RETRY_COUNT:
+                time.sleep(OCR_RETRY_BACKOFF_S)
+    return (hosp, sigla, None, last_err)
 
 
 def scan_cells_ocr(
