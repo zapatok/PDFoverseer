@@ -41,10 +41,12 @@ def test_cancel_mid_loop_stops_within_a_few_pages(monkeypatch):
     # Token que se cancela cuando ya se renderizaron 3 páginas.
     token = CancellationToken()
 
-    real_render = corner_count.render_page_region
+    # render_page_region ya está parcheado a fake_render por _patch_render;
+    # este wrapper lo envuelve para cancelar el token tras 3 renders.
+    patched_render = corner_count.render_page_region
 
     def render_then_maybe_cancel(pdf_path, page_idx, *, bbox, dpi):
-        img = real_render(pdf_path, page_idx, bbox=bbox, dpi=dpi)
+        img = patched_render(pdf_path, page_idx, bbox=bbox, dpi=dpi)
         if len(render_calls) >= 3:
             token.cancel()
         return img
