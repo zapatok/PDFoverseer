@@ -55,7 +55,7 @@ class ArtScanner:
         base = self._filename_glob(folder)  # captures flags for happy-path too
         start = time.perf_counter()
         try:
-            ocr = count_paginations(pdfs[0])
+            ocr = count_paginations(pdfs[0], cancel=cancel)
         except CancelledError:
             raise
         except (PdfRenderError, OSError, RuntimeError) as exc:

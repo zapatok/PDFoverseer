@@ -12,11 +12,15 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytesseract
 from PIL import Image
 
 from core.scanners.utils.pdf_render import get_page_count, render_page_region
+
+if TYPE_CHECKING:
+    from core.scanners.cancellation import CancellationToken  # noqa: F401
 
 # Top-right corner: rightmost 30%, top 22% (matches project CROP defaults)
 _CORNER_BBOX = (0.70, 0.0, 1.0, 0.22)
@@ -89,7 +93,12 @@ def _count_transitions(series: list[tuple[int, int]]) -> int:
     return docs
 
 
-def count_paginations(pdf_path: Path, *, dpi: int = 200) -> CornerCountResult:
+def count_paginations(
+    pdf_path: Path,
+    *,
+    dpi: int = 200,
+    cancel: CancellationToken | None = None,
+) -> CornerCountResult:
     """OCR the upper-right corner of each page, parse "Página N de M",
     count document transitions."""
     pages_total = get_page_count(pdf_path)
@@ -97,6 +106,8 @@ def count_paginations(pdf_path: Path, *, dpi: int = 200) -> CornerCountResult:
     series: list[tuple[int, int]] = []
 
     for page_idx in range(pages_total):
+        if cancel is not None:
+            cancel.check()
         img: Image.Image = render_page_region(pdf_path, page_idx, bbox=_CORNER_BBOX, dpi=dpi)
         text = pytesseract.image_to_string(img, config="--psm 7 --oem 1", lang="spa+eng")
         text = _normalize_digits(text)
