@@ -163,7 +163,43 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 - **VLM integration:** ~~Attempted~~ REVERTED (2026-03-30). See postmortem in Links.
 - **Browse UX:** `/api/browse` uses server-side tkinter chooser — only works with local display
 
-## FASE 4 UX slice — `po_overhaul` branch (shipped 2026-05-14)
+## FASE 5 UX slice — `po_overhaul` branch (shipped 2026-05-15)
+
+Slice UX cerrando 3 pendientes del roadmap post-FASE 4:
+
+1. **Histórico drill-in**: click en celda del SparkGrid abre `HistoryDrawer`
+   (primitive `ui/Drawer.jsx` no-modal); serie de 12 meses con stats, gráfico
+   de línea y tabla mes-a-mes con chips de método. Read-only, estado
+   `historyDrawer` en Zustand, cero backend (lee la cache de `useHistoryStore`).
+2. **Cancelación a nivel de página**: `count_paginations` y `count_form_codes`
+   reciben el `CancellationToken` y lo chequean por página (levanta
+   `CancelledError`); un cancel se honra en <3 s.
+3. **Auto-retry OCR**: `_ocr_worker` reintenta un scan fallido 2× en silencio
+   (`OCR_RETRY_COUNT`/`OCR_RETRY_BACKOFF_S` en `core/utils.py`); un
+   `CancelledError` nunca dispara retry.
+
+- **Spec:** `docs/superpowers/specs/2026-05-15-fase-5-design.md`
+- **Plan:** `docs/superpowers/plans/2026-05-15-pdfoverseer-fase-5.md`
+- **Tag:** `fase-5-mvp` (local, awaiting push approval)
+- **Bundle delta:** +1.28 kB gzipped (baseline FASE 4 92.38 kB → 93.66 kB).
+  Sin nuevas deps; todo sobre primitives existentes.
+- **New deps:** ninguna
+
+### Smoke bugs caught (commits 9e4b312, 9afddfe, 0a7e7c5)
+1. `Drawer` dejaba el foco atrapado dentro del panel `aria-hidden` al cerrar
+   con la X. Fix: al cerrar, devuelve el foco al elemento que lo abrió.
+2. `HistoryDrawer` parpadeaba al estado vacío durante los 200 ms de la
+   animación de cierre (los props caen a null). Fix: congela el último
+   contenido real mientras se desliza fuera.
+3. Una celda OCR interrumpida quedaba atascada en "Escaneando…" — el evento
+   `scan_cancelled` actualizaba `scanProgress` pero nunca limpiaba
+   `scanningCells`. Fix: ambos eventos terminales vacían el set.
+
+### Next (roadmap restante)
+- Refinamiento de motores OCR por tipo de documento (fase FINAL — cada doc
+  type con sus parámetros propios; ver memoria `project_ocr_refinement_deferred`).
+
+### FASE 4 UX slice — predecessor, `po_overhaul` branch (shipped 2026-05-14)
 
 Slice UX cerrando 3 pendientes del roadmap post-FASE 3:
 
@@ -189,14 +225,14 @@ Slice UX cerrando 3 pendientes del roadmap post-FASE 3:
   Casi todo construido sobre primitives FASE 3, sin nuevas deps.
 - **New deps:** ninguna
 
-### Smoke bugs caught (commit cf5e1cb)
+#### Smoke bugs caught (commit cf5e1cb)
 1. `HospitalCard` referenced `<Tooltip>` sin importarlo (latent FASE 3 bug).
 2. `HospitalDetail` filtraba siglas con `cells[s]` truthy → HLL manual mode
    landing en lista vacía. Fix: en `mode="manual"` siempre 18 rows.
 3. `FileList` no refrescaba el row tras `savePerFileOverride` (cell state
    updated, files-state stale). Fix: optimistic local update en `onCommit`.
 
-### Next (FASE 5)
+#### Next (FASE 5)
 - Per-sigla OCR engine refinement contra el corpus real
 - Page-level cancellation (target <3s)
 - Drill-in del histórico (vista detalle de serie completa con números
