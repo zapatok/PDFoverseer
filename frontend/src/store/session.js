@@ -13,6 +13,7 @@ export const useSessionStore = create((set, get) => ({
   loading: false,
   error: null,
   historyView: false,
+  historyDrawer: null,   // { hospital, sigla } | null — drill-in del SparkGrid
 
   // FASE 2 additions
   scanningCells: new Set(),            // "HPV|odi" strings, mirrored in CategoryRow
@@ -31,8 +32,11 @@ export const useSessionStore = create((set, get) => ({
     ...(view !== "hospital" && { hospitalMode: "scanned", focusSigla: null }),
   }),
 
-  toggleHistoryView: () => set((s) => ({ historyView: !s.historyView })),
-  setHistoryView: (v) => set({ historyView: !!v }),
+  toggleHistoryView: () => set((s) => ({ historyView: !s.historyView, historyDrawer: null })),
+  setHistoryView: (v) => set({ historyView: !!v, historyDrawer: null }),
+
+  openHistoryDrawer: (hospital, sigla) => set({ historyDrawer: { hospital, sigla } }),
+  closeHistoryDrawer: () => set({ historyDrawer: null }),
 
   loadMonths: async () => {
     set({ loading: true, error: null });
@@ -52,7 +56,7 @@ export const useSessionStore = create((set, get) => ({
       // Tear down any prior WS and reconnect for the new session
       get()._ws?.close();
       const ws = createWSClient(sessionId, { onEvent: get()._handleWSEvent });
-      set({ session, loading: false, _ws: ws, scanningCells: new Set(), scanProgress: null });
+      set({ session, loading: false, _ws: ws, scanningCells: new Set(), scanProgress: null, historyDrawer: null });
     } catch (error) {
       set({ error: String(error), loading: false });
     }
