@@ -58,7 +58,7 @@ class HeaderDetectScanner:
         base = self._filename_glob(folder)  # capture flags for happy path
         start = time.perf_counter()
         try:
-            ocr = count_form_codes(pdfs[0], sigla_code=self.sigla_code)
+            ocr = count_form_codes(pdfs[0], sigla_code=self.sigla_code, cancel=cancel)
         except CancelledError:
             raise
         except (PdfRenderError, OSError, RuntimeError) as exc:

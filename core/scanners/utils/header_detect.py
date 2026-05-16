@@ -10,11 +10,15 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytesseract
 from PIL import Image
 
 from core.scanners.utils.pdf_render import get_page_count, render_page_region
+
+if TYPE_CHECKING:
+    from core.scanners.cancellation import CancellationToken
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,7 @@ def count_form_codes(
     *,
     sigla_code: str,
     dpi: int = 200,
+    cancel: CancellationToken | None = None,
 ) -> HeaderDetectResult:
     """OCR the top-third of each page; count documents in a compilation.
 
@@ -69,6 +74,8 @@ def count_form_codes(
     pages_with_match: list[int] = []
 
     for page_idx in range(pages_total):
+        if cancel is not None:
+            cancel.check()
         img: Image.Image = render_page_region(pdf_path, page_idx, bbox=_TOP_THIRD_BBOX, dpi=dpi)
         text = pytesseract.image_to_string(img, config="--psm 6 --oem 1", lang="spa+eng")
         page_matches = pattern.findall(text)
