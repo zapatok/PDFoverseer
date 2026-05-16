@@ -1,20 +1,9 @@
 import Sparkline from "./Sparkline";
 import Tooltip from "../ui/Tooltip";
 import { SIGLAS } from "../lib/sigla-labels";
+import { anomalyTone } from "../lib/anomaly";
 
 const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
-
-function anomalyTone(series) {
-  if (!series || series.length < 7) return "neutral";
-  const last = series[series.length - 1].count;
-  const baseline = series.slice(-7, -1);
-  const valid = baseline.filter((p) => p && p.count > 0);
-  if (valid.length < 6) return "neutral";
-  const mean = valid.reduce((a, b) => a + b.count, 0) / valid.length;
-  if (mean === 0) return "neutral";
-  if (last / mean < 0.7) return "warn";
-  return "neutral";
-}
 
 function TooltipRows({ series }) {
   if (!series || series.length === 0) return <span>Sin datos</span>;
