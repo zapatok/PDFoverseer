@@ -64,6 +64,11 @@ export default function Drawer({ open, onClose, title, children }) {
         <button
           type="button"
           onClick={onClose}
+          // Panel cerrado = único elemento enfocable es esta X. La sacamos del
+          // orden de tabulación para que el teclado no entre al panel invisible
+          // (aria-hidden cubre el árbol de accesibilidad; pointer-events-none,
+          // los clicks). El contenido del drawer es read-only — sin enfocables.
+          tabIndex={open ? undefined : -1}
           className="text-po-text-muted hover:text-po-text shrink-0"
           aria-label="Cerrar"
         >
