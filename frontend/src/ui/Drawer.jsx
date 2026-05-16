@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 
 /**
@@ -11,9 +11,15 @@ import { X } from "lucide-react";
  *   </Drawer>
  *
  * Siempre montado (para la transición). Cuando !open: deslizado fuera de
- * pantalla + pointer-events-none para no capturar clicks.
+ * pantalla + pointer-events-none para no capturar clicks. Al cerrar, si el
+ * foco quedó dentro del panel (p. ej. el usuario cerró con la X), se devuelve
+ * al elemento que lo abrió — un contenedor aria-hidden no puede contener el
+ * foco.
  */
 export default function Drawer({ open, onClose, title, children }) {
+  const asideRef = useRef(null);
+  const openerRef = useRef(null);
+
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
@@ -23,8 +29,28 @@ export default function Drawer({ open, onClose, title, children }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  // Al abrir, recordar quién tenía el foco; al cerrar, si el foco quedó
+  // atrapado dentro del panel ya oculto (aria-hidden), devolvérselo.
+  useEffect(() => {
+    if (open) {
+      openerRef.current = document.activeElement;
+      return undefined;
+    }
+    const aside = asideRef.current;
+    if (aside && aside.contains(document.activeElement)) {
+      const opener = openerRef.current;
+      if (opener instanceof HTMLElement && opener.isConnected) {
+        opener.focus();
+      } else {
+        document.activeElement.blur();
+      }
+    }
+    return undefined;
+  }, [open]);
+
   return (
     <aside
+      ref={asideRef}
       aria-hidden={!open}
       className={[
         "fixed top-0 right-0 bottom-0 z-40 w-[420px]",
