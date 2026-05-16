@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useSessionStore } from "../store/session";
 import HospitalCard from "../components/HospitalCard";
 import SparkGrid from "../components/SparkGrid";
+import HistoryDrawer from "../components/HistoryDrawer";
 import Button from "../ui/Button";
 import { useHistory } from "../lib/useHistoryStore";
 
@@ -14,6 +15,7 @@ export default function MonthOverview() {
     months, session, loading, error,
     loadMonths, openMonth, selectHospital, runScan, generateOutput,
     historyView, setHistoryView,
+    historyDrawer, openHistoryDrawer, closeHistoryDrawer,
   } = useSessionStore();
 
   const sessionId = session?.session_id;
@@ -118,7 +120,11 @@ export default function MonthOverview() {
               </div>
             </div>
             {historyView ? (
-              <SparkGrid history={history} />
+              <SparkGrid
+                history={history}
+                onCellClick={openHistoryDrawer}
+                activeCell={historyDrawer}
+              />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 {HOSPITALS.map((h) => (
@@ -136,6 +142,18 @@ export default function MonthOverview() {
           </section>
         </>
       )}
+
+      <HistoryDrawer
+        open={!!historyDrawer}
+        hospital={historyDrawer?.hospital ?? null}
+        sigla={historyDrawer?.sigla ?? null}
+        series={
+          historyDrawer
+            ? history?.[`${historyDrawer.hospital}|${historyDrawer.sigla}`]
+            : undefined
+        }
+        onClose={closeHistoryDrawer}
+      />
 
       {error && <p className="text-po-error">{error}</p>}
     </div>

@@ -18,7 +18,7 @@ function TooltipRows({ series }) {
   );
 }
 
-export default function SparkGrid({ history }) {
+export default function SparkGrid({ history, onCellClick, activeCell }) {
   return (
     <div className="rounded-xl bg-po-panel border border-po-border overflow-hidden">
       {/* Header row */}
@@ -42,9 +42,18 @@ export default function SparkGrid({ history }) {
             const series = history?.[`${h}|${code}`] ?? [];
             const tone = anomalyTone(series);
             const last = series.length > 0 ? series[series.length - 1].count : "—";
+            const isActive = activeCell?.hospital === h && activeCell?.sigla === code;
             return (
               <Tooltip key={h} content={<TooltipRows series={series} />}>
-                <div className="px-3 py-2 flex items-center justify-between gap-2 cursor-default hover:bg-po-panel-hover">
+                <button
+                  type="button"
+                  onClick={() => onCellClick(h, code)}
+                  className={[
+                    "px-3 py-2 flex items-center justify-between gap-2 w-full text-left",
+                    "hover:bg-po-panel-hover transition",
+                    isActive ? "ring-2 ring-inset ring-po-accent bg-po-panel-hover" : "",
+                  ].join(" ")}
+                >
                   <Sparkline data={series.map((p) => p.count)} tone={tone} />
                   <span
                     className={`text-sm tabular-nums ${
@@ -56,7 +65,7 @@ export default function SparkGrid({ history }) {
                     {last}
                     {tone === "warn" && " ↓"}
                   </span>
-                </div>
+                </button>
               </Tooltip>
             );
           })}
