@@ -70,3 +70,7 @@ def test_output_emits_worker_totals(client, tmp_path):
     wb = openpyxl.load_workbook(out["output_path"])
     sheet, coord = list(wb.defined_names["HLL_workers_chgen"].destinations)[0]
     assert wb[sheet][coord].value == 40
+
+    # una celda nunca contada no se emite: su rango con nombre queda en blanco
+    nc_sheet, nc_coord = list(wb.defined_names["HLL_workers_chintegral"].destinations)[0]
+    assert wb[nc_sheet][nc_coord].value is None
