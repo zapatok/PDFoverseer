@@ -89,6 +89,10 @@ El conteo de trabajadores reutiliza tres mecanismos que ya existen: el blob de
 sesión, el autosave con debounce (FASE 3) y el escritor genérico de Excel. Lo
 genuinamente nuevo es el visor pdf.js y la interacción de conteo.
 
+> **Convención de rutas.** Las rutas HTTP en este documento se escriben sin el prefijo
+> `/api` por brevedad; los routers reales lo llevan — la ruta real de
+> `POST /sessions/{id}/output` es `POST /api/sessions/{id}/output`.
+
 ## 4. El visor de conteo
 
 ### 4.1 pdf.js reemplaza el iframe
@@ -112,11 +116,17 @@ El estado `lightbox` de Zustand gana un campo `mode`:
 
 ### 4.3 Sesión continua multi-PDF
 
-En `count_workers`, el visor carga **todos** los PDFs de la celda (ordenados como en
-`cell.per_file`) y los trata como un solo flujo de PgDn: al pasar la última página
-del archivo K se avanza a la página 1 del archivo K+1. De ahí salen los indicadores
-"archivo 3 / 7" y "página 5 / 12" del HUD. Cada PDF se obtiene con el endpoint que
-ya existe: `GET /sessions/{id}/cells/{hosp}/{sigla}/pdf?index=N`.
+En `count_workers`, el visor carga **todos** los PDFs de la celda y los trata como un
+solo flujo de PgDn: al pasar la última página del archivo K se avanza a la página 1
+del archivo K+1. De ahí salen los indicadores "archivo 3 / 7" y "página 5 / 12" del HUD.
+
+El orden y el índice de los archivos los fija el backend:
+`GET /sessions/{id}/cells/{hosp}/{sigla}/files` lista los PDFs en el orden
+`sorted(rglob("*.pdf"))`, y `GET /sessions/{id}/cells/{hosp}/{sigla}/pdf?index=N`
+sirve el N-ésimo de **esa misma** lista. El visor usa `/files` como autoridad de
+orden — no el dict `per_file`, que no garantiza orden. Las celdas de charla con
+subcarpetas se **aplanan** en esa única secuencia (el `rglob` es recursivo); `/files`
+además expone el `subfolder` de cada PDF por si el HUD quiere mostrarlo.
 
 ### 4.4 Punto de entrada y estado de la celda
 
@@ -265,14 +275,17 @@ visor en `worker_cursor` — exactamente donde se dejó.
 El visor tiene una acción **"Terminé esta categoría"** que fija
 `worker_status = "terminado"`. Una celda terminada se puede reabrir y editar después.
 
-Al exportar (`POST /output`), si alguna celda `charla`/`chintegral` está
-`en_progreso` o sin iniciar, la respuesta incluye un campo **nuevo**,
-`worker_warnings`, que lista esas celdas. Es **distinto** del campo `warnings` que la
-respuesta ya devuelve hoy (`output.py:115`, diagnósticos del escritor de Excel —
-p. ej. un rango con nombre no encontrado): no se mezclan. `warnings` es diagnóstico
-interno del escritor; `worker_warnings` es un aviso de completitud para el usuario.
-La exportación **igual procede** — el aviso es informativo. El frontend lo muestra
-como toast/diálogo.
+Al exportar (`POST /output`), la respuesta incluye un campo **nuevo**,
+`worker_warnings`, que lista las celdas `charla`/`chintegral` con conteo incompleto.
+Una celda entra en `worker_warnings` cuando su `worker_status` **no es `terminado`**
+(en progreso o sin iniciar) **o** alguno de sus PDFs no se pudo abrir (§10) — esta es
+la regla única de completitud, no se redefine en otra sección.
+
+`worker_warnings` es **distinto** del campo `warnings` que la respuesta ya devuelve
+hoy (`output.py:115`, diagnósticos del escritor de Excel — p. ej. un rango con nombre
+no encontrado): no se mezclan. `warnings` es diagnóstico interno del escritor;
+`worker_warnings` es un aviso de completitud para el usuario. La exportación **igual
+procede** — el aviso es informativo. El frontend lo muestra como toast/diálogo.
 
 ## 8. Cascada al Excel
 
@@ -300,9 +313,8 @@ Emitir la clave rellena la celda sin tocar el escritor. **No se modifica el escr
 de Excel** — solo se agrega la emisión.
 
 Si una celda de trabajadores nunca se contó, no se emite su clave: el template (ya
-limpio — ver §8.2) conserva su celda en blanco, y el `worker_warnings` de §7.3 lo
-señala. Una celda con algún PDF que no se pudo abrir (§10) también queda incompleta:
-se incluye en `worker_warnings` aunque su estado sea `terminado`.
+limpio — ver §8.2) conserva su celda en blanco. Esa celda — y cualquiera con conteo
+incompleto según la regla única de §7.3 — aparece en `worker_warnings`.
 
 ### 8.2 Corrección de la fórmula del template
 
@@ -355,7 +367,7 @@ hace un **diff de verificación**: respecto del template actual, solo deben camb
 | `core/db/sessions_repo.py` | Sin cambios de schema — los campos nuevos viven en el blob |
 | `api/state.py` | `apply_worker_count()`, en espejo de `apply_user_override` |
 | `api/routes/sessions.py` | Endpoint `PATCH .../worker-count` |
-| `api/routes/output.py` | Emisión de `{HOSP}_workers_{purpose}`; campo `warnings` en la respuesta |
+| `api/routes/output.py` | Emisión de `{HOSP}_workers_{purpose}`; campo nuevo `worker_warnings` en la respuesta |
 | `core/excel/writer.py`, `core/excel/template.py` | Sin cambios — las claves nuevas fluyen por `generate_resumen` |
 | `data/templates/build_template_v1.py` | Paso nuevo en `build()`: reescribir `H14` a `=H30*0.5`, vaciar las 8 celdas de trabajadores (filas 29/30); extender `verify()`; regenerar |
 
