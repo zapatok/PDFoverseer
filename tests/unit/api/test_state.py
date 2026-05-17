@@ -209,3 +209,37 @@ def test_compute_worker_count_tolerates_malformed_marks():
         "worker_marks": {"a.pdf": [{"page": 1, "count": 7}, {"page": 2}, None]},
     }
     assert compute_worker_count(cell) == 7
+
+
+def test_apply_worker_count_persists_all_fields(manager):
+    manager.apply_worker_count(
+        "2026-04",
+        "HLL",
+        "charla",
+        marks={"a.pdf": [{"page": 1, "count": 12}]},
+        status="en_progreso",
+        cursor={"file": 0, "page": 1},
+    )
+    cell = manager.get_session_state("2026-04")["cells"]["HLL"]["charla"]
+    assert cell["worker_marks"] == {"a.pdf": [{"page": 1, "count": 12}]}
+    assert cell["worker_status"] == "en_progreso"
+    assert cell["worker_cursor"] == {"file": 0, "page": 1}
+
+
+def test_apply_worker_count_partial_patch_leaves_other_fields(manager):
+    manager.apply_worker_count(
+        "2026-04", "HLL", "charla", marks={"a.pdf": [{"page": 1, "count": 5}]}
+    )
+    manager.apply_worker_count("2026-04", "HLL", "charla", status="terminado")
+    cell = manager.get_session_state("2026-04")["cells"]["HLL"]["charla"]
+    assert cell["worker_marks"] == {"a.pdf": [{"page": 1, "count": 5}]}
+    assert cell["worker_status"] == "terminado"
+
+
+def test_apply_worker_count_empty_marks_clears(manager):
+    manager.apply_worker_count(
+        "2026-04", "HLL", "charla", marks={"a.pdf": [{"page": 1, "count": 5}]}
+    )
+    manager.apply_worker_count("2026-04", "HLL", "charla", marks={})
+    cell = manager.get_session_state("2026-04")["cells"]["HLL"]["charla"]
+    assert cell["worker_marks"] == {}

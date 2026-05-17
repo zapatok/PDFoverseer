@@ -258,6 +258,40 @@ class SessionManager:
         cell["per_file_overrides"][filename] = count
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    def apply_worker_count(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        *,
+        marks: dict | None = None,
+        status: str | None = None,
+        cursor: dict | None = None,
+    ) -> None:
+        """Mezcla los campos de conteo de trabajadores en una celda.
+
+        Patch parcial: cada argumento que no sea ``None`` se escribe; los que
+        son ``None`` se dejan intactos. Para vaciar las marcas, pasar
+        ``marks={}``. La celda se crea si no existe.
+
+        Args:
+            session_id: id de la sesión (``YYYY-MM``).
+            hospital: sigla del hospital (HLL/HLU/HRB/HPV).
+            sigla: la sigla de la celda (``charla`` o ``chintegral``).
+            marks: dict ``{archivo: [{page, count}, ...]}``, o None.
+            status: ``"en_progreso"`` | ``"terminado"``, o None.
+            cursor: ``{file, page}`` con la última posición, o None.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+        if marks is not None:
+            cell["worker_marks"] = marks
+        if status is not None:
+            cell["worker_status"] = status
+        if cursor is not None:
+            cell["worker_cursor"] = cursor
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
     def apply_cell_result(
         self,
         session_id: str,
