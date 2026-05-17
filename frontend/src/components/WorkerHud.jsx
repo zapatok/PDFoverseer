@@ -1,3 +1,5 @@
+import { Mic, MicOff } from "lucide-react";
+
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import SaveIndicator from "../ui/SaveIndicator";
@@ -11,13 +13,29 @@ function Metric({ label, value }) {
   );
 }
 
+// El chip de micrófono reusa el primitive Badge — misma forma que el resto de
+// chips, varía color y texto (feedback_chip_consistency). "Voz no disponible"
+// es además el aviso permanente del spec §10 cuando el navegador no soporta el
+// Web Speech API: estado visible, no bloquea el conteo por teclado.
+const MIC_CHIP = {
+  listening: { variant: "jade", icon: Mic, label: "Escuchando" },
+  paused: { variant: "amber", icon: MicOff, label: "Voz en pausa" },
+  error: { variant: "neutral", icon: MicOff, label: "Voz con error" },
+  unsupported: { variant: "neutral", icon: MicOff, label: "Voz no disponible" },
+};
+
+function MicChip({ status }) {
+  const c = MIC_CHIP[status] ?? MIC_CHIP.unsupported;
+  return <Badge variant={c.variant} icon={c.icon}>{c.label}</Badge>;
+}
+
 /**
  * @param {object} props - ver el visor (Task 16) para el origen de cada prop.
  */
 export function WorkerHud({
   files, fileIndex, pageInFile, pageCount,
   subtotal, total, marks, currentFilename,
-  status, saveStatus, onFinish,
+  status, saveStatus, micStatus, onFinish,
 }) {
   const pageMarks = [...(marks[currentFilename] || [])].sort((a, b) => a.page - b.page);
 
@@ -52,7 +70,8 @@ export function WorkerHud({
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <MicChip status={micStatus} />
         <SaveIndicator status={saveStatus} />
         {status === "terminado" && <Badge variant="jade">Terminado</Badge>}
       </div>

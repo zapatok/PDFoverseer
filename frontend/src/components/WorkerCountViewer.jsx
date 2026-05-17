@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useDebouncedCallback } from "../lib/hooks/useDebouncedCallback";
 import { usePdfDocument } from "../hooks/usePdfDocument";
+import { useSpeechNumber } from "../hooks/useSpeechNumber";
 import { useSessionStore } from "../store/session";
 import { computeWorkerCount, fileSubtotal } from "../lib/worker-count";
 import { PdfPage } from "./PdfPage";
@@ -32,6 +33,7 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
   const [marks, setMarks] = useState(() => initCell?.worker_marks || {});
   const [status, setStatus] = useState(initCell?.worker_status || "en_progreso");
   const [pending, setPending] = useState(null); // buffer de dígitos tecleados, o null
+  const [micPaused, setMicPaused] = useState(false);
 
   // --- carga de la lista de archivos (orden = sorted rglob del backend) ---
   useEffect(() => {
@@ -87,6 +89,12 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
+
+  // --- voz: un número reconocido entra como pendiente, igual que tecleado ---
+  const { status: micStatus } = useSpeechNumber({
+    enabled: !micPaused,
+    onNumber: (n) => setPending(String(n)),
+  });
 
   if (!files) {
     return (
@@ -177,6 +185,7 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
     else if (e.key === "PageUp") { e.preventDefault(); retreat(); }
     else if (e.key === "Delete") { e.preventDefault(); deleteMark(); }
     else if (e.key === "e" || e.key === "E") { e.preventDefault(); editMark(); }
+    else if (e.key === "m" || e.key === "M") { e.preventDefault(); setMicPaused((p) => !p); }
     else if (e.key === "Backspace") {
       e.preventDefault();
       setPending((p) => (p && p.length > 1 ? p.slice(0, -1) : null));
@@ -217,6 +226,7 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
         currentFilename={currentFile.name}
         status={status}
         saveStatus={saveStatus}
+        micStatus={micStatus}
         onFinish={toggleFinish}
       />
     </div>
