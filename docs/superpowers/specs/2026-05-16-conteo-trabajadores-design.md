@@ -156,6 +156,14 @@ La ausencia de marca **equivale a 0** en la suma; no se guarda un cero explícit
 La burbuja se puede arrastrar si tapa contenido de la página. Esa posición **no se
 persiste** — vuelve a su lugar por defecto en cada sesión; es una comodidad, no un dato.
 
+**Tablas que cruzan páginas.** §1 anota que una tabla de firmas puede continuar de
+una página a la siguiente. Para el conteo no hace falta tratamiento especial: cada
+página recibe la cantidad de firmas que la persona ve en ella, y la suma de las
+marcas da el total correcto sin importar cuántas páginas abarque la tabla. Si una
+misma fila de firma queda partida por el corte de página, la persona cuenta a ese
+trabajador una sola vez, en la página que decida — es un juicio humano que la
+herramienta no asiste.
+
 ### 5.2 Entrada por voz
 
 Se usa el **Web Speech API** (`SpeechRecognition`) en modo continuo, con locale
@@ -228,10 +236,16 @@ en Zustand y las **autosalva con debounce**, igual que el patrón de autosave de
 ### 6.3 Totales derivados
 
 - **Subtotal de archivo** = suma de los `count` de las marcas de ese archivo.
-- **Total de celda** = suma de todos los archivos.
+- **Total de celda** = suma de los subtotales de los archivos **presentes hoy en la
+  lista de la celda**.
 
 Se calculan en el frontend para el HUD y la UI de celda, y en el backend al momento
 de exportar. La lógica es una suma trivial; no amerita un fixture espejado.
+
+`worker_marks` está indexado por nombre de archivo. Si un PDF se renombra o se quita
+entre sesiones, sus marcas quedan huérfanas; el total **solo suma los archivos que
+hoy están en la celda** (intersección con `per_file`), así que una marca huérfana no
+infla el resultado. El plan puede además podar las huérfanas al cargar la sesión.
 
 ## 7. Ciclo de vida del conteo
 
@@ -252,9 +266,13 @@ El visor tiene una acción **"Terminé esta categoría"** que fija
 `worker_status = "terminado"`. Una celda terminada se puede reabrir y editar después.
 
 Al exportar (`POST /output`), si alguna celda `charla`/`chintegral` está
-`en_progreso` o sin iniciar, la respuesta incluye un campo **`warnings`** que lista
-esas celdas. La exportación **igual procede** — el aviso es informativo. El frontend
-lo muestra como toast/diálogo.
+`en_progreso` o sin iniciar, la respuesta incluye un campo **nuevo**,
+`worker_warnings`, que lista esas celdas. Es **distinto** del campo `warnings` que la
+respuesta ya devuelve hoy (`output.py:115`, diagnósticos del escritor de Excel —
+p. ej. un rango con nombre no encontrado): no se mezclan. `warnings` es diagnóstico
+interno del escritor; `worker_warnings` es un aviso de completitud para el usuario.
+La exportación **igual procede** — el aviso es informativo. El frontend lo muestra
+como toast/diálogo.
 
 ## 8. Cascada al Excel
 
@@ -275,39 +293,58 @@ usan `chgen` ("charlas generales diarias"), no `charla`. Es una divergencia cono
 de nomenclatura entre la sigla del sistema y la clave del rango del template.
 
 `generate_resumen` (`core/excel/writer.py`) ya resuelve cualquier clave → defined
-name → celda. Emitir `HLL_workers_chgen` rellena la fila 29 sin tocar el escritor.
-**No se modifica el escritor de Excel** — solo se agrega la emisión.
+name → celda. Los 8 rangos `{HOSP}_workers_{purpose}` ya existen en el template y
+resuelven a las columnas de HH, filas 29 (`chgen`) y 30 (`chintegral`) — p. ej.
+`HLL_workers_chgen → H29`, `HPV_workers_chintegral → N30` (verificado con openpyxl).
+Emitir la clave rellena la celda sin tocar el escritor. **No se modifica el escritor
+de Excel** — solo se agrega la emisión.
 
 Si una celda de trabajadores nunca se contó, no se emite su clave: el template (ya
-limpio — ver §8.2) conserva su 0, y el aviso de exportación de §7.3 lo señala.
+limpio — ver §8.2) conserva su celda en blanco, y el `worker_warnings` de §7.3 lo
+señala. Una celda con algún PDF que no se pudo abrir (§10) también queda incompleta:
+se incluye en `worker_warnings` aunque su estado sea `terminado`.
 
-### 8.2 Corrección de fórmulas del template
+### 8.2 Corrección de la fórmula del template
 
-El template `data/templates/RESUMEN_template_v1.xlsx` lo genera el script
-`data/templates/build_template_v1.py`. Las filas relevantes:
+El template `data/templates/RESUMEN_template_v1.xlsx` se construye con el script
+`data/templates/build_template_v1.py`, que **copia** la planilla base
+`data/output_sample/RESUMEN_ABRIL_2026.xlsx` (`shutil.copy`) y luego le agrega los
+rangos con nombre y vacía las celdas de cantidad. **El script no genera las fórmulas
+de HH** — las hereda tal cual de la planilla copiada. Por eso cualquier corrección de
+fórmula debe ser un **paso nuevo y explícito** dentro de `build()`, posterior a la copia.
+
+Las filas de HH de charla y charla integral (columnas de HH: H, J, L, N):
 
 - Fila 29 = trabajadores `chgen`; fila 30 = trabajadores `chintegral`.
-- Fila 13 = HH de chgen = `trabajadores_chgen × 0.25`.
-- Fila 14 = HH de chintegral = `trabajadores_chintegral × 0.5`.
+- Fila 13 = HH de chgen = `trabajadores_chgen (fila 29) × 0.25`.
+- Fila 14 = HH de chintegral = `trabajadores_chintegral (fila 30) × 0.5`.
 
-La fila 14 tiene **dos fórmulas erradas**, verificadas con openpyxl:
+**Una sola fórmula está errada**, verificado con openpyxl sobre el template actual:
 
 | Celda | Fórmula actual | Debe ser | Problema |
 |-------|----------------|----------|----------|
-| `H14` | `=H29*0.5` | `=H30*0.5` | Apunta a la fila de chgen, no chintegral |
-| `N14` | `=M14*0.5` | `=N30*0.5` | Apunta a una celda de HH, no a la de trabajadores |
+| `H14` | `=H29*0.5` | `=H30*0.5` | Apunta a la fila de chgen (29), no a la de chintegral (30) |
 
-`J14` (`=J30*0.5`) y `L14` están correctas — el plan confirma las cuatro columnas.
+`J14` (`=J30*0.5`), `L14` (`=L30*0.5`) y `N14` (`=N30*0.5`) **ya están correctas** —
+solo `H14` cambia.
 
-La corrección va en `build_template_v1.py` (la fuente de verdad), seguida de
-regenerar el template y un **diff de verificación**: solo `H14`/`N14` deben cambiar.
-Regenerar además limpia los **valores ABRIL obsoletos** que hoy quedaron pegados en
-las filas de trabajadores del template (p. ej. `J29 = 479`); un template limpio debe
-tener esas filas en 0 / en blanco.
+Aparte, las 8 celdas de trabajadores (columnas H/J/L/N, filas 29 y 30) arrastran
+**valores obsoletos de ABRIL** pegados en la planilla base: `J29=479`, `L29=5255`,
+`N29=4851`, `J30=123`, `L30=373`, `N30=784` (`H29` y `H30` ya están en blanco). El
+script **no las limpia hoy**: `build()` solo vacía las columnas de cantidad
+(G/I/K/M) y `verify()` solo comprueba esas. Un template limpio debe traer esas 8
+celdas en blanco.
 
-> *Deuda aparte, fuera de alcance:* existe un tercer bug, `L12 = K11*0.25` en vez de
-> `K12*0.25`, en la fila de HH de charla. No afecta el conteo de trabajadores y se
-> revisa por separado.
+El cambio en `build_template_v1.py` es entonces un paso nuevo en `build()` que
+(1) reescribe `H14` a `=H30*0.5` y (2) vacía las 8 celdas de trabajadores. Se
+extiende `verify()` para afirmar ambas cosas. Luego se regenera el template y se
+hace un **diff de verificación**: respecto del template actual, solo deben cambiar
+`H14` y los 6 valores obsoletos que se vacían.
+
+> *Deuda aparte, fuera de alcance:* existe otro bug de fórmula, `L12 = =K11*0.25`
+> (debería ser `=K12*0.25` — columna correcta, fila equivocada). `L12` es el HH de la
+> fila `odi` (fila 12), no de charla. No afecta el conteo de trabajadores y se revisa
+> por separado.
 
 ## 9. Cambios por capa
 
@@ -320,7 +357,7 @@ tener esas filas en 0 / en blanco.
 | `api/routes/sessions.py` | Endpoint `PATCH .../worker-count` |
 | `api/routes/output.py` | Emisión de `{HOSP}_workers_{purpose}`; campo `warnings` en la respuesta |
 | `core/excel/writer.py`, `core/excel/template.py` | Sin cambios — las claves nuevas fluyen por `generate_resumen` |
-| `data/templates/build_template_v1.py` | Corregir las fórmulas de la fila 14; regenerar el template |
+| `data/templates/build_template_v1.py` | Paso nuevo en `build()`: reescribir `H14` a `=H30*0.5`, vaciar las 8 celdas de trabajadores (filas 29/30); extender `verify()`; regenerar |
 
 **Frontend**
 
@@ -342,7 +379,7 @@ tener esas filas en 0 / en blanco.
 - **Reconocimiento sin número** (ruido, palabra no numérica) → se ignora; la burbuja
   no cambia.
 - **PDF que no carga en pdf.js** → mensaje claro; el archivo se puede saltar y se
-  refleja en el HUD.
+  refleja en el HUD; la celda queda incompleta y aparece en `worker_warnings` (§7.3).
 - **Autosave que falla** (red) → indicador de error de FASE 3; las marcas quedan en
   memoria y se reintenta.
 
@@ -359,7 +396,8 @@ Siguiendo las convenciones del proyecto: fixtures reales, sin mockear la base de
   verificar que `{HOSP}_workers_{purpose}` cae en el rango con nombre correcto y que
   las fórmulas de HH dan el resultado esperado.
 - **Fórmulas del template** — una prueba que verifica que `H14/J14/L14/N14` apuntan a
-  la fila 30 y que la fila 13 apunta a la 29.
+  la fila 30, que la fila 13 apunta a la 29, y que las 8 celdas de trabajadores
+  (H/J/L/N × filas 29/30) quedan en blanco tras regenerar.
 - **El visor** — smoke vía chrome-devtools: paginado continuo, burbuja
   pendiente → fijada, `Supr`, `M`, pausar y retomar.
 
@@ -385,8 +423,8 @@ testeable es el parser.
 
 - Feature 2 (badges de "primera página de documento" en el visor) — diseño aparte.
 - Cualquier detección automática de tablas de firma o de conteo.
-- El bug `L12` del template (HH de charla apunta a `K11` en vez de `K12`) — anotado
-  como deuda; no afecta a los trabajadores.
+- El bug `L12` del template (HH de la fila `odi` —fila 12— con `=K11*0.25` en vez de
+  `=K12*0.25`) — anotado como deuda; no afecta a los trabajadores.
 
 ## 14. Secuencia de construcción
 
@@ -395,7 +433,8 @@ El plan detalla las tareas; este es el orden grueso:
 1. **Backend — modelo de datos de trabajadores**: campos en la celda, endpoint
    `PATCH worker-count`, persistencia.
 2. **Backend — cascada y template**: emisión de `{HOSP}_workers_{purpose}`,
-   corrección de fórmulas + regeneración del template, aviso de exportación.
+   corrección de `H14` + limpieza de las 8 celdas de trabajadores + regeneración del
+   template, aviso de exportación.
 3. **Spike de voz**: validar el Web Speech API en el navegador objetivo (§12).
 4. **Frontend — visor pdf.js**: reemplazar el iframe, con paridad del modo `inspect`.
 5. **Frontend — modo `count_workers`**: paginado continuo, burbuja, marcas, teclado,
