@@ -88,13 +88,6 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
     return () => window.removeEventListener("keydown", h);
   }, []);
 
-  if (error) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-black p-8 text-center text-sm text-po-text-muted">
-        No se pudo abrir el PDF. Se puede saltar este archivo; la celda quedará incompleta.
-      </div>
-    );
-  }
   if (!files) {
     return (
       <div className="flex h-full w-full items-center justify-center text-sm text-po-text-muted">
@@ -196,10 +189,20 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
   return (
     <div className="flex h-full w-full">
       <div className="relative flex-1 overflow-auto bg-black">
-        {doc && (
-          <div className="flex justify-center p-4">
-            <PdfPage doc={doc} pageNumber={page} scale={1.8} />
+        {/* Un PDF roto no es un dead-end: el HUD y los atajos siguen vivos
+            (spec §10) — el error se muestra en el panel y Re Pág / Av Pág
+            permiten saltar a otro archivo. */}
+        {error ? (
+          <div className="flex h-full w-full items-center justify-center p-8 text-center text-sm text-po-text-muted">
+            No se pudo abrir este PDF. Usa Re Pág / Av Pág para moverte a otro
+            archivo; la celda quedará incompleta.
           </div>
+        ) : (
+          doc && (
+            <div className="flex justify-center p-4">
+              <PdfPage doc={doc} pageNumber={page} scale={1.8} />
+            </div>
+          )
         )}
         <WorkerBubble state={bubbleState} value={bubbleValue} />
       </div>
