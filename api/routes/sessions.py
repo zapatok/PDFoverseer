@@ -8,13 +8,18 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.batch import make_handle
 from api.routes.ws import broadcast
-from api.state import SessionManager, compute_cell_count
+from api.state import (
+    SessionManager,
+    compute_cell_count,
+    compute_worker_count,
+)
 from core.orchestrator import (
     enumerate_month,
     scan_cells_ocr,
@@ -305,6 +310,46 @@ def patch_per_file_override(
         "filename": filename,
         "count": body.count,
         "new_cell_count": compute_cell_count(cell),
+    }
+
+
+class WorkerCountPatch(BaseModel):
+    """Body del PATCH worker-count. Patch parcial: los campos None no se tocan."""
+
+    marks: dict | None = None
+    status: Literal["en_progreso", "terminado"] | None = None
+    cursor: dict | None = None
+
+
+@router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/worker-count")
+def patch_worker_count(
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    body: WorkerCountPatch,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Autosalva el conteo de trabajadores de una celda (patch parcial)."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(status_code=422, detail="session_id inválido")
+    try:
+        mgr.apply_worker_count(
+            session_id,
+            hospital,
+            sigla,
+            marks=body.marks,
+            status=body.status,
+            cursor=body.cursor,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Sesión {session_id} no encontrada") from exc
+    state = mgr.get_session_state(session_id)
+    cell = state["cells"].get(hospital, {}).get(sigla, {})
+    return {
+        "worker_marks": cell.get("worker_marks"),
+        "worker_status": cell.get("worker_status"),
+        "worker_cursor": cell.get("worker_cursor"),
+        "worker_count": compute_worker_count(cell),
     }
 
 
