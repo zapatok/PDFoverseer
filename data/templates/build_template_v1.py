@@ -103,6 +103,13 @@ def build() -> tuple[int, int]:
             _set_or_replace_name(wb, name, ref)
             workforce_count += 1
 
+    # Fix HH formula + blank stale workforce values (spec §8.2).
+    # The sample's H14 points to row 29 (chgen); chintegral lives in row 30.
+    ws["H14"] = "=H30*0.5"
+    for hh_col in HH_COL.values():
+        for row in WORKFORCE_ROW.values():
+            ws[f"{hh_col}{row}"] = None
+
     wb.save(DST)
     return cantidad_count, workforce_count
 
@@ -138,6 +145,19 @@ def verify() -> None:
             val = ws[f"{col}{row}"].value
             if val is not None:
                 raise AssertionError(f"Cell {col}{row} should be blank in template, has {val!r}")
+
+    # HH formulas: row 13 = chgen ×0.25, row 14 = chintegral ×0.5
+    for col in HH_COL.values():
+        if ws[f"{col}13"].value != f"={col}29*0.25":
+            raise AssertionError(f"{col}13 HH formula wrong: {ws[f'{col}13'].value!r}")
+        if ws[f"{col}14"].value != f"={col}30*0.5":
+            raise AssertionError(f"{col}14 HH formula wrong: {ws[f'{col}14'].value!r}")
+
+    # Workforce value cells must ship blank
+    for col in HH_COL.values():
+        for row in WORKFORCE_ROW.values():
+            if ws[f"{col}{row}"].value is not None:
+                raise AssertionError(f"Cell {col}{row} should be blank")
 
 
 def main() -> int:
