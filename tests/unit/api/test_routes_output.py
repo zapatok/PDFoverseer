@@ -111,3 +111,23 @@ def test_worker_warnings_silent_when_terminado(client, tmp_path):
     out = client.post("/api/sessions/2026-04/output", json={}).json()
     warned = {(w["hospital"], w["sigla"]) for w in out["worker_warnings"]}
     assert ("HLL", "charla") not in warned
+
+
+def test_worker_warnings_flag_en_progreso_cell(client, tmp_path):
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    mgr = client.app.dependency_overrides[get_manager]()
+    mgr.apply_filename_result("2026-04", "HLL", "charla", _scan_result({"c1.pdf": 3}))
+    mgr.apply_worker_count("2026-04", "HLL", "charla", status="en_progreso")
+    out = client.post("/api/sessions/2026-04/output", json={}).json()
+    warned = {(w["hospital"], w["sigla"]) for w in out["worker_warnings"]}
+    assert ("HLL", "charla") in warned
+
+
+def test_worker_warnings_silent_when_no_pdfs(client, tmp_path):
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    mgr = client.app.dependency_overrides[get_manager]()
+    # worker_status presente pero sin per_file → la celda no tiene nada que contar
+    mgr.apply_worker_count("2026-04", "HLL", "charla", status="en_progreso")
+    out = client.post("/api/sessions/2026-04/output", json={}).json()
+    warned = {(w["hospital"], w["sigla"]) for w in out["worker_warnings"]}
+    assert ("HLL", "charla") not in warned
