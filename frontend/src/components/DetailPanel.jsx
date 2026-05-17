@@ -1,10 +1,13 @@
-import { MousePointer2, FileStack, PenLine } from "lucide-react";
+import { MousePointer2, FileStack, PenLine, Users } from "lucide-react";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
 import Badge from "../ui/Badge";
+import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { METHOD_LABEL, CONFIDENCE_LABEL } from "../lib/method-labels";
+import { useSessionStore } from "../store/session";
+import { computeWorkerCount } from "../lib/worker-count";
 
 function effectiveCount(cell) {
   return cell?.user_override ?? cell?.ocr_count ?? cell?.filename_count ?? cell?.count ?? 0;
@@ -14,6 +17,39 @@ function confidenceVariant(cell) {
   if (cell?.confidence === "high") return "confidence-high";
   if (cell?.confidence === "low") return "confidence-low";
   return "neutral";
+}
+
+function WorkerCountModule({ hospital, sigla, cell }) {
+  const openWorkerCount = useSessionStore((s) => s.openWorkerCount);
+  const status = cell.worker_status;
+  const total = computeWorkerCount(cell.worker_marks, Object.keys(cell.per_file || {}));
+  const started = status === "en_progreso" || status === "terminado";
+
+  return (
+    <div className="mt-6">
+      <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mb-2">
+        Conteo de trabajadores
+      </h4>
+      {started && (
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-3xl font-semibold tabular-nums">{total.toLocaleString()}</span>
+          <span className="text-xs text-po-text-muted">trabajadores</span>
+          <Badge variant={status === "terminado" ? "jade" : "amber"}>
+            {status === "terminado" ? "Terminado" : "En progreso"}
+          </Badge>
+        </div>
+      )}
+      <Button
+        variant={started ? "secondary" : "primary"}
+        icon={Users}
+        onClick={() => openWorkerCount(hospital, sigla)}
+      >
+        {!started && "Contar trabajadores"}
+        {status === "en_progreso" && "Continuar conteo"}
+        {status === "terminado" && "Revisar"}
+      </Button>
+    </div>
+  );
 }
 
 export default function DetailPanel({ hospital, sigla, cell }) {
@@ -84,6 +120,10 @@ export default function DetailPanel({ hospital, sigla, cell }) {
 
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual</h4>
       <OverridePanel hospital={hospital} sigla={sigla} cell={cell} />
+
+      {(sigla === "charla" || sigla === "chintegral") && (
+        <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} />
+      )}
     </div>
   );
 }
