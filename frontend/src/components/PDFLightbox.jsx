@@ -12,6 +12,7 @@ import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
 import { usePdfDocument } from "../hooks/usePdfDocument";
 import { PdfPage } from "./PdfPage";
+import { WorkerCountViewer } from "./WorkerCountViewer";
 
 function effectiveCount(cell) {
   return cell?.user_override ?? cell?.ocr_count ?? cell?.filename_count ?? cell?.count ?? 0;
@@ -130,14 +131,25 @@ export default function PDFLightbox() {
         </div>
       </Dialog.Header>
       <Dialog.Body>
-        <div className="flex-1 overflow-hidden bg-black">
-          <InspectView url={pdfUrl} />
-        </div>
-        <aside className="w-80 border-l border-po-border p-4 overflow-y-auto">
-          <CountSummary cell={cell} />
-          <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual</h4>
-          <OverridePanel hospital={lightbox.hospital} sigla={lightbox.sigla} cell={cell} />
-        </aside>
+        {lightbox.mode === "count_workers" ? (
+          <WorkerCountViewer
+            sessionId={session.session_id}
+            hospital={lightbox.hospital}
+            sigla={lightbox.sigla}
+            initialFileIndex={lightbox.fileIndex}
+          />
+        ) : (
+          <>
+            <div className="flex-1 overflow-hidden bg-black">
+              <InspectView url={pdfUrl} />
+            </div>
+            <aside className="w-80 border-l border-po-border p-4 overflow-y-auto">
+              <CountSummary cell={cell} />
+              <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual</h4>
+              <OverridePanel hospital={lightbox.hospital} sigla={lightbox.sigla} cell={cell} />
+            </aside>
+          </>
+        )}
       </Dialog.Body>
     </Dialog>
   );
