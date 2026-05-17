@@ -15,9 +15,15 @@ export function PdfPage({ doc, pageNumber, scale = 1.5 }) {
     if (!doc) return undefined;
     let cancelled = false;
     let renderTask = null;
+    let loadedPage = null;
 
     doc.getPage(pageNumber).then((page) => {
-      if (cancelled) return;
+      if (cancelled) {
+        // Desmontado antes de renderizar — libera la página igual.
+        page.cleanup();
+        return;
+      }
+      loadedPage = page;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const viewport = page.getViewport({ scale });
@@ -34,6 +40,9 @@ export function PdfPage({ doc, pageNumber, scale = 1.5 }) {
     return () => {
       cancelled = true;
       if (renderTask) renderTask.cancel();
+      // Libera fuentes y bitmaps de la página; pdf.js los retiene hasta
+      // doc.destroy() si no se llama cleanup() explícito.
+      if (loadedPage) loadedPage.cleanup();
     };
   }, [doc, pageNumber, scale]);
 
