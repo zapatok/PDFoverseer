@@ -12,6 +12,23 @@ from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
 
 
+def _scan_result(per_file: dict):
+    """ScanResult de filename_glob con per_file poblado."""
+    from core.scanners.base import ConfidenceLevel, ScanResult
+
+    return ScanResult(
+        count=sum(per_file.values()),
+        confidence=ConfidenceLevel.HIGH,
+        method="filename_glob",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=len(per_file),
+        duration_ms=10,
+        per_file=per_file,
+    )
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
@@ -74,3 +91,23 @@ def test_output_emits_worker_totals(client, tmp_path):
     # una celda nunca contada no se emite: su rango con nombre queda en blanco
     nc_sheet, nc_coord = list(wb.defined_names["HLL_workers_chintegral"].destinations)[0]
     assert wb[nc_sheet][nc_coord].value is None
+
+
+def test_worker_warnings_flag_incomplete_cell(client, tmp_path):
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    mgr = client.app.dependency_overrides[get_manager]()
+    mgr.apply_filename_result("2026-04", "HLL", "charla", _scan_result({"c1.pdf": 3}))
+    # per_file poblado, sin worker_status → celda incompleta
+    out = client.post("/api/sessions/2026-04/output", json={}).json()
+    warned = {(w["hospital"], w["sigla"]) for w in out["worker_warnings"]}
+    assert ("HLL", "charla") in warned
+
+
+def test_worker_warnings_silent_when_terminado(client, tmp_path):
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    mgr = client.app.dependency_overrides[get_manager]()
+    mgr.apply_filename_result("2026-04", "HLL", "charla", _scan_result({"c1.pdf": 3}))
+    mgr.apply_worker_count("2026-04", "HLL", "charla", status="terminado")
+    out = client.post("/api/sessions/2026-04/output", json={}).json()
+    warned = {(w["hospital"], w["sigla"]) for w in out["worker_warnings"]}
+    assert ("HLL", "charla") not in warned

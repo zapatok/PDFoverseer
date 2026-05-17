@@ -79,6 +79,31 @@ def _build_worker_values(state: dict) -> dict[str, int]:
     return out
 
 
+def _build_worker_warnings(state: dict) -> list[dict]:
+    """Celdas charla/chintegral con conteo de trabajadores incompleto.
+
+    Una celda avisa si tiene PDFs (``per_file`` no vacío) y su ``worker_status``
+    no es ``"terminado"`` — la regla única del spec §7.3. El frontend bloquea
+    "Terminé esta categoría" cuando un PDF no abre, así que el disyuntor "algún
+    PDF falló" queda cubierto por este mismo predicado.
+
+    Args:
+        state: el blob de estado de la sesión.
+
+    Returns:
+        Lista de ``{"hospital", "sigla"}``; vacía si nada está incompleto.
+    """
+    out: list[dict] = []
+    for hosp, sigla_map in state.get("cells", {}).items():
+        for sigla in WORKER_PURPOSE:
+            cell = sigla_map.get(sigla)
+            if not cell or not cell.get("per_file"):
+                continue
+            if cell.get("worker_status") != "terminado":
+                out.append({"hospital": hosp, "sigla": sigla})
+    return out
+
+
 @router.post("/sessions/{session_id}/output")
 def generate(
     session_id: str,
@@ -134,5 +159,6 @@ def generate(
         "output_path": str(result.output_path),
         "cells_written": result.cells_written,
         "warnings": result.warnings,
+        "worker_warnings": _build_worker_warnings(state),
         "duration_ms": result.duration_ms,
     }
