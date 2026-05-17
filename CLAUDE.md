@@ -163,7 +163,69 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 - **VLM integration:** ~~Attempted~~ REVERTED (2026-03-30). See postmortem in Links.
 - **Browse UX:** `/api/browse` uses server-side tkinter chooser — only works with local display
 
-## FASE 5 UX slice — `po_overhaul` branch (shipped 2026-05-15)
+## Feature 1 — Conteo asistido de trabajadores firmantes — `po_overhaul` branch (shipped 2026-05-17)
+
+Conteo manual asistido de los trabajadores que firman las listas de asistencia
+en los PDFs de `charla` / `chintegral`. El operador abre un visor pdf.js, marca
+el número de firmantes por página (teclado o voz) y la suma alimenta el Excel.
+
+1. **Modelo de datos + cascada (backend)**: la celda gana `worker_marks`
+   (`{archivo: [{page, count}]}`), `worker_status` (`en_progreso`/`terminado`)
+   y `worker_cursor`; el total se deriva con `compute_worker_count` — nunca se
+   almacena. `PATCH …/cells/{h}/{s}/worker-count` persiste las marcas. El writer
+   emite los rangos `{HOSP}_workers_{purpose}`
+   (`WORKER_PURPOSE = {charla: chgen, chintegral: chintegral}`) → filas 29/30
+   del template; las filas HH 13/14 ya traen las fórmulas (`=fila29*0.25`,
+   `=fila30*0.5`). `/output` devuelve `worker_warnings` con las celdas
+   charla/chintegral incompletas.
+2. **Visor pdf.js (frontend)**: `WorkerCountViewer` monta `pdfjs-dist` con
+   paginación continua multi-PDF; `WorkerBubble` (marca flotante de 3 estados),
+   `WorkerHud` (panel lateral con total + `SaveIndicator`), autosave debounced.
+   Un PDF que no abre se puede saltar — el HUD y el teclado siguen vivos.
+3. **Conteo por teclado y voz**: teclado (dígitos, `PgDn`/`PgUp` fija-avanza,
+   `Supr`, `E`, `M`); voz vía `useSpeechNumber` (Web Speech API, es-CL) +
+   `parseSpanishNumber` (números 0-999, suite vitest). `M` pausa el micrófono;
+   el chip de micrófono reusa el primitive `Badge`.
+4. **Integración UI**: módulo "Conteo de trabajadores" en el `DetailPanel` de
+   las celdas charla/chintegral; al "Generar Excel", `MonthOverview` muestra un
+   `toast.warning` con las celdas incompletas junto al toast de éxito.
+
+- **Spec:** `docs/superpowers/specs/2026-05-16-conteo-trabajadores-design.md`
+- **Plan:** `docs/superpowers/plans/2026-05-16-pdfoverseer-conteo-trabajadores.md`
+  (22 tasks, 4 chunks + Spike S1)
+- **Tag:** `conteo-trabajadores-mvp` (local, awaiting push approval)
+- **Bundle:** main JS gzipped 93.66 → 243.57 kB — el salto es `pdfjs-dist`,
+  intrínseco a un visor de PDF; el `pdf.worker.min.mjs` (~1.2 MB) se sirve como
+  archivo aparte. Sin presupuesto que vigilar para esta app single-user/LAN.
+- **New deps:** `pdfjs-dist` (visor), `vitest` (devDep — suite del parser).
+
+### Bugs caught en revisión (commits 2f15036, b792faa, 4555a8e)
+1. `PdfPage` no liberaba los recursos del `PDFPageProxy` en el cleanup → fuga
+   de memoria al paginar. Fix: `page.cleanup()`.
+2. `WorkerCountViewer` hacía early-return ante un error de carga, matando el
+   HUD y el handler de teclado → un PDF roto bloqueaba la celda entera. Fix:
+   el error se muestra en el panel izquierdo y el visor sigue vivo (spec §10).
+3. `useSpeechNumber` dejaba el chip en "error" tras un reinicio automático del
+   reconocedor. Fix: un handler `onstart` restablece "listening" en cada
+   (re)arranque.
+
+### Smoke caveats — voz pendiente de validar
+El smoke de integración (teclado, Excel, `worker_warnings`) pasó. La **voz no
+se pudo verificar en Brave**: el constructor `webkitSpeechRecognition` existe
+pero Brave desactiva el backend de voz (privacidad) → `rec.start()` es un no-op
+silencioso y el chip se queda en "Voz en pausa" (no llega a "Escuchando" ni a
+"error"). El conteo por teclado no se ve afectado. Validar la voz en Chrome o
+abordar el **Spike S1** (aún pendiente — Plan B: cambiar el motor de voz, todo
+aislado en `useSpeechNumber`).
+
+### Next (roadmap restante)
+- Refinamiento de motores OCR por tipo de documento (cada doc type con sus
+  parámetros propios; ver memoria `project_ocr_refinement_deferred`).
+- Feature 2 — badges de inicio-de-documento en el visor + toggle que corrige el
+  conteo (ver memoria `project_feature2_boundary_badges`). Orden del roadmap:
+  refinamiento OCR → feature 2.
+
+### FASE 5 UX slice — predecessor, `po_overhaul` branch (shipped 2026-05-15)
 
 Slice UX cerrando 3 pendientes del roadmap post-FASE 4:
 
@@ -185,7 +247,7 @@ Slice UX cerrando 3 pendientes del roadmap post-FASE 4:
   Sin nuevas deps; todo sobre primitives existentes.
 - **New deps:** ninguna
 
-### Smoke bugs caught (commits 9e4b312, 9afddfe, 0a7e7c5)
+#### Smoke bugs caught (commits 9e4b312, 9afddfe, 0a7e7c5)
 1. `Drawer` dejaba el foco atrapado dentro del panel `aria-hidden` al cerrar
    con la X. Fix: al cerrar, devuelve el foco al elemento que lo abrió.
 2. `HistoryDrawer` parpadeaba al estado vacío durante los 200 ms de la
@@ -195,7 +257,7 @@ Slice UX cerrando 3 pendientes del roadmap post-FASE 4:
    `scan_cancelled` actualizaba `scanProgress` pero nunca limpiaba
    `scanningCells`. Fix: ambos eventos terminales vacían el set.
 
-### Next (roadmap restante)
+#### Next (roadmap restante)
 - Refinamiento de motores OCR por tipo de documento (fase FINAL — cada doc
   type con sus parámetros propios; ver memoria `project_ocr_refinement_deferred`).
 
