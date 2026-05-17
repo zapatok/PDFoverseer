@@ -74,6 +74,20 @@ export const api = {
     return r.json();
   },
 
+  patchWorkerCount: async (sessionId, hospital, sigla, patch, opts = {}) => {
+    const r = await fetch(
+      `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/worker-count`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+        signal: opts.signal,
+      }
+    );
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+
   getCellFiles: (sessionId, hospital, sigla) =>
     fetch(`${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/files`).then(jsonOrThrow),
 
