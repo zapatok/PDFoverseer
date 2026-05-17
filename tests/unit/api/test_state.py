@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from api.state import SessionManager
+from api.state import SessionManager, compute_worker_count
 from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
 
@@ -173,3 +173,39 @@ def test_get_session_state_migrates_legacy_count_on_first_read(manager, tmp_path
     # Idempotent: second read returns the same
     cell2 = manager.get_session_state("2026-04")["cells"]["HPV"]["art"]
     assert cell2 == cell
+
+
+def test_compute_worker_count_sums_marks_across_files():
+    cell = {
+        "per_file": {"a.pdf": 1, "b.pdf": 1},
+        "worker_marks": {
+            "a.pdf": [{"page": 1, "count": 12}, {"page": 2, "count": 8}],
+            "b.pdf": [{"page": 1, "count": 20}],
+        },
+    }
+    assert compute_worker_count(cell) == 40
+
+
+def test_compute_worker_count_ignores_orphan_files():
+    cell = {
+        "per_file": {"a.pdf": 1},
+        "worker_marks": {
+            "a.pdf": [{"page": 1, "count": 12}],
+            "renamed_old.pdf": [{"page": 1, "count": 99}],
+        },
+    }
+    assert compute_worker_count(cell) == 12
+
+
+def test_compute_worker_count_zero_when_no_marks():
+    assert compute_worker_count({"per_file": {"a.pdf": 1}}) == 0
+    assert compute_worker_count({}) == 0
+
+
+def test_compute_worker_count_tolerates_malformed_marks():
+    # worker_marks viene de un blob JSON sin tipado; debe tolerar basura.
+    cell = {
+        "per_file": {"a.pdf": 1},
+        "worker_marks": {"a.pdf": [{"page": 1, "count": 7}, {"page": 2}, None]},
+    }
+    assert compute_worker_count(cell) == 7

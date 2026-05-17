@@ -36,6 +36,31 @@ def compute_cell_count(cell: dict) -> int:
     return cell.get("ocr_count") or cell.get("filename_count") or 0
 
 
+def compute_worker_count(cell: dict) -> int:
+    """Total de trabajadores firmantes de una celda charla/chintegral.
+
+    Suma los ``count`` de todas las marcas. Solo cuenta archivos presentes en
+    ``per_file``: las marcas huérfanas de un PDF renombrado o eliminado se
+    ignoran. Si ``per_file`` está vacío (celda sin escanear), no se filtra.
+
+    Args:
+        cell: el dict de estado de una celda.
+
+    Returns:
+        La suma de trabajadores firmantes; 0 si no hay marcas.
+    """
+    marks: dict = cell.get("worker_marks") or {}
+    per_file: dict = cell.get("per_file") or {}
+    total = 0
+    for filename, page_marks in marks.items():
+        if per_file and filename not in per_file:
+            continue
+        for mark in page_marks or []:
+            if isinstance(mark, dict):
+                total += mark.get("count") or 0
+    return total
+
+
 class SessionManager:
     """Wrap session DB operations + maintain in-memory cell state."""
 
