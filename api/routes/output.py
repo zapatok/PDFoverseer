@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from api.routes.sessions import get_manager
-from api.state import SessionManager
+from api.state import SessionManager, compute_worker_count
 from core.db.historical_repo import upsert_count
 from core.excel.writer import generate_resumen
 
@@ -59,6 +59,26 @@ def _build_cell_values(state: dict) -> dict[str, int]:
     return out
 
 
+# Sigla del sistema → "purpose" del rango de trabajadores en el Excel.
+# El template usa "chgen" para charlas generales, no "charla".
+WORKER_PURPOSE: dict[str, str] = {"charla": "chgen", "chintegral": "chintegral"}
+
+
+def _build_worker_values(state: dict) -> dict[str, int]:
+    """Emite ``{HOSP}_workers_{purpose}`` para las celdas charla/chintegral
+    que tengan datos de conteo de trabajadores."""
+    out: dict[str, int] = {}
+    for hosp, sigla_map in state.get("cells", {}).items():
+        for sigla, purpose in WORKER_PURPOSE.items():
+            cell = sigla_map.get(sigla)
+            if not cell:
+                continue
+            if "worker_marks" not in cell and "worker_status" not in cell:
+                continue  # nunca se contó — no emitir; el template queda en blanco
+            out[f"{hosp}_workers_{purpose}"] = compute_worker_count(cell)
+    return out
+
+
 @router.post("/sessions/{session_id}/output")
 def generate(
     session_id: str,
@@ -72,6 +92,7 @@ def generate(
     except KeyError:
         raise HTTPException(404, f"Session not found: {session_id}")
     cell_values = _build_cell_values(state)
+    cell_values.update(_build_worker_values(state))
     output_dir = _output_dir()
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"RESUMEN_{session_id}.xlsx"

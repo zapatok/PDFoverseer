@@ -52,3 +52,21 @@ def test_output_uses_v2_priority(client, tmp_path):
     dest = list(wb.defined_names["HRB_odi_count"].destinations)[0]
     sheet, coord = dest
     assert wb[sheet][coord].value == 17
+
+
+def test_output_emits_worker_totals(client, tmp_path):
+    import openpyxl
+
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    mgr = client.app.dependency_overrides[get_manager]()
+    mgr.apply_worker_count(
+        "2026-04",
+        "HLL",
+        "charla",
+        marks={"c1.pdf": [{"page": 1, "count": 18}, {"page": 2, "count": 22}]},
+        status="terminado",
+    )
+    out = client.post("/api/sessions/2026-04/output", json={}).json()
+    wb = openpyxl.load_workbook(out["output_path"])
+    sheet, coord = list(wb.defined_names["HLL_workers_chgen"].destinations)[0]
+    assert wb[sheet][coord].value == 40
