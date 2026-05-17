@@ -32,6 +32,10 @@ export function useSpeechNumber({ enabled, onNumber }) {
     rec.interimResults = false;
     let stopped = false;
 
+    // onstart restablece "listening" en cada (re)arranque — también tras un
+    // error seguido del reinicio automático de onend; así el chip no se queda
+    // en "error" con el micrófono ya activo de nuevo.
+    rec.onstart = () => setStatus("listening");
     rec.onresult = (e) => {
       const last = e.results[e.results.length - 1];
       const n = parseSpanishNumber(last[0].transcript);
@@ -49,7 +53,6 @@ export function useSpeechNumber({ enabled, onNumber }) {
 
     try {
       rec.start();
-      setStatus("listening");
     } catch {
       setStatus("error");
     }
