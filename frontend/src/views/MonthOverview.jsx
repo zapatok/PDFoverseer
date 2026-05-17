@@ -43,6 +43,12 @@ export default function MonthOverview() {
     try {
       const r = await generateOutput(sessionId);
       toast.success(`Excel guardado en ${r.output_path}`, { icon: <FileSpreadsheet size={16} /> });
+      if (r.worker_warnings?.length) {
+        const lista = r.worker_warnings.map((w) => `${w.hospital}·${w.sigla}`).join(", ");
+        toast.warning(
+          `Conteo de trabajadores incompleto en ${r.worker_warnings.length} celda(s): ${lista}`,
+        );
+      }
     } catch (err) {
       toast.error(`No se pudo generar el Excel: ${String(err)}`);
     }
