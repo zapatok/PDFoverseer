@@ -8,6 +8,10 @@ import Tooltip from "../ui/Tooltip";
 import { FileStack, PenLine } from "lucide-react";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { METHOD_LABEL, CONFIDENCE_LABEL } from "../lib/method-labels";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
+
+import { usePdfDocument } from "../hooks/usePdfDocument";
+import { PdfPage } from "./PdfPage";
 
 function effectiveCount(cell) {
   return cell?.user_override ?? cell?.ocr_count ?? cell?.filename_count ?? cell?.count ?? 0;
@@ -45,6 +49,37 @@ function CountSummary({ cell }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+function InspectView({ url }) {
+  const { doc, numPages, error, loading } = usePdfDocument(url);
+
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center p-8 text-center text-sm text-po-text-muted">
+        No se pudo abrir el PDF.
+      </div>
+    );
+  }
+  if (loading || !doc) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-po-text-muted">
+        Cargando…
+      </div>
+    );
+  }
+  return (
+    <TransformWrapper minScale={0.5} maxScale={4} doubleClick={{ disabled: true }}>
+      <TransformComponent
+        wrapperClass="!w-full !h-full"
+        contentClass="flex flex-col items-center gap-3 p-4"
+      >
+        {Array.from({ length: numPages }, (_, i) => (
+          <PdfPage key={i + 1} doc={doc} pageNumber={i + 1} />
+        ))}
+      </TransformComponent>
+    </TransformWrapper>
   );
 }
 
@@ -95,8 +130,8 @@ export default function PDFLightbox() {
         </div>
       </Dialog.Header>
       <Dialog.Body>
-        <div className="flex-1 bg-black">
-          <iframe src={pdfUrl} className="w-full h-full border-0" title={filename} />
+        <div className="flex-1 overflow-hidden bg-black">
+          <InspectView url={pdfUrl} />
         </div>
         <aside className="w-80 border-l border-po-border p-4 overflow-y-auto">
           <CountSummary cell={cell} />

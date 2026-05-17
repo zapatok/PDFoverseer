@@ -18,7 +18,7 @@ export const useSessionStore = create((set, get) => ({
   // FASE 2 additions
   scanningCells: new Set(),            // "HPV|odi" strings, mirrored in CategoryRow
   scanProgress: null,                  // {done, total, etaMs, terminal?} | null
-  lightbox: null,                      // {hospital, sigla, fileIndex} | null
+  lightbox: null,                      // {hospital, sigla, fileIndex, mode} | null
   _ws: null,
 
   // FASE 3 — pending-save coordination (see spec §6.6).
@@ -244,7 +244,8 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
-  openLightbox: (hospital, sigla, fileIndex = 0) => set({ lightbox: { hospital, sigla, fileIndex } }),
+  openLightbox: (hospital, sigla, fileIndex = 0, mode = "inspect") =>
+    set({ lightbox: { hospital, sigla, fileIndex, mode } }),
   closeLightbox: () => set({ lightbox: null }),
 
   generateOutput: async (sessionId) => {
