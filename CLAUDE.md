@@ -209,14 +209,23 @@ el número de firmantes por página (teclado o voz) y la suma alimenta el Excel.
    reconocedor. Fix: un handler `onstart` restablece "listening" en cada
    (re)arranque.
 
-### Smoke caveats — voz pendiente de validar
-El smoke de integración (teclado, Excel, `worker_warnings`) pasó. La **voz no
-se pudo verificar en Brave**: el constructor `webkitSpeechRecognition` existe
-pero Brave desactiva el backend de voz (privacidad) → `rec.start()` es un no-op
-silencioso y el chip se queda en "Voz en pausa" (no llega a "Escuchando" ni a
-"error"). El conteo por teclado no se ve afectado. Validar la voz en Chrome o
-abordar el **Spike S1** (aún pendiente — Plan B: cambiar el motor de voz, todo
-aislado en `useSpeechNumber`).
+### Voz — validada 2026-05-18 (Spike S1 resuelto)
+El smoke de integración (teclado, Excel, `worker_warnings`) pasó. La voz se
+depuró a fondo con chrome-devtools:
+- **Chrome: funciona** — Web Speech API de nube; Daniel validó el dictado real,
+  latencia aceptable. Hay una pausa breve (~0.8 s) entre guardar un número y
+  reanudar la escucha — es el `audiostart` del reinicio del reconocedor en modo
+  `continuous`, inherente al Web Speech API; no se optimiza.
+- **Brave: imposible** — quita la API key del servicio de voz de Google (la
+  nube queda como no-op silencioso) y tampoco distribuye el componente SODA
+  (on-device también muerto). Para voz hay que usar Chrome; el conteo por
+  teclado sí funciona en Brave.
+- **On-device (`SpeechRecognition` con `processLocally`): descartado** — se
+  probó (Chrome 148 instala el modelo `SODA es-ES`), pero el motor on-device
+  oye el audio (`speechstart` dispara) y no transcribe nada (0 eventos
+  `onresult`, es-CL/es-ES, con y sin flags). El puente Web Speech → on-device
+  para español no funciona. NO reintentar; `useSpeechNumber.js` se mantiene en
+  la ruta de nube.
 
 ### Next (roadmap restante)
 - Refinamiento de motores OCR por tipo de documento (cada doc type con sus
