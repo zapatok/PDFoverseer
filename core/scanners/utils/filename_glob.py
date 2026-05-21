@@ -18,8 +18,8 @@ from core.domain import SIGLAS
 # `REUNION_OLD.PDF` — while still rejecting false positives where a sigla
 # name is an embedded substring of an unrelated word (e.g. `ext` inside
 # `extra`).
-_TOKEN_SEP = r"(?:^|[_\-.])"
-_TOKEN_END = r"(?:[_\-.]|$)"
+_TOKEN_SEP = r"(?:^|(?<=[_\-.]))"  # zero-width: start-of-string OR after a separator
+_TOKEN_END = r"(?:$|(?=[_\-.]))"  # zero-width: end-of-string OR before a separator
 
 # Compiled per-sigla patterns keyed by sigla string.
 _SIGLA_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -61,10 +61,7 @@ def extract_sigla(filename: str) -> str | None:
         m = pattern.search(stem)
         if m is None:
             continue
-        # The actual sigla token starts after the leading separator (if any).
-        sep_len = len(m.group()) - len(sigla)
-        token_start = m.start() + sep_len
-        candidates.append((token_start, sigla))
+        candidates.append((m.start(), sigla))
     if not candidates:
         return None
     # Earliest position wins; ties broken by longest sigla (most specific).

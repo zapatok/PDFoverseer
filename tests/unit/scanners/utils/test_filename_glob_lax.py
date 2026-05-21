@@ -49,6 +49,7 @@ def test_count_pdfs_recursive_via_pattern(tmp_path: Path):
     result = count_pdfs_by_sigla(tmp_path, sigla="andamios")
     assert result.count == 2
     assert result.files_scanned == 3
+    assert "some_files_unrecognized" in result.flags
 
 
 def test_count_pdfs_folder_missing_returns_zero_with_flag(tmp_path: Path):
