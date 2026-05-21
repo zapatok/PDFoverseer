@@ -38,7 +38,29 @@ class AnchorsScanner:
         )
 
     def count_ocr(self, folder: Path, *, cancel: CancellationToken) -> ScanResult:
-        """Pase 2 — A2 anchors over every multi-page PDF, A7 lock 1-pagers."""
+        """Run pase-2 OCR using header-band anchors (A2) with A7 one-page lock.
+
+        For each PDF in *folder*: single-page files contribute 1 document
+        without OCR (A7 lock); multi-page files are scanned by
+        ``count_covers_by_anchors`` using the flavors declared in
+        ``PATTERNS[sigla]``. Results are summed into a single ``ScanResult``.
+
+        Args:
+            folder: Directory containing the PDFs to scan.
+            cancel: Token checked before each PDF; raises ``CancelledError``
+                if the orchestrator has signalled cancellation.
+
+        Returns:
+            A ``ScanResult`` with:
+              - ``count``: total document covers found across all PDFs.
+              - ``method``: ``"header_band_anchors"`` (or ``"filename_glob"``
+                if no flavors are configured or all files are absent).
+              - ``confidence``: ``HIGH`` if no errors, ``LOW`` otherwise.
+              - ``flags``: includes ``"a7_one_page_locked"`` when at least one
+                single-page PDF was counted trivially.
+              - ``per_file``: per-filename document count.
+              - ``telemetry``: near-match entries if any were collected.
+        """
         cancel.check()
         base = self._filename_glob(folder)
         if "folder_missing" in base.flags:
@@ -52,11 +74,7 @@ class AnchorsScanner:
         flavors = pattern.get("cover_flavors", []) if pattern is not None else []
         if not flavors:
             return base
-        top_fraction = (
-            pattern.get("top_fraction", DEFAULT_TOP_FRACTION)
-            if pattern is not None
-            else DEFAULT_TOP_FRACTION
-        )
+        top_fraction = pattern.get("top_fraction", DEFAULT_TOP_FRACTION)  # pattern is non-None here
 
         start = time.perf_counter()
         total_count = 0

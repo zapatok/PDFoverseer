@@ -37,6 +37,28 @@ class PaginationScanner:
         )
 
     def count_ocr(self, folder: Path, *, cancel: CancellationToken) -> ScanResult:
+        """Run pase-2 OCR using 'Página N de M' pagination transitions (A7 lock).
+
+        For each PDF in *folder*: single-page files contribute 1 document
+        without OCR (A7 lock); multi-page files are scanned by
+        ``count_paginations`` which detects document boundaries via Spanish
+        pagination stamps in the upper-right corner.
+
+        Args:
+            folder: Directory containing the PDFs to scan.
+            cancel: Token checked before each PDF; raises ``CancelledError``
+                if the orchestrator has signalled cancellation.
+
+        Returns:
+            A ``ScanResult`` with:
+              - ``count``: total documents found across all PDFs.
+              - ``method``: ``"pagination"`` (or ``"filename_glob"`` when the
+                folder is missing or empty).
+              - ``confidence``: ``HIGH`` if no errors, ``LOW`` otherwise.
+              - ``flags``: includes ``"a7_one_page_locked"`` when at least one
+                single-page PDF was counted trivially.
+              - ``per_file``: per-filename document count.
+        """
         cancel.check()
         base = SimpleFilenameScanner(sigla=self.sigla).count(folder)
         if "folder_missing" in base.flags:

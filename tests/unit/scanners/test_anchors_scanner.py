@@ -18,14 +18,56 @@ def test_anchors_scanner_falls_through_to_filename_glob_for_pase1(tmp_path: Path
     assert result.count == 1
 
 
-def test_anchors_scanner_count_ocr_skips_when_no_multipage_pdf(tmp_path: Path):
-    """count_ocr only triggers OCR when at least one PDF has >1 pages."""
-    # Use a tiny but valid PDF (1 page) to skip OCR
+def test_anchors_scanner_count_ocr_returns_base_for_unknown_sigla(tmp_path: Path):
+    """A sigla absent from PATTERNS has no flavors, so count_ocr returns the
+    filename_glob base result unchanged (early return on empty flavors).
+
+    Note: this does NOT exercise the A7 one-page path — the function returns
+    before reaching that branch because 'andamios' is not in PATTERNS.
+    """
     pdf = tmp_path / "2026-04-15_andamios_chequeo.pdf"
     pdf.write_bytes(_one_page_pdf())
     scanner = AnchorsScanner(sigla="andamios")
     result = scanner.count_ocr(tmp_path, cancel=CancellationToken())
-    assert result.method == "filename_glob"  # nothing to scan
+    assert result.method == "filename_glob"  # unknown sigla → no flavors → base returned
+
+
+def test_anchors_scanner_a7_only_one_page_pdfs(tmp_path: Path, monkeypatch):
+    """A7 path: a folder containing only 1-page PDFs is handled without OCR.
+
+    With a known sigla (PATTERNS monkeypatched to have a flavor), every PDF
+    has page_count == 1, so each is counted trivially. count_covers_by_anchors
+    must NOT be called.
+    """
+    pdf_a = tmp_path / "2026-04-01_andamios_a.pdf"
+    pdf_b = tmp_path / "2026-04-02_andamios_b.pdf"
+    pdf_c = tmp_path / "2026-04-03_andamios_c.pdf"
+    for p in (pdf_a, pdf_b, pdf_c):
+        p.write_bytes(_one_page_pdf())
+
+    import core.scanners.anchors_scanner as _mod
+
+    monkeypatch.setattr(_mod, "PATTERNS", {"andamios": _FAKE_PATTERN})
+    monkeypatch.setattr(_mod, "get_page_count", lambda _: 1)
+
+    ocr_called = []
+
+    def _must_not_be_called(*args, **kw):
+        ocr_called.append(True)
+        raise AssertionError("count_covers_by_anchors must not be called when all PDFs are 1-page")
+
+    monkeypatch.setattr(
+        "core.scanners.anchors_scanner.count_covers_by_anchors",
+        _must_not_be_called,
+    )
+
+    scanner = AnchorsScanner(sigla="andamios")
+    result = scanner.count_ocr(tmp_path, cancel=CancellationToken())
+
+    assert result.method == "header_band_anchors"
+    assert "a7_one_page_locked" in result.flags
+    assert result.count == 3  # one trivial doc per 1-page PDF
+    assert not ocr_called, "count_covers_by_anchors was invoked unexpectedly"
 
 
 def _one_page_pdf() -> bytes:
