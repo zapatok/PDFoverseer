@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from core.scanners.utils.header_band_anchors import _normalize_text
+from core.scanners.patterns import Flavor
+from core.scanners.utils.header_band_anchors import (
+    FlavorMatchResult,
+    _match_flavor,
+    _normalize_text,
+)
 
 
 def test_normalize_text_lowercases():
@@ -23,3 +28,70 @@ def test_normalize_text_collapses_slashes_dashes():
     regardless of OCR noise around separators."""
     assert _normalize_text("SI/NO/NA") == "si no na"
     assert _normalize_text("F-CRS-LCH-05") == "f crs lch 05"
+
+
+# ---------------------------------------------------------------------------
+# Task 2.2: _match_flavor helper
+# ---------------------------------------------------------------------------
+
+
+def test_match_flavor_counts_anchors():
+    flavor: Flavor = {
+        "name": "f_test",
+        "anchors": ["ITEM", "ACTIVIDAD", "CUMPLE"],
+        "min_match": 2,
+    }
+    text = _normalize_text("ITEM ACTIVIDAD CUMPLE")
+    result = _match_flavor(text, flavor)
+    assert result.matched_anchors == ["item", "actividad", "cumple"]
+    assert result.passes
+    assert not result.anti_anchored
+
+
+def test_match_flavor_below_min_match_does_not_pass():
+    flavor: Flavor = {
+        "name": "f_test",
+        "anchors": ["A", "B", "C", "D"],
+        "min_match": 3,
+    }
+    text = _normalize_text("A B only")
+    result = _match_flavor(text, flavor)
+    assert len(result.matched_anchors) == 2
+    assert not result.passes
+
+
+def test_match_flavor_anti_anchor_disqualifies():
+    """A5: any anti-anchor match descalifica even if anchors >= min_match."""
+    flavor: Flavor = {
+        "name": "f_dif_pts_cover",
+        "anchors": [
+            "REGISTRO DE CHARLA",
+            "Nombre de la Capacitación",
+            "Cargo Relator",
+            "Tiempo duración charla",
+        ],
+        "min_match": 3,
+        "anti_anchors": ["TEST DE COMPRENSIÓN", "F-PETS-CRS"],
+    }
+    text = _normalize_text(
+        "REGISTRO DE CHARLA Nombre de la Capacitación Cargo Relator "
+        "Tiempo duración charla TEST DE COMPRENSIÓN"
+    )
+    result = _match_flavor(text, flavor)
+    assert len(result.matched_anchors) == 4
+    assert result.anti_anchored
+    assert not result.passes
+
+
+def test_match_flavor_anti_min_match_threshold():
+    """Custom anti_min_match: needs ≥ 2 anti-anchor matches to descalificar."""
+    flavor: Flavor = {
+        "name": "f_test",
+        "anchors": ["A", "B"],
+        "min_match": 1,
+        "anti_anchors": ["X", "Y", "Z"],
+        "anti_min_match": 2,
+    }
+    text = _normalize_text("A X")
+    result = _match_flavor(text, flavor)
+    assert result.passes  # only 1 anti-anchor matched; 2 needed

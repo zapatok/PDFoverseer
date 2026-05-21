@@ -15,7 +15,14 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from core.scanners.patterns import (
+    DEFAULT_ANTI_MIN_MATCH,
+    DEFAULT_MIN_MATCH,
+    Flavor,
+)
 
 if TYPE_CHECKING:
     pass
@@ -34,3 +41,39 @@ def _normalize_text(text: str) -> str:
     no_seps = _SEPARATORS_RX.sub(" ", lower)
     collapsed = _WHITESPACE_RX.sub(" ", no_seps)
     return collapsed.strip()
+
+
+@dataclass(frozen=True)
+class FlavorMatchResult:
+    """Per-page match outcome for a single flavor."""
+
+    matched_anchors: list[str]
+    matched_anti_anchors: list[str]
+    passes: bool  # True iff matched_anchors >= min_match AND anti_anchored is False
+    anti_anchored: bool  # True iff matched_anti_anchors >= anti_min_match
+
+
+def _match_flavor(normalized_text: str, flavor: Flavor) -> FlavorMatchResult:
+    """Count how many anchors / anti-anchors of a flavor match the page text."""
+    matched_anchors: list[str] = []
+    for anchor in flavor["anchors"]:
+        normalized = _normalize_text(anchor)
+        if normalized and normalized in normalized_text:
+            matched_anchors.append(normalized)
+
+    matched_anti: list[str] = []
+    for anti in flavor.get("anti_anchors", []):
+        normalized = _normalize_text(anti)
+        if normalized and normalized in normalized_text:
+            matched_anti.append(normalized)
+
+    min_match = flavor.get("min_match", DEFAULT_MIN_MATCH)
+    anti_min = flavor.get("anti_min_match", DEFAULT_ANTI_MIN_MATCH)
+    anti_anchored = len(matched_anti) >= anti_min
+    passes = len(matched_anchors) >= min_match and not anti_anchored
+    return FlavorMatchResult(
+        matched_anchors=matched_anchors,
+        matched_anti_anchors=matched_anti,
+        passes=passes,
+        anti_anchored=anti_anchored,
+    )
