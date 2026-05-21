@@ -6,6 +6,7 @@ import re
 
 import pytest
 
+from core.domain import SIGLAS
 from core.scanners.patterns import (
     PATTERNS,
     SCAN_STRATEGIES,
@@ -60,3 +61,30 @@ def test_flavor_anti_anchors_optional():
         "anti_min_match": 1,
     }
     assert flavor["anti_anchors"] == ["X"]
+
+
+def test_all_18_siglas_have_a_pattern_eventually():
+    """Final shape check. Will fail until chunks 4-5 populate the registry.
+    Skipped while WIP."""
+    missing = set(SIGLAS) - set(PATTERNS)
+    if missing:
+        pytest.skip(f"WIP — missing siglas: {sorted(missing)}")
+    assert set(PATTERNS) == set(SIGLAS), "patterns.py must cover exactly the 18 SIGLAS"
+
+
+def test_anchors_strategy_requires_cover_flavors():
+    """Sanity check: every entry with strategy='anchors' has cover_flavors."""
+    for sigla, pattern in PATTERNS.items():
+        if pattern["scan_strategy"] == "anchors":
+            assert "cover_flavors" in pattern, f"{sigla} declares anchors but has no cover_flavors"
+            assert len(pattern["cover_flavors"]) >= 1
+
+
+def test_flavor_naming_convention_a9():
+    """A9: flavor names start with 'f_' and are snake_case."""
+    rx = re.compile(r"^f_[a-z0-9_]+$")
+    for sigla, pattern in PATTERNS.items():
+        for flavor in pattern.get("cover_flavors", []):
+            assert rx.match(flavor["name"]), (
+                f"{sigla}: flavor name '{flavor['name']}' violates A9 (must match {rx.pattern})"
+            )
