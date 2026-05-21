@@ -8,18 +8,23 @@ from pathlib import Path
 
 from core.domain import SIGLAS
 
-# Capture the dash-free remainder between the date prefix and the .pdf suffix.
-# Sigla resolution (which token of the remainder is the sigla) happens against
-# the closed SIGLAS list — the previous regex-only approach broke on multi-word
-# siglas like `dif_pts` because non-greedy `[a-z_]+?` stopped at the first `_`.
-_FILENAME_REMAINDER_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}_(?P<rest>.+?)\.pdf$",
-    re.IGNORECASE,
-)
+# Token-boundary pattern for lax sigla extraction (A10).
+#
+# A sigla is recognised when it appears in the filename stem (without the
+# .pdf extension) surrounded by token separators: start-of-string, end-of-
+# string, or one of the characters [_\-.].  This is "lax" in that there is
+# no date-prefix requirement — it captures HLL mega-compilation files like
+# `2026-04_andamios.pdf` (no day component) and arbitrary-casing files like
+# `REUNION_OLD.PDF` — while still rejecting false positives where a sigla
+# name is an embedded substring of an unrelated word (e.g. `ext` inside
+# `extra`).
+_TOKEN_SEP = r"(?:^|[_\-.])"
+_TOKEN_END = r"(?:[_\-.]|$)"
 
-# Match longest siglas first so `dif_pts` wins over a hypothetical `dif`,
-# `herramientas_elec` over `herramientas`, etc.
-_SIGLAS_BY_LEN_DESC = sorted(SIGLAS, key=len, reverse=True)
+# Compiled per-sigla patterns keyed by sigla string.
+_SIGLA_PATTERNS: dict[str, re.Pattern[str]] = {
+    s: re.compile(_TOKEN_SEP + re.escape(s) + _TOKEN_END) for s in SIGLAS
+}
 
 
 @dataclass(frozen=True)
@@ -32,22 +37,46 @@ class GlobCountResult:
 
 
 def extract_sigla(filename: str) -> str | None:
-    """Extract the sigla from a canonical filename like
-    `2026-04-01_art_crs_andamios.pdf`. Returns None if format doesn't match
-    or no known sigla is present at the start of the remainder.
+    """Extract the sigla from a filename via lax matching (A10).
+
+    Lax: the sigla name may appear anywhere in the filename stem, bounded by
+    token separators (``^``, ``$``, ``_``, ``-``, ``.``).  Returns the sigla
+    whose token-boundary match starts earliest (left-most); ties broken by
+    longest (most specific) sigla.  Case-insensitive.
+
+    Handles substring overlaps: ``2026-04_chps_acta_reunion.pdf`` resolves to
+    ``chps`` (appears before ``reunion``), not ``reunion``.
+
+    No date-prefix requirement — captures HLL mega-compilation files like
+    ``2026-04_andamios.pdf`` (no day component) and arbitrary-casing files
+    like ``REUNION_OLD.PDF``.
     """
-    m = _FILENAME_REMAINDER_RE.match(filename)
-    if not m:
+    fn_lower = filename.lower()
+    if not fn_lower.endswith(".pdf"):
         return None
-    rest = m.group("rest").lower()
-    for sigla in _SIGLAS_BY_LEN_DESC:
-        if rest == sigla or rest.startswith(sigla + "_"):
-            return sigla
-    return None
+    # Strip the .pdf extension so end-of-string anchors work on the stem.
+    stem = fn_lower[: -len(".pdf")]
+    candidates: list[tuple[int, str]] = []  # (match_start, sigla)
+    for sigla, pattern in _SIGLA_PATTERNS.items():
+        m = pattern.search(stem)
+        if m is None:
+            continue
+        # The actual sigla token starts after the leading separator (if any).
+        sep_len = len(m.group()) - len(sigla)
+        token_start = m.start() + sep_len
+        candidates.append((token_start, sigla))
+    if not candidates:
+        return None
+    # Earliest position wins; ties broken by longest sigla (most specific).
+    candidates.sort(key=lambda t: (t[0], -len(t[1])))
+    return candidates[0][1]
 
 
 def count_pdfs_by_sigla(folder: Path, *, sigla: str) -> GlobCountResult:
-    """Count PDFs (recursively) where filename starts with the given sigla.
+    """Count PDFs (recursively) where filename contains the given sigla token.
+
+    A8: if ``folder`` does not exist, returns count=0 with flag
+    ``'folder_missing'``; no exception raised.
 
     Args:
         folder: Directory to search (may or may not exist).
@@ -55,7 +84,6 @@ def count_pdfs_by_sigla(folder: Path, *, sigla: str) -> GlobCountResult:
 
     Returns:
         GlobCountResult with count, method, files_scanned, and flags.
-        Returns count=0 with flag 'folder_missing' if folder doesn't exist.
     """
     if not folder.exists():
         return GlobCountResult(
