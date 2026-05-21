@@ -52,15 +52,9 @@ __all__ = [
 # --- Auto-register default scanners on import ---
 from core.domain import SIGLAS as _SIGLAS  # noqa: E402
 from core.scanners.anchors_scanner import AnchorsScanner  # noqa: E402
-from core.scanners.art_scanner import ArtScanner  # noqa: E402,F401
-from core.scanners.charla_scanner import CharlaScanner  # noqa: E402,F401
-from core.scanners.irl_scanner import IrlScanner  # noqa: E402,F401
-from core.scanners.odi_scanner import OdiScanner  # noqa: E402,F401
 from core.scanners.pagination_scanner import PaginationScanner  # noqa: E402
 from core.scanners.patterns import PATTERNS  # noqa: E402
 from core.scanners.simple_factory import SimpleFilenameScanner  # noqa: E402
-
-# TODO(Chunk 4): delete the specialized scanner modules + these imports
 
 
 def _build_scanner_for_sigla(sigla: str) -> Scanner:
