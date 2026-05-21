@@ -120,6 +120,19 @@ def test_match_flavor_near_match_flag():
     assert result.missing_anchors == ["c", "d"]
 
 
+def test_match_flavor_near_match_not_emitted_when_min_match_1():
+    """A14 guard: min_match=1 means 0 anchors is NOT a near-match (would be noise)."""
+    flavor: Flavor = {
+        "name": "f_test",
+        "anchors": ["XYZZY", "QUUX"],
+        "min_match": 1,
+    }
+    text = _normalize_text("completely unrelated content here")
+    result = _match_flavor(text, flavor)
+    assert not result.passes
+    assert not result.near_match  # 0 matches must NOT be a near-match
+
+
 # ---------------------------------------------------------------------------
 # Task 2.4: count_covers_by_anchors main entry
 # ---------------------------------------------------------------------------

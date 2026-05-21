@@ -84,7 +84,12 @@ def _match_flavor(normalized_text: str, flavor: Flavor) -> FlavorMatchResult:
     anti_min = flavor.get("anti_min_match", DEFAULT_ANTI_MIN_MATCH)
     anti_anchored = len(matched_anti) >= anti_min
     passes = len(matched_anchors) >= min_match and not anti_anchored
-    near_match = (not passes) and (not anti_anchored) and (len(matched_anchors) == min_match - 1)
+    near_match = (
+        (not passes)
+        and (not anti_anchored)
+        and min_match > 1
+        and (len(matched_anchors) == min_match - 1)
+    )
     return FlavorMatchResult(
         matched_anchors=matched_anchors,
         matched_anti_anchors=matched_anti,
@@ -97,7 +102,11 @@ def _match_flavor(normalized_text: str, flavor: Flavor) -> FlavorMatchResult:
 
 @dataclass(frozen=True)
 class NearMatch:
-    """A14: page that matched min_match - 1 anchors → candidate for new variant."""
+    """A14: page that matched min_match - 1 anchors → candidate for new variant.
+
+    Note: ``pdf_name`` is intentionally absent here; the calling scanner adds it
+    when building a ``NearMatchEntry`` (see ``core.scanners.base``).
+    """
 
     page_index: int
     flavor_name: str
@@ -107,6 +116,8 @@ class NearMatch:
 
 @dataclass(frozen=True)
 class AnchorCountResult:
+    """Aggregated result of the anchor-based cover scan for a single PDF."""
+
     count: int  # total cover pages across all flavors
     pages_total: int
     matches_per_flavor: dict[str, int] = field(default_factory=dict)
@@ -143,6 +154,11 @@ def count_covers_by_anchors(
     Returns:
         AnchorCountResult with the total cover count + per-flavor breakdown
         + near-match telemetry.
+
+    Raises:
+        PdfRenderError: if a page fails to render. Propagates to the caller —
+            this layer does not do partial scans. The scanner that wraps this
+            (AnchorsScanner) catches it at the PDF level and falls back.
     """
     pages_total = get_page_count(pdf_path)
     matches_per_flavor: dict[str, int] = {f["name"]: 0 for f in flavors}
