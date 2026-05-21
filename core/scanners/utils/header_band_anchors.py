@@ -15,17 +15,23 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+import pytesseract
+from PIL import Image
 
 from core.scanners.patterns import (
     DEFAULT_ANTI_MIN_MATCH,
     DEFAULT_MIN_MATCH,
+    DEFAULT_TOP_FRACTION,
     Flavor,
 )
+from core.scanners.utils.pdf_render import get_page_count, render_page_region
 
 if TYPE_CHECKING:
-    pass
+    from core.scanners.cancellation import CancellationToken
 
 
 _SEPARATORS_RX = re.compile(r"[/\-_]+")
@@ -86,4 +92,95 @@ def _match_flavor(normalized_text: str, flavor: Flavor) -> FlavorMatchResult:
         anti_anchored=anti_anchored,
         near_match=near_match,
         missing_anchors=missing_anchors,
+    )
+
+
+@dataclass(frozen=True)
+class NearMatch:
+    """A14: page that matched min_match - 1 anchors → candidate for new variant."""
+
+    page_index: int
+    flavor_name: str
+    matched_anchors: list[str]
+    missing_anchors: list[str]
+
+
+@dataclass(frozen=True)
+class AnchorCountResult:
+    count: int  # total cover pages across all flavors
+    pages_total: int
+    matches_per_flavor: dict[str, int] = field(default_factory=dict)
+    near_matches: list[NearMatch] = field(default_factory=list)
+    method: str = "header_band_anchors"
+
+
+def count_covers_by_anchors(
+    pdf_path: Path,
+    *,
+    flavors: list[Flavor],
+    top_fraction: float = DEFAULT_TOP_FRACTION,
+    dpi: int = 200,
+    cancel: CancellationToken | None = None,
+) -> AnchorCountResult:
+    """OCR the top band of each page; count pages that match any flavor (A4).
+
+    A page contributes exactly +1 to the total even if multiple flavors pass
+    (the first passing flavor "owns" the page in `matches_per_flavor`). This
+    avoids double-counting when anchor lists overlap.
+
+    Near-matches (A14): a page that matches min_match - 1 anchors of some
+    flavor (without anti-anchors firing) is recorded as a candidate for a
+    new template variant — surfaced to the operator via telemetry, not
+    counted toward `count`.
+
+    Args:
+        pdf_path: source PDF.
+        flavors: list of Flavor dicts from patterns.py.
+        top_fraction: fraction of page height OCR'd from the top (default 0.25).
+        dpi: OCR rendering resolution.
+        cancel: optional CancellationToken (cooperative cancellation).
+
+    Returns:
+        AnchorCountResult with the total cover count + per-flavor breakdown
+        + near-match telemetry.
+    """
+    pages_total = get_page_count(pdf_path)
+    matches_per_flavor: dict[str, int] = {f["name"]: 0 for f in flavors}
+    near_matches: list[NearMatch] = []
+    cover_pages = 0
+
+    bbox = (0.0, 0.0, 1.0, max(0.05, min(1.0, top_fraction)))
+
+    for page_idx in range(pages_total):
+        if cancel is not None:
+            cancel.check()
+        img: Image.Image = render_page_region(pdf_path, page_idx, bbox=bbox, dpi=dpi)
+        text = pytesseract.image_to_string(img, config="--psm 6 --oem 1", lang="spa+eng")
+        normalized = _normalize_text(text)
+
+        # First passing flavor wins this page; record near-match only if no flavor passes
+        owned = False
+        page_near: NearMatch | None = None
+        for flavor in flavors:
+            res = _match_flavor(normalized, flavor)
+            if res.passes:
+                matches_per_flavor[flavor["name"]] += 1
+                cover_pages += 1
+                owned = True
+                break
+            if res.near_match and page_near is None:
+                page_near = NearMatch(
+                    page_index=page_idx,
+                    flavor_name=flavor["name"],
+                    matched_anchors=res.matched_anchors,
+                    missing_anchors=res.missing_anchors,
+                )
+        if not owned and page_near is not None:
+            near_matches.append(page_near)
+
+    return AnchorCountResult(
+        count=cover_pages,
+        pages_total=pages_total,
+        matches_per_flavor=matches_per_flavor,
+        near_matches=near_matches,
     )

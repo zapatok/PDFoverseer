@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from PIL import Image
+
 from core.scanners.patterns import Flavor
 from core.scanners.utils.header_band_anchors import (
     FlavorMatchResult,
@@ -114,3 +118,68 @@ def test_match_flavor_near_match_flag():
     assert not result.passes
     assert result.near_match  # 2 == min_match - 1
     assert result.missing_anchors == ["c", "d"]
+
+
+# ---------------------------------------------------------------------------
+# Task 2.4: count_covers_by_anchors main entry
+# ---------------------------------------------------------------------------
+
+
+def test_count_covers_uses_first_passing_flavor(monkeypatch):
+    """A page counts as 1 cover if ANY flavor passes (A4, no double-counting)."""
+    import core.scanners.utils.header_band_anchors as mod
+
+    page_texts = [
+        "ITEM ACTIVIDAD CUMPLE Página 1 de",  # passes f_lch_xx
+        "ITEM ACTIVIDAD",  # near-match
+        "TITAN CHECK LIST HERRAMIENTAS ELÉCTRICAS",  # passes f_titan
+        "unrelated content",  # no match
+    ]
+
+    def fake_get_page_count(_path):
+        return len(page_texts)
+
+    def fake_render(_path, page_idx, **_):
+        # Return placeholder image; real OCR is stubbed below
+        return Image.new("RGB", (10, 10), "white")
+
+    fake_ocr_call_count = {"n": 0}
+
+    def patched_ocr(img, **kw):
+        text = page_texts[fake_ocr_call_count["n"]]
+        fake_ocr_call_count["n"] += 1
+        return text
+
+    monkeypatch.setattr(mod, "get_page_count", fake_get_page_count)
+    monkeypatch.setattr(mod, "render_page_region", fake_render)
+    monkeypatch.setattr(mod.pytesseract, "image_to_string", patched_ocr)
+
+    flavors: list[Flavor] = [
+        {
+            "name": "f_lch_xx",
+            "anchors": ["ITEM", "ACTIVIDAD", "CUMPLE", "Página 1 de"],
+            "min_match": 3,
+        },
+        {
+            "name": "f_titan",
+            "anchors": ["TITAN", "CHECK LIST", "HERRAMIENTAS ELÉCTRICAS"],
+            "min_match": 3,
+        },
+    ]
+
+    from core.scanners.utils.header_band_anchors import count_covers_by_anchors
+
+    result = count_covers_by_anchors(
+        Path("/fake.pdf"),
+        flavors=flavors,
+        top_fraction=0.25,
+    )
+    assert result.count == 2
+    assert result.pages_total == 4
+    assert sorted(result.matches_per_flavor.keys()) == ["f_lch_xx", "f_titan"]
+    assert result.matches_per_flavor["f_lch_xx"] == 1
+    assert result.matches_per_flavor["f_titan"] == 1
+    # The near-match on page 1 (index 1) lands in telemetry
+    assert len(result.near_matches) == 1
+    assert result.near_matches[0].page_index == 1
+    assert result.near_matches[0].flavor_name == "f_lch_xx"
