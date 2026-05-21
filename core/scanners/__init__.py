@@ -51,28 +51,43 @@ __all__ = [
 
 # --- Auto-register default scanners on import ---
 from core.domain import SIGLAS as _SIGLAS  # noqa: E402
+from core.scanners.anchors_scanner import AnchorsScanner  # noqa: E402
 from core.scanners.art_scanner import ArtScanner  # noqa: E402
 from core.scanners.charla_scanner import CharlaScanner  # noqa: E402
 from core.scanners.irl_scanner import IrlScanner  # noqa: E402
 from core.scanners.odi_scanner import OdiScanner  # noqa: E402
-from core.scanners.simple_factory import make_simple_scanner as _make  # noqa: E402
+from core.scanners.pagination_scanner import PaginationScanner  # noqa: E402
+from core.scanners.patterns import PATTERNS  # noqa: E402
+from core.scanners.simple_factory import SimpleFilenameScanner  # noqa: E402
 
+# ArtScanner / OdiScanner / IrlScanner / CharlaScanner imported above as dead
+# code — Chunk 4 will delete them once the per-sigla patterns are complete.
 _SPECIALIZED = (ArtScanner(), OdiScanner(), IrlScanner(), CharlaScanner())
 
 
-def register_defaults() -> None:
-    """Register all 18 sigla scanners.
+def _build_scanner_for_sigla(sigla: str) -> Scanner:
+    """Pick the Scanner class based on patterns.py scan_strategy."""
+    if sigla not in PATTERNS:
+        # Not in registry yet (WIP) — fall back to SimpleFilenameScanner
+        return SimpleFilenameScanner(sigla=sigla)
+    strategy = PATTERNS[sigla]["scan_strategy"]
+    if strategy == "anchors":
+        return AnchorsScanner(sigla=sigla)
+    if strategy == "pagination":
+        return PaginationScanner(sigla=sigla)
+    # "none"
+    return SimpleFilenameScanner(sigla=sigla)
 
-    Specialized scanners (art/odi/irl/charla) are registered first; the
-    remaining 14 fall back to SimpleFilenameScanner via _make. Idempotent —
-    safe to call after clear().
+
+def register_defaults() -> None:
+    """Register one scanner per sigla in core.domain.SIGLAS.
+
+    Picks the concrete scanner class based on patterns.py scan_strategy.
+    Idempotent — safe to call after clear().
     """
-    for scanner in _SPECIALIZED:
-        if not has(scanner.sigla):
-            register(scanner)
     for sigla in _SIGLAS:
         if not has(sigla):
-            register(_make(sigla))
+            register(_build_scanner_for_sigla(sigla))
 
 
 register_defaults()
