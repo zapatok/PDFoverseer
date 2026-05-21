@@ -95,3 +95,22 @@ def test_match_flavor_anti_min_match_threshold():
     text = _normalize_text("A X")
     result = _match_flavor(text, flavor)
     assert result.passes  # only 1 anti-anchor matched; 2 needed
+
+
+# ---------------------------------------------------------------------------
+# Task 2.3: near_match signal + missing_anchors
+# ---------------------------------------------------------------------------
+
+
+def test_match_flavor_near_match_flag():
+    """A14: a page with min_match - 1 anchors is a near-match candidate."""
+    flavor: Flavor = {
+        "name": "f_test",
+        "anchors": ["A", "B", "C", "D"],
+        "min_match": 3,
+    }
+    text = _normalize_text("A B nothing-else")
+    result = _match_flavor(text, flavor)
+    assert not result.passes
+    assert result.near_match  # 2 == min_match - 1
+    assert result.missing_anchors == ["c", "d"]

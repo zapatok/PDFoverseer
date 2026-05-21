@@ -51,15 +51,22 @@ class FlavorMatchResult:
     matched_anti_anchors: list[str]
     passes: bool  # True iff matched_anchors >= min_match AND anti_anchored is False
     anti_anchored: bool  # True iff matched_anti_anchors >= anti_min_match
+    near_match: bool  # A14: matched == min_match - 1 AND not anti_anchored
+    missing_anchors: list[str]  # anchors NOT matched (normalized form)
 
 
 def _match_flavor(normalized_text: str, flavor: Flavor) -> FlavorMatchResult:
     """Count how many anchors / anti-anchors of a flavor match the page text."""
     matched_anchors: list[str] = []
+    missing_anchors: list[str] = []
     for anchor in flavor["anchors"]:
         normalized = _normalize_text(anchor)
-        if normalized and normalized in normalized_text:
+        if not normalized:
+            continue
+        if normalized in normalized_text:
             matched_anchors.append(normalized)
+        else:
+            missing_anchors.append(normalized)
 
     matched_anti: list[str] = []
     for anti in flavor.get("anti_anchors", []):
@@ -71,9 +78,12 @@ def _match_flavor(normalized_text: str, flavor: Flavor) -> FlavorMatchResult:
     anti_min = flavor.get("anti_min_match", DEFAULT_ANTI_MIN_MATCH)
     anti_anchored = len(matched_anti) >= anti_min
     passes = len(matched_anchors) >= min_match and not anti_anchored
+    near_match = (not passes) and (not anti_anchored) and (len(matched_anchors) == min_match - 1)
     return FlavorMatchResult(
         matched_anchors=matched_anchors,
         matched_anti_anchors=matched_anti,
         passes=passes,
         anti_anchored=anti_anchored,
+        near_match=near_match,
+        missing_anchors=missing_anchors,
     )
