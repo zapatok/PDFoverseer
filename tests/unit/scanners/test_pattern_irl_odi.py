@@ -41,9 +41,10 @@ def _load_gt(path: Path) -> dict:
 def test_irl_count_ocr_smoke():
     """AnchorsScanner returns 1 cover for the 54-page IRL booklet fixture.
 
-    The booklet embeds many sub-forms that each start a new 'pagina 1 de N'
-    section.  The IRL cover anchors ('informacion de riesgos laborales' +
-    'f crs odi 01') must fire exactly once — on the real IRL cover page.
+    The booklet embeds many sub-forms, each with its own 'pagina N de M'
+    header.  The IRL flavor pairs 'pagina 1 de' (a page-1 marker) with
+    'fecha de realizacion' — the attendance-section field present only on the
+    real IRL cover — so the pair fires exactly once across the 54 pages.
     """
     if not _IRL_PDF.exists():
         pytest.skip("IRL fixture PDF not present (gitignored)")

@@ -61,17 +61,19 @@ DEFAULT_ANTI_MIN_MATCH: int = 1
 # ---------------------------------------------------------------------------
 # ART anchor constants (OCR-verified 2026-05-21 against f_art_01_p1.pdf)
 #
-# top_fraction=0.40 is required: at 0.25 the pagina field is below the crop
-# boundary. ART form code appears in the header band on all pages; the page
-# number field "pagina 1de" (OCR rendering of "Página 1 de 4" — note no space
-# before the digit) is present ONLY on the cover; "analisis de riesgos"
-# appears on all pages as the form title, so both must match (min_match=2).
+# top_fraction=0.40 chosen empirically — at 0.25 the cover band did not
+# reliably yield the anchor pair under OCR. "analisis de riesgos" is the form
+# title and appears on every page; "pagina 1" is the cover-only discriminator
+# (the header pagination reads "Página 1 de 4" on the cover, "Página 2 de 4"
+# etc. on continuations). The anchor is "pagina 1" — not "pagina 1 de" — so it
+# tolerates OCR rendering the digit with or without a space ("1 de" / "1de").
+# Both anchors must match (min_match=2).
 # ---------------------------------------------------------------------------
 _ART_ANCHORS: list[Flavor] = [
     {
         "name": "f_crs_art_01",
         "anchors": [
-            "pagina 1de",  # OCR of "Página 1 de 4" — cover only at top_fraction=0.40
+            "pagina 1",  # cover-only — header pagination start; space-tolerant
             "analisis de riesgos",  # ART form title, present on all pages (makes pair unique)
         ],
         "min_match": 2,
@@ -135,7 +137,7 @@ _ODI_ANCHORS: list[Flavor] = [
 # appears only on cover pages (P1 and P3). min_match=2 pairs the title
 # (universal) with the cover-specific field label.
 # ---------------------------------------------------------------------------
-CRS_RCH_ANCHORS: list[Flavor] = [
+_CHARLA_ANCHORS: list[Flavor] = [
     {
         "name": "f_crs_rch_01",
         "anchors": [
@@ -171,7 +173,7 @@ PATTERNS: dict[str, SiglaPattern] = {
     "charla": {
         "filename_glob": r"^.*charla.*\.pdf$",
         "scan_strategy": "anchors",
-        "cover_flavors": CRS_RCH_ANCHORS,
+        "cover_flavors": _CHARLA_ANCHORS,
     },
     # ... remaining entries llenadas en chunks posteriores
 }
