@@ -1,7 +1,8 @@
 """Count document boundaries by detecting "Página N de M" transitions.
 
-Used by art_scanner when ART folders contain a compilation PDF.
-Each new document starts at page 1 of a new pagination series.
+Used by PaginationScanner (scan_strategy="pagination") to count documents
+in compilations. Each new document starts at page 1 of a new pagination
+series.
 
 Reuses regex + digit normalization from core/utils when available, falls
 back to a local pattern otherwise.

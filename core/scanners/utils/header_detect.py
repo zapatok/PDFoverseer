@@ -1,8 +1,10 @@
 """Find `F-CRS-XXX/NN` form codes in the top-third of each PDF page.
 
-Used by odi_scanner and irl_scanner to count documents in compilations.
-The form code pattern is canonical to CRS prevention paperwork:
-`F-CRS-ODI/03`, `F-CRS-IRL/45`, etc.
+Form-code detection helper. The odi/irl scanners that used it were
+replaced by the data-driven AnchorsScanner; retained as a documented,
+tested utility for potential reuse as a fallback path. The form code
+pattern is canonical to CRS prevention paperwork: `F-CRS-ODI/03`,
+`F-CRS-IRL/45`, etc.
 """
 
 from __future__ import annotations
