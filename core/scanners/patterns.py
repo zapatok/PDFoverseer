@@ -679,6 +679,9 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*herramientas_elec.*\.pdf$",
         "scan_strategy": "anchors",
         "recursive_glob": True,
+        # top_fraction 1/3 (not the 0.25 default): the HLL REG-SSO-HLL-17
+        # form-code sits lower than the 0.25 band. All three flavors' anchor
+        # hit-rates (see comment above) were OCR-verified in this top-third band.
         "top_fraction": 1 / 3,
         "cover_flavors": _HERRAMIENTAS_ELEC_ANCHORS,
     },
@@ -688,7 +691,6 @@ PATTERNS: dict[str, SiglaPattern] = {
         "recursive_glob": True,
         "cover_flavors": _ANDAMIOS_ANCHORS,
     },
-    # ... remaining entries llenadas en chunks posteriores
 }
 
 
