@@ -1,0 +1,6 @@
+{
+  "fixture": "senal_chequeos.pdf",
+  "pages": 6,
+  "covers_expected": 6,
+  "notes": "6 pages; each page is a standalone senaletica checklist; top_fraction=1.0 needed (landscape forms); all are covers"
+}

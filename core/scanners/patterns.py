@@ -237,6 +237,32 @@ _CHPS_ANCHORS: list[Flavor] = [
 # "pagina 1 de" would get only 2 hits ("chequeo extintores" + "f crs lch")
 # and would not count as a cover.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Senal anchor constants (OCR-verified 2026-05-21 against senal_chequeos.pdf —
+# 6-page HPV compilation; all 6 pages are standalone senaletica checklists).
+#
+# Senal forms use landscape/mixed orientations — the form title "LISTA DE
+# CHEQUEO DE SEÑALÉTICA DE SEGURIDAD" and "CONSTRUCTORA REGION SUR" appear
+# in different positions depending on form variant.  top_fraction=1.0 is
+# required: at 0.25 many pages miss both anchors due to layout variance.
+# With full-page scan both anchors appear on every page (each is its own
+# standalone cover — no continuation pages).
+# Plan candidates ("F-PETS-CRS", "FECHA", "EMPRESA CONTRATISTA") were DROPPED:
+# "F-PETS-CRS" yields "f pets crs" which only appeared on 1/6 pages; the
+# others were not in the OCR top region consistently.
+# min_match=2 requires both anchors simultaneously.
+# ---------------------------------------------------------------------------
+_SENAL_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_pets_crs_xx",
+        "anchors": [
+            "lista de chequeo de senaletica de seguridad",  # form title — all pages
+            "constructora region sur",  # org name — all pages
+        ],
+        "min_match": 2,
+    },
+]
+
 _EXT_ANCHORS: list[Flavor] = [
     {
         # Intersection of header labels across F-CRS-LCH-18 template (HPV corpus).
@@ -309,6 +335,13 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*bodega.*\.pdf$",
         "scan_strategy": "anchors",
         "cover_flavors": _BODEGA_ANCHORS,
+    },
+    "senal": {
+        "filename_glob": r"^.*senal.*\.pdf$",
+        "scan_strategy": "anchors",
+        "recursive_glob": True,
+        "cover_flavors": _SENAL_ANCHORS,
+        "top_fraction": 1.0,
     },
     "ext": {
         "filename_glob": r"^.*ext.*\.pdf$",
