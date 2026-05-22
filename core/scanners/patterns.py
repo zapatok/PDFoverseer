@@ -208,55 +208,49 @@ _CHARLA_ANCHORS: list[Flavor] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Bodega anchor constants (OCR-verified 2026-05-21 against
-# f_pets_07_03_p1_chequeo.pdf — 4-page HPV compilation with 4 separate
-# bodega cover pages, each "Pagina 1 de 1").
+# Bodega anchor constants (verbatim from spec §9 · bodega).
 #
-# The form header reads "CHEQUEO BODEGA SUSPEL/RESPEL  F-PETS-CRS-07-03"
-# followed by "CONSTRUCTORA REGION SUR S.A." — all present in the top 25%
-# band on every page.  With min_match=3 the triple
-# ("chequeo bodega" ∩ "f pets crs" ∩ "bodega suspel") fires on every
-# page — which is CORRECT: each page of this PDF is a separate 1-page
-# document (distinct dates/RESPEL sections); all 4 are covers.
-# "bodega respel" was NOT verified in the top 25% band (OCR sees it as part
-# of "suspel/respel" without a leading "bodega " prefix); dropped from the
-# working anchor set.  "realizado por" and "obra" appear sporadically; kept
-# as optional extras that do not affect min_match=3 firing.
+# Mono-flavor f_pets_07_03 (no-CRS-prefixed code preserved per A9).
+# 6 anclas / min_match=3 (regla universal). Restaurada 2026-05-22 tras
+# anchor-truncation postmortem (estaba a 5 anclas con un literal truncado
+# "f pets crs" en vez del código completo "f pets crs 07 03" y omitía
+# "bodega respel" basándose en una verificación empírica del implementer).
 # ---------------------------------------------------------------------------
 _BODEGA_ANCHORS: list[Flavor] = [
     {
         "name": "f_pets_07_03",
         "anchors": [
-            "chequeo bodega",  # Form title — all bodega covers
-            "f pets crs",  # Form-code family prefix (A12) — all bodega covers
-            "bodega suspel",  # Section label — present on cover band
-            "realizado por",  # Signatory field — optional extra
-            "obra",  # Site field — optional extra
+            "chequeo bodega suspel respel",  # form title (slash→space)
+            "f pets crs 07 03",  # full form code (A12 family prefix + suffix)
+            "obra",  # site field
+            "realizado por",  # signatory field
+            "bodega suspel",  # section label
+            "bodega respel",  # section label
         ],
         "min_match": 3,
     },
 ]
 
 # ---------------------------------------------------------------------------
-# CHPS anchor constants (OCR-verified 2026-05-21 against
-# f_ar_01_p1_acta_reunion.pdf — 3-page HPV CHPS meeting minutes).
+# CHPS anchor constants (verbatim from spec §18 · chps).
 #
-# "acta de reunion" appears in the running header of all 3 pages.
-# "f crs ar" (form-code family prefix) also appears in the running header.
-# "lista de convocados" is ONLY on the cover (page 1 attendee table).
-# "hospital de" and "lugar de la reunion" are also cover-only fields.
-# min_match=3: cover (p1) gets ≥5 matches; continuations (p2/p3) get 2
-# ("acta de reunion" + "f crs ar") → not counted as covers.
+# Mono-flavor f_ar_01 (Acta de Reunión CHPS, F-CRS-AR-01). 7 anclas /
+# min_match=3 (regla universal). Restaurada 2026-05-22 tras
+# anchor-truncation postmortem (estaba a 5 anclas — faltaba "desarrollo de
+# la reunion" + "pagina 1 de", y el código estaba truncado a "f crs ar"
+# en vez del código completo "f crs ar 01").
 # ---------------------------------------------------------------------------
 _CHPS_ANCHORS: list[Flavor] = [
     {
         "name": "f_ar_01",
         "anchors": [
-            "acta de reunion",  # Form title — all pages (running header)
-            "f crs ar",  # Form-code family prefix (A12) — all pages (running header)
-            "lista de convocados",  # Attendee table header — cover only (p1)
-            "hospital de",  # Site field — cover only (p1)
-            "lugar de la reunion",  # Meeting location field — cover only (p1)
+            "acta de reunion",  # form title — running header
+            "f crs ar 01",  # full form code (A12 family prefix + suffix)
+            "lista de convocados",  # attendee table header — cover only
+            "desarrollo de la reunion",  # section header — cover only
+            "hospital de",  # site field — cover only
+            "lugar de la reunion",  # meeting location field — cover only
+            "pagina 1 de",  # cover marker
         ],
         "min_match": 3,
     },
@@ -384,24 +378,26 @@ _CALIENTE_ANCHORS: list[Flavor] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Exc anchor constants (OCR-verified 2026-05-21 against exc_chequeos.pdf —
-# 23-page HPV compilation; all 23 pages are standalone 1-page excavacion
-# checklists "Página 1 de 1").
+# Exc anchor constants (verbatim from spec §13 · exc).
 #
-# The form header reads "EXCAVACIONES" (or "EXCAVACION" depending on template)
-# and "F-CRS-LCH-xx" (normalizes to "f crs lch").  "CONSTRUCTORA REGION SUR"
-# and "Página 1 de 1" also appear in the top 25% band.  min_match=3: every
-# standalone cover gets ≥3 of the four hits; a hypothetical continuation page
-# (pagina 2 de N) would miss "pagina 1 de" and drop to ≤2 hits.
+# Mono-flavor por intersección (cubre LCH-31 + LCH-034). 8 anclas /
+# min_match=3 (regla universal). Restaurada 2026-05-22 tras
+# anchor-truncation postmortem (estaba a 4 anclas, una de ellas inventada
+# por el implementer — "f crs lch" — que NO está en el spec; el spec usa
+# field-labels específicos de la excavación).
 # ---------------------------------------------------------------------------
 _EXC_ANCHORS: list[Flavor] = [
     {
-        "name": "f_lch_xx",
+        "name": "f_lch_xx",  # A9 — cubre LCH-31 + LCH-034 por intersección
         "anchors": [
-            "excavaciones",  # form title — all pages
-            "constructora region sur",  # org name — all pages
-            "f crs lch",  # form-code family prefix (A12) — all pages
-            "pagina 1 de",  # cover-only discriminator — "Pagina 1 de 1"
+            "excavaciones",  # form title
+            "sector inspeccionado",  # field label
+            "obra",  # field label
+            "fecha",  # field label
+            "cargo",  # field label
+            "constructora region sur spa",  # org name (with SpA suffix per spec)
+            "descripcion",  # field label
+            "pagina 1 de",  # cover marker
         ],
         "min_match": 3,
     },
@@ -433,20 +429,25 @@ _SENAL_ANCHORS: list[Flavor] = [
     },
 ]
 
+# ---------------------------------------------------------------------------
+# Ext anchor constants (verbatim from spec §11 · ext).
+#
+# Mono-flavor por intersección de field-labels (cubre LCH-18 + LCH-37).
+# 6 anclas / min_match=3 (regla universal). Restaurada 2026-05-22 tras
+# anchor-truncation postmortem (estaba a 4 anclas, dos de ellas inventadas
+# por el implementer — "f crs lch" + "constructora region sur" — que NO
+# están en el spec; el spec usa field-labels específicos del extintor).
+# ---------------------------------------------------------------------------
 _EXT_ANCHORS: list[Flavor] = [
     {
-        # Intersection of header labels across F-CRS-LCH-18 template (HPV corpus).
-        # "chequeo extintores" is the form title — present on all pages.
-        # "f crs lch" is the form-code family prefix (A12) — present on all pages.
-        # "pagina 1 de" is the cover-only discriminator — "Pagina 1 de 1" on covers.
-        # "constructora region sur" is the org name — present on most pages.
-        # min_match=3 requires three of these four simultaneously.
-        "name": "f_lch_xx",
+        "name": "f_lch_xx",  # A9 — cubre LCH-18 + LCH-37 por intersección
         "anchors": [
-            "chequeo extintores",  # form title — all pages
-            "f crs lch",  # form-code family prefix (A12) — all pages
-            "pagina 1 de",  # cover-only discriminator — "Pagina 1 de 1"
-            "constructora region sur",  # org name — most pages (OCR noise may drop)
+            "chequeo extintores",  # form title
+            "ubicacion del extintor",  # field label
+            "numero de serie del extintor",  # field label (distinctive)
+            "fecha de vencimiento del extintor",  # field label
+            "tipo de extintor",  # field label
+            "pagina 1 de",  # cover marker
         ],
         "min_match": 3,
     },
