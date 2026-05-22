@@ -565,47 +565,56 @@ _HERRAMIENTAS_ELEC_ANCHORS: list[Flavor] = [
 
 
 # ---------------------------------------------------------------------------
-# Andamios anchor constants (OCR-verified 2026-05-22).
+# Andamios anchor constants (verbatim from spec §17 · andamios).
 #
-# Two flavors found in the corpus:
+# Multi-flavor (2 sabores):
 #
-# f_lch_xx  — Standard CRS template (F-CRS-LCH-05 "Lista de Chequeo de
-#   Andamios").  Multiple forms are compiled into a single PDF; each cover page
-#   reads "Pagina 1 de N" and carries both 'lista de chequeo de andamios' and
-#   'datos del andamio'.  Continuation pages miss at least one of these.
-#   min_match=2 of 3 anchors — robust across varying scan quality.
-#   Anti-anchor: 'analisis de riesgos en el trabajo' / 'f crs art' reject ART
-#   armado_titan forms that are sometimes misfiled in the andamios folder.
-#   ART pages naturally fail f_lch_xx anchor matching (0 hits) — the
-#   anti_anchors are defense in depth.
+# f_lch_05  — Familia CRS estándar F-CRS-LCH-05 "LISTA DE CHEQUEO DE
+#   ANDAMIOS", ~95% del corpus (incluye HPV/HRB/HLL — HLL aquí viene en
+#   portrait, no landscape). 9 anclas, min_match=4 (redundancia útil con
+#   varios section headers). Anti-anchors rechazan ARTs cross-categoría
+#   (HPV/TITAN `*_armado_*.pdf` son F-CRS-ART-01, no chequeos de andamio).
 #
-# f_ribeiro — RIBEIRO SPA proprietary form ("Lista de Verificación Andamios").
-#   'linea de negocio' (corporativo selector row) and 'inspeccion de andamios'
-#   (section header) appear reliably at default top-25%.  'ribeiro' in the logo
-#   area adds a third candidate; min_match=2 of 3 fires on both 0.25 and 0.5.
+# f_ribeiro  — Sabor minoritario HRB "RIBEIRO SPA / 1cl-1890". 6 anclas,
+#   min_match=3.
+#
+# Restaurada 2026-05-22 tras anchor-truncation postmortem (f_lch_05 estaba
+# truncada a 3 anclas/min_match=2; f_ribeiro a 3 anclas/min_match=2).
+# El flavor f_lch_05 también fue renombrado desde "f_lch_xx" — el spec da
+# el código exacto F-CRS-LCH-05 (no hay variantes numéricas observadas en
+# esta sigla, a diferencia de herramientas_elec).
 # ---------------------------------------------------------------------------
 _ANDAMIOS_ANCHORS: list[Flavor] = [
     {
-        "name": "f_lch_xx",
+        "name": "f_lch_05",  # A9 — exact form code F-CRS-LCH-05
         "anchors": [
-            "lista de chequeo de andamios",  # form title — all cover pages
-            "datos del andamio",  # structural section header — cover pages
-            "pagina 1 de",  # cover-only discriminator
+            "lista de chequeo de andamios",  # form title — universal
+            "constructora region sur",  # header subtitle
+            "f crs lch 05",  # form code (no observed variants)
+            "tipo andamio",  # field label (FACHADA / MULTIDIRECCIONAL)
+            "datos del andamio",  # section header
+            "superficie de apoyo",  # section header
+            "estructura del andamio",  # section header
+            "plataformas de trabajo",  # section header
+            "pagina 1 de",  # cover marker
         ],
-        "min_match": 2,
+        "min_match": 4,
         "anti_anchors": [
             "analisis de riesgos en el trabajo",  # ART form title — rejects misfiled ARTs
-            "f crs art",  # ART form-code family prefix (A12) — secondary guard
+            "f crs art 01",  # ART form code (full A12 family prefix)
         ],
     },
     {
-        "name": "f_ribeiro",
+        "name": "f_ribeiro",  # A9 — RIBEIRO SPA propietario
         "anchors": [
-            "linea de negocio",  # RIBEIRO corporativo selector — all covers
-            "inspeccion de andamios",  # RIBEIRO section header — all covers
-            "ribeiro",  # contractor name in logo area
+            "ribeiro spa",  # contractor name
+            "lista de verificacion andamios",  # form title
+            "1cl 1890",  # form code (hyphen→space)
+            "inspeccion de andamios",  # section header
+            "centro de trabajo",  # field label
+            "linea de negocio",  # corporativo selector row
         ],
-        "min_match": 2,
+        "min_match": 3,
     },
 ]
 
