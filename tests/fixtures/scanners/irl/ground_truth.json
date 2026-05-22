@@ -1,0 +1,6 @@
+{
+  "fixture": "f_irl_01_p1.pdf",
+  "pages": 54,
+  "covers_expected": 1,
+  "notes": "54-page IRL induction booklet. The IRL cover (P1) has 'informacion de riesgos laborales' + 'f crs odi 01'. Pages 33+ are embedded sub-documents (test forms, procedures, declarations) each with their own pagina-1-de header, but none match the IRL cover anchors."
+}

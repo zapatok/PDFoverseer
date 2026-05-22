@@ -58,12 +58,122 @@ DEFAULT_MIN_MATCH: int = 3
 DEFAULT_ANTI_MIN_MATCH: int = 1
 
 
+# ---------------------------------------------------------------------------
+# ART anchor constants (OCR-verified 2026-05-21 against f_art_01_p1.pdf)
+#
+# top_fraction=0.40 is required: at 0.25 the pagina field is below the crop
+# boundary. ART form code appears in the header band on all pages; the page
+# number field "pagina 1de" (OCR rendering of "Página 1 de 4" — note no space
+# before the digit) is present ONLY on the cover; "analisis de riesgos"
+# appears on all pages as the form title, so both must match (min_match=2).
+# ---------------------------------------------------------------------------
+_ART_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_crs_art_01",
+        "anchors": [
+            "pagina 1de",  # OCR of "Página 1 de 4" — cover only at top_fraction=0.40
+            "analisis de riesgos",  # ART form title, present on all pages (makes pair unique)
+        ],
+        "min_match": 2,
+    },
+]
+
+# ---------------------------------------------------------------------------
+# IRL anchor constants (OCR-verified 2026-05-21 against f_irl_01_p1.pdf)
+#
+# IRL booklets are 50+ page compilations (pages 1-32 are the core booklet;
+# pages 33+ are embedded sub-forms: test de comprension, declarations, etc.).
+# The booklet running header ("f crs odi 01" + title) repeats on EVERY page
+# of the 32-page section — it cannot discriminate P1 from P2-P32.
+# The body intro "forma oportuna" also repeats verbatim (DS-44 article text).
+#
+# The IRL *cover* (P1) is uniquely identified by attendance-section fields:
+#   "pagina 1 de"           — page-1 marker; absent on pages 2-32 (pagina 2 de
+#                             32 etc.); sub-form covers at pages 33+ also have
+#                             pagina-1-de but lack the second anchor.
+#   "fecha de realizacion"  — attendance header field present only on the IRL
+#                             cover; absent from all sub-form covers (test
+#                             forms, declarations, cartillas at pages 33+).
+# min_match=2 requires both simultaneously.
+# ---------------------------------------------------------------------------
+_IRL_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_crs_odi_01",
+        "anchors": [
+            "pagina 1 de",  # page-1 marker — P1 only among the 32-page booklet
+            "fecha de realizacion",  # attendance field — IRL cover only, absent from sub-forms
+        ],
+        "min_match": 2,
+    },
+]
+
+# ---------------------------------------------------------------------------
+# ODI anchor constants (OCR-verified 2026-05-21 against f_odi_01_p1.pdf)
+#
+# ODI is a 2-page form. Both pages share the title "obligacion de informar
+# visita" in the header. Only the cover (P1) has "nombre completo" (the
+# signature field section). P2 has "induccion inicial" in its body. Using
+# title + signature-field anchor discriminates P1 uniquely. min_match=2.
+# ---------------------------------------------------------------------------
+_ODI_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_crs_odi_03",
+        "anchors": [
+            "obligacion de informar visita",  # ODI title — both pages
+            "nombre completo",  # Signature table header — cover only
+        ],
+        "min_match": 2,
+    },
+]
+
+# ---------------------------------------------------------------------------
+# Charla anchor constants (OCR-verified 2026-05-21 against f_rch_p1.pdf)
+#
+# Charla PDFs are multi-document compilations: P1 and P3 are both covers
+# (separate charla sessions), P2 is the continuation of the first session.
+# "registro de charla" appears in all pages' headers; "nombre de la charla"
+# appears only on cover pages (P1 and P3). min_match=2 pairs the title
+# (universal) with the cover-specific field label.
+# ---------------------------------------------------------------------------
+CRS_RCH_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_crs_rch_01",
+        "anchors": [
+            "registro de charla",  # Charla form title — all pages
+            "nombre de la charla",  # Session title field — cover pages only
+        ],
+        "min_match": 2,
+    },
+]
+
+
 PATTERNS: dict[str, SiglaPattern] = {
     "reunion": {
         "filename_glob": r"^.*reunion.*\.pdf$",
         "scan_strategy": "none",
     },
-    # ... 17 entries más, llenadas en chunks posteriores
+    "art": {
+        "filename_glob": r"^.*art.*\.pdf$",
+        "scan_strategy": "anchors",
+        "cover_flavors": _ART_ANCHORS,
+        "top_fraction": 0.40,
+    },
+    "irl": {
+        "filename_glob": r"^.*irl.*\.pdf$",
+        "scan_strategy": "anchors",
+        "cover_flavors": _IRL_ANCHORS,
+    },
+    "odi": {
+        "filename_glob": r"^.*odi.*\.pdf$",
+        "scan_strategy": "anchors",
+        "cover_flavors": _ODI_ANCHORS,
+    },
+    "charla": {
+        "filename_glob": r"^.*charla.*\.pdf$",
+        "scan_strategy": "anchors",
+        "cover_flavors": CRS_RCH_ANCHORS,
+    },
+    # ... remaining entries llenadas en chunks posteriores
 }
 
 

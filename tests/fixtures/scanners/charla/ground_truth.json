@@ -1,0 +1,6 @@
+{
+  "fixture": "f_rch_p1.pdf",
+  "pages": 3,
+  "covers_expected": 2,
+  "notes": "3-page charla compilation: P1 and P3 are both session covers ('registro de charla' + 'nombre de la charla'); P2 is the continuation/attendance sheet of the first session. Each cover begins a new charla document."
+}
