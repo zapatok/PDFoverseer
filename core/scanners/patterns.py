@@ -69,62 +69,99 @@ DEFAULT_ANTI_MIN_MATCH: int = 1
 # tolerates OCR rendering the digit with or without a space ("1 de" / "1de").
 # Both anchors must match (min_match=2).
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# ART anchor constants (verbatim from spec §7 · art).
+#
+# ART = "Análisis de Riesgos en el Trabajo" (F-CRS-ART-01 / Rev. 02). Es un
+# documento de 4 páginas; el header del formulario (título, logo, cuadro de
+# código) repite en las 4 páginas → NO sirve como ancla. Solo los CAMPOS
+# DEL FORMULARIO COVER son cover-only. Sin shadow cover (A5 no necesario).
+#
+# Lista completa del spec — 6 anclas — con min_match=3 (regla universal).
+# Si OCR pierde 2-3 anclas (sello sobre el header, manchas), las restantes
+# pasan. Restaurada 2026-05-22 tras anchor-truncation postmortem (estaba
+# truncada a 2 anclas con min_match=2).
+# ---------------------------------------------------------------------------
 _ART_ANCHORS: list[Flavor] = [
     {
-        "name": "f_crs_art_01",
+        "name": "f_art_01",
         "anchors": [
-            "pagina 1",  # cover-only — header pagination start; space-tolerant
-            "analisis de riesgos",  # ART form title, present on all pages (makes pair unique)
+            "nombre del supervisor",  # top ~10% — cover-only
+            "area de trabajo",  # top ~15% — cover-only
+            "descripcion del trabajo a realizar",  # top ~18% — muy distintiva
+            "hora de inicio de los trabajos",  # top ~22% — cover-only
+            "n de trabajadores involucrados",  # top ~22% (° dropped — OCR-fragile)
+            "pagina 1 de",  # top ~5% — cover-only ("Página 1 de 4")
         ],
-        "min_match": 2,
+        "min_match": 3,
     },
 ]
 
 # ---------------------------------------------------------------------------
-# IRL anchor constants (OCR-verified 2026-05-21 against f_irl_01_p1.pdf)
+# IRL anchor constants (verbatim from spec §2 · irl).
 #
-# IRL booklets are 50+ page compilations (pages 1-32 are the core booklet;
-# pages 33+ are embedded sub-forms: test de comprension, declarations, etc.).
-# The booklet running header ("f crs odi 01" + title) repeats on EVERY page
-# of the 32-page section — it cannot discriminate P1 from P2-P32.
-# The body intro "forma oportuna" also repeats verbatim (DS-44 article text).
+# IRL = "Información de Riesgos Laborales" (F-CRS-ODI-01 — el código real es
+# ODI-01, no IRL). El header del formulario y los encabezados de tabla
+# (ACTIVIDAD / PELIGRO / RIESGOS ASOCIADOS / MEDIDAS DE CONTROL) repiten en
+# TODAS las páginas — por eso NO sirven como anclas. Las anclas son
+# campos del formulario que solo aparecen en la portada (cover-only).
 #
-# The IRL *cover* (P1) is uniquely identified by attendance-section fields:
-#   "pagina 1 de"           — page-1 marker; absent on pages 2-32 (pagina 2 de
-#                             32 etc.); sub-form covers at pages 33+ also have
-#                             pagina-1-de but lack the second anchor.
-#   "fecha de realizacion"  — attendance header field present only on the IRL
-#                             cover; absent from all sub-form covers (test
-#                             forms, declarations, cartillas at pages 33+).
-# min_match=2 requires both simultaneously.
+# Lista completa del spec — 14 anclas — con min_match=3 (regla universal).
+# Redundancia alta → tolera OCR sucio mucho mejor que un único código.
+# Restaurada 2026-05-22 tras anchor-truncation postmortem (estaba truncada a
+# 2 anclas con min_match=2).
 # ---------------------------------------------------------------------------
 _IRL_ANCHORS: list[Flavor] = [
     {
         "name": "f_crs_odi_01",
         "anchors": [
-            "pagina 1 de",  # page-1 marker — P1 only among the 32-page booklet
-            "fecha de realizacion",  # attendance field — IRL cover only, absent from sub-forms
+            "antecedentes generales",  # cover section header
+            "fecha de realizacion",  # cover field
+            "tiempo de duracion",  # cover field
+            "horario de inicio",  # cover field
+            "horario de termino",  # cover field
+            "obra",  # cover field
+            "tipo de induccion",  # cover field
+            "identificacion del trabajador",  # cover section header
+            "identificacion del relator",  # cover section header
+            "persona trabajadora nueva",  # tipo de induccion checkbox
+            "con ausencia prolongada",  # tipo de induccion checkbox
+            "reubicada con nuevo cargo",  # tipo de induccion checkbox (slash→space)
+            "por nuevo proceso productivo",  # tipo de induccion checkbox
+            "pagina 1 de",  # P1 only — V4 pagination pattern reused as anchor
         ],
-        "min_match": 2,
+        "min_match": 3,
     },
 ]
 
 # ---------------------------------------------------------------------------
-# ODI anchor constants (OCR-verified 2026-05-21 against f_odi_01_p1.pdf)
+# ODI anchor constants (verbatim from spec §3 · odi).
 #
-# ODI is a 2-page form. Both pages share the title "obligacion de informar
-# visita" in the header. Only the cover (P1) has "nombre completo" (the
-# signature field section). P2 has "induccion inicial" in its body. Using
-# title + signature-field anchor discriminates P1 uniquely. min_match=2.
+# ODI Visitas = "Obligación de Informar Visita" (F-CRS-ODI-03). El título y
+# el cuadro de código repiten en página 2; por eso NO son anclas. Las anclas
+# son campos cover-only del visitante (nombre, teléfono, identidad, etc.) y
+# los encabezados de columna que en este formulario NO se repiten en la
+# continuación.
+#
+# Lista completa del spec — 8 anclas — con min_match=3 (regla universal).
+# Constelación más distintiva (nombre completo + n° telefónico + c. identidad)
+# es casi única de la portada de ODI Visita. Restaurada 2026-05-22 tras
+# anchor-truncation postmortem (estaba truncada a 2 anclas con min_match=2).
 # ---------------------------------------------------------------------------
 _ODI_ANCHORS: list[Flavor] = [
     {
         "name": "f_crs_odi_03",
         "anchors": [
-            "obligacion de informar visita",  # ODI title — both pages
-            "nombre completo",  # Signature table header — cover only
+            "nombre completo",  # visitante field — cover only
+            "n telefonico",  # visitante field (° dropped — OCR-fragile)
+            "c identidad",  # visitante field (period dropped — OCR-fragile)
+            "empresa",  # visitante field
+            "actividad",  # column header — cover only (does NOT repeat on p2)
+            "peligro incidente potencial",  # column header (slash→space)
+            "medidas de control",  # column header — cover only in ODI
+            "pagina 1 de",  # P1 only — V4 pagination pattern reused as anchor
         ],
-        "min_match": 2,
+        "min_match": 3,
     },
 ]
 
@@ -624,8 +661,11 @@ PATTERNS: dict[str, SiglaPattern] = {
     "art": {
         "filename_glob": r"^.*art.*\.pdf$",
         "scan_strategy": "anchors",
+        # top_fraction defaults to 0.25 per spec §7 ("top_fraction=1/4 default,
+        # no override"). recursive_glob=True per spec §7 ("Nota de enumeración"):
+        # HRB has 7.-ART/<EMPRESA>/*.pdf subfolders that must be enumerated.
+        "recursive_glob": True,
         "cover_flavors": _ART_ANCHORS,
-        "top_fraction": 0.40,
     },
     "irl": {
         "filename_glob": r"^.*irl.*\.pdf$",
