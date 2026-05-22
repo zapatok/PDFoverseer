@@ -1,0 +1,12 @@
+{
+  "fixture_dir": "insgral/",
+  "files": [
+    "2026-03-30_insgral_check_list_carreras.pdf",
+    "2026-04-01_insgral_check_list_comedor.pdf",
+    "2026-04-01_insgral_check_list_orden_y_aseo.pdf",
+    "2026-04-02_insgral_check_list_andamios.pdf"
+  ],
+  "pages_per_file": 1,
+  "covers_expected": 4,
+  "notes": "4 HRB insgral PDFs, each 1 page. Each is a separate inspection document (LCH-series forms with diverse templates). The PaginationScanner applies A7 lock: every single-page PDF counts as 1 document without OCR. Total = 4. Note: real corpus insgral PDFs use centered pagination stamps (not upper-right corner), so corner_count returns 0 for multi-page compilations; A7 is the operative path for these 1-page files."
+}
