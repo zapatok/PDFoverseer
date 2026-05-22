@@ -1,15 +1,19 @@
-"""Scanner driven by 'Página N de M' pagination — pase 2 for siglas with
-heterogeneous templates but reliable Spanish pagination (cat 8 insgral,
-cat 14 altura).
+"""Scanner for the open-universe siglas — insgral (cat 8) and altura (cat 14).
 
-Reuses `core/scanners/utils/corner_count.count_paginations` — the minimal
-engine that OCR's the upper-right corner and counts document transitions.
-This is deliberately MUCH simpler than the full V4 pipeline
-(`core/pipeline.py`): no parallel workers, no GPU SR, no Dempster-Shafer
-inference. V4 stays intact as legacy code; if a future failure mode
-demands its capabilities, we can promote a sigla to V4 via a new strategy.
+These siglas have heterogeneous templates with no stable anchor set, so they
+are counted by their per-document "Página N de M" pagination instead
+(``scan_strategy="pagination"``).
 
-A7 still applies: 1-page PDFs contribute count=1 without OCR.
+The counting engine is the **full V4 pipeline** (``core/pipeline.py``), reached
+through ``core/scanners/utils/v4_count.count_documents_v4``. V4 OCRs every
+page, detects the pagination period by autocorrelation and recovers
+OCR-failed pages with Dempster-Shafer inference. This replaced the original
+lightweight ``corner_count`` helper, which undercounted on the real corpus
+(13/18 documents where V4 recovered 18/18 — decided 2026-05-21).
+
+A7 still applies: 1-page PDFs contribute 1 document without OCR. A V4 result
+built mostly from inferred (guessed) reads downgrades the cell to LOW
+confidence so the operator reviews it.
 """
 
 from __future__ import annotations
@@ -21,13 +25,25 @@ from pathlib import Path
 from core.scanners.base import ConfidenceLevel, ScanResult
 from core.scanners.cancellation import CancellationToken, CancelledError
 from core.scanners.simple_factory import SimpleFilenameScanner
-from core.scanners.utils.corner_count import count_paginations
 from core.scanners.utils.pdf_render import PdfRenderError, get_page_count
+from core.scanners.utils.v4_count import V4CountResult, count_documents_v4
+
+
+def _v4_result_is_trustworthy(v4: V4CountResult) -> bool:
+    """A V4 count is trustworthy when most pages were read directly.
+
+    A count built mostly from Dempster-Shafer ``inferred`` reads (or with any
+    unresolved ``failed`` read, or no documents at all) is guesswork — the
+    cell is downgraded to LOW confidence for operator review.
+    """
+    if v4.count == 0 or v4.failed_reads > 0:
+        return False
+    return v4.direct_reads >= v4.inferred_reads
 
 
 @dataclass
 class PaginationScanner:
-    """Counts documents in compilations via 'Página N de M' transitions."""
+    """Counts documents in compilations via the V4 pagination pipeline."""
 
     sigla: str
 
@@ -37,12 +53,12 @@ class PaginationScanner:
         )
 
     def count_ocr(self, folder: Path, *, cancel: CancellationToken) -> ScanResult:
-        """Run pase-2 OCR using 'Página N de M' pagination transitions (A7 lock).
+        """Run pase-2 OCR by counting "Página N de M" documents via V4.
 
         For each PDF in *folder*: single-page files contribute 1 document
-        without OCR (A7 lock); multi-page files are scanned by
-        ``count_paginations`` which detects document boundaries via Spanish
-        pagination stamps in the upper-right corner.
+        without OCR (A7 lock); multi-page files are analyzed by the V4
+        pipeline, which counts document boundaries from the pagination
+        stamps.
 
         Args:
             folder: Directory containing the PDFs to scan.
@@ -52,11 +68,15 @@ class PaginationScanner:
         Returns:
             A ``ScanResult`` with:
               - ``count``: total documents found across all PDFs.
-              - ``method``: ``"pagination"`` (or ``"filename_glob"`` when the
-                folder is missing or empty).
-              - ``confidence``: ``HIGH`` if no errors, ``LOW`` otherwise.
-              - ``flags``: includes ``"a7_one_page_locked"`` when at least one
-                single-page PDF was counted trivially.
+              - ``method``: ``"v4"`` (or ``"filename_glob"`` when the folder
+                is missing or empty).
+              - ``confidence``: ``HIGH`` only if every multi-page PDF was
+                counted from a trustworthy (mostly-direct) V4 read; ``LOW``
+                if any PDF errored or produced a guesswork count.
+              - ``flags``: includes ``"a7_one_page_locked"`` when at least
+                one single-page PDF was counted trivially, and
+                ``"v4_low_confidence"`` when at least one PDF's count is
+                guesswork.
               - ``per_file``: per-filename document count.
         """
         cancel.check()
@@ -74,6 +94,7 @@ class PaginationScanner:
         errors: list[str] = []
         flags = list(base.flags)
         a7_used = False
+        low_confidence_files: list[str] = []
 
         for pdf in pdfs:
             cancel.check()
@@ -83,33 +104,43 @@ class PaginationScanner:
                 errors.append(f"page_count_failed:{pdf.name}:{exc}")
                 continue
             if pages == 1:
-                # A7
+                # A7 — 1 page = 1 document, locked, no OCR.
                 per_file[pdf.name] = 1
                 total += 1
                 a7_used = True
                 continue
             try:
-                result = count_paginations(pdf, cancel=cancel)
+                v4 = count_documents_v4(pdf, cancel=cancel)
             except CancelledError:
                 raise
             except (PdfRenderError, OSError, RuntimeError) as exc:
-                errors.append(f"pagination_failed:{pdf.name}:{exc}")
-                # Conservative fallback: count as 1 doc
+                errors.append(f"v4_failed:{pdf.name}:{exc}")
+                # Conservative fallback: count the compilation as 1 document.
                 per_file[pdf.name] = 1
                 total += 1
+                low_confidence_files.append(pdf.name)
                 continue
-            per_file[pdf.name] = result.count
-            total += result.count
+            # A degenerate count of 0 for a multi-page PDF is never right —
+            # fall back to 1 and flag it.
+            pdf_count = v4.count if v4.count > 0 else 1
+            per_file[pdf.name] = pdf_count
+            total += pdf_count
+            if not _v4_result_is_trustworthy(v4):
+                low_confidence_files.append(pdf.name)
 
         if a7_used:
             flags.append("a7_one_page_locked")
+        if low_confidence_files:
+            flags.append("v4_low_confidence")
 
         duration_ms = int((time.perf_counter() - start) * 1000)
-        confidence = ConfidenceLevel.HIGH if not errors else ConfidenceLevel.LOW
+        confidence = (
+            ConfidenceLevel.HIGH if not errors and not low_confidence_files else ConfidenceLevel.LOW
+        )
         return ScanResult(
             count=total,
             confidence=confidence,
-            method="pagination",
+            method="v4",
             breakdown=base.breakdown,
             flags=flags,
             errors=errors,
