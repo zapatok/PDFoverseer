@@ -204,6 +204,41 @@ _CHPS_ANCHORS: list[Flavor] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Maquinaria anchor constants (OCR-verified 2026-05-21 against
+# maquinaria_accesorios_de_levante.pdf — 7-page HPV compilation with 7
+# standalone 1-page checklists; also cross-checked against LCH-08/LCH-15/
+# LCH-16 templates from HPV corpus).
+#
+# The top 25% band reliably captures the form header: "f crs lch" form code
+# + "constructora region sur" + "pagina 1 de".  For multi-page forms
+# (e.g. LCH-16 grua torres: "Página 1 de 2" / "Página 2 de 2"), only page-1
+# carries "pagina 1 de" — continuations read "pagina 2 de" and do NOT fire.
+# For 1-page forms (LCH-09 accesorios, LCH-15 montacarga), every page is a
+# standalone doc and "pagina 1 de 1" fires on each.
+#
+# Plan candidates "FECHA ÚLTIMA MANTENCIÓN", "NOMBRE OPERADOR", "RUT", "MARCA"
+# were DROPPED: they appear in the body (below 25% band on most templates) and
+# are not reliably in the top band across the ≥5 templates observed.
+# min_match=2 requires "pagina 1 de" ∩ "constructora region sur".
+# ---------------------------------------------------------------------------
+_MAQUINARIA_ANCHORS: list[Flavor] = [
+    {
+        # Intersection of header labels across ≥5 templates (LCH-08 / -09 / -15 / -16 / -26).
+        # "constructora region sur" is in the running header of every page (cover and continuation).
+        # "pagina 1 de" is the cover-only discriminator: cover pages read "Pagina 1 de N";
+        # continuation pages read "Pagina 2 de N" etc. and do NOT match this anchor.
+        # min_match=2 requires both simultaneously.
+        "name": "f_lch_xx",
+        "anchors": [
+            "pagina 1 de",  # cover-only discriminator — "Pagina 1 de N" on P1; absent on P2+
+            "constructora region sur",  # running header — all pages; makes pair unique
+        ],
+        "min_match": 2,
+    },
+]
+
+
 PATTERNS: dict[str, SiglaPattern] = {
     "reunion": {
         "filename_glob": r"^.*reunion.*\.pdf$",
@@ -239,6 +274,12 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*bodega.*\.pdf$",
         "scan_strategy": "anchors",
         "cover_flavors": _BODEGA_ANCHORS,
+    },
+    "maquinaria": {
+        "filename_glob": r"^.*maquinaria.*\.pdf$",
+        "scan_strategy": "anchors",
+        "recursive_glob": True,
+        "cover_flavors": _MAQUINARIA_ANCHORS,
     },
     "altura": {
         "filename_glob": r"^.*altura.*\.pdf$",
