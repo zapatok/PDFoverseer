@@ -238,6 +238,30 @@ _CHPS_ANCHORS: list[Flavor] = [
 # and would not count as a cover.
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+# Exc anchor constants (OCR-verified 2026-05-21 against exc_chequeos.pdf —
+# 23-page HPV compilation; all 23 pages are standalone 1-page excavacion
+# checklists "Página 1 de 1").
+#
+# The form header reads "EXCAVACIONES" (or "EXCAVACION" depending on template)
+# and "F-CRS-LCH-xx" (normalizes to "f crs lch").  "CONSTRUCTORA REGION SUR"
+# and "Página 1 de 1" also appear in the top 25% band.  min_match=3: every
+# standalone cover gets ≥3 of the four hits; a hypothetical continuation page
+# (pagina 2 de N) would miss "pagina 1 de" and drop to ≤2 hits.
+# ---------------------------------------------------------------------------
+_EXC_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_lch_xx",
+        "anchors": [
+            "excavaciones",  # form title — all pages
+            "constructora region sur",  # org name — all pages
+            "f crs lch",  # form-code family prefix (A12) — all pages
+            "pagina 1 de",  # cover-only discriminator — "Pagina 1 de 1"
+        ],
+        "min_match": 3,
+    },
+]
+
+# ---------------------------------------------------------------------------
 # Senal anchor constants (OCR-verified 2026-05-21 against senal_chequeos.pdf —
 # 6-page HPV compilation; all 6 pages are standalone senaletica checklists).
 #
@@ -335,6 +359,12 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*bodega.*\.pdf$",
         "scan_strategy": "anchors",
         "cover_flavors": _BODEGA_ANCHORS,
+    },
+    "exc": {
+        "filename_glob": r"^.*exc.*\.pdf$",
+        "scan_strategy": "anchors",
+        "recursive_glob": True,
+        "cover_flavors": _EXC_ANCHORS,
     },
     "senal": {
         "filename_glob": r"^.*senal.*\.pdf$",

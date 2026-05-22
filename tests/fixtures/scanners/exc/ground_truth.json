@@ -1,0 +1,6 @@
+{
+  "fixture": "exc_chequeos.pdf",
+  "pages": 23,
+  "covers_expected": 23,
+  "notes": "23 pages; each page is a standalone 1-page excavacion checklist (Pagina 1 de 1); all are covers"
+}
