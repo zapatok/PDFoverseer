@@ -28,6 +28,7 @@ PH5B_CONF_MIN        = 0.50  # sweep2
 PH5B_RATIO_MIN       = 0.90  # lowered from 0.95: zero regressions on 40 fixtures, fixes INS_31 (3 misreads in 31-page all-1-page PDF)
 INFERENCE_ENGINE_VERSION = "s2t-helena"
 PAGE_PATTERN_VERSION     = "v1-baseline"  # restored baseline: P-prefix only, tot<=10, Unicode quotes intact
+SCANNER_PATTERNS_VERSION = "v1-ocr-per-sigla"  # patterns.py registry: 18 siglas, anchors + V4 pagination
 
 # ============================================================================
 # Page Number Patterns & Normalization
