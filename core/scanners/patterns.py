@@ -156,7 +156,7 @@ _CHARLA_ANCHORS: list[Flavor] = [
 # The form header reads "CHEQUEO BODEGA SUSPEL/RESPEL  F-PETS-CRS-07-03"
 # followed by "CONSTRUCTORA REGION SUR S.A." — all present in the top 25%
 # band on every page.  With min_match=3 the triple
-# ("chequeo bodega" ∩ "f-pets-crs-07-03" ∩ "bodega suspel") fires on every
+# ("chequeo bodega" ∩ "f pets crs" ∩ "bodega suspel") fires on every
 # page — which is CORRECT: each page of this PDF is a separate 1-page
 # document (distinct dates/RESPEL sections); all 4 are covers.
 # "bodega respel" was NOT verified in the top 25% band (OCR sees it as part
@@ -169,7 +169,7 @@ _BODEGA_ANCHORS: list[Flavor] = [
         "name": "f_pets_07_03",
         "anchors": [
             "chequeo bodega",  # Form title — all bodega covers
-            "f-pets-crs-07-03",  # Form code — all bodega covers
+            "f pets crs",  # Form-code family prefix (A12) — all bodega covers
             "bodega suspel",  # Section label — present on cover band
             "realizado por",  # Signatory field — optional extra
             "obra",  # Site field — optional extra
@@ -183,18 +183,18 @@ _BODEGA_ANCHORS: list[Flavor] = [
 # f_ar_01_p1_acta_reunion.pdf — 3-page HPV CHPS meeting minutes).
 #
 # "acta de reunion" appears in the running header of all 3 pages.
-# "f-crs-ar-01" also appears in the running header of all pages.
+# "f crs ar" (form-code family prefix) also appears in the running header.
 # "lista de convocados" is ONLY on the cover (page 1 attendee table).
 # "hospital de" and "lugar de la reunion" are also cover-only fields.
 # min_match=3: cover (p1) gets ≥5 matches; continuations (p2/p3) get 2
-# ("acta de reunion" + "f-crs-ar-01") → not counted as covers.
+# ("acta de reunion" + "f crs ar") → not counted as covers.
 # ---------------------------------------------------------------------------
 _CHPS_ANCHORS: list[Flavor] = [
     {
         "name": "f_ar_01",
         "anchors": [
             "acta de reunion",  # Form title — all pages (running header)
-            "f-crs-ar-01",  # Form code — all pages (running header)
+            "f crs ar",  # Form-code family prefix (A12) — all pages (running header)
             "lista de convocados",  # Attendee table header — cover only (p1)
             "hospital de",  # Site field — cover only (p1)
             "lugar de la reunion",  # Meeting location field — cover only (p1)
