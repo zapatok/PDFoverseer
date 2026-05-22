@@ -238,6 +238,30 @@ _CHPS_ANCHORS: list[Flavor] = [
 # and would not count as a cover.
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+# Caliente anchor constants (OCR-verified 2026-05-21 against
+# caliente_chequeos.pdf — 19-page HPV compilation; all 19 pages are standalone
+# 1-page trabajos en caliente checklists "Página 1 de 1").
+#
+# The form header reads "CHEQUEO TRABAJOS EN CALIENTE" and "F-LCH-CRS-32"
+# (normalized to "f lch crs" — NOTE: code direction is LCH-CRS, not CRS-LCH).
+# "CONSTRUCTORA REGION SUR" and "Página 1 de 1" are also in the top band.
+# min_match=3: every standalone cover gets ≥3 hits; a continuation page that
+# lacked "pagina 1 de" would drop to ≤2 hits and not count as a cover.
+# ---------------------------------------------------------------------------
+_CALIENTE_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_lch_crs_32",
+        "anchors": [
+            "chequeo trabajos en caliente",  # form title — all pages
+            "constructora region sur",  # org name — all pages
+            "f lch crs",  # form-code family prefix (A12, direction LCH-CRS) — all pages
+            "pagina 1 de",  # cover-only discriminator — "Pagina 1 de 1"
+        ],
+        "min_match": 3,
+    },
+]
+
+# ---------------------------------------------------------------------------
 # Exc anchor constants (OCR-verified 2026-05-21 against exc_chequeos.pdf —
 # 23-page HPV compilation; all 23 pages are standalone 1-page excavacion
 # checklists "Página 1 de 1").
@@ -359,6 +383,12 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*bodega.*\.pdf$",
         "scan_strategy": "anchors",
         "cover_flavors": _BODEGA_ANCHORS,
+    },
+    "caliente": {
+        "filename_glob": r"^.*caliente.*\.pdf$",
+        "scan_strategy": "anchors",
+        "recursive_glob": True,
+        "cover_flavors": _CALIENTE_ANCHORS,
     },
     "exc": {
         "filename_glob": r"^.*exc.*\.pdf$",
