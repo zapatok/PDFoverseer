@@ -129,22 +129,44 @@ _ODI_ANCHORS: list[Flavor] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Charla anchor constants (OCR-verified 2026-05-21 against f_rch_p1.pdf)
+# CRS_RCH_ANCHORS — shared form-field anchors for the F-CRS-RCH-01 template
+# (charla, chintegral, dif_pts all reuse this list per the spec sections
+# 4 · charla, 5 · chintegral, 6 · dif_pts).
 #
-# Charla PDFs are multi-document compilations: P1 and P3 are both covers
-# (separate charla sessions), P2 is the continuation of the first session.
-# "registro de charla" appears in all pages' headers; "nombre de la charla"
-# appears only on cover pages (P1 and P3). min_match=2 pairs the title
-# (universal) with the cover-specific field label.
+# The form has variants (Rev 01 2024 with "Tiempo duración charla" +
+# "Tipología de Charla/Reunión"; Rev 03 2025 with "Hora de inicio" + "Hora
+# de Término" without typology). The list covers both variants — with the
+# rule ≥ 3 matches, any variant passes.
+#
+# **Repeat on every page (NOT useful as anchor)** per spec: form title
+# "REGISTRO DE FORMACIÓN E INFORMACIÓN", "CONSTRUCTORA REGIÓN SUR SPA",
+# code box "F-CRS-RCH-01". Crucially, "Página 1 de N" is **NOT** included
+# in this anchor set — continuation pages (signature grids) of charla also
+# read "Página 1 de 2" (template bug — verified with sample from Daniel).
+#
+# All cover-only field labels normalized to the form _normalize_text emits
+# (lowercase, accent-stripped, separator /-_→space).
 # ---------------------------------------------------------------------------
+CRS_RCH_ANCHORS: list[str] = [
+    "nombre de la charla",  # session title field — cover only
+    "obra",  # site field — cover only
+    "relator",  # speaker field — cover only
+    "cargo relator",  # speaker role field — cover only
+    "hora de inicio",  # start time — Rev 03+
+    "hora de termino",  # end time — Rev 03+
+    "tiempo duracion charla",  # duration field — Rev 01
+    "tipologia de charla",  # typology section header — Rev 01 (slash→space)
+    "charla de induccion",  # typology checkbox — Rev 01
+    "charla re instruccion",  # typology checkbox — Rev 01 (hyphen→space)
+    "reunion de coordinacion",  # typology checkbox — Rev 01
+    "difusion de documentos",  # typology checkbox — Rev 01
+]
+
 _CHARLA_ANCHORS: list[Flavor] = [
     {
         "name": "f_crs_rch_01",
-        "anchors": [
-            "registro de charla",  # Charla form title — all pages
-            "nombre de la charla",  # Session title field — cover pages only
-        ],
-        "min_match": 2,
+        "anchors": CRS_RCH_ANCHORS,
+        "min_match": 3,
     },
 ]
 
@@ -204,50 +226,65 @@ _CHPS_ANCHORS: list[Flavor] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Chintegral anchor constants (OCR-verified 2026-05-22).
+# Chintegral anchor constants (verbatim from spec §5 · chintegral).
 #
-# Three flavors observed in the corpus:
+# Three flavors per the spec:
 #
-# f_rch  — Standard RCH template (F-CRS-RCH-01).  The form header reads
-#   "REGISTRO DE CHARLA" + "NOMBRE DE LA CHARLA" on cover pages; continuation
-#   pages lack "nombre de la charla".  min_match=2 requires both simultaneously.
-#   Same anchor pair as _CHARLA_ANCHORS (charla sigla) — shared by design; the
-#   two siglas differ in filename_glob and scan context, not in the anchor set.
+# f_rch — Standard RCH template (F-CRS-RCH-01). Reuses CRS_RCH_ANCHORS
+#   (shared with charla and dif_pts). The "Tipología" checkbox with
+#   "Charla Integral" marked is what distinguishes a chintegral from a
+#   regular charla; the filename_glob already separates them by folder.
 #
-# f_japa — JAPA contractor variant.  The form header reads
-#   "REGISTRO CAPACITACIÓN ..." + contractor name "SOCIEDAD DE PROYECTOS DE
-#   INGENIERIA".  Plan-proposed anchors ("JAPA", "Nombre del trabajador") were
-#   OCR-rejected: they do not appear in the top 25% band.  min_match=2.
+# f_japa — JAPA contractor variant (Sociedad de Proyectos de Ingeniería).
+#   Form title "REGISTRO CAPACITACIÓN" + multiple structural fields. Anchors
+#   transcribed verbatim from the spec §5 prose list.
 #
-# f_previene — PREVIENE programme ("PROGRAMA PREVIENE: INFANCIA, JUVENTUD Y
-#   BIENESTAR" + "LISTA DE ASISTENCIA").  Odd pages are covers; even pages are
-#   signature continuation pages that lack "lista de asistencia" in the top
-#   band.  min_match=2.
+# f_previene — PREVIENE programme (Plan de Acción Nacional de Drogas).
+#   Documented anchors include the programme title, subtitle, the
+#   "LISTA DE ASISTENCIA" section, the campaign banner, and the standard
+#   programme fields (Región, Comuna, etc.). Anchors per spec §5.
 # ---------------------------------------------------------------------------
 _CHINTEGRAL_ANCHORS: list[Flavor] = [
     {
         "name": "f_rch",
-        "anchors": [
-            "registro de charla",  # Form title — cover and continuations share title
-            "nombre de la charla",  # Session title field — cover pages only
-        ],
-        "min_match": 2,
+        "anchors": CRS_RCH_ANCHORS,
+        "min_match": 3,
     },
     {
         "name": "f_japa",
         "anchors": [
-            "registro capacitacion",  # JAPA form title prefix (accent-stripped)
-            "sociedad de proyectos de ingenieria",  # JAPA contractor name
+            "registro capacitacion",  # JAPA form title (accent-stripped)
+            "lugar",  # field label
+            "temas tratados",  # section
+            "tipo charla",  # caja
+            "capacitacion interna",  # checkbox
+            "capacitacion externa",  # checkbox
+            "charla integral",  # checkbox (literal)
+            "reinstruccion",  # checkbox
+            "procedimiento",  # checkbox (high false-positive risk; min_match=3 protects)
+            "charla 5 minutos",  # checkbox
+            "protocolo",  # checkbox (high false-positive risk)
+            "personal japa",  # caja al final
+            "subcontrato",  # caja al final
+            "sociedad de proyectos de ingenieria",  # JAPA full contractor name (logo footer)
         ],
-        "min_match": 2,
+        "min_match": 3,
     },
     {
         "name": "f_previene",
         "anchors": [
-            "programa previene",  # PREVIENE programme title prefix
-            "lista de asistencia",  # Attendance section header — cover pages only
+            "programa previene",  # title — distinctive
+            "infancia juventud y bienestar",  # subtitle (comma dropped)
+            "lista de asistencia",  # section
+            "estrategia nacional de drogas",  # banner
+            "region",  # field
+            "comuna",  # field
+            "espacio de intervencion",  # field
+            "numero de asistentes",  # field
+            "componente",  # field
+            "tematica",  # field
         ],
-        "min_match": 2,
+        "min_match": 3,
     },
 ]
 
@@ -521,67 +558,61 @@ _ANDAMIOS_ANCHORS: list[Flavor] = [
 
 
 # ---------------------------------------------------------------------------
-# Dif_pts anchor constants (OCR-verified 2026-05-22).
+# Dif_pts anchor constants (verbatim from spec §6 · dif_pts).
 #
-# top_fraction=1/3 (instead of default 0.25) — dif_pts forms carry the
-# key discriminating fields in the upper-third of the page; 25% was too
-# tight for some templates.
+# top_fraction=1/3 (set in PATTERNS entry below): the HLL flavor B and the
+# AGUASAN flavor C extend the cover form below the default 0.25 band.
 #
-# Three flavors observed in the corpus:
+# Three flavors per spec:
 #
-# f_rch  — Standard RCH standalone charla sheets (F-CRS-RCH-01 family).
-#   Each page is an independent 1-page form ("Página 1 de 1").  The form
-#   code "f crs rch 01" and pagination "pagina 1 de 1" appear reliably in
-#   the top-third band.  "nombre de la charla" is present on covers.
-#   min_match=2 is sufficient; a 3-anchor match fires on every standalone page.
-#   Note: A7 lock fires for 1-page PDFs — OCR not needed; the fixture is 1 page.
+# f_rch — Standard RCH (F-CRS-RCH-01) — reuses CRS_RCH_ANCHORS shared with
+#   charla and chintegral. The chintegral "Nombre de la Charla" field on
+#   dif_pts forms usually says "DIFUSIÓN DE …" or "PROCEDIMIENTO TRABAJO
+#   SEGURO …"; the filename_glob distinguishes dif_pts from charla.
 #
-# f_ch_crs_01 — HLL compilation format (F-CH-CRS-01).  Alternates real
-#   charla covers with "TEST DE COMPRENSIÓN" shadow pages every other page.
-#   Cover anchors: "registro de charla" + "f ch crs 01" + "nombre de la
-#   capacitacion" (min_match=2 of 3).
-#   Shadow pages are rejected by anti_anchors: "alternativa correcta" fires
-#   reliably on shadow pages (OCR-verified on p2 of HLL fixture); "test de
-#   comprension" is a secondary guard that fires on most shadow pages.
-#   Rejection is robust: shadow p1 also fails anchor matching (score=1 < 2).
+# f_ch_crs_01 — HLL compilation format (F-CH-CRS-01) alternating cover +
+#   shadow "TEST DE COMPRENSIÓN" pages. Anti-anchors reject the test pages
+#   so they don't double-count. Anchors and anti-anchors are copy-pasted
+#   from the spec §6 Python literal verbatim (line 1007-1024 of the spec).
 #
-# f_aguasan — AGUASAN contractor variant ("registro de charla y capacitacion"
-#   + "charla operacional" + other structural fields).  min_match=2 of 4
-#   possible anchors; "tema tratado" + "seleccione" appear on all observed
-#   covers.  A7 lock fires for 1-page PDFs.
+# f_aguasan — AGUASAN contractor template (code SGT-06-F2). Self-contained
+#   (no shadow pages observed). Anchors from spec §6 Python literal
+#   (line 1041-1055 of the spec).
 # ---------------------------------------------------------------------------
 _DIF_PTS_ANCHORS: list[Flavor] = [
     {
         "name": "f_rch",
-        "anchors": [
-            "f crs rch 01",  # form code — all standalone dif_pts sheets
-            "pagina 1 de 1",  # every standalone page is "Pagina 1 de 1"
-            "nombre de la charla",  # session title field — covers
-        ],
-        "min_match": 2,
+        "anchors": CRS_RCH_ANCHORS,
+        "min_match": 3,
     },
     {
         "name": "f_ch_crs_01",
         "anchors": [
-            "registro de charla",  # form title — cover pages (HLL compilation)
-            "f ch crs 01",  # form code — cover pages
+            "registro de charla",  # form title — cover (compilation HLL)
             "nombre de la capacitacion",  # training-session title field
+            "cargo relator",  # speaker role field
+            "tiempo duracion charla",  # duration field
         ],
-        "min_match": 2,
+        "min_match": 3,
         "anti_anchors": [
-            "alternativa correcta",  # answer-key field — shadow test-de-comprension pages ONLY
-            "test de comprension",  # shadow page section header (secondary guard)
+            "test de comprension",  # shadow page title
+            "test trabajo en",  # covers "...EN ALTURA", "...EN CALIENTE", etc.
+            "alternativa correcta",  # answer-key field — shadow pages only
+            "f pets crs",  # test form-code prefix (cover uses f ch crs 01)
         ],
     },
     {
         "name": "f_aguasan",
         "anchors": [
-            "tema tratado",  # AGUASAN topic field — all covers
-            "seleccione",  # AGUASAN checkbox instruction — all covers
+            "aguasan",  # contractor brand
             "registro de charla y capacitacion",  # AGUASAN form title
-            "charla operacional",  # AGUASAN charla type label
+            "categoria",  # field
+            "charla especifica diaria",  # category checkbox
+            "charla operacional",  # category checkbox
+            "total personal entrenado",  # field
+            "tema tratado",  # topic field — all covers
         ],
-        "min_match": 2,
+        "min_match": 3,
     },
 ]
 
