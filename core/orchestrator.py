@@ -330,6 +330,21 @@ def scan_cells_ocr(
                 on_progress({"type": "cell_error", "hospital": h, "sigla": s, "error": err})
             else:
                 results[(h, s)] = result  # type: ignore[assignment]
+                telemetry = result.telemetry
+                near_matches = (
+                    [
+                        {
+                            "pdf_name": nm.pdf_name,
+                            "page_index": nm.page_index,
+                            "flavor_name": nm.flavor_name,
+                            "matched_anchors": list(nm.matched_anchors),
+                            "missing_anchors": list(nm.missing_anchors),
+                        }
+                        for nm in telemetry.near_matches
+                    ]
+                    if telemetry
+                    else []
+                )
                 on_progress(
                     {
                         "type": "cell_done",
@@ -340,6 +355,7 @@ def scan_cells_ocr(
                             "method": result.method,
                             "confidence": result.confidence.value,
                             "duration_ms_ocr": result.duration_ms,
+                            "near_matches": near_matches,
                         },
                     }
                 )
@@ -386,6 +402,21 @@ def scan_cells_ocr(
                 on_progress({"type": "cell_error", "hospital": h, "sigla": s, "error": err})
             else:
                 results[(h, s)] = result  # type: ignore[assignment]
+                telemetry = result.telemetry
+                near_matches = (
+                    [
+                        {
+                            "pdf_name": nm.pdf_name,
+                            "page_index": nm.page_index,
+                            "flavor_name": nm.flavor_name,
+                            "matched_anchors": list(nm.matched_anchors),
+                            "missing_anchors": list(nm.missing_anchors),
+                        }
+                        for nm in telemetry.near_matches
+                    ]
+                    if telemetry
+                    else []
+                )
                 on_progress(
                     {
                         "type": "cell_done",
@@ -396,6 +427,7 @@ def scan_cells_ocr(
                             "method": result.method,
                             "confidence": result.confidence.value,
                             "duration_ms_ocr": result.duration_ms,
+                            "near_matches": near_matches,
                         },
                     }
                 )

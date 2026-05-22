@@ -25,7 +25,7 @@ from core.orchestrator import (
     scan_cells_ocr,
     scan_month,
 )
-from core.scanners.base import ConfidenceLevel, ScanResult
+from core.scanners.base import ConfidenceLevel, NearMatchEntry, ScanResult, ScanTelemetry
 from core.scanners.cancellation import CancellationToken
 
 # Single thread per session is plenty — Daniel's machine has one user, and
@@ -197,6 +197,26 @@ def scan_ocr(
         asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
         if event.get("type") == "cell_done":
             r = event["result"]
+            # A14: reconstruct ScanTelemetry from the near_matches the
+            # orchestrator serialised into the event so apply_ocr_result
+            # can persist them alongside the rest of the cell state.
+            raw_nms = r.get("near_matches") or []
+            telemetry = (
+                ScanTelemetry(
+                    near_matches=[
+                        NearMatchEntry(
+                            pdf_name=nm["pdf_name"],
+                            page_index=nm["page_index"],
+                            flavor_name=nm["flavor_name"],
+                            matched_anchors=nm["matched_anchors"],
+                            missing_anchors=nm["missing_anchors"],
+                        )
+                        for nm in raw_nms
+                    ]
+                )
+                if raw_nms
+                else None
+            )
             result = ScanResult(
                 count=r["ocr_count"],
                 confidence=ConfidenceLevel(r["confidence"]),
@@ -206,6 +226,7 @@ def scan_ocr(
                 errors=[],
                 duration_ms=r["duration_ms_ocr"],
                 files_scanned=1,
+                telemetry=telemetry,
             )
             mgr.apply_ocr_result(session_id, event["hospital"], event["sigla"], result)
 

@@ -171,6 +171,9 @@ class SessionManager:
         means "no flags this run" (NOT "preserve previous"). Stale data from
         a previous OCR run is overwritten, which is the correct semantic for
         a fresh scan.
+
+        A14: near_matches from result.telemetry are persisted so the UI can
+        surface them in the DetailPanel "Casi-matches" section.
         """
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
@@ -182,6 +185,22 @@ class SessionManager:
         cell["errors"] = list(result.errors)
         cell["duration_ms_ocr"] = result.duration_ms
         cell["per_file"] = result.per_file
+        # A14: persist near-match telemetry so the UI can surface candidates.
+        telemetry = result.telemetry
+        cell["near_matches"] = (
+            [
+                {
+                    "pdf_name": nm.pdf_name,
+                    "page_index": nm.page_index,
+                    "flavor_name": nm.flavor_name,
+                    "matched_anchors": list(nm.matched_anchors),
+                    "missing_anchors": list(nm.missing_anchors),
+                }
+                for nm in telemetry.near_matches
+            ]
+            if telemetry
+            else []
+        )
         cell.setdefault("per_file_overrides", {})
         cell.setdefault("manual_entry", False)
         cell.setdefault("filename_count", None)
