@@ -222,6 +222,41 @@ _CHPS_ANCHORS: list[Flavor] = [
 # are not reliably in the top band across the ≥5 templates observed.
 # min_match=2 requires "pagina 1 de" ∩ "constructora region sur".
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Ext anchor constants (OCR-verified 2026-05-21 against ext_chequeos.pdf —
+# 15-page HPV compilation; all 15 pages are standalone 1-page extintor
+# checklists "Página 1 de 1").
+#
+# The form header contains "CHEQUEO EXTINTORES" (title), "F-CRS-LCH-18"
+# (code, normalized to "f crs lch"), "Constructora Región Sur SpA"
+# (normalized to "constructora region sur"), and "Página 1 de 1" (pagination).
+# All four are present in the top 25% band on every page.  P1 misses
+# "constructora region sur" due to OCR noise on the logo area, but still
+# gets 3 hits from the remaining three anchors.  min_match=3 is safe:
+# every page reaches ≥3 hits; a hypothetical continuation page that lacked
+# "pagina 1 de" would get only 2 hits ("chequeo extintores" + "f crs lch")
+# and would not count as a cover.
+# ---------------------------------------------------------------------------
+_EXT_ANCHORS: list[Flavor] = [
+    {
+        # Intersection of header labels across F-CRS-LCH-18 template (HPV corpus).
+        # "chequeo extintores" is the form title — present on all pages.
+        # "f crs lch" is the form-code family prefix (A12) — present on all pages.
+        # "pagina 1 de" is the cover-only discriminator — "Pagina 1 de 1" on covers.
+        # "constructora region sur" is the org name — present on most pages.
+        # min_match=3 requires three of these four simultaneously.
+        "name": "f_lch_xx",
+        "anchors": [
+            "chequeo extintores",  # form title — all pages
+            "f crs lch",  # form-code family prefix (A12) — all pages
+            "pagina 1 de",  # cover-only discriminator — "Pagina 1 de 1"
+            "constructora region sur",  # org name — most pages (OCR noise may drop)
+        ],
+        "min_match": 3,
+    },
+]
+
+
 _MAQUINARIA_ANCHORS: list[Flavor] = [
     {
         # Intersection of header labels across ≥5 templates (LCH-08 / -09 / -15 / -16 / -26).
@@ -274,6 +309,12 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*bodega.*\.pdf$",
         "scan_strategy": "anchors",
         "cover_flavors": _BODEGA_ANCHORS,
+    },
+    "ext": {
+        "filename_glob": r"^.*ext.*\.pdf$",
+        "scan_strategy": "anchors",
+        "recursive_glob": True,
+        "cover_flavors": _EXT_ANCHORS,
     },
     "maquinaria": {
         "filename_glob": r"^.*maquinaria.*\.pdf$",
