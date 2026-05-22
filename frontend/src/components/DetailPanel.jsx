@@ -1,13 +1,18 @@
-import { MousePointer2, FileStack, PenLine, Users } from "lucide-react";
+import { useState } from "react";
+import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy } from "lucide-react";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
+import PdfCoverViewer from "./PdfCoverViewer";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { METHOD_LABEL, CONFIDENCE_LABEL } from "../lib/method-labels";
 import { useSessionStore } from "../store/session";
 import { computeWorkerCount } from "../lib/worker-count";
+import { copyFlavorStub } from "../lib/flavorStub";
+import { api } from "../lib/api";
+import { toast } from "sonner";
 
 function effectiveCount(cell) {
   return cell?.user_override ?? cell?.ocr_count ?? cell?.filename_count ?? cell?.count ?? 0;
@@ -17,6 +22,97 @@ function confidenceVariant(cell) {
   if (cell?.confidence === "high") return "confidence-high";
   if (cell?.confidence === "low") return "confidence-low";
   return "neutral";
+}
+
+function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const pdfUrl = sessionId
+    ? api.cellPdfUrl(sessionId, hospital, sigla, pdfIndex)
+    : null;
+
+  async function handleCopyStub() {
+    try {
+      await copyFlavorStub(nm);
+      toast.success("Stub copiado al portapapeles");
+    } catch {
+      toast.error("No se pudo copiar al portapapeles");
+    }
+  }
+
+  return (
+    <li className="flex flex-col gap-1 py-2 border-b border-po-border last:border-0">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="font-mono text-xs text-po-text truncate flex-1">{nm.pdf_name}</span>
+        <span className="text-xs text-po-text-muted shrink-0">p.&nbsp;{nm.page_index + 1}</span>
+        <Badge variant="amber">{nm.flavor_name}</Badge>
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap text-xs text-po-text-muted">
+        <span>Coincide: {nm.matched_anchors.join(", ")}</span>
+        {nm.missing_anchors.length > 0 && (
+          <span>· Falta: {nm.missing_anchors.join(", ")}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 mt-1">
+        <Button
+          variant="secondary"
+          icon={ScanSearch}
+          onClick={() => setViewerOpen(true)}
+          disabled={!sessionId}
+        >
+          Ver portada
+        </Button>
+        <Button
+          variant="secondary"
+          icon={ClipboardCopy}
+          onClick={handleCopyStub}
+        >
+          Marcar como nuevo flavor
+        </Button>
+      </div>
+      {viewerOpen && pdfUrl && (
+        <PdfCoverViewer
+          open={viewerOpen}
+          onClose={() => setViewerOpen(false)}
+          url={pdfUrl}
+          pageNumber={nm.page_index + 1}
+          title={`${nm.pdf_name} — p. ${nm.page_index + 1}`}
+        />
+      )}
+    </li>
+  );
+}
+
+function NearMatchesSection({ hospital, sigla, cell, sessionId }) {
+  const nearMatches = cell.near_matches;
+  if (!nearMatches || nearMatches.length === 0) return null;
+
+  // Derive file indices: sort the per_file keys (bare filenames, alphabetically)
+  // to match the server-side sorted(folder.rglob("*.pdf")) order for flat folders.
+  const sortedNames = Object.keys(cell.per_file || {}).sort();
+
+  return (
+    <div className="mt-6">
+      <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mb-2 flex items-center gap-2">
+        Casi-matches
+        <Badge variant="amber">{nearMatches.length} candidato{nearMatches.length !== 1 ? "s" : ""} a flavor nuevo</Badge>
+      </h4>
+      <ul className="divide-y-0">
+        {nearMatches.map((nm, i) => {
+          const pdfIndex = sortedNames.indexOf(nm.pdf_name);
+          return (
+            <NearMatchRow
+              key={`${nm.pdf_name}-${nm.page_index}-${i}`}
+              nm={nm}
+              hospital={hospital}
+              sigla={sigla}
+              sessionId={sessionId}
+              pdfIndex={pdfIndex >= 0 ? pdfIndex : 0}
+            />
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 function WorkerCountModule({ hospital, sigla, cell }) {
@@ -53,6 +149,8 @@ function WorkerCountModule({ hospital, sigla, cell }) {
 }
 
 export default function DetailPanel({ hospital, sigla, cell }) {
+  const sessionId = useSessionStore((s) => s.session?.session_id);
+
   if (!cell || !sigla) {
     return (
       <EmptyState
@@ -120,6 +218,13 @@ export default function DetailPanel({ hospital, sigla, cell }) {
 
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual</h4>
       <OverridePanel hospital={hospital} sigla={sigla} cell={cell} />
+
+      <NearMatchesSection
+        hospital={hospital}
+        sigla={sigla}
+        cell={cell}
+        sessionId={sessionId}
+      />
 
       {(sigla === "charla" || sigla === "chintegral") && (
         <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} />

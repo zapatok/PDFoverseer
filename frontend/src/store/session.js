@@ -365,6 +365,7 @@ export const useSessionStore = create((set, get) => ({
             method: event.result.method,
             confidence: event.result.confidence,
             duration_ms_ocr: event.result.duration_ms_ocr,
+            near_matches: event.result.near_matches ?? [],
           };
           cells[event.hospital] = hosp;
           set({ scanningCells: next, session: { ...session, cells } });
