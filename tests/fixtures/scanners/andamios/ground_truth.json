@@ -1,0 +1,22 @@
+{
+  "fixtures": [
+    {
+      "file": "f_lch_05_p2p5_chequeo_hrb.pdf",
+      "pages": 4,
+      "covers_expected": 2,
+      "notes": "HRB andamios chequeo (F-CRS-LCH-05): 4 pages from a 9-page compilation, containing 2 standalone covers (p1, p3) and 2 continuation pages. Flavor f_lch_xx."
+    },
+    {
+      "file": "f_ribeiro_p1_andamios_hrb.pdf",
+      "pages": 1,
+      "covers_expected": 1,
+      "notes": "HRB RIBEIRO SPA proprietary form: 1 standalone cover. Flavor f_ribeiro."
+    },
+    {
+      "file": "f_lch_05_shadow_art.pdf",
+      "pages": 3,
+      "covers_expected": 0,
+      "notes": "Anti-anchor shadow: ART armado_titan misfiled in andamios folder. Must yield 0 covers (anti_anchors: 'analisis de riesgos en el trabajo', 'f crs art')."
+    }
+  ]
+}
