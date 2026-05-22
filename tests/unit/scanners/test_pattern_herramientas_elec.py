@@ -1,16 +1,23 @@
 """Smoke tests for the herramientas_elec anchor patterns (Task 5.11).
 
-Two OCR-verified flavors:
+Three OCR-verified flavors:
   f_lch_xx  — CRS standard template (F-CRS-LCH family).  Standalone covers
                recognised by 'constructora region sur' + 'pagina 1 de'.
+               Anti-anchors reject EPP checklists (F-CRS-LCH-02) misfiled here.
   f_hll_17  — HLL proprietary form REG-SSO-HLL-17.  Recognised by
                'reg sso hll 17' + 'chequeo de herramientas'.
+  f_titan   — TITAN contractor proprietary template (TN-SGSSO-RG family).
+               Recognised by 'titan' + at least one of 'sistema de gestion de
+               seguridad y salud' / 'tn sgsso rg' / 'inspeccion' / 'herramienta'.
 
-A7-lock shadow: the EPP fixture is a 1-page PDF.  Decision A7 fires before
-OCR: single-page PDFs are always counted as 1 document (trivial lock).
+Anti-anchor shadow: a 2-page EPP checklist (F-CRS-LCH-02) misfiled in the
+herramientas_elec folder.  Both pages carry 'constructora region sur' + 'pagina
+1 de' (would fire f_lch_xx without protection), but 'chequeo de elementos'
+fires on both → anti-anchor rejects them → 0 covers.  Decision A7 does NOT
+fire (2 pages), so the anchor/anti-anchor logic is genuinely exercised.
+
+Note: standalone 1-page EPP PDFs are A7-locked (always 1 doc, no OCR).
 Anti-anchors only apply to multi-page PDFs where OCR is actually run.
-The EPP fixture therefore counts as 1 cover — this is expected, correct
-behavior, not a false positive.
 
 Fixtures (gitignored): tests/fixtures/scanners/herramientas_elec/*.pdf
 Ground truth (committed): tests/fixtures/scanners/herramientas_elec/ground_truth.json
@@ -37,6 +44,7 @@ _GT = _DIR / "ground_truth.json"
 
 _LCH_PDF = _DIR / "f_lch_xx_p1p3_extensiones.pdf"
 _HLL_PDF = _DIR / "f_hll_17_p1p2_herr_hll.pdf"
+_TITAN_PDF = _DIR / "f_titan_p1p2_martillo_tronzadora.pdf"
 _SHADOW_PDF = _DIR / "f_lch_xx_shadow_epp.pdf"
 
 
@@ -58,7 +66,7 @@ def _fixture_covers(filename: str) -> int:
 
 
 def test_herramientas_elec_lch_xx_smoke():
-    """f_lch_xx fixture: 3 standalone covers in a 3-page extensiones PDF."""
+    """f_lch_xx fixture: scanner uses method 'header_band_anchors'."""
     if not _LCH_PDF.exists():
         pytest.skip("herramientas_elec f_lch_xx fixture not present (gitignored)")
 
@@ -79,7 +87,6 @@ def test_herramientas_elec_lch_xx_count():
     scanner = AnchorsScanner(sigla="herramientas_elec")
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
-    # Verify per_file breakdown for this specific file
     assert _LCH_PDF.name in result.per_file, (
         f"Expected {_LCH_PDF.name!r} in per_file; got keys={list(result.per_file)}"
     )
@@ -113,16 +120,41 @@ def test_herramientas_elec_hll17_count():
 
 
 # ---------------------------------------------------------------------------
-# Anti-anchor shadow (EPP misfiled)
+# f_titan flavor
 # ---------------------------------------------------------------------------
 
 
-def test_herramientas_elec_shadow_epp_a7_counts_one():
-    """EPP misfiled in herramientas_elec folder: A7 lock fires (1-page PDF → 1 doc).
+def test_herramientas_elec_titan_count():
+    """f_titan fixture reports 2 covers (TITAN TN-SGSSO-RG proprietary form)."""
+    if not _TITAN_PDF.exists():
+        pytest.skip("herramientas_elec f_titan fixture not present (gitignored)")
 
-    Anti-anchors only apply to multi-page PDFs where OCR is actually run.
-    A 1-page PDF is always counted as 1 document by Decision A7, regardless
-    of whether its content matches any anchor or anti-anchor pattern.
+    expected = _fixture_covers(_TITAN_PDF.name)
+    scanner = AnchorsScanner(sigla="herramientas_elec")
+    result = scanner.count_ocr(_DIR, cancel=CancellationToken())
+
+    assert _TITAN_PDF.name in result.per_file, (
+        f"Expected {_TITAN_PDF.name!r} in per_file; got keys={list(result.per_file)}"
+    )
+    assert result.per_file[_TITAN_PDF.name] == expected, (
+        f"f_titan cover count: got {result.per_file[_TITAN_PDF.name]}, expected {expected}. "
+        f"errors={result.errors!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Anti-anchor shadow (EPP misfiled) — anti-anchor must genuinely fire
+# ---------------------------------------------------------------------------
+
+
+def test_herramientas_elec_shadow_epp_anti_anchor_rejects():
+    """EPP misfiled in herramientas_elec folder: anti-anchor fires → 0 covers.
+
+    The shadow fixture is a 2-page PDF so Decision A7 does NOT fire.
+    Both pages carry 'constructora region sur' + 'pagina 1 de' (would match
+    f_lch_xx without protection), but 'chequeo de elementos' fires on both
+    pages → anti-anchor rejects them → 0 covers.  This verifies the
+    anti-anchor is genuinely exercised, not bypassed by the A7 1-page lock.
     """
     if not _SHADOW_PDF.exists():
         pytest.skip("herramientas_elec EPP shadow fixture not present (gitignored)")
@@ -130,9 +162,9 @@ def test_herramientas_elec_shadow_epp_a7_counts_one():
     scanner = AnchorsScanner(sigla="herramientas_elec")
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
-    got = result.per_file.get(_SHADOW_PDF.name, 0)
-    assert got == 1, (
-        f"A7 lock must count single-page EPP as 1 document, got {got}. "
+    got = result.per_file.get(_SHADOW_PDF.name, -1)
+    assert got == 0, (
+        f"Anti-anchor must reject EPP pages → 0 covers, got {got}. "
         f"per_file={result.per_file!r}  errors={result.errors!r}"
     )
 
@@ -143,8 +175,11 @@ def test_herramientas_elec_shadow_epp_a7_counts_one():
 
 
 def test_herramientas_elec_total_count():
-    """Total across all 3 fixtures: 3 + 2 + 1 = 6 covers (EPP shadow counted by A7)."""
-    if not (_LCH_PDF.exists() and _HLL_PDF.exists() and _SHADOW_PDF.exists()):
+    """Total across all 4 fixtures: 3 + 2 + 2 + 0 = 7 covers."""
+    all_present = (
+        _LCH_PDF.exists() and _HLL_PDF.exists() and _TITAN_PDF.exists() and _SHADOW_PDF.exists()
+    )
+    if not all_present:
         pytest.skip("one or more herramientas_elec fixtures not present (gitignored)")
 
     scanner = AnchorsScanner(sigla="herramientas_elec")

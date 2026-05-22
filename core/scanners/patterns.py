@@ -399,25 +399,45 @@ _MAQUINARIA_ANCHORS: list[Flavor] = [
 # ---------------------------------------------------------------------------
 # Herramientas_elec anchor constants (OCR-verified 2026-05-22).
 #
-# Two flavors found in the corpus:
+# Three flavors found in the corpus:
 #
 # f_lch_xx  — Standard CRS template (F-CRS-LCH family, multiple variants used
 #   by HPV and HRB contractors).  Every page is a standalone cover ("Pagina 1
 #   de 1").  'constructora region sur' appears in the running header; 'pagina 1
 #   de' is the cover-only discriminator.  min_match=2 of 2 anchors.
-#   Anti-anchor: 'chequeo de elementos' / 'elementos de proteccion personal'
-#   fires on the EPP form (LCH-CRS-02) that is sometimes misfiled here.  The
-#   EPP page naturally fails anchor matching (hits=0) — the anti_anchors are
-#   defense in depth.
+#   Anti-anchor: 'chequeo de elementos' fires on the EPP form (F-CRS-LCH-02
+#   "Chequeo de Elementos de Protección Personal") that is sometimes misfiled
+#   here.  OCR-verified on 2-page EPP shadow fixture: 'chequeo de elementos'
+#   fires on 100% of EPP pages in the top-third band; 'elementos de proteccion
+#   personal' does NOT appear in the top-third band (title wraps past the crop
+#   line), so it is kept as a secondary guard only.  Without anti_anchors, both
+#   EPP pages would falsely fire f_lch_xx (both have 'constructora region sur'
+#   + 'pagina 1 de' in the header).
+#   Known limitation: standalone 1-page EPP PDFs are A7-locked (always 1 doc,
+#   no OCR) — anti-anchors only protect multi-page PDFs where OCR is run.
 #
 # f_hll_17  — HLL proprietary form REG-SSO-HLL-17 "Chequeo de Herramientas".
 #   'reg sso hll 17' is the form code; 'chequeo de herramientas' is the form
-#   title.  Both appear reliably in the top-25% band.  min_match=2 of 2.
+#   title.  Both appear reliably in the top-third band.  min_match=2 of 2.
 #
-# TITAN and REALI contractors (HPV subfolders) use the standard CRS templates
-# (LCH-04, LCH-14) and are therefore covered by the f_lch_xx flavor.
-# No proprietary TITAN or REALI herramientas templates were observed in this
-# corpus — do not add flavors for them without a verified sample.
+# f_titan  — TITAN contractor proprietary template (TN-SGSSO-RG-NNN family).
+#   OCR-verified 2026-05-22 on 49 TITAN-branded files from the HPV corpus.
+#   TITAN uses a proprietary safety-management template distinct from the CRS
+#   LCH family (different layout, different form-code family, TITAN branding).
+#   63 TITAN files do use the CRS template (covered by f_lch_xx); 49 use this
+#   proprietary form.  Anchors (hit rates across 49 proprietary-form files):
+#     'titan'                                    → 100%  (brand name, logo area)
+#     'sistema de gestion de seguridad y salud'  →  93%  (form title / header)
+#     'tn sgsso rg'                              →  71%  (form-code prefix, A12)
+#     'inspeccion'                               →  91%  (section label)
+#     'herramienta'                              →  85%  (instrument label)
+#   min_match=2: 'titan' is always present; one additional anchor always fires
+#   even on the weakest pages.  CRS-template TITAN files are excluded because
+#   they lack 'titan' in the top-third band.
+#
+# No f_reali flavor: the only REALI file in the corpus uses F-CRS-LCH-04
+# (covered by f_lch_xx).  Plan-proposed anchors ('FORM-PREV-021', REALI
+# branding) do not appear in any OCR output from the top-third band.
 # ---------------------------------------------------------------------------
 _HERRAMIENTAS_ELEC_ANCHORS: list[Flavor] = [
     {
@@ -437,6 +457,17 @@ _HERRAMIENTAS_ELEC_ANCHORS: list[Flavor] = [
         "anchors": [
             "reg sso hll 17",  # HLL form code — all covers
             "chequeo de herramientas",  # HLL form title — all covers
+        ],
+        "min_match": 2,
+    },
+    {
+        "name": "f_titan",
+        "anchors": [
+            "titan",  # TITAN brand name in logo/header area — 100% hit rate
+            "sistema de gestion de seguridad y salud",  # form title/header — 93%
+            "tn sgsso rg",  # form-code family prefix (A12) — 71%
+            "inspeccion",  # section label — 91%
+            "herramienta",  # instrument label — 85%
         ],
         "min_match": 2,
     },

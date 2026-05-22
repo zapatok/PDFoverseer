@@ -13,10 +13,16 @@
       "notes": "HLL REG-SSO-HLL-17 proprietary form: 2 standalone covers. Flavor f_hll_17."
     },
     {
+      "file": "f_titan_p1p2_martillo_tronzadora.pdf",
+      "pages": 2,
+      "covers_expected": 2,
+      "notes": "TITAN TN-SGSSO-RG proprietary form: 2 standalone covers (martillo demoledor + tronzadora). Flavor f_titan. OCR-verified: both pages fire 'titan' + at least one of 'sistema de gestion de seguridad y salud'/'tn sgsso rg'/'inspeccion'/'herramienta'."
+    },
+    {
       "file": "f_lch_xx_shadow_epp.pdf",
-      "pages": 1,
-      "covers_expected": 1,
-      "notes": "A7-lock shadow: EPP misfiled in herramientas_elec folder (1-page PDF). A7 rule fires before OCR — single-page PDFs are always counted as 1 document without anchor checking. Anti-anchors only apply to multi-page PDFs."
+      "pages": 2,
+      "covers_expected": 0,
+      "notes": "Anti-anchor shadow: 2-page EPP checklist (F-CRS-LCH-02) misfiled in herramientas_elec folder. Both pages carry 'constructora region sur' + 'pagina 1 de' (would fire f_lch_xx without anti-anchor), but 'chequeo de elementos' fires on both pages → anti-anchor rejects them → 0 covers. OCR-verified 2026-05-22. Note: standalone 1-page EPP PDFs are A7-locked (1 doc, no OCR); anti-anchors only protect multi-page PDFs."
     }
   ]
 }
