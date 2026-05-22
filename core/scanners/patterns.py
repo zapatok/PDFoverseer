@@ -453,19 +453,35 @@ _EXT_ANCHORS: list[Flavor] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Maquinaria anchor constants (verbatim from spec §10 · maquinaria).
+#
+# "Universo de templates abierto" — observamos ≥5 templates (F-CRS-LCH-08,
+# -16, -26, -40, LCH-CRS-07 con prefijo distinto). El spec usa la
+# **intersección estable de field-labels de identificación** del formulario
+# (cover-only en todos los templates), NO el running header. Verificado
+# leyendo p2 de F-CRS-LCH-16 grúa: la continuación tiene el header del form
+# y el ITEM/ACTIVIDAD del checklist pero NO los field-labels de
+# identificación.
+#
+# 5 anchors / min_match=3 (regla universal). Cualquier template observado
+# matchea ≥4; un template nuevo debería matchear ≥3 si mantiene los básicos
+# (fecha mantención + operador + paginación). Restaurada 2026-05-22 tras
+# anchor-truncation postmortem (estaba truncada a 2 anclas con min_match=2
+# usando "constructora region sur" + "pagina 1 de", que NO es el set del
+# spec — el running header no es cover-only en este universo de templates).
+# ---------------------------------------------------------------------------
 _MAQUINARIA_ANCHORS: list[Flavor] = [
     {
-        # Intersection of header labels across ≥5 templates (LCH-08 / -09 / -15 / -16 / -26).
-        # "constructora region sur" is in the running header of every page (cover and continuation).
-        # "pagina 1 de" is the cover-only discriminator: cover pages read "Pagina 1 de N";
-        # continuation pages read "Pagina 2 de N" etc. and do NOT match this anchor.
-        # min_match=2 requires both simultaneously.
-        "name": "f_lch_xx",
+        "name": "f_lch_xx",  # A9 — cubre F-CRS-LCH-* y F-LCH-CRS-* por intersección
         "anchors": [
-            "pagina 1 de",  # cover-only discriminator — "Pagina 1 de N" on P1; absent on P2+
-            "constructora region sur",  # running header — all pages; makes pair unique
+            "fecha ultima mantencion",  # long distinctive label — cover-only
+            "nombre operador",  # distinctive field — cover-only
+            "rut",  # classic field label
+            "marca",  # also substring-matches "MARCA/MODELO"
+            "pagina 1 de",  # cover-only universal — P2+ says "pagina 2 de N"
         ],
-        "min_match": 2,
+        "min_match": 3,
     },
 ]
 
