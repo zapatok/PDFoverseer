@@ -1,12 +1,6 @@
 {
-  "fixture_dir": "altura/",
-  "files": [
-    "2026-04-01_altura_check_list.pdf",
-    "2026-04-02_altura_check_list.pdf",
-    "2026-04-07_altura_check_list.pdf",
-    "2026-04-08_altura_check_list.pdf"
-  ],
-  "pages_per_file": 1,
-  "covers_expected": 4,
-  "notes": "4 HRB altura PDFs, each 1 page. Each is a separate height-work checklist (diverse templates across contractors). The PaginationScanner applies A7 lock: every single-page PDF counts as 1 document without OCR. Total = 4. Note: real corpus altura PDFs use centered pagination stamps (not upper-right corner), so corner_count returns 0 for multi-page compilations; A7 is the operative path for these 1-page files."
+  "fixture": "2026-05-08_altura_chequeos_arnes_de_seguridad.pdf",
+  "pages": 18,
+  "covers_expected": 18,
+  "notes": "Real HPV altura compilation: 18 standalone 'CHEQUEO DE ARNÉS DE SEGURIDAD' (F-CRS-LCH-03) forms bound into one PDF, each stamped 'Página 1 de 1' (verified by rendering pages 1, 2 — distinct workers per page). V4 counts 18 documents: 14 read directly, 4 recovered by Dempster-Shafer inference. The lightweight corner_count helper recovered only 13 of these 18 — the evidence that motivated the V4 engine swap."
 }
