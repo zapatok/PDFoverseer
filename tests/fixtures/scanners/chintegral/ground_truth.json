@@ -1,0 +1,17 @@
+{
+  "sigla": "chintegral",
+  "flavors": {
+    "f_rch": {
+      "fixture_pdf": "f_rch/f_rch_p1_crs.pdf",
+      "covers_expected": 1
+    },
+    "f_japa": {
+      "fixture_pdf": "f_japa/f_japa_p1_reinstruccion.pdf",
+      "covers_expected": 1
+    },
+    "f_previene": {
+      "fixture_pdf": "f_previene/f_previene_p1_hll.pdf",
+      "covers_expected": 1
+    }
+  }
+}

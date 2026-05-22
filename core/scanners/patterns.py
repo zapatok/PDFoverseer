@@ -203,6 +203,54 @@ _CHPS_ANCHORS: list[Flavor] = [
     },
 ]
 
+# ---------------------------------------------------------------------------
+# Chintegral anchor constants (OCR-verified 2026-05-22).
+#
+# Three flavors observed in the corpus:
+#
+# f_rch  — Standard RCH template (F-CRS-RCH-01).  The form header reads
+#   "REGISTRO DE CHARLA" + "NOMBRE DE LA CHARLA" on cover pages; continuation
+#   pages lack "nombre de la charla".  min_match=2 requires both simultaneously.
+#   Same anchor pair as _CHARLA_ANCHORS (charla sigla) — shared by design; the
+#   two siglas differ in filename_glob and scan context, not in the anchor set.
+#
+# f_japa — JAPA contractor variant.  The form header reads
+#   "REGISTRO CAPACITACIÓN ..." + contractor name "SOCIEDAD DE PROYECTOS DE
+#   INGENIERIA".  Plan-proposed anchors ("JAPA", "Nombre del trabajador") were
+#   OCR-rejected: they do not appear in the top 25% band.  min_match=2.
+#
+# f_previene — PREVIENE programme ("PROGRAMA PREVIENE: INFANCIA, JUVENTUD Y
+#   BIENESTAR" + "LISTA DE ASISTENCIA").  Odd pages are covers; even pages are
+#   signature continuation pages that lack "lista de asistencia" in the top
+#   band.  min_match=2.
+# ---------------------------------------------------------------------------
+_CHINTEGRAL_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_rch",
+        "anchors": [
+            "registro de charla",  # Form title — cover and continuations share title
+            "nombre de la charla",  # Session title field — cover pages only
+        ],
+        "min_match": 2,
+    },
+    {
+        "name": "f_japa",
+        "anchors": [
+            "registro capacitacion",  # JAPA form title prefix (accent-stripped)
+            "sociedad de proyectos de ingenieria",  # JAPA contractor name
+        ],
+        "min_match": 2,
+    },
+    {
+        "name": "f_previene",
+        "anchors": [
+            "programa previene",  # PREVIENE programme title prefix
+            "lista de asistencia",  # Attendance section header — cover pages only
+        ],
+        "min_match": 2,
+    },
+]
+
 
 # ---------------------------------------------------------------------------
 # Maquinaria anchor constants (OCR-verified 2026-05-21 against
@@ -424,6 +472,12 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*chps.*\.pdf$",
         "scan_strategy": "anchors",
         "cover_flavors": _CHPS_ANCHORS,
+    },
+    "chintegral": {
+        "filename_glob": r"^.*chintegral.*\.pdf$",
+        "scan_strategy": "anchors",
+        "recursive_glob": True,
+        "cover_flavors": _CHINTEGRAL_ANCHORS,
     },
     # ... remaining entries llenadas en chunks posteriores
 }
