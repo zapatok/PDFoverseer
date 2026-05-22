@@ -32,9 +32,16 @@ describe("buildFlavorStub", () => {
     expect(stub).toContain("faltó en ejemplo.pdf");
   });
 
-  it("fija min_match al número de anclas coincidentes", () => {
+  it("aplica un piso de 3 a min_match cuando hay pocas anclas coincidentes", () => {
+    // NM tiene 2 anclas coincidentes → max(3, 2) = 3
     const stub = buildFlavorStub(NM);
-    expect(stub).toContain("min_match=2,");
+    expect(stub).toContain("min_match=3,");
+  });
+
+  it("usa el número de anclas coincidentes cuando supera el piso de 3", () => {
+    const nm = { ...NM, matched_anchors: ["A", "B", "C", "D"] };
+    const stub = buildFlavorStub(nm);
+    expect(stub).toContain("min_match=4,");
   });
 
   it("sin anclas faltantes no aparecen líneas de anclas comentadas", () => {

@@ -34,7 +34,7 @@ ${matched}
 ${missing}
             ],
             anti_anchors=[],
-            min_match=${nm.matched_anchors.length},
+            min_match=${Math.max(3, nm.matched_anchors.length)},
         ),`;
 }
 
