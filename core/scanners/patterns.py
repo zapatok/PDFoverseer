@@ -396,6 +396,71 @@ _MAQUINARIA_ANCHORS: list[Flavor] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Dif_pts anchor constants (OCR-verified 2026-05-22).
+#
+# top_fraction=1/3 (instead of default 0.25) — dif_pts forms carry the
+# key discriminating fields in the upper-third of the page; 25% was too
+# tight for some templates.
+#
+# Three flavors observed in the corpus:
+#
+# f_rch  — Standard RCH standalone charla sheets (F-CRS-RCH-01 family).
+#   Each page is an independent 1-page form ("Página 1 de 1").  The form
+#   code "f crs rch 01" and pagination "pagina 1 de 1" appear reliably in
+#   the top-third band.  "nombre de la charla" is present on covers.
+#   min_match=2 is sufficient; a 3-anchor match fires on every standalone page.
+#   Note: A7 lock fires for 1-page PDFs — OCR not needed; the fixture is 1 page.
+#
+# f_ch_crs_01 — HLL compilation format (F-CH-CRS-01).  Alternates real
+#   charla covers with "TEST DE COMPRENSIÓN" shadow pages every other page.
+#   Cover anchors: "registro de charla" + "f ch crs 01" + "nombre de la
+#   capacitacion" (min_match=2 of 3).
+#   Shadow pages are rejected by anti_anchors: "alternativa correcta" fires
+#   reliably on shadow pages (OCR-verified on p2 of HLL fixture); "test de
+#   comprension" is a secondary guard that fires on most shadow pages.
+#   Rejection is robust: shadow p1 also fails anchor matching (score=1 < 2).
+#
+# f_aguasan — AGUASAN contractor variant ("registro de charla y capacitacion"
+#   + "charla operacional" + other structural fields).  min_match=2 of 4
+#   possible anchors; "tema tratado" + "seleccione" appear on all observed
+#   covers.  A7 lock fires for 1-page PDFs.
+# ---------------------------------------------------------------------------
+_DIF_PTS_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_rch",
+        "anchors": [
+            "f crs rch 01",  # form code — all standalone dif_pts sheets
+            "pagina 1 de 1",  # every standalone page is "Pagina 1 de 1"
+            "nombre de la charla",  # session title field — covers
+        ],
+        "min_match": 2,
+    },
+    {
+        "name": "f_ch_crs_01",
+        "anchors": [
+            "registro de charla",  # form title — cover pages (HLL compilation)
+            "f ch crs 01",  # form code — cover pages
+            "nombre de la capacitacion",  # training-session title field
+        ],
+        "min_match": 2,
+        "anti_anchors": [
+            "alternativa correcta",  # answer-key field — shadow test-de-comprension pages ONLY
+            "test de comprension",  # shadow page section header (secondary guard)
+        ],
+    },
+    {
+        "name": "f_aguasan",
+        "anchors": [
+            "tema tratado",  # AGUASAN topic field — all covers
+            "seleccione",  # AGUASAN checkbox instruction — all covers
+            "registro de charla y capacitacion",  # AGUASAN form title
+            "charla operacional",  # AGUASAN charla type label
+        ],
+        "min_match": 2,
+    },
+]
+
 PATTERNS: dict[str, SiglaPattern] = {
     "reunion": {
         "filename_glob": r"^.*reunion.*\.pdf$",
@@ -478,6 +543,13 @@ PATTERNS: dict[str, SiglaPattern] = {
         "scan_strategy": "anchors",
         "recursive_glob": True,
         "cover_flavors": _CHINTEGRAL_ANCHORS,
+    },
+    "dif_pts": {
+        "filename_glob": r"^.*dif_pts.*\.pdf$",
+        "scan_strategy": "anchors",
+        "recursive_glob": True,
+        "top_fraction": 1 / 3,
+        "cover_flavors": _DIF_PTS_ANCHORS,
     },
     # ... remaining entries llenadas en chunks posteriores
 }

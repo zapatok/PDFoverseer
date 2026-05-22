@@ -1,0 +1,21 @@
+{
+  "sigla": "dif_pts",
+  "top_fraction": 0.3333333333333333,
+  "flavors": {
+    "f_rch": {
+      "fixture_pdf": "f_rch/f_rch_p1_standalone.pdf",
+      "covers_expected": 1,
+      "note": "1-page standalone — A7 lock fires, no OCR needed"
+    },
+    "f_ch_crs_01": {
+      "fixture_pdf": "f_ch_crs_01/f_ch_crs_01_2p_cover_shadow.pdf",
+      "covers_expected": 1,
+      "note": "2 pages: p1=real cover (anchors pass), p2=shadow (anti-anchor fires + anchor miss)"
+    },
+    "f_aguasan": {
+      "fixture_pdf": "f_aguasan/f_aguasan_p1_extintor.pdf",
+      "covers_expected": 1,
+      "note": "1-page standalone — A7 lock fires, no OCR needed"
+    }
+  }
+}
