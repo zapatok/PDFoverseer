@@ -1,0 +1,22 @@
+{
+  "fixtures": [
+    {
+      "file": "f_lch_xx_p1p3_extensiones.pdf",
+      "pages": 3,
+      "covers_expected": 3,
+      "notes": "HPV extensiones elec (LCH-04 variant): 3 standalone covers, each 'pagina 1 de 1'. Flavor f_lch_xx."
+    },
+    {
+      "file": "f_hll_17_p1p2_herr_hll.pdf",
+      "pages": 2,
+      "covers_expected": 2,
+      "notes": "HLL REG-SSO-HLL-17 proprietary form: 2 standalone covers. Flavor f_hll_17."
+    },
+    {
+      "file": "f_lch_xx_shadow_epp.pdf",
+      "pages": 1,
+      "covers_expected": 1,
+      "notes": "A7-lock shadow: EPP misfiled in herramientas_elec folder (1-page PDF). A7 rule fires before OCR — single-page PDFs are always counted as 1 document without anchor checking. Anti-anchors only apply to multi-page PDFs."
+    }
+  ]
+}

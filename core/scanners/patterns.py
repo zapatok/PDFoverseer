@@ -397,6 +397,99 @@ _MAQUINARIA_ANCHORS: list[Flavor] = [
 
 
 # ---------------------------------------------------------------------------
+# Herramientas_elec anchor constants (OCR-verified 2026-05-22).
+#
+# Two flavors found in the corpus:
+#
+# f_lch_xx  — Standard CRS template (F-CRS-LCH family, multiple variants used
+#   by HPV and HRB contractors).  Every page is a standalone cover ("Pagina 1
+#   de 1").  'constructora region sur' appears in the running header; 'pagina 1
+#   de' is the cover-only discriminator.  min_match=2 of 2 anchors.
+#   Anti-anchor: 'chequeo de elementos' / 'elementos de proteccion personal'
+#   fires on the EPP form (LCH-CRS-02) that is sometimes misfiled here.  The
+#   EPP page naturally fails anchor matching (hits=0) — the anti_anchors are
+#   defense in depth.
+#
+# f_hll_17  — HLL proprietary form REG-SSO-HLL-17 "Chequeo de Herramientas".
+#   'reg sso hll 17' is the form code; 'chequeo de herramientas' is the form
+#   title.  Both appear reliably in the top-25% band.  min_match=2 of 2.
+#
+# TITAN and REALI contractors (HPV subfolders) use the standard CRS templates
+# (LCH-04, LCH-14) and are therefore covered by the f_lch_xx flavor.
+# No proprietary TITAN or REALI herramientas templates were observed in this
+# corpus — do not add flavors for them without a verified sample.
+# ---------------------------------------------------------------------------
+_HERRAMIENTAS_ELEC_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_lch_xx",
+        "anchors": [
+            "constructora region sur",  # running header — all pages
+            "pagina 1 de",  # cover-only discriminator ("Pagina 1 de 1")
+        ],
+        "min_match": 2,
+        "anti_anchors": [
+            "chequeo de elementos",  # EPP form title — rejects LCH-CRS-02 misfiled pages
+            "elementos de proteccion personal",  # EPP form section header (secondary guard)
+        ],
+    },
+    {
+        "name": "f_hll_17",
+        "anchors": [
+            "reg sso hll 17",  # HLL form code — all covers
+            "chequeo de herramientas",  # HLL form title — all covers
+        ],
+        "min_match": 2,
+    },
+]
+
+
+# ---------------------------------------------------------------------------
+# Andamios anchor constants (OCR-verified 2026-05-22).
+#
+# Two flavors found in the corpus:
+#
+# f_lch_xx  — Standard CRS template (F-CRS-LCH-05 "Lista de Chequeo de
+#   Andamios").  Multiple forms are compiled into a single PDF; each cover page
+#   reads "Pagina 1 de N" and carries both 'lista de chequeo de andamios' and
+#   'datos del andamio'.  Continuation pages miss at least one of these.
+#   min_match=2 of 3 anchors — robust across varying scan quality.
+#   Anti-anchor: 'analisis de riesgos en el trabajo' / 'f crs art' reject ART
+#   armado_titan forms that are sometimes misfiled in the andamios folder.
+#   ART pages naturally fail f_lch_xx anchor matching (0 hits) — the
+#   anti_anchors are defense in depth.
+#
+# f_ribeiro — RIBEIRO SPA proprietary form ("Lista de Verificación Andamios").
+#   'linea de negocio' (corporativo selector row) and 'inspeccion de andamios'
+#   (section header) appear reliably at default top-25%.  'ribeiro' in the logo
+#   area adds a third candidate; min_match=2 of 3 fires on both 0.25 and 0.5.
+# ---------------------------------------------------------------------------
+_ANDAMIOS_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_lch_xx",
+        "anchors": [
+            "lista de chequeo de andamios",  # form title — all cover pages
+            "datos del andamio",  # structural section header — cover pages
+            "pagina 1 de",  # cover-only discriminator
+        ],
+        "min_match": 2,
+        "anti_anchors": [
+            "analisis de riesgos en el trabajo",  # ART form title — rejects misfiled ARTs
+            "f crs art",  # ART form-code family prefix (A12) — secondary guard
+        ],
+    },
+    {
+        "name": "f_ribeiro",
+        "anchors": [
+            "linea de negocio",  # RIBEIRO corporativo selector — all covers
+            "inspeccion de andamios",  # RIBEIRO section header — all covers
+            "ribeiro",  # contractor name in logo area
+        ],
+        "min_match": 2,
+    },
+]
+
+
+# ---------------------------------------------------------------------------
 # Dif_pts anchor constants (OCR-verified 2026-05-22).
 #
 # top_fraction=1/3 (instead of default 0.25) — dif_pts forms carry the
@@ -550,6 +643,19 @@ PATTERNS: dict[str, SiglaPattern] = {
         "recursive_glob": True,
         "top_fraction": 1 / 3,
         "cover_flavors": _DIF_PTS_ANCHORS,
+    },
+    "herramientas_elec": {
+        "filename_glob": r"^.*herramientas_elec.*\.pdf$",
+        "scan_strategy": "anchors",
+        "recursive_glob": True,
+        "top_fraction": 1 / 3,
+        "cover_flavors": _HERRAMIENTAS_ELEC_ANCHORS,
+    },
+    "andamios": {
+        "filename_glob": r"^.*andamios.*\.pdf$",
+        "scan_strategy": "anchors",
+        "recursive_glob": True,
+        "cover_flavors": _ANDAMIOS_ANCHORS,
     },
     # ... remaining entries llenadas en chunks posteriores
 }
