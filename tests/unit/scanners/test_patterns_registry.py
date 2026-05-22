@@ -63,13 +63,13 @@ def test_flavor_anti_anchors_optional():
     assert flavor["anti_anchors"] == ["X"]
 
 
-def test_all_18_siglas_have_a_pattern_eventually():
-    """Final shape check. Will fail until chunks 4-5 populate the registry.
-    Skipped while WIP."""
-    missing = set(SIGLAS) - set(PATTERNS)
-    if missing:
-        pytest.skip(f"WIP — missing siglas: {sorted(missing)}")
-    assert set(PATTERNS) == set(SIGLAS), "patterns.py must cover exactly the 18 SIGLAS"
+def test_all_18_siglas_have_a_pattern():
+    """Completeness gate — patterns.py must cover exactly the 18 SIGLAS."""
+    assert set(PATTERNS) == set(SIGLAS), (
+        "patterns.py must cover exactly the 18 SIGLAS; "
+        f"missing={sorted(set(SIGLAS) - set(PATTERNS))} "
+        f"extra={sorted(set(PATTERNS) - set(SIGLAS))}"
+    )
 
 
 def test_anchors_strategy_requires_cover_flavors():

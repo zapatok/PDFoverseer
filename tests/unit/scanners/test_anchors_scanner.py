@@ -18,18 +18,22 @@ def test_anchors_scanner_falls_through_to_filename_glob_for_pase1(tmp_path: Path
     assert result.count == 1
 
 
-def test_anchors_scanner_count_ocr_returns_base_for_unknown_sigla(tmp_path: Path):
+def test_anchors_scanner_count_ocr_returns_base_for_unknown_sigla(tmp_path: Path, monkeypatch):
     """A sigla absent from PATTERNS has no flavors, so count_ocr returns the
-    filename_glob base result unchanged (early return on empty flavors).
+    filename_glob base result unchanged (defensive early return).
 
-    Note: this does NOT exercise the A7 one-page path — the function returns
-    before reaching that branch because 'andamios' is not in PATTERNS.
+    All 18 SIGLAS are now populated in PATTERNS, so the test removes one
+    entry to exercise the fallback path. This does NOT reach the A7 one-page
+    branch — the function returns as soon as it finds no pattern.
     """
+    from core.scanners.patterns import PATTERNS
+
+    monkeypatch.delitem(PATTERNS, "andamios", raising=False)
     pdf = tmp_path / "2026-04-15_andamios_chequeo.pdf"
     pdf.write_bytes(_one_page_pdf())
     scanner = AnchorsScanner(sigla="andamios")
     result = scanner.count_ocr(tmp_path, cancel=CancellationToken())
-    assert result.method == "filename_glob"  # unknown sigla → no flavors → base returned
+    assert result.method == "filename_glob"  # no pattern → base returned
 
 
 def test_anchors_scanner_a7_only_one_page_pdfs(tmp_path: Path, monkeypatch):
