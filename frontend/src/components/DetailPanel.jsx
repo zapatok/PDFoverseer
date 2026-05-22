@@ -26,9 +26,14 @@ function confidenceVariant(cell) {
 
 function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
   const [viewerOpen, setViewerOpen] = useState(false);
-  const pdfUrl = sessionId
-    ? api.cellPdfUrl(sessionId, hospital, sigla, pdfIndex)
-    : null;
+  // pdfIndex < 0 means the near-match PDF name was not found among the
+  // cell's per_file keys (e.g. nested-folder name forms diverge). Opening
+  // any URL would silently show the wrong PDF, so the viewer is disabled.
+  const located = pdfIndex >= 0;
+  const pdfUrl =
+    sessionId && located
+      ? api.cellPdfUrl(sessionId, hospital, sigla, pdfIndex)
+      : null;
 
   async function handleCopyStub() {
     try {
@@ -57,10 +62,15 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
           variant="secondary"
           icon={ScanSearch}
           onClick={() => setViewerOpen(true)}
-          disabled={!sessionId}
+          disabled={!sessionId || !located}
         >
           Ver portada
         </Button>
+        {!located && (
+          <span className="text-xs text-po-text-muted">
+            PDF no ubicado en la celda
+          </span>
+        )}
         <Button
           variant="secondary"
           icon={ClipboardCopy}
@@ -106,7 +116,7 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId }) {
               hospital={hospital}
               sigla={sigla}
               sessionId={sessionId}
-              pdfIndex={pdfIndex >= 0 ? pdfIndex : 0}
+              pdfIndex={pdfIndex}
             />
           );
         })}
