@@ -148,6 +148,61 @@ _CHARLA_ANCHORS: list[Flavor] = [
     },
 ]
 
+# ---------------------------------------------------------------------------
+# Bodega anchor constants (OCR-verified 2026-05-21 against
+# f_pets_07_03_p1_chequeo.pdf — 4-page HPV compilation with 4 separate
+# bodega cover pages, each "Pagina 1 de 1").
+#
+# The form header reads "CHEQUEO BODEGA SUSPEL/RESPEL  F-PETS-CRS-07-03"
+# followed by "CONSTRUCTORA REGION SUR S.A." — all present in the top 25%
+# band on every page.  With min_match=3 the triple
+# ("chequeo bodega" ∩ "f-pets-crs-07-03" ∩ "bodega suspel") fires on every
+# page — which is CORRECT: each page of this PDF is a separate 1-page
+# document (distinct dates/RESPEL sections); all 4 are covers.
+# "bodega respel" was NOT verified in the top 25% band (OCR sees it as part
+# of "suspel/respel" without a leading "bodega " prefix); dropped from the
+# working anchor set.  "realizado por" and "obra" appear sporadically; kept
+# as optional extras that do not affect min_match=3 firing.
+# ---------------------------------------------------------------------------
+_BODEGA_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_pets_07_03",
+        "anchors": [
+            "chequeo bodega",  # Form title — all bodega covers
+            "f-pets-crs-07-03",  # Form code — all bodega covers
+            "bodega suspel",  # Section label — present on cover band
+            "realizado por",  # Signatory field — optional extra
+            "obra",  # Site field — optional extra
+        ],
+        "min_match": 3,
+    },
+]
+
+# ---------------------------------------------------------------------------
+# CHPS anchor constants (OCR-verified 2026-05-21 against
+# f_ar_01_p1_acta_reunion.pdf — 3-page HPV CHPS meeting minutes).
+#
+# "acta de reunion" appears in the running header of all 3 pages.
+# "f-crs-ar-01" also appears in the running header of all pages.
+# "lista de convocados" is ONLY on the cover (page 1 attendee table).
+# "hospital de" and "lugar de la reunion" are also cover-only fields.
+# min_match=3: cover (p1) gets ≥5 matches; continuations (p2/p3) get 2
+# ("acta de reunion" + "f-crs-ar-01") → not counted as covers.
+# ---------------------------------------------------------------------------
+_CHPS_ANCHORS: list[Flavor] = [
+    {
+        "name": "f_ar_01",
+        "anchors": [
+            "acta de reunion",  # Form title — all pages (running header)
+            "f-crs-ar-01",  # Form code — all pages (running header)
+            "lista de convocados",  # Attendee table header — cover only (p1)
+            "hospital de",  # Site field — cover only (p1)
+            "lugar de la reunion",  # Meeting location field — cover only (p1)
+        ],
+        "min_match": 3,
+    },
+]
+
 
 PATTERNS: dict[str, SiglaPattern] = {
     "reunion": {
@@ -174,6 +229,26 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*charla.*\.pdf$",
         "scan_strategy": "anchors",
         "cover_flavors": _CHARLA_ANCHORS,
+    },
+    "insgral": {
+        "filename_glob": r"^.*insgral.*\.pdf$",
+        "scan_strategy": "pagination",
+        "recursive_glob": True,
+    },
+    "bodega": {
+        "filename_glob": r"^.*bodega.*\.pdf$",
+        "scan_strategy": "anchors",
+        "cover_flavors": _BODEGA_ANCHORS,
+    },
+    "altura": {
+        "filename_glob": r"^.*altura.*\.pdf$",
+        "scan_strategy": "pagination",
+        "recursive_glob": True,
+    },
+    "chps": {
+        "filename_glob": r"^.*chps.*\.pdf$",
+        "scan_strategy": "anchors",
+        "cover_flavors": _CHPS_ANCHORS,
     },
     # ... remaining entries llenadas en chunks posteriores
 }
