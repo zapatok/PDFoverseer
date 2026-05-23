@@ -722,6 +722,15 @@ PATTERNS: dict[str, SiglaPattern] = {
     "charla": {
         "filename_glob": r"^.*charla.*\.pdf$",
         "scan_strategy": "anchors",
+        # recursive_glob: True per Fase B audit 2026-05-22. Spec §4 didn't
+        # mandate recursive enumeration but the real corpus shows both HPV
+        # (338 PDFs) and HRB (46 PDFs) organize charlas by contractor
+        # subfolders (AGUASAN, ALUMINIO 2000, ARAYA, …) — the same pattern
+        # ART § 7 documents. Without recursive_glob the scanner finds 0
+        # files at top level for HPV/HRB charla. HLU and HLL keep charlas
+        # flat; recursive_glob doesn'"'"'t hurt them. Same gap-fill as the
+        # art recursive_glob=True I added in Group 2.
+        "recursive_glob": True,
         # Spec §4 didn't override top_fraction. Fase A 2026-05-22 OCR
         # diagnostic showed that on a HRB chintegral compilation page (same
         # F-CRS-RCH-01 template), top_fraction=0.25 captures only the title
