@@ -606,7 +606,16 @@ _ANDAMIOS_ANCHORS: list[Flavor] = [
             "plataformas de trabajo",  # section header
             "pagina 1 de",  # cover marker
         ],
-        "min_match": 4,
+        # Spec §17 set min_match=4 with "redundancia útil" but no OCR data.
+        # Fase A 2026-05-22 OCR diagnostic (.tmp_calibration/ocr_band_diagnostic.py):
+        # EVERY casi-match on the real ABRIL HRB fixture matched exactly 3 of 9
+        # anchors (lista de chequeo de andamios + datos del andamio OR tipo
+        # andamio + pagina 1 de). The remaining 6 anchors (running header,
+        # form code, section headers) are NOT picked up by Tesseract at
+        # top_fraction=0.25 — verified across all 4 casi-match pages.
+        # Conformed to universal rule (≥3 matches ⇒ portada). Anti-anchors
+        # already protect against ART cross-categoría.
+        "min_match": 3,
         "anti_anchors": [
             "analisis de riesgos en el trabajo",  # ART form title — rejects misfiled ARTs
             "f crs art 01",  # ART form code (full A12 family prefix)
@@ -713,6 +722,16 @@ PATTERNS: dict[str, SiglaPattern] = {
     "charla": {
         "filename_glob": r"^.*charla.*\.pdf$",
         "scan_strategy": "anchors",
+        # Spec §4 didn't override top_fraction. Fase A 2026-05-22 OCR
+        # diagnostic showed that on a HRB chintegral compilation page (same
+        # F-CRS-RCH-01 template), top_fraction=0.25 captures only the title
+        # field ("nombre de la charla", 1/12 anchors) — the typology
+        # checkboxes (charla de induccion, charla re instruccion, reunion
+        # de coordinacion, difusion de documentos) sit between 0.25 and 0.33
+        # vertically. Raising to 1/3 recovers 4 additional anchors per
+        # cover page → reaches min_match=3 reliably. Matches the band
+        # already used by dif_pts (shares the same form template family).
+        "top_fraction": 1 / 3,
         "cover_flavors": _CHARLA_ANCHORS,
     },
     "insgral": {
@@ -772,6 +791,12 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*chintegral.*\.pdf$",
         "scan_strategy": "anchors",
         "recursive_glob": True,
+        # Same OCR-band rationale as charla above — chintegral shares the
+        # F-CRS-RCH-01 form template (f_rch flavor) and needs the wider
+        # band to pick up the typology checkbox anchors. The other two
+        # flavors (f_japa, f_previene) are independent templates whose
+        # anchors are concentrated higher; widening doesn't hurt them.
+        "top_fraction": 1 / 3,
         "cover_flavors": _CHINTEGRAL_ANCHORS,
     },
     "dif_pts": {
