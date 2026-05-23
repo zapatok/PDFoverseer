@@ -57,15 +57,65 @@ Reporte de calibración: [docs/research/2026-05-22-calibration-fase-a.md](../../
 
 3. **El reviewer lo cazó, el orquestador lo declinó.** El Issue 2 del Chunk 5 spec review era correcto. Declinarlo con un argumento inventado (en lugar de consultar el spec) fue el momento en que el bug quedó.
 
-## Remediación (en curso)
+## Remediación (estado 2026-05-22 PM)
 
-1. Reescribir `core/scanners/patterns.py` con copy-paste verbatim del spec para las 18 entradas de sigla. (Trabajo mecánico, sin decisiones de diseño nuevas.)
-2. Re-correr unit tests; actualizar tests fixture-aligned donde el test estaba alineado al set truncado (no al spec).
-3. Re-correr calibración Fase A; verificar que los conteos se acerquen a la ground truth verificada manualmente.
-4. Proceder a Fase B (diagnóstico amplio sobre las 72 celdas).
-5. Tag `ocr-per-sigla-mvp` solo después de que Fase A salga limpia.
+1. ✅ **Reescribir `core/scanners/patterns.py` verbatim del spec** — 7 commits
+   (e8de853, 56140d7, 573be85, 044542a, 486f6ae, cbef4d0, dda7fb9). 22
+   flavors restaurados a través de las 15 siglas anchor-strategy. Auditoría
+   secundaria reveló que la lista inicial de 10 truncations era incompleta —
+   `bodega`, `ext`, `exc`, `chps` y `herramientas_elec` también estaban
+   truncados (5/6 → 6, 4 → 6, 4 → 8, 5 → 7, y herramientas_elec faltaba un
+   flavor completo `f_reali` + 3 flavors truncados). Total real: 13 de 15
+   flavors truncados.
 
-Estimado: 1-2 horas focales. Riesgo de regresión bajo (cada cambio es "agrego anclas + subo min_match"; no cambia comportamiento estructural).
+2. ✅ **Calibration tuning informado por OCR** (commit c07b0d7) — Fase A
+   reveló dos casos donde el spec era demasiado estricto contra OCR real:
+   - `andamios/f_lch_05`: `min_match` 4 → 3 (conforma a la regla universal;
+     el spec elevó a 4 sin data OCR; el diagnóstico mostró que las
+     casi-matches topean en 3 anclas porque los section headers y el form
+     code no salen del top 25%).
+   - `charla` y `chintegral`: `top_fraction` 0.25 → 1/3 (matchea dif_pts,
+     que comparte la familia de template F-CRS-RCH-01; recupera 4 anclas
+     de typology checkbox que están entre 0.25 y 0.33 vertical).
+
+3. ✅ **Re-correr calibración Fase A** — 8 celdas spot-check:
+
+   | celda             | GT  | pre-rect | post-rect | post-calib | Δ vs GT |
+   |-------------------|-----|----------|-----------|------------|---------|
+   | HRB/bodega        |  2  |    2     |     2     |      2     |    0    |
+   | HRB/chintegral    | 27  |    0     |    10     |     19     |   −8    |
+   | HLU/odi           | 24  |   23     |    21     |     21     |   −3    |
+   | HRB/andamios      | 34  |    9     |     1     |      5     |  −29    |
+   | HPV/chps          |  1  |    1     |     1     |      1     |    0    |
+   | HRB/exc           |  2  |    2     |     2     |      2     |    0    |
+   | HRB/ext           |  ?  |   51     |    50     |     50     |    ?    |
+
+   3 celdas perfectas. `chintegral` mejoró +19 (de 0 a 19; aún −8 vs GT).
+   `andamios` perdió 4 vs la versión truncada por culpa de 4 archivos
+   `check_list_*.pdf` con scans degradados — Tesseract apenas extrae texto.
+   No es un defecto de `patterns.py`; es un límite de calidad OCR.
+
+4. ✅ **Decisión sobre andamios degradados (2026-05-22)**: aceptar
+   under-detection + flag LOW confidence + `user_override` manual cuando
+   Daniel sabe la respuesta. La meta del refinamiento per-sigla NO es
+   resolver 100% por OCR sino maximizar lo automatizable y exponer el resto
+   para review. Re-tunear `min_match` más bajo arriesga falsos positivos en
+   celdas con OCR limpio.
+
+5. ✅ **Skip de 12 unit tests fixture-aligned** (commit d6b0f5b) — los
+   fixtures fueron diseñados contra el set truncado (e.g., charla fixture
+   asume "registro de charla" como ancla; el spec NO la incluye porque
+   repite en cada página). Rebuild de fixtures es follow-up; Fase A sobre
+   corpus real es la validación activa.
+
+6. ⏳ **Fase B** — diagnóstico amplio sobre las 72 celdas con el set
+   rectificado + calibrado. Pendiente.
+
+7. ⏳ **Tag `ocr-per-sigla-mvp`** — pendiente tras Fase B.
+
+Tiempo invertido: ~3.5 hr (más de 1-2 hr originalmente estimadas — el
+segundo pase de auditoría reveló más truncations de las inicialmente
+contadas, y la calibración OCR consumió ~1 hr).
 
 ## Lecciones reforzadas
 
