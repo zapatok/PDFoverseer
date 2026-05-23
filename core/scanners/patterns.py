@@ -354,24 +354,25 @@ _CHINTEGRAL_ANCHORS: list[Flavor] = [
 # and would not count as a cover.
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
-# Caliente anchor constants (OCR-verified 2026-05-21 against
-# caliente_chequeos.pdf — 19-page HPV compilation; all 19 pages are standalone
-# 1-page trabajos en caliente checklists "Página 1 de 1").
+# Caliente anchor constants (verbatim from spec §15 · caliente).
 #
-# The form header reads "CHEQUEO TRABAJOS EN CALIENTE" and "F-LCH-CRS-32"
-# (normalized to "f lch crs" — NOTE: code direction is LCH-CRS, not CRS-LCH).
-# "CONSTRUCTORA REGION SUR" and "Página 1 de 1" are also in the top band.
-# min_match=3: every standalone cover gets ≥3 hits; a continuation page that
-# lacked "pagina 1 de" would drop to ≤2 hits and not count as a cover.
+# Mono-flavor f_lch_3x (cubre F-LCH-CRS-32 + -36 por intersección). 8 anclas
+# / min_match=3 (regla universal). Restaurada 2026-05-22 tras
+# anchor-truncation postmortem (estaba a 4 anclas con flavor name
+# "f_lch_crs_32" — código demasiado específico, no captura el variante -36).
 # ---------------------------------------------------------------------------
 _CALIENTE_ANCHORS: list[Flavor] = [
     {
-        "name": "f_lch_crs_32",
+        "name": "f_lch_3x",  # A9 — cubre F-LCH-CRS-32 + -36
         "anchors": [
-            "chequeo trabajos en caliente",  # form title — all pages
-            "constructora region sur",  # org name — all pages
-            "f lch crs",  # form-code family prefix (A12, direction LCH-CRS) — all pages
-            "pagina 1 de",  # cover-only discriminator — "Pagina 1 de 1"
+            "chequeo trabajos en caliente",  # form title
+            "constructora region sur spa",  # org name (with SpA suffix per spec)
+            "f lch crs",  # form-code family prefix (A12, LCH-CRS direction)
+            "item",  # column header
+            "actividad",  # column header
+            "cumple",  # column header
+            "esmeril angular",  # checklist item (template-specific, distinctive)
+            "pagina 1 de",  # cover marker
         ],
         "min_match": 3,
     },
@@ -404,28 +405,29 @@ _EXC_ANCHORS: list[Flavor] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Senal anchor constants (OCR-verified 2026-05-21 against senal_chequeos.pdf —
-# 6-page HPV compilation; all 6 pages are standalone senaletica checklists).
+# Senal anchor constants (verbatim from spec §12 · senal).
 #
-# Senal forms use landscape/mixed orientations — the form title "LISTA DE
-# CHEQUEO DE SEÑALÉTICA DE SEGURIDAD" and "CONSTRUCTORA REGION SUR" appear
-# in different positions depending on form variant.  top_fraction=1.0 is
-# required: at 0.25 many pages miss both anchors due to layout variance.
-# With full-page scan both anchors appear on every page (each is its own
-# standalone cover — no continuation pages).
-# Plan candidates ("F-PETS-CRS", "FECHA", "EMPRESA CONTRATISTA") were DROPPED:
-# "F-PETS-CRS" yields "f pets crs" which only appeared on 1/6 pages; the
-# others were not in the OCR top region consistently.
-# min_match=2 requires both anchors simultaneously.
+# Mono-flavor f_lch_22. 8 anclas / min_match=3 (regla universal). Restaurada
+# 2026-05-22 tras anchor-truncation postmortem (flavor estaba renombrado a
+# "f_pets_crs_xx" — no coincide con el código del formulario; estaba a
+# 2 anclas con min_match=2, y la entrada PATTERNS forzaba top_fraction=1.0
+# para compensar; el spec usa el default 0.25 con field-labels específicos
+# que tolerarán variaciones de layout vía la redundancia min_match=3).
 # ---------------------------------------------------------------------------
 _SENAL_ANCHORS: list[Flavor] = [
     {
-        "name": "f_pets_crs_xx",
+        "name": "f_lch_22",  # A9 — código del formulario
         "anchors": [
-            "lista de chequeo de senaletica de seguridad",  # form title — all pages
-            "constructora region sur",  # org name — all pages
+            "lista de chequeo de senaletica",  # form title
+            "zona area",  # field label (slash→space)
+            "persona(s) que realiza la inspeccion",  # field label
+            "codigo de registro pgs",  # field label
+            "cumple",  # column header
+            "fotografia",  # column header
+            "inspeccion realizada por",  # field label
+            "pagina 1 de",  # cover marker
         ],
-        "min_match": 2,
+        "min_match": 3,
     },
 ]
 
@@ -734,8 +736,10 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*senal.*\.pdf$",
         "scan_strategy": "anchors",
         "recursive_glob": True,
+        # top_fraction defaults to 0.25 per spec §12 (no override). Earlier
+        # implementation set 1.0 as a workaround for 2-anchor truncation;
+        # restoring 8 anchors removes the need for the workaround.
         "cover_flavors": _SENAL_ANCHORS,
-        "top_fraction": 1.0,
     },
     "ext": {
         "filename_glob": r"^.*ext.*\.pdf$",
