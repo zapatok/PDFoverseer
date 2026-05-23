@@ -490,79 +490,84 @@ _MAQUINARIA_ANCHORS: list[Flavor] = [
 
 
 # ---------------------------------------------------------------------------
-# Herramientas_elec anchor constants (OCR-verified 2026-05-22).
+# Herramientas_elec anchor constants (verbatim from spec §16 ·
+# herramientas_elec).
 #
-# Three flavors found in the corpus:
+# Multi-flavor (4 sabores) por spec:
 #
-# f_lch_xx  — Standard CRS template (F-CRS-LCH family, multiple variants used
-#   by HPV and HRB contractors).  Every page is a standalone cover ("Pagina 1
-#   de 1").  'constructora region sur' appears in the running header; 'pagina 1
-#   de' is the cover-only discriminator.  min_match=2 of 2 anchors.
-#   Anti-anchor: 'chequeo de elementos' fires on the EPP form (F-CRS-LCH-02
-#   "Chequeo de Elementos de Protección Personal") that is sometimes misfiled
-#   here.  OCR-verified on 2-page EPP shadow fixture: 'chequeo de elementos'
-#   fires on 100% of EPP pages in the top-third band; 'elementos de proteccion
-#   personal' does NOT appear in the top-third band (title wraps past the crop
-#   line), so it is kept as a secondary guard only.  Without anti_anchors, both
-#   EPP pages would falsely fire f_lch_xx (both have 'constructora region sur'
-#   + 'pagina 1 de' in the header).
-#   Known limitation: standalone 1-page EPP PDFs are A7-locked (always 1 doc,
-#   no OCR) — anti-anchors only protect multi-page PDFs where OCR is run.
+# f_lch_xx  — Intersección de field-labels del checklist CRS (cubre
+#   F-CRS-LCH-* + F-LCH-CRS-* + F-CRS-CRS-* por intersección). 12 anclas /
+#   min_match=4 (la única excepción a la regla universal min_match=3 en el
+#   spec — el spec eleva a 4 por la corta-substring "SI" / "NO" / "NA" que
+#   pueden match falso). Anti-anchors rechazan la familia EPP (LCH-CRS-02).
 #
-# f_hll_17  — HLL proprietary form REG-SSO-HLL-17 "Chequeo de Herramientas".
-#   'reg sso hll 17' is the form code; 'chequeo de herramientas' is the form
-#   title.  Both appear reliably in the top-third band.  min_match=2 of 2.
+# f_titan   — TITAN contractor template (TN-SGSSO-RG-NNN). 5 anclas /
+#   min_match=3.
 #
-# f_titan  — TITAN contractor proprietary template (TN-SGSSO-RG-NNN family).
-#   OCR-verified 2026-05-22 on 49 TITAN-branded files from the HPV corpus.
-#   TITAN uses a proprietary safety-management template distinct from the CRS
-#   LCH family (different layout, different form-code family, TITAN branding).
-#   63 TITAN files do use the CRS template (covered by f_lch_xx); 49 use this
-#   proprietary form.  Anchors (hit rates across 49 proprietary-form files):
-#     'titan'                                    → 100%  (brand name, logo area)
-#     'sistema de gestion de seguridad y salud'  →  93%  (form title / header)
-#     'tn sgsso rg'                              →  71%  (form-code prefix, A12)
-#     'inspeccion'                               →  91%  (section label)
-#     'herramienta'                              →  85%  (instrument label)
-#   min_match=2: 'titan' is always present; one additional anchor always fires
-#   even on the weakest pages.  CRS-template TITAN files are excluded because
-#   they lack 'titan' in the top-third band.
+# f_reali   — REALI propietario (FORM-PREV-021). 4 anclas / min_match=3.
 #
-# No f_reali flavor: the only REALI file in the corpus uses F-CRS-LCH-04
-# (covered by f_lch_xx).  Plan-proposed anchors ('FORM-PREV-021', REALI
-# branding) do not appear in any OCR output from the top-third band.
+# f_hll_17  — HLL propietario REG-SSO-HLL-17 "Chequeo de Herramientas".
+#   5 anclas / min_match=3.
+#
+# Restaurada 2026-05-22 tras anchor-truncation postmortem (f_lch_xx estaba
+# a 2 anclas / min_match=2; f_hll_17 a 2/2; f_titan a 5/2 con anclas
+# parcialmente distintas del spec; falta f_reali). PATTERNS["herramientas_elec"]
+# top_fraction=1/3 también removido — el spec usa default 0.25 (línea 2204).
 # ---------------------------------------------------------------------------
 _HERRAMIENTAS_ELEC_ANCHORS: list[Flavor] = [
     {
-        "name": "f_lch_xx",
+        "name": "f_lch_xx",  # A9 — cubre F-CRS-LCH-* + F-LCH-CRS-* + F-CRS-CRS-*
         "anchors": [
-            "constructora region sur",  # running header — all pages
-            "pagina 1 de",  # cover-only discriminator ("Pagina 1 de 1")
+            "constructora region sur",  # running header
+            "f crs lch",  # form-code variant 1
+            "f lch crs",  # form-code variant 2
+            "f crs crs",  # form-code variant 3
+            "item",  # column header
+            "actividad",  # column header
+            "cumple",  # column header
+            "si",  # column value header (short — defended by min_match=4)
+            "no",  # column value header
+            "na",  # column value header
+            "pagina 1 de",  # cover marker
+            "inspeccion realizada",  # section header
         ],
-        "min_match": 2,
+        "min_match": 4,  # spec excepción — eleva a 4 por short-substring risk
         "anti_anchors": [
-            "chequeo de elementos",  # EPP form title — rejects LCH-CRS-02 misfiled pages
-            "elementos de proteccion personal",  # EPP form section header (secondary guard)
+            "elementos de proteccion personal",  # EPP form title — rejects LCH-CRS-02
+            "lch crs 02",  # EPP form code
         ],
     },
     {
-        "name": "f_hll_17",
+        "name": "f_titan",  # A9
         "anchors": [
-            "reg sso hll 17",  # HLL form code — all covers
-            "chequeo de herramientas",  # HLL form title — all covers
+            "titan",  # brand
+            "check list",  # title fragment
+            "herramientas electricas",  # title fragment
+            "tn sgsso rg",  # form-code family prefix (A12)
+            "sistema de gestion de seguridad y salud ocupacional",  # title/header
         ],
-        "min_match": 2,
+        "min_match": 3,
     },
     {
-        "name": "f_titan",
+        "name": "f_reali",  # A9
         "anchors": [
-            "titan",  # TITAN brand name in logo/header area — 100% hit rate
-            "sistema de gestion de seguridad y salud",  # form title/header — 93%
-            "tn sgsso rg",  # form-code family prefix (A12) — 71%
-            "inspeccion",  # section label — 91%
-            "herramienta",  # instrument label — 85%
+            "reali",  # brand
+            "form prev 021",  # form code (separators normalized)
+            "lista de chequeo de herramientas",  # form title
+            "programa de gestion en seguridad",  # subtitle/banner
         ],
-        "min_match": 2,
+        "min_match": 3,
+    },
+    {
+        "name": "f_hll_17",  # A9 — REG-SSO-HLL-17
+        "anchors": [
+            "reg sso hll 17",  # full form code
+            "chequeo de herramientas",  # form title
+            "mantencion de obra",  # section/site label
+            "codificacion",  # field label
+            "estado enchufe macho",  # checklist item (distinctive)
+        ],
+        "min_match": 3,
     },
 ]
 
@@ -780,10 +785,10 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*herramientas_elec.*\.pdf$",
         "scan_strategy": "anchors",
         "recursive_glob": True,
-        # top_fraction 1/3 (not the 0.25 default): the HLL REG-SSO-HLL-17
-        # form-code sits lower than the 0.25 band. All three flavors' anchor
-        # hit-rates (see comment above) were OCR-verified in this top-third band.
-        "top_fraction": 1 / 3,
+        # top_fraction defaults to 0.25 per spec §16 line 2204 (explicit
+        # "top_fraction": 0.25 in the spec'"'"'s Python block). Earlier
+        # implementation set 1/3 as a workaround for 2-anchor truncation
+        # in f_hll_17; restoring 5 anchors removes the need for the workaround.
         "cover_flavors": _HERRAMIENTAS_ELEC_ANCHORS,
     },
     "andamios": {
