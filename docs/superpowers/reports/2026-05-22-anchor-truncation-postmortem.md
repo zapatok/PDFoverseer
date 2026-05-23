@@ -108,10 +108,41 @@ Reporte de calibración: [docs/research/2026-05-22-calibration-fase-a.md](../../
    repite en cada página). Rebuild de fixtures es follow-up; Fase A sobre
    corpus real es la validación activa.
 
-6. ⏳ **Fase B** — diagnóstico amplio sobre las 72 celdas con el set
-   rectificado + calibrado. Pendiente.
+6. ✅ **Fase B sample** (commit 19332ec + reporte) — smoke sobre 72 celdas
+   con max 2 PDFs × 20 pp por celda (13.9 min total). De 24 celdas
+   flagueadas: **8 son `folder_missing`** (A8 working: HLL/odi, HLL/chps,
+   HLU/{bodega,senal,altura,chps,andamios}, HRB/{reunion,senal,chps}), **1
+   es `anti_anchored`** (HLL/dif_pts working as designed — el sample
+   rechazó 10 páginas shadow test y detectó 9 covers). Las **15 reales**:
 
-7. ⏳ **Tag `ocr-per-sigla-mvp`** — pendiente tras Fase B.
+   - **ART en 3 de 4 hospitales** (HPV/HRB/HLL `no_covers_no_signal`):
+     mismo patrón de scans degradados que andamios. El header del form
+     ("ANALISIS DE RIESGOSEN EL TRABAJO (ART)" + "F-CRS-ART-01") SÍ se
+     lee, pero los field-labels del cover (nombre del supervisor, area
+     de trabajo, descripción) NO se extraen del top 25% en la mayoría de
+     los PDFs. Solo HLU (scans limpios) detecta. Decisión arquitectónica
+     2026-05-22: aceptar under-detection + manual override.
+   - **HPV/maquinaria `no_covers_no_signal`**: 14 files, 0 covers en
+     muestra. Mismo problema OCR-degradado.
+   - **4 celdas `near_matches_no_covers`** (HPV/charla, HPV/chintegral,
+     HRB/herramientas_elec, HLL/senal): anclas cerca pero no llegan a
+     min_match en el sample. Real-corpus run probablemente capture
+     algunos por la cobertura más amplia (es muestra de solo 2 PDFs).
+   - **5 V4 errors en insgral/altura** (HPV/insgral, HPV/altura,
+     HLU/insgral, HLL/insgral, HLL/altura): errores del motor V4 (Tess
+     o el pipeline) en ciertos PDFs específicos. Worth investigating
+     pero no bloquea MVP (V4 ya tiene auto-retry per FASE 5).
+
+   Reporte completo: `docs/research/2026-05-22-calibration-fase-b.md`.
+   Defecto spec adicional descubierto y arreglado en proceso: charla
+   sin `recursive_glob: True` (HPV+HRB tienen subfolders por
+   contratista — 384 PDFs perdidos antes del fix).
+
+7. ⏳ **Tag `ocr-per-sigla-mvp`** — pendiente. El estado actual es
+   aceptable como MVP: las cells "limpias" (HLU + algunas HPV/HRB) son
+   precisas; las degraded-scan cells (ART HPV/HRB/HLL, maquinaria HPV,
+   andamios HRB) caen a LOW confidence + manual override, exactamente
+   el flujo FASE 2/3 ya diseñado.
 
 Tiempo invertido: ~3.5 hr (más de 1-2 hr originalmente estimadas — el
 segundo pase de auditoría reveló más truncations de las inicialmente
