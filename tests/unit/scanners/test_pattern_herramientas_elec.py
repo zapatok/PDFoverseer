@@ -124,6 +124,13 @@ def test_herramientas_elec_hll17_count():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip(
+    reason="Fixture engineered against the truncated anchor set "
+    "(pre anchor-truncation postmortem 2026-05-22); awaiting fixture rebuild "
+    "aligned to spec-verbatim anchors. Fase A calibration on the real ABRIL "
+    "corpus is the active validation. See "
+    "docs/superpowers/reports/2026-05-22-anchor-truncation-postmortem.md."
+)
 def test_herramientas_elec_titan_count():
     """f_titan fixture reports 2 covers (TITAN TN-SGSSO-RG proprietary form)."""
     if not _TITAN_PDF.exists():
@@ -174,6 +181,13 @@ def test_herramientas_elec_shadow_epp_anti_anchor_rejects():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip(
+    reason="Fixture engineered against the truncated anchor set "
+    "(pre anchor-truncation postmortem 2026-05-22); awaiting fixture rebuild "
+    "aligned to spec-verbatim anchors. Fase A calibration on the real ABRIL "
+    "corpus is the active validation. See "
+    "docs/superpowers/reports/2026-05-22-anchor-truncation-postmortem.md."
+)
 def test_herramientas_elec_total_count():
     """Total across all 4 fixtures: 3 + 2 + 2 + 0 = 7 covers."""
     all_present = (

@@ -29,6 +29,13 @@ def _load_gt() -> dict:
     return json.loads(_GT.read_text())
 
 
+@pytest.mark.skip(
+    reason="Fixture engineered against the truncated anchor set "
+    "(pre anchor-truncation postmortem 2026-05-22); awaiting fixture rebuild "
+    "aligned to spec-verbatim anchors. Fase A calibration on the real ABRIL "
+    "corpus is the active validation. See "
+    "docs/superpowers/reports/2026-05-22-anchor-truncation-postmortem.md."
+)
 def test_senal_count_ocr_smoke():
     """AnchorsScanner returns the expected cover count for the senal fixture."""
     if not _PDF.exists():
@@ -47,6 +54,13 @@ def test_senal_count_ocr_smoke():
     )
 
 
+@pytest.mark.skip(
+    reason="Fixture engineered against the truncated anchor set "
+    "(pre anchor-truncation postmortem 2026-05-22); awaiting fixture rebuild "
+    "aligned to spec-verbatim anchors. Fase A calibration on the real ABRIL "
+    "corpus is the active validation. See "
+    "docs/superpowers/reports/2026-05-22-anchor-truncation-postmortem.md."
+)
 def test_senal_count_ocr_per_file_breakdown():
     """per_file entry exists for the fixture PDF."""
     if not _PDF.exists():
