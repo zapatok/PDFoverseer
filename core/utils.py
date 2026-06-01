@@ -1,4 +1,5 @@
 """Shared configuration, types, and utilities for the OCR pipeline."""
+
 from __future__ import annotations
 
 import re
@@ -8,27 +9,39 @@ from dataclasses import dataclass, field
 # Configuration Constants
 # ============================================================================
 
-DPI              = 150
-CROP_X_START     = 0.70   # rightmost 30%
-CROP_Y_END       = 0.22   # top 22%
-TESS_CONFIG      = "--psm 6 --oem 1"
-PARALLEL_WORKERS = 6      # concurrent Tesseract subprocesses
-BATCH_SIZE       = 12     # pages per batch (pause/cancel granularity)
+DPI = 150
+CROP_X_START = 0.70  # rightmost 30%
+CROP_Y_END = 0.22  # top 22%
+TESS_CONFIG = "--psm 6 --oem 1"
+PARALLEL_WORKERS = 6  # concurrent Tesseract subprocesses
+BATCH_SIZE = 12  # pages per batch (pause/cancel granularity)
 
 # OCR auto-retry (FASE 5) — el orquestador reintenta un scan de celda fallido
 # en silencio antes de reportar el error.
-OCR_RETRY_COUNT = 2          # reintentos tras el intento inicial (3 intentos totales)
-OCR_RETRY_BACKOFF_S = 0.5    # pausa entre intentos
+OCR_RETRY_COUNT = 2  # reintentos tras el intento inicial (3 intentos totales)
+OCR_RETRY_BACKOFF_S = 0.5  # pausa entre intentos
 
-MIN_CONF_FOR_NEW_DOC = 0.55   # sweep2 (2026-03-24, 40 fixtures incl. degraded)
-ANOMALY_DROPOUT      = 0.0
+# Compilation-suspect heuristic (audit #4). Two signals flag a folder as a
+# likely compilation: a single PDF much longer than one document, OR several
+# medium PDFs whose average length is well above one document (a compilation
+# spread across files, which the per-PDF factor alone misses -- e.g.
+# HRB/andamios check_list_*.pdf of 6-9pp).
+COMPILATION_PAGE_FACTOR = 3  # a PDF is suspect if pages > expected x this
+COMPILATION_RATIO_FACTOR = 2  # a folder is suspect if avg pages/PDF > expected x this
+
+MIN_CONF_FOR_NEW_DOC = 0.55  # sweep2 (2026-03-24, 40 fixtures incl. degraded)
+ANOMALY_DROPOUT = 0.0
 PHASE4_FALLBACK_CONF = 0.15  # re-enabled: recovers pages the gap solver missed
-CLASH_BOUNDARY_PEN   = 1.5   # sweep2
-PH5B_CONF_MIN        = 0.50  # sweep2
-PH5B_RATIO_MIN       = 0.90  # lowered from 0.95: zero regressions on 40 fixtures, fixes INS_31 (3 misreads in 31-page all-1-page PDF)
+CLASH_BOUNDARY_PEN = 1.5  # sweep2
+PH5B_CONF_MIN = 0.50  # sweep2
+PH5B_RATIO_MIN = 0.90  # lowered from 0.95: zero regressions on 40 fixtures, fixes INS_31 (3 misreads in 31-page all-1-page PDF)
 INFERENCE_ENGINE_VERSION = "s2t-helena"
-PAGE_PATTERN_VERSION     = "v1-baseline"  # restored baseline: P-prefix only, tot<=10, Unicode quotes intact
-SCANNER_PATTERNS_VERSION = "v1-ocr-per-sigla"  # patterns.py registry: 18 siglas, anchors + V4 pagination
+PAGE_PATTERN_VERSION = (
+    "v1-baseline"  # restored baseline: P-prefix only, tot<=10, Unicode quotes intact
+)
+SCANNER_PATTERNS_VERSION = (
+    "v1-ocr-per-sigla"  # patterns.py registry: 18 siglas, anchors + V4 pagination
+)
 
 # ============================================================================
 # Page Number Patterns & Normalization
@@ -69,14 +82,15 @@ def _parse(text: str) -> tuple[int | None, int | None]:
 # Data Types
 # ============================================================================
 
+
 @dataclass
 class Document:
-    index:          int
+    index: int
     start_pdf_page: int
     declared_total: int
-    pages:          list[int] = field(default_factory=list)
+    pages: list[int] = field(default_factory=list)
     inferred_pages: list[int] = field(default_factory=list)
-    sequence_ok:    bool      = True
+    sequence_ok: bool = True
 
     @property
     def found_total(self) -> int:
@@ -90,10 +104,11 @@ class Document:
 @dataclass
 class _PageRead:
     """Internal per-page OCR result used for inference."""
-    pdf_page:   int
-    curr:       int | None
-    total:      int | None
-    method:     str
+
+    pdf_page: int
+    curr: int | None
+    total: int | None
+    method: str
     confidence: float
     # Set by Phase 1b; not stored in sessions (has default):
     _ph1_orphan_candidate: bool = field(default=False, repr=False, compare=False)

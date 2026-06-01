@@ -14,6 +14,8 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 
+from core.utils import COMPILATION_PAGE_FACTOR, COMPILATION_RATIO_FACTOR
+
 # Tentative thresholds — calibrate per sigla as needed. Conservative
 # defaults; better to flag false positives than miss real compilations.
 EXPECTED_PAGES_PER_DOC: dict[str, int] = {
@@ -37,8 +39,6 @@ EXPECTED_PAGES_PER_DOC: dict[str, int] = {
     "chps": 4,
 }
 
-_TIGHT_FACTOR = 5  # PDF is suspect if pages > expected × factor
-
 
 def _page_count(pdf_path: Path) -> int:
     try:
@@ -49,21 +49,32 @@ def _page_count(pdf_path: Path) -> int:
 
 
 def flag_compilation_suspect(folder: Path, *, sigla: str) -> bool:
-    """Return True if at least one PDF in folder has page-count
-    >> expected for this sigla (likely compilation).
+    """Return True if a folder likely contains a compilation (audit #4).
+
+    Two signals:
+      1. **Per-PDF:** any single PDF longer than ``expected ×
+         COMPILATION_PAGE_FACTOR`` — a compilation packed into one file.
+      2. **Aggregate:** at least 3 PDFs whose *average* length exceeds
+         ``expected × COMPILATION_RATIO_FACTOR`` — a compilation spread across
+         several medium PDFs that no single PDF reveals (e.g. HRB/andamios
+         ``check_list_*.pdf`` of 6-9pp).
 
     Args:
         folder: Directory to scan recursively for PDF files.
         sigla: Category key used to look up the expected pages per document.
 
     Returns:
-        True if any PDF exceeds the compilation threshold, False otherwise.
+        True if either signal fires, False otherwise.
     """
     if not folder.exists():
         return False
+    counts = [c for c in (_page_count(p) for p in folder.rglob("*.pdf")) if c > 0]
+    if not counts:
+        return False
     expected = EXPECTED_PAGES_PER_DOC.get(sigla, 5)
-    threshold = expected * _TIGHT_FACTOR
-    for pdf in folder.rglob("*.pdf"):
-        if _page_count(pdf) > threshold:
-            return True
-    return False
+    # Per-PDF signal: one file much longer than a single document.
+    if any(c > expected * COMPILATION_PAGE_FACTOR for c in counts):
+        return True
+    # Aggregate signal: several medium PDFs averaging well above one document.
+    avg = sum(counts) / len(counts)
+    return len(counts) >= 3 and avg > expected * COMPILATION_RATIO_FACTOR
