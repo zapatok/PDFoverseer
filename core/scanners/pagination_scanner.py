@@ -19,12 +19,14 @@ confidence so the operator reviews it.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from core.scanners.base import ConfidenceLevel, ScanResult
 from core.scanners.cancellation import CancellationToken, CancelledError
 from core.scanners.simple_factory import SimpleFilenameScanner
+from core.scanners.utils.cell_enumeration import enumerate_cell_pdfs
 from core.scanners.utils.pdf_render import PdfRenderError, get_page_count
 from core.scanners.utils.v4_count import V4CountResult, count_documents_v4
 
@@ -52,7 +54,13 @@ class PaginationScanner:
             folder, override_method=override_method
         )
 
-    def count_ocr(self, folder: Path, *, cancel: CancellationToken) -> ScanResult:
+    def count_ocr(
+        self,
+        folder: Path,
+        *,
+        cancel: CancellationToken,
+        on_pdf: Callable[[str], None] | None = None,
+    ) -> ScanResult:
         """Run pase-2 OCR by counting "Página N de M" documents via V4.
 
         For each PDF in *folder*: single-page files contribute 1 document
@@ -64,6 +72,10 @@ class PaginationScanner:
             folder: Directory containing the PDFs to scan.
             cancel: Token checked before each PDF; raises ``CancelledError``
                 if the orchestrator has signalled cancellation.
+            on_pdf: Optional callback invoked with each PDF's filename once it
+                has been processed (A7, V4, or handled error). Drives the
+                per-PDF progress bar; never called for a PDF aborted by
+                cancellation.
 
         Returns:
             A ``ScanResult`` with:
@@ -84,7 +96,7 @@ class PaginationScanner:
         if "folder_missing" in base.flags:
             return base  # A8
 
-        pdfs = sorted(folder.rglob("*.pdf"))
+        pdfs = enumerate_cell_pdfs(folder)
         if not pdfs:
             return base
 
@@ -97,36 +109,47 @@ class PaginationScanner:
         low_confidence_files: list[str] = []
 
         for pdf in pdfs:
-            cancel.check()
+            cancel.check()  # outside the try: a pre-PDF cancel must not emit on_pdf
+            emit = True
             try:
-                pages = get_page_count(pdf)
-            except PdfRenderError as exc:
-                errors.append(f"page_count_failed:{pdf.name}:{exc}")
-                continue
-            if pages == 1:
-                # A7 — 1 page = 1 document, locked, no OCR.
-                per_file[pdf.name] = 1
-                total += 1
-                a7_used = True
-                continue
-            try:
-                v4 = count_documents_v4(pdf, cancel=cancel)
+                try:
+                    pages = get_page_count(pdf)
+                except PdfRenderError as exc:
+                    errors.append(f"page_count_failed:{pdf.name}:{exc}")
+                    continue
+                if pages == 1:
+                    # A7 — 1 page = 1 document, locked, no OCR.
+                    per_file[pdf.name] = 1
+                    total += 1
+                    a7_used = True
+                    continue
+                try:
+                    v4 = count_documents_v4(pdf, cancel=cancel)
+                except CancelledError:
+                    raise
+                except (PdfRenderError, OSError, RuntimeError) as exc:
+                    errors.append(f"v4_failed:{pdf.name}:{exc}")
+                    # Conservative fallback: count the compilation as 1 document.
+                    per_file[pdf.name] = 1
+                    total += 1
+                    low_confidence_files.append(pdf.name)
+                    continue
+                # A degenerate count of 0 for a multi-page PDF is never right —
+                # fall back to 1 and flag it.
+                pdf_count = v4.count if v4.count > 0 else 1
+                per_file[pdf.name] = pdf_count
+                total += pdf_count
+                if not _v4_result_is_trustworthy(v4):
+                    low_confidence_files.append(pdf.name)
             except CancelledError:
+                # Cancelled mid-PDF: this file did not finish — do not tick it.
+                emit = False
                 raise
-            except (PdfRenderError, OSError, RuntimeError) as exc:
-                errors.append(f"v4_failed:{pdf.name}:{exc}")
-                # Conservative fallback: count the compilation as 1 document.
-                per_file[pdf.name] = 1
-                total += 1
-                low_confidence_files.append(pdf.name)
-                continue
-            # A degenerate count of 0 for a multi-page PDF is never right —
-            # fall back to 1 and flag it.
-            pdf_count = v4.count if v4.count > 0 else 1
-            per_file[pdf.name] = pdf_count
-            total += pdf_count
-            if not _v4_result_is_trustworthy(v4):
-                low_confidence_files.append(pdf.name)
+            finally:
+                # `finally` runs through every `continue` above, so A7/error
+                # branches still count as one processed PDF.
+                if emit and on_pdf is not None:
+                    on_pdf(pdf.name)
 
         if a7_used:
             flags.append("a7_one_page_locked")
