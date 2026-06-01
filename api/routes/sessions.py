@@ -434,6 +434,13 @@ def get_cell_files(
         subfolder = pdf.parent.name if pdf.parent != folder else None
         override = per_file_overrides.get(pdf.name)
         inferred = per_file.get(pdf.name)
+        # effective_count defaults to 1 here — a PDF the operator is looking at
+        # counts as at least one document. This is intentionally asymmetric with
+        # api.state.compute_cell_count, which defaults a dataless cell to 0
+        # (audit #7). The divergence is presentation-only and pre-scan: after a
+        # scan, per_file covers every PDF and the two agree. Kept at 1 because
+        # it is the intuitive per-file view for the operator.
+        effective = override if override is not None else (inferred if inferred is not None else 1)
         out.append(
             {
                 "name": pdf.name,
@@ -442,9 +449,7 @@ def get_cell_files(
                 "suspect": page_count >= 10,
                 "per_file_count": inferred,
                 "override_count": override,
-                "effective_count": override
-                if override is not None
-                else (inferred if inferred is not None else 1),
+                "effective_count": effective,
                 "origin": _origin_for(pdf.name, override),
             }
         )
