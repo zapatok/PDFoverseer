@@ -27,6 +27,7 @@ from core.orchestrator import (
 )
 from core.scanners.base import ConfidenceLevel, NearMatchEntry, ScanResult, ScanTelemetry
 from core.scanners.cancellation import CancellationToken
+from core.scanners.utils.cell_enumeration import enumerate_cell_pdfs
 
 # Single thread per session is plenty — Daniel's machine has one user, and
 # scan_cells_ocr already uses a ProcessPoolExecutor internally for parallelism.
@@ -186,6 +187,11 @@ def scan_ocr(
             raise HTTPException(404, f"Folder missing for {hosp}/{sigla}")
         cells_with_paths.append((hosp, sigla, folder_path))
 
+    # Pre-count PDFs across the selected cells so the client can size the
+    # progress bar immediately (audit #1). Uses the same enumeration the OCR
+    # scanners iterate, so the scan's `done` converges exactly on total_pdfs.
+    total_pdfs = sum(len(enumerate_cell_pdfs(f)) for (_, _, f) in cells_with_paths)
+
     # Atomic check-then-set: setdefault returns the value already in the dict if
     # it existed, otherwise installs and returns the new one.
     handle = make_handle(session_id=session_id, total=len(cells_with_paths))
@@ -261,7 +267,7 @@ def scan_ocr(
             app.state.batches.pop(session_id, None)
 
     handle.future = _DISPATCH_POOL.submit(_run)
-    return {"accepted": True, "total": len(cells_with_paths)}
+    return {"accepted": True, "total": len(cells_with_paths), "total_pdfs": total_pdfs}
 
 
 @router.post("/sessions/{session_id}/cancel")

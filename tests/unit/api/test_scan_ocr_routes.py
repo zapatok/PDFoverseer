@@ -62,6 +62,17 @@ def test_scan_ocr_dispatches(client) -> None:
     assert r.json()["total"] == 1
 
 
+def test_scan_ocr_returns_total_pdfs(client) -> None:
+    # The fixture seeds exactly one odi PDF, so the progress bar's denominator
+    # (total_pdfs) must be 1 (audit finding #1 — real progress denominator).
+    sid = _open_and_scan(client)
+    r = client.post(f"/api/sessions/{sid}/scan-ocr", json={"cells": [["HPV", "odi"]]})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["accepted"] is True
+    assert body["total_pdfs"] == 1
+
+
 def test_cancel_no_active_batch_is_idempotent(client) -> None:
     r = client.post("/api/sessions/2027-12/cancel")
     assert r.status_code == 200
