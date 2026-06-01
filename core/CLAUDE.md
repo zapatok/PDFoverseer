@@ -1,6 +1,21 @@
 # core/ — OCR Pipeline & Inference Engine
 
-## V4 Pipeline (pipeline.py)
+## Counting architecture (read first)
+
+PDFoverseer counts documents per (hospital, sigla) in two passes, dispatched by
+`core/scanners/patterns.py` (one `scan_strategy` per sigla):
+
+- **Pase 1 — filename glob** (`SimpleFilenameScanner`): ~90% of cells. 1 PDF = 1
+  document, no OCR. Counts recursively via `count_pdfs_by_sigla`.
+- **Pase 2 — OCR** (`AnchorsScanner` / `PaginationScanner`): the implicit
+  compilations. See **Scanner Architecture** at the end for the triad.
+
+The **V4 pipeline** documented immediately below is **no longer a standalone
+scanner** — it is an internal engine reached **only** through `PaginationScanner`
+(via `utils/v4_count.py`). The V4 / inference sections describe that engine's
+internals; the active, current design is the scanner triad.
+
+## V4 Pipeline (pipeline.py — internal engine, reached via PaginationScanner)
 
 **Tess-SR only** (EasyOCR removed 2026-03-26, see postmortem):
 1. **Producers** (6 parallel workers): PyMuPDF rendering + Tesseract (Tier 1 direct + Tier 2 w/ 4x SR GPU bicubic)
