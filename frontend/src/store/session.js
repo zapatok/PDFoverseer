@@ -17,7 +17,7 @@ export const useSessionStore = create((set, get) => ({
 
   // FASE 2 additions
   scanningCells: new Set(),            // "HPV|odi" strings, mirrored in CategoryRow
-  scanProgress: null,                  // {done, total, etaMs, terminal?} | null
+  scanProgress: null,                  // {done, total, pdfName?, etaMs?, unit?, terminal?} | null
   lightbox: null,                      // {hospital, sigla, fileIndex, mode} | null
   _ws: null,
 
@@ -82,8 +82,10 @@ export const useSessionStore = create((set, get) => ({
 
   scanOcr: async (sessionId, cellPairs) => {
     try {
-      await api.scanOcr(sessionId, cellPairs);
-      set({ scanProgress: { done: 0, total: cellPairs.length } });
+      const resp = await api.scanOcr(sessionId, cellPairs);
+      // Size the bar from the real PDF count (audit #1); scan_started will
+      // confirm it over the WS moments later.
+      set({ scanProgress: { done: 0, total: resp?.total_pdfs ?? 0, unit: "pdf" } });
     } catch (error) {
       set({ error: String(error) });
     }
@@ -390,15 +392,37 @@ export const useSessionStore = create((set, get) => ({
         }
         break;
       }
+      case "scan_started":
+        // Real denominator for the bar: number of PDFs to scan (audit #1).
+        set({ scanProgress: { done: 0, total: event.total_pdfs, unit: "pdf" } });
+        break;
+      case "pdf_progress":
+        set({
+          scanProgress: {
+            done: event.done,
+            total: event.total,
+            pdfName: event.pdf_name,
+            etaMs: event.eta_ms,
+            unit: "pdf",
+          },
+        });
+        break;
       case "scan_progress":
-        set({ scanProgress: { done: event.done, total: event.total, etaMs: event.eta_ms } });
+        // Legacy cell-granularity progress — superseded by pdf_progress
+        // (audit #1). Still emitted by the backend for test/compat reasons;
+        // ignored here so it doesn't fight the per-PDF bar.
         break;
       case "scan_complete":
         // Scan run terminated → no cell can still be scanning. Defensive:
         // clears any cell that never emitted its own cell_done/cell_error.
+        // Finalize the PDF bar at 100% without clobbering its denominator.
         set({
           scanningCells: new Set(),
-          scanProgress: { ...state.scanProgress, terminal: "complete", done: event.scanned, total: event.scanned + (event.errors || 0) },
+          scanProgress: {
+            ...state.scanProgress,
+            terminal: "complete",
+            done: state.scanProgress?.total ?? 0,
+          },
         });
         // Auto-dismiss after 5s
         setTimeout(() => set((s) => (s.scanProgress?.terminal === "complete" ? { scanProgress: null } : s)), 5000);
@@ -406,10 +430,11 @@ export const useSessionStore = create((set, get) => ({
       case "scan_cancelled":
         // Scan run terminated → clear scanningCells. The interrupted cell
         // never emits cell_done/cell_error; without this it stays stuck
-        // on "Escaneando…" forever (bug caught in the FASE 5 smoke).
+        // on "Escaneando…" forever (bug caught in the FASE 5 smoke). Keep the
+        // per-PDF done where it stopped; just mark the bar cancelled.
         set({
           scanningCells: new Set(),
-          scanProgress: { ...state.scanProgress, terminal: "cancelled", done: event.scanned, total: event.total },
+          scanProgress: { ...state.scanProgress, terminal: "cancelled" },
         });
         setTimeout(() => set((s) => (s.scanProgress?.terminal === "cancelled" ? { scanProgress: null } : s)), 5000);
         break;
