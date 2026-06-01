@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { api } from "../lib/api";
 import { createWSClient } from "../lib/ws";
 import { invalidateHistory } from "../lib/useHistoryStore";
+import { OCR_CONFIRM_PDF_THRESHOLD } from "../lib/constants";
+import { estimateScanSeconds, shouldConfirmScan, totalPdfsForPairs } from "../lib/scanCost";
 
 export const useSessionStore = create((set, get) => ({
   view: "month",
@@ -81,6 +83,18 @@ export const useSessionStore = create((set, get) => ({
   },
 
   scanOcr: async (sessionId, cellPairs) => {
+    // Cost guard (audit #2): warn before a long OCR run and remind that
+    // regime-1 cells are already counted by filename. Estimated from the
+    // pase-1 filename counts the client already holds.
+    const totalPdfs = totalPdfsForPairs(get().session, cellPairs);
+    if (shouldConfirmScan(totalPdfs, OCR_CONFIRM_PDF_THRESHOLD)) {
+      const mins = Math.max(1, Math.round(estimateScanSeconds(totalPdfs) / 60));
+      const ok = window.confirm(
+        `Vas a escanear con OCR ${totalPdfs} PDFs (~${mins} min). En categorías ` +
+          `de régimen 1 el conteo por nombre de archivo ya suele ser correcto. ¿Continuar?`,
+      );
+      if (!ok) return;
+    }
     try {
       const resp = await api.scanOcr(sessionId, cellPairs);
       // Size the bar from the real PDF count (audit #1); scan_started will
