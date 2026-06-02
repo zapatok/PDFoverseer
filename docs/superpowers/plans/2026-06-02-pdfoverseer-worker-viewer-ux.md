@@ -215,7 +215,7 @@ describe("WORKER_SHORTCUTS", () => {
   const matches = new Set(WORKER_SHORTCUTS.flatMap((s) => s.match));
 
   it("cubre cada tecla que el visor maneja", () => {
-    const handled = ["PageDown", "PageUp", "Delete", "e", "E", "m", "M", "Backspace", "+", "-", "0", "5", "9"];
+    const handled = ["PageDown", "PageUp", "Delete", "e", "E", "m", "M", "Backspace", "+", "=", "-", "_", "0", "5", "9"];
     for (const k of handled) expect(matches.has(k)).toBe(true);
   });
 
@@ -253,7 +253,7 @@ export const WORKER_SHORTCUTS = [
   { keys: ["Re Pág"],     match: ["PageUp"],    action: "Retroceder" },
   { keys: ["Supr"],       match: ["Delete"],    action: "Borrar marca" },
   { keys: ["E"],          match: ["e", "E"],    action: "Editar página" },
-  { keys: ["+", "−"],     match: ["+", "-"],    action: "Acercar / alejar" },
+  { keys: ["+", "−"],     match: ["+", "=", "-", "_"], action: "Acercar / alejar" },
   { keys: ["M"],          match: ["m", "M"],    action: "Voz on / off" },
   { keys: ["Retroceso"],  match: ["Backspace"], action: "Corregir dígito" },
 ];
@@ -370,16 +370,11 @@ After the existing "limpia el buffer pendiente al cambiar de página" effect (li
 useEffect(() => { setZoom(1); }, [fileIndex, pageInFile]);
 ```
 
-After `const { doc, error } = usePdfDocument(pdfUrl);` (line ~61) add:
-```js
-const { panelRef, fitScale } = useFitScale(doc, /* page computed below */ 1);
-```
-> NOTE: `page` is derived later in the file (after the early returns). Move the `useFitScale` call so it uses the bound `page`, OR pass `pageInFile` clamped. Simplest: call `useFitScale(doc, Math.max(pageInFile, 1))` here — `pageInFile` is the source state and the page render already clamps. The hook only reads natural page size, so a transient over-bound value self-corrects on the next render.
-
-Replace the hook call with:
+Immediately after `const { doc, error } = usePdfDocument(pdfUrl);` (line ~61), add the hook in its **final form** (write this directly — do not use a placeholder):
 ```js
 const { panelRef, fitScale } = useFitScale(doc, Math.max(pageInFile, 1));
 ```
+> Why `pageInFile` and not `page`: the clamped `page` is derived later, **after** the early returns, but hooks must run before them. `pageInFile` (the source state, line ~32) is already in scope here. The hook only reads the page's natural size, so any transient over-bound value self-corrects on the next render. This call MUST sit above the `if (!files)` / `if (files.length === 0)` early returns so the hook order stays stable.
 
 Add zoom helpers next to the other handlers (near `advance`/`retreat`):
 ```js
@@ -586,7 +581,9 @@ return (
       onSelect={setPageInFile}
     />
     <div ref={panelRef} className="relative flex-1 overflow-auto bg-black">
-      {/* …PDF panel from Task 4… */}
+      {/* PRESERVE the full panel interior from Task 4 Step 3: the error/doc
+          render, <WorkerBubble state={bubbleState} value={bubbleValue} />, and
+          the zoom-overlay control. Do not drop WorkerBubble. */}
     </div>
     <WorkerHud /* …unchanged… */ />
   </div>
@@ -622,7 +619,7 @@ import { WORKER_SHORTCUTS } from "../lib/worker-shortcuts";
 ```
 At the foot of the `<aside>` (after the finish `<Button>`), add a compact, always-visible legend:
 ```jsx
-<div className="border-t border-po-border pt-3">
+<div className="shrink-0 border-t border-po-border pt-3">
   <p className="mb-1.5 text-xs uppercase tracking-wider text-po-text-muted">Atajos</p>
   <ul className="flex flex-col gap-1">
     {WORKER_SHORTCUTS.map((s) => (
@@ -638,7 +635,7 @@ At the foot of the `<aside>` (after the finish `<Button>`), add a compact, alway
   </ul>
 </div>
 ```
-> The `aside` is a flex column; the marks list already has `flex-1 overflow-y-auto`, so the legend sits at the bottom without pushing content off-screen. If vertical space is tight, wrap the legend in `shrink-0`.
+> The `aside` is a flex column; the marks list already has `flex-1 overflow-y-auto`, so the `shrink-0` keeps the legend pinned at the bottom while the marks list absorbs the extra height.
 
 - [ ] **Step 2: Build**
 
