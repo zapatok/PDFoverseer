@@ -1,16 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 
+import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
+
 import { api } from "../lib/api";
 import { useDebouncedCallback } from "../lib/hooks/useDebouncedCallback";
 import { usePdfDocument } from "../hooks/usePdfDocument";
+import { useFitScale } from "../hooks/useFitScale";
 import { useSpeechNumber } from "../hooks/useSpeechNumber";
 import { useSessionStore } from "../store/session";
 import { computeWorkerCount, fileSubtotal } from "../lib/worker-count";
+import Button from "../ui/Button";
 import { PdfPage } from "./PdfPage";
 import { WorkerBubble } from "./WorkerBubble";
 import { WorkerHud } from "./WorkerHud";
 
 const SAVE_DEBOUNCE_MS = 700;
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 4;
+const ZOOM_STEP = 0.2;
 
 /** La marca de una página concreta de un archivo, o undefined. */
 function markFor(marks, filename, page) {
@@ -34,6 +41,7 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
   const [status, setStatus] = useState(initCell?.worker_status || "en_progreso");
   const [pending, setPending] = useState(null); // buffer de dígitos tecleados, o null
   const [micPaused, setMicPaused] = useState(false);
+  const [zoom, setZoom] = useState(1);
 
   // --- carga de la lista de archivos (orden = sorted rglob del backend) ---
   useEffect(() => {
@@ -59,6 +67,11 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
     ? api.cellPdfUrl(sessionId, hospital, sigla, fileIdx)
     : null;
   const { doc, error } = usePdfDocument(pdfUrl);
+  // El ajuste-a-ventana usa `pageInFile` (estado fuente) porque el `page`
+  // acotado se deriva tras los early returns y los hooks deben correr antes;
+  // el hook solo lee el tamaño natural, así que un valor transitorio fuera de
+  // rango se autocorrige en el siguiente render.
+  const { panelRef, fitScale } = useFitScale(doc, Math.max(pageInFile, 1));
 
   // --- autosave con debounce + flush al cerrar ---
   const flushSave = useDebouncedCallback((m, st, cur) => {
@@ -80,6 +93,11 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
   // limpia el buffer pendiente al cambiar de página
   useEffect(() => {
     setPending(null);
+  }, [fileIndex, pageInFile]);
+
+  // El zoom es por página: al cambiar de página o archivo vuelve a "ajustado".
+  useEffect(() => {
+    setZoom(1);
   }, [fileIndex, pageInFile]);
 
   // --- atajos de teclado: un listener estable que delega en una ref fresca ---
@@ -140,6 +158,12 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
     }
   };
 
+  // --- zoom (por página; se resetea en el efecto de cambio de página) ---
+  const zoomIn = () => setZoom((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)));
+  const zoomOut = () => setZoom((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)));
+  const resetZoom = () => setZoom(1);
+  const effectiveScale = Math.max(0.1, fitScale * zoom);
+
   // --- mutaciones de marcas (cada una autosalva) ---
   const fixAndAdvance = () => {
     let nextMarks = marks;
@@ -186,6 +210,8 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
     else if (e.key === "Delete") { e.preventDefault(); deleteMark(); }
     else if (e.key === "e" || e.key === "E") { e.preventDefault(); editMark(); }
     else if (e.key === "m" || e.key === "M") { e.preventDefault(); setMicPaused((p) => !p); }
+    else if (e.key === "+" || e.key === "=") { e.preventDefault(); zoomIn(); }
+    else if (e.key === "-" || e.key === "_") { e.preventDefault(); zoomOut(); }
     else if (e.key === "Backspace") {
       e.preventDefault();
       setPending((p) => (p && p.length > 1 ? p.slice(0, -1) : null));
@@ -197,7 +223,7 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
 
   return (
     <div className="flex h-full w-full">
-      <div className="relative flex-1 overflow-auto bg-black">
+      <div ref={panelRef} className="relative flex-1 overflow-auto bg-black">
         {/* Un PDF roto no es un dead-end: el HUD y los atajos siguen vivos
             (spec §10) — el error se muestra en el panel y Re Pág / Av Pág
             permiten saltar a otro archivo. */}
@@ -209,11 +235,20 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
         ) : (
           doc && (
             <div className="flex justify-center p-4">
-              <PdfPage doc={doc} pageNumber={page} scale={1.8} />
+              <PdfPage doc={doc} pageNumber={page} scale={effectiveScale} />
             </div>
           )
         )}
         <WorkerBubble state={bubbleState} value={bubbleValue} />
+        {doc && !error && (
+          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg bg-po-panel/90 p-1 shadow-sm ring-1 ring-po-border backdrop-blur">
+            <Button size="sm" variant="ghost" icon={ZoomOut} onClick={zoomOut} aria-label="Alejar" />
+            <Button size="sm" variant="ghost" icon={Maximize2} onClick={resetZoom} aria-label="Ajustar a ventana">
+              {Math.round(zoom * 100)}%
+            </Button>
+            <Button size="sm" variant="ghost" icon={ZoomIn} onClick={zoomIn} aria-label="Acercar" />
+          </div>
+        )}
       </div>
       <WorkerHud
         files={files}
