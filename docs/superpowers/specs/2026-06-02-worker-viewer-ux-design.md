@@ -93,6 +93,8 @@ renombrado/eliminado), igual que el backend.
 - **Implementación:** un hook/función pura para la escala de ajuste
   (`computeFitScale(viewport, panelRect)`) testeable, más el `zoomFactor` como
   estado local del visor. `PdfPage` ya acepta `scale`; se le pasa la escala efectiva.
+  `computeFitScale` devuelve `1.0` si `pageW` o `pageH` es 0 (viewport degenerado de
+  una página malformada) para evitar la división por cero.
 - **Scroll:** cuando el zoom supera el panel, el contenedor ya es `overflow-auto`.
 
 ### ③ Columna de miniaturas (solo el PDF actual)
@@ -101,8 +103,11 @@ renombrado/eliminado), igual que el backend.
   la izquierda del panel PDF; una miniatura por página del **archivo abierto**
   (`doc` actual, `pageCount` páginas).
 - **Render perezoso:** `IntersectionObserver` — cada miniatura se rasteriza a un canvas
-  pequeño solo al entrar en viewport; se cachea el canvas/blob para no re-renderizar al
-  navegar. Reusa el `doc` ya cargado (sin fetch extra).
+  pequeño solo al entrar en viewport; se cachea para no re-renderizar al navegar. Reusa
+  el `doc` ya cargado (sin fetch extra). **Invalidación del cache:** keyed por página del
+  `doc` actual (p. ej. `WeakMap` sobre el objeto `doc` → mapa de canvas por número de
+  página). Al cambiar de archivo, `doc` es otro objeto → el cache se invalida solo, sin
+  limpieza manual.
 - **Estado visual:** resalta la página actual (anillo); las páginas con marca muestran
   un badge pequeño con el `count`. Clic en una miniatura → `setPageInFile(n)`.
 - **Layout:** el visor pasa a `[WorkerThumbnails | panel PDF | WorkerHud]`.
@@ -116,8 +121,10 @@ renombrado/eliminado), igual que el backend.
 - `WorkerHud.jsx`: sección compacta al pie, **siempre visible** (sin toggle), con chips:
   `0-9` ingresar · `Av Pág` fijar y avanzar · `Re Pág` retroceder · `Supr` borrar ·
   `E` editar página · `+ / −` zoom · `M` voz on/off · `Retroceso` corregir dígito.
-- Las teclas se muestran con el primitive `Badge`/estilo de tecla existente, en español
-  neutro, coherente con el texto "Re Pág / Av Pág" ya usado en el panel de error.
+- Las teclas se muestran con el primitive `Badge` en tono **`neutral`** (no un color de
+  estado como iris/jade/amber) y tipografía monoespaciada (`@fontsource/jetbrains-mono`,
+  ya dependencia) para que lean como teclas; el texto de la acción en español neutro,
+  coherente con "Re Pág / Av Pág" ya usado en el panel de error.
 
 ## Casos borde
 
