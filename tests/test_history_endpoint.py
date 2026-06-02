@@ -1,12 +1,26 @@
-"""GET /api/sessions/{id}/history?n=12 endpoint."""
+"""GET /api/sessions/{id}/history?n=12 endpoint.
+
+The endpoint's window is **time-based**: it returns the last N months counting
+back from today (see api/routes/history.py — session_id is only used for
+routing). The fixture therefore seeds data relative to the current UTC month so
+the assertions hold regardless of the wall-clock date the suite runs on.
+"""
 
 from __future__ import annotations
+
+from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
 from api.main import create_app
 from core.db.historical_repo import upsert_count
+
+
+def _ym(month_idx: int) -> tuple[int, int]:
+    """Convert an absolute year*12+month0 index back to (year, month)."""
+    year, month_zero = divmod(month_idx, 12)
+    return year, month_zero + 1
 
 
 @pytest.fixture
@@ -20,11 +34,13 @@ def client_with_history(tmp_path, monkeypatch):
         sid_state = mgr.open_session(year=2026, month=5, month_root=Path(tmp_path))
         sid = sid_state["session_id"]
 
-        # Seed 12 months: 2025-06 → 2026-05, count=10..21
+        # Seed 12 months ending at the current UTC month (count = 10..21), so the
+        # newest entry always lands inside the endpoint's "last N from today"
+        # window no matter when the test runs.
+        now = datetime.utcnow()
+        end_idx = now.year * 12 + (now.month - 1)
         for offset in range(12):
-            total = 2025 * 12 + 6 + offset - 1
-            year, month_zero = divmod(total, 12)
-            month = month_zero + 1
+            year, month = _ym(end_idx - 11 + offset)
             upsert_count(
                 mgr._conn,
                 year=year,
@@ -47,10 +63,17 @@ def test_history_endpoint_returns_n_months(client_with_history):
     assert "HPV|reunion" in data
     series = data["HPV|reunion"]
     assert len(series) == 12
-    assert series[0]["year"] == 2025
-    assert series[0]["month"] == 6
-    assert series[-1]["year"] == 2026
-    assert series[-1]["month"] == 5
+
+    now = datetime.utcnow()
+    end_idx = now.year * 12 + (now.month - 1)
+    first_year, first_month = _ym(end_idx - 11)
+    # Oldest entry is 11 months before today, with the lowest seeded count.
+    assert series[0]["year"] == first_year
+    assert series[0]["month"] == first_month
+    assert series[0]["count"] == 10
+    # Newest entry is the current UTC month, with the highest seeded count.
+    assert series[-1]["year"] == now.year
+    assert series[-1]["month"] == now.month
     assert series[-1]["count"] == 21
 
 
