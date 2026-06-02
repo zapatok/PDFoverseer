@@ -13,6 +13,7 @@ import Button from "../ui/Button";
 import { PdfPage } from "./PdfPage";
 import { WorkerBubble } from "./WorkerBubble";
 import { WorkerHud } from "./WorkerHud";
+import { WorkerThumbnails } from "./WorkerThumbnails";
 
 const SAVE_DEBOUNCE_MS = 700;
 const ZOOM_MIN = 0.25;
@@ -223,6 +224,13 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
 
   return (
     <div className="flex h-full w-full">
+      <WorkerThumbnails
+        doc={error ? null : doc}
+        pageCount={pageCount}
+        currentPage={page}
+        marks={marks[currentFile.name] || []}
+        onSelect={setPageInFile}
+      />
       <div ref={panelRef} className="relative flex-1 overflow-auto bg-black">
         {/* Un PDF roto no es un dead-end: el HUD y los atajos siguen vivos
             (spec §10) — el error se muestra en el panel y Re Pág / Av Pág
