@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Calendar, RefreshCw, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { useSessionStore } from "../store/session";
@@ -6,6 +6,7 @@ import HospitalCard from "../components/HospitalCard";
 import SparkGrid from "../components/SparkGrid";
 import HistoryDrawer from "../components/HistoryDrawer";
 import Button from "../ui/Button";
+import { api } from "../lib/api";
 import { useHistory } from "../lib/useHistoryStore";
 
 const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
@@ -21,9 +22,19 @@ export default function MonthOverview() {
   const sessionId = session?.session_id;
   const { data: history } = useHistory(historyView ? sessionId : null);
 
+  // G5 — generated RESUMEN files, so the home can open the last Excel directly.
+  const [outputs, setOutputs] = useState([]);
+
   useEffect(() => {
     loadMonths();
   }, [loadMonths]);
+
+  useEffect(() => {
+    api.listOutputs().then(setOutputs).catch(() => {});
+  }, []);
+
+  // Prefer the active month's Excel; fall back to the most recent generated.
+  const activeOutput = outputs.find((o) => o.session_id === sessionId) ?? outputs[0];
 
   const activeMonth = sessionId;
   const cells = session?.cells || {};
@@ -51,6 +62,7 @@ export default function MonthOverview() {
         icon: <FileSpreadsheet size={16} />,
         description: warn,
       });
+      api.listOutputs().then(setOutputs).catch(() => {});
     } catch (err) {
       toast.error(`No se pudo generar el Excel: ${String(err)}`);
     }
@@ -81,22 +93,38 @@ export default function MonthOverview() {
 
       {session && (
         <>
-          <section className="flex gap-3">
-            <Button
-              variant="primary"
-              icon={RefreshCw}
-              disabled={loading}
-              onClick={() => runScan(sessionId)}
-            >
-              {loading ? "Escaneando…" : "Escanear todos los hospitales"}
-            </Button>
-            <Button
-              icon={FileSpreadsheet}
-              disabled={loading}
-              onClick={onGenerate}
-            >
-              Generar Excel del mes
-            </Button>
+          <section className="space-y-2">
+            <div className="flex gap-3">
+              <Button
+                variant="primary"
+                icon={RefreshCw}
+                disabled={loading}
+                onClick={() => runScan(sessionId)}
+              >
+                {loading ? "Escaneando…" : "Escanear todos los hospitales"}
+              </Button>
+              <Button
+                icon={FileSpreadsheet}
+                disabled={loading}
+                onClick={onGenerate}
+              >
+                Generar Excel del mes
+              </Button>
+            </div>
+            {activeOutput && (
+              <a
+                href={api.outputUrl(activeOutput.session_id)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-po-text-muted hover:text-po-accent transition"
+              >
+                <FileSpreadsheet size={13} strokeWidth={1.75} />
+                Último Excel: RESUMEN_{activeOutput.session_id}.xlsx
+                <span className="text-po-text-subtle">
+                  · {new Date(activeOutput.mtime_iso).toLocaleString()}
+                </span>
+              </a>
+            )}
           </section>
 
           <section>

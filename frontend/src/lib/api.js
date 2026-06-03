@@ -108,6 +108,10 @@ export const api = {
   cellPdfUrl: (sessionId, hospital, sigla, index = 0) =>
     `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/pdf?index=${index}`,
 
+  // G5 — open the generated RESUMEN xlsx from the home; list all generated files.
+  outputUrl: (sessionId) => `${BASE}/sessions/${sessionId}/output`,
+  listOutputs: () => fetch(`${BASE}/outputs`).then(jsonOrThrow),
+
   getHistory: async (sessionId, n = 12) => {
     const r = await fetch(`${BASE}/sessions/${sessionId}/history?n=${n}`);
     if (!r.ok) throw new Error(await r.text());
