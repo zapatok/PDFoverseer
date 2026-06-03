@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useSessionStore } from "../store/session";
 import CategoryGroup from "../components/CategoryGroup";
+import CategoryBulkActions from "../components/CategoryBulkActions";
 import FileList from "../components/FileList";
 import DetailPanel from "../components/DetailPanel";
 import ScanControls from "../components/ScanControls";
@@ -20,14 +21,10 @@ export default function HospitalDetail({ hospital, onBack }) {
     0,
   );
 
-  const normalized =
-    hospitalMode === "manual"
-      ? SIGLAS
-      : SIGLAS.filter((s) => cells[s] && !cells[s].flags?.includes("compilation_suspect"));
-  const compilations =
-    hospitalMode === "manual"
-      ? []
-      : SIGLAS.filter((s) => cells[s] && cells[s].flags?.includes("compilation_suspect"));
+  // One list, folder order (1-18). No Normalizadas/Compilaciones split — the
+  // dot already says listo/pendiente and compilation_suspect is just a chip.
+  const ordered =
+    hospitalMode === "manual" ? SIGLAS : SIGLAS.filter((s) => cells[s]);
 
   const onCheck = (sigla, checked) => {
     setSelectedSet((prev) => {
@@ -70,35 +67,25 @@ export default function HospitalDetail({ hospital, onBack }) {
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-6">
         <section>
           <h3 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mb-3">Categorías</h3>
+          {hospitalMode !== "manual" && (
+            <CategoryBulkActions
+              hospital={hospital}
+              cells={cells}
+              selectedSiglas={[...selectedSet]}
+              onMarkedReady={() => setSelectedSet(new Set())}
+            />
+          )}
           <CategoryGroup
-            title="Normalizadas"
-            cells={normalized.map((s) => ({ sigla: s, ...cells[s] }))}
+            cells={ordered.map((s) => ({ sigla: s, ...cells[s] }))}
             hospital={hospital}
             selected={selected}
             onSelect={setSelected}
             checkedSet={selectedSet}
             onCheck={onCheck}
-            defaultOpen
             mode={hospitalMode}
             focusSigla={focusSigla}
             onCommitNext={focusNextSigla}
           />
-          {compilations.length > 0 && (
-            <CategoryGroup
-              title="Compilaciones"
-              cells={compilations.map((s) => ({ sigla: s, ...cells[s] }))}
-              hospital={hospital}
-              selected={selected}
-              onSelect={setSelected}
-              checkedSet={selectedSet}
-              onCheck={onCheck}
-              defaultOpen
-              showScanAll
-              mode={hospitalMode}
-              focusSigla={focusSigla}
-              onCommitNext={focusNextSigla}
-            />
-          )}
         </section>
 
         <section>

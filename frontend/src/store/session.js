@@ -4,6 +4,7 @@ import { createWSClient } from "../lib/ws";
 import { invalidateHistory } from "../lib/useHistoryStore";
 import { OCR_CONFIRM_PDF_THRESHOLD } from "../lib/constants";
 import { estimateScanSeconds, shouldConfirmScan, totalPdfsForPairs } from "../lib/scanCost";
+import { isCellReady } from "../lib/cell-status";
 
 export const useSessionStore = create((set, get) => ({
   view: "month",
@@ -103,6 +104,17 @@ export const useSessionStore = create((set, get) => ({
     } catch (error) {
       set({ error: String(error) });
     }
+  },
+
+  // Scan only the pendiente (amber) cells of a hospital with OCR. Reuses
+  // scanOcr (and its cost guard) — never duplicates the threshold.
+  scanPending: (sessionId, hospital) => {
+    const cells = get().session?.cells?.[hospital] || {};
+    const pairs = Object.keys(cells)
+      .filter((sigla) => !isCellReady(cells[sigla]))
+      .map((sigla) => [hospital, sigla]);
+    if (pairs.length === 0) return undefined;
+    return get().scanOcr(sessionId, pairs);
   },
 
   cancelScan: async (sessionId) => {

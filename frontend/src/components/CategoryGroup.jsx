@@ -29,21 +29,23 @@ export default function CategoryGroup({
 
   return (
     <div className="border-b border-po-border last:border-b-0 mb-2 last:mb-0">
-      <div className="flex items-center justify-between py-2 px-1">
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center gap-2 text-sm font-medium text-po-text hover:text-po-accent"
-        >
-          {open ? <ChevronDown size={14} strokeWidth={1.75} /> : <ChevronRight size={14} strokeWidth={1.75} />}
-          {title}
-          <span className="text-po-text-muted font-normal">· {cells.length}</span>
-        </button>
-        {showScanAll && open && (
-          <Button size="sm" icon={Scan} onClick={scanAll} disabled={cells.length === 0}>
-            Escanear todas
-          </Button>
-        )}
-      </div>
+      {title && (
+        <div className="flex items-center justify-between py-2 px-1">
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex items-center gap-2 text-sm font-medium text-po-text hover:text-po-accent"
+          >
+            {open ? <ChevronDown size={14} strokeWidth={1.75} /> : <ChevronRight size={14} strokeWidth={1.75} />}
+            {title}
+            <span className="text-po-text-muted font-normal">· {cells.length}</span>
+          </button>
+          {showScanAll && open && (
+            <Button size="sm" icon={Scan} onClick={scanAll} disabled={cells.length === 0}>
+              Escanear todas
+            </Button>
+          )}
+        </div>
+      )}
       {open && (
         <div>
           {cells.map((cell) => (
