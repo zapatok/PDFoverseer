@@ -199,7 +199,7 @@ def count(self, folder: Path, *, override_method: str | None = None) -> ScanResu
                         per_file={fn: 1 for fn in glob_result.matched_filenames},
                         method="filename_glob", confidence=confidence, start=start)
 ```
-Add a small private `_result(...)` helper on the dataclass that builds the `ScanResult` (DRY — avoids repeating the 9 fields three times). **Gotcha:** `matched_filenames` are basenames but files may live in subfolders (recursive glob); resolve the actual path per file (e.g. build a `{basename: full_path}` map from `folder.rglob("*.pdf")` filtered by `extract_sigla`) so `_page_count` opens the right file. Verify against the consolidated `filename_glob.py`.
+Add a small private `_result(...)` helper **as a method of `SimpleFilenameScanner`** (NOT on `ScanResult` — it's a `@dataclass(frozen=True)`) that builds the `ScanResult` (DRY — avoids repeating the 9 fields three times). **Gotcha:** `matched_filenames` are basenames but files may live in subfolders (recursive glob); resolve the actual path per file (e.g. build a `{basename: full_path}` map from `folder.rglob("*.pdf")` filtered by `extract_sigla`) so `_page_count` opens the right file. Verify against the consolidated `filename_glob.py`.
 
 - [ ] **Step 5: Run test to verify it passes**
 
@@ -229,14 +229,14 @@ git commit -m "feat(scanners): honest pase-1 confidence + page-count for fixed-p
 ### Task 3: `confirmed` cell flag + endpoint + store action
 
 **Files:**
-- Modify: `api/state.py` (cell init / `apply_filename_result` setdefault `confirmed=False`; new `apply_confirmed(session_id, hospital, sigla, confirmed)`; preserve `confirmed` across scans via `setdefault`)
+- Modify: `api/state.py` — new `apply_confirmed(session_id, hospital, sigla, confirmed)`; add `cell.setdefault("confirmed", False)` in **both** `apply_filename_result` AND `apply_ocr_result` (both overwrite `per_file` directly, so `confirmed` must be re-asserted via `setdefault` in each) so a re-scan never clears it
 - Modify: `api/routes/sessions.py` (new `PATCH /api/sessions/{id}/cells/{h}/{s}/confirm`, mirroring the worker-count endpoint)
 - Modify: `frontend/src/store/session.js` (`confirmCell(sessionId, hospital, sigla, confirmed)` → PATCH + optimistic cell update)
 - Create: `tests/api/test_confirm_endpoint.py`
 
 - [ ] **Step 1: Write the failing test** — open session, PATCH confirm true → cell `confirmed` true; re-run pase-1 scan → still true (preserved); PATCH false → false. Real fixtures, no DB mock.
 - [ ] **Step 2:** Run `pytest tests/api/test_confirm_endpoint.py -v` → FAIL (endpoint missing).
-- [ ] **Step 3:** Implement `apply_confirmed` + endpoint (validate session_id regex like the others; 404 if cell missing) + `setdefault("confirmed", False)` wherever the cell is (re)built so a scan never clears it.
+- [ ] **Step 3:** Implement `apply_confirmed` + endpoint (validate session_id regex like the others; 404 if cell missing) + `cell.setdefault("confirmed", False)` in **both `apply_filename_result` and `apply_ocr_result`** so neither a filename re-scan nor an OCR scan clears it.
 - [ ] **Step 4:** Run the test → PASS; `pytest tests/ -q`; `ruff check .`.
 - [ ] **Step 5:** Add `confirmCell` store action (mirror `saveWorkerCount`/`savePerFileOverride` PATCH pattern in `session.js`).
 - [ ] **Step 6: Commit** `feat(sessions): add confirmed cell flag + confirm endpoint`.
@@ -269,7 +269,7 @@ git commit -m "feat(scanners): honest pase-1 confidence + page-count for fixed-p
 
 **Files:** new `frontend/src/components/CategoryBulkActions.jsx`; `frontend/src/views/HospitalDetail.jsx` (mount it above the list); `frontend/src/store/session.js` (`scanPending`)
 
-- [ ] **Step 1:** `scanPending(sessionId, hospital)` store helper: derive amber siglas (`!isCellReady(cell)`) from state, call `scanOcr` with those pairs (respect the existing >50-PDF cost guard from the OCR audit).
+- [ ] **Step 1:** `scanPending(sessionId, hospital)` store helper: derive amber siglas (`!isCellReady(cell)`) from state, call `scanOcr` with those pairs (locate the existing >50-PDF cost guard first — it lives in the `scanOcr` store action / `scanCost.js` from the OCR audit — and reuse it, don't duplicate the threshold).
 - [ ] **Step 2:** `CategoryBulkActions.jsx`: two `Button`s — "Escanear pendientes" (`scanPending`) and "Marcar seleccionadas como listas" (`confirmCell` for each checked sigla; optimistic). Disabled states (no pendientes / nothing selected).
 - [ ] **Step 3:** Mount above the category list in `HospitalDetail`; reconcile with the header `ScanControls` (keep targeted scan or fold in — no behavior change to targeted scan).
 - [ ] **Step 4:** `npm run build`. **Commit** `feat(frontend): scan-pending + mark-ready bulk actions`.
@@ -312,3 +312,4 @@ Divisors ≠ 1 (odi/art), promoting inferred siglas to solid, cascade/Excel chan
 ## Notes
 - **Number changes are expected** for fixed-page compilations (bodega/ext/etc.) — flag in the smoke.
 - Anchors pinned vs `feature/ocr-per-sigla`; re-verify against the consolidated tree at execution (pre-req step 5).
+- **Latent inconsistency (out of scope):** `HistoryDrawer.jsx`'s `methodToOrigin` maps `page_count_pure` → "OCR", so historical fixed-page cells will read "OCR" (not "Estructura") in the history drawer. History is untouched here; add a `TODO` comment in `HistoryDrawer.jsx` during Task 2 so it surfaces at the next history task.
