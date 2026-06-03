@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.responses import FileResponse
 
 from api.routes.sessions import get_manager
 from api.state import SessionManager, compute_worker_count
@@ -162,3 +164,52 @@ def generate(
         "worker_warnings": _build_worker_warnings(state),
         "duration_ms": result.duration_ms,
     }
+
+
+@router.get("/sessions/{session_id}/output")
+def serve_output(session_id: str) -> FileResponse:
+    """Serve the generated RESUMEN_<month>.xlsx so the home can open it (G5).
+
+    Args:
+        session_id: month id ``YYYY-MM``.
+
+    Returns:
+        The xlsx as a downloadable FileResponse.
+    """
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, "invalid session_id")
+    out_dir = _output_dir().resolve()
+    path = (out_dir / f"RESUMEN_{session_id}.xlsx").resolve()
+    # is_relative_to guards against any traversal once the name is templated.
+    if not path.is_file() or not path.is_relative_to(out_dir):
+        raise HTTPException(404, "no output for that month")
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=f"RESUMEN_{session_id}.xlsx",
+    )
+
+
+@router.get("/outputs")
+def list_outputs() -> list[dict]:
+    """List every generated RESUMEN xlsx, most recent first (G5).
+
+    Returns:
+        ``[{session_id, filename, mtime_iso, size}]`` — empty if none exist.
+    """
+    d = _output_dir()
+    if not d.exists():
+        return []
+    out: list[dict] = []
+    for p in d.glob("RESUMEN_*.xlsx"):
+        st = p.stat()
+        out.append(
+            {
+                "session_id": p.stem.removeprefix("RESUMEN_"),
+                "filename": p.name,
+                "mtime_iso": datetime.fromtimestamp(st.st_mtime).isoformat(),
+                "size": st.st_size,
+            }
+        )
+    out.sort(key=lambda o: o["mtime_iso"], reverse=True)
+    return out
