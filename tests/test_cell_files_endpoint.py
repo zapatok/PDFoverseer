@@ -214,3 +214,41 @@ def test_effective_count_defaults_to_one_for_unscanned_file(tmp_path, monkeypatc
         assert by_name["b.pdf"]["per_file_count"] is None
         assert by_name["b.pdf"]["override_count"] is None
         assert by_name["b.pdf"]["effective_count"] == 1
+
+
+def test_origin_ocr_and_count_after_scan(tmp_path, monkeypatch):
+    """After an OCR scan, the per-file row reports origin='OCR' and the OCR
+    per-file count (review #5/#6: the chip + count surface the scan result)."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test_ocr.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "x.pdf", 4)  # multipage, OCR found 3 documents
+
+        mgr.apply_ocr_result(
+            sid,
+            "HRB",
+            "odi",
+            ScanResult(
+                count=3,
+                confidence=ConfidenceLevel.HIGH,
+                method="header_band_anchors",
+                breakdown=None,
+                flags=[],
+                errors=[],
+                duration_ms=5000,
+                files_scanned=1,
+                per_file={"x.pdf": 3},
+            ),
+        )
+
+        rows = {r["name"]: r for r in c.get(f"/api/sessions/{sid}/cells/HRB/odi/files").json()}
+        assert rows["x.pdf"]["origin"] == "OCR"
+        assert rows["x.pdf"]["effective_count"] == 3
