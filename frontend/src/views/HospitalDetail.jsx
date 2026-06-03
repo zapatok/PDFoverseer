@@ -42,8 +42,6 @@ export default function HospitalDetail({ hospital, onBack }) {
     if (next) useSessionStore.setState({ focusSigla: next });
   };
 
-  const headerCountLabel = hospitalMode === "manual" ? "ingresadas" : "detectados";
-
   return (
     <div>
       <header className="flex items-center gap-4 mb-6">
@@ -57,7 +55,7 @@ export default function HospitalDetail({ hospital, onBack }) {
         <h2 className="text-xl font-semibold">{hospital}</h2>
         <span className="text-sm text-po-text-muted">
           Total: <span className="tabular-nums">{total.toLocaleString()}</span>{" "}
-          {headerCountLabel}
+          {hospitalMode === "manual" ? "documentos ingresados" : "documentos detectados"}
         </span>
         <div className="ml-auto">
           <ScanControls hospital={hospital} selectedSiglas={[...selectedSet]} />
