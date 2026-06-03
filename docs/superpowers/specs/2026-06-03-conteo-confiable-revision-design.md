@@ -67,7 +67,7 @@ def en ~408 con cuerpo en ~415-425; la firma actual es
 
 **Cambio de firma obligatorio:** pasa a `_origin_for(filename, override, page_count)`.
 Hoy `page_count` se computa **dentro del `for pdf in sorted(...)`** (la línea
-`with fitz.open(pdf)...` ~430-433), que está **después** del `def _origin_for`, así
+`with fitz.open(pdf)...` ~461-464), que está **después** del `def _origin_for`, así
 que la función NO lo ve hasta que se le pasa. El sitio de llamada (hoy
 `"origin": _origin_for(pdf.name, override)` ~453) pasa a
 `_origin_for(pdf.name, override, page_count)`. **Sin este cambio, las ramas `Error`
@@ -110,6 +110,8 @@ esa grafía:
 - `HistoryDrawer.jsx` `methodToOrigin`: devuelve `"Manual"` (antes `"manual"`) y
   `"R1"` para `page_count_pure` (antes caía en "OCR"; ajuste de coherencia ya que
   Estructura desaparece — history sigue fuera de alcance, solo este alineado).
+  **Eliminar el comentario TODO obsoleto** (`HistoryDrawer.jsx:8-11`, "el historial
+  no se toca") que queda desactualizado tras este ajuste.
 
 ### Frontend (render)
 
@@ -360,8 +362,9 @@ abrirlos desde el navegador.
 - `tests/test_cell_files_endpoint.py`, `tests/test_output_serve_endpoint.py`.
 
 **Frontend**
-- `components/OriginChip.jsx` (5 variantes, sin Estructura), `ui/Badge.jsx` (quitar/
-  reasignar `blue`).
+- `components/OriginChip.jsx` (5 variantes, sin Estructura), `ui/Badge.jsx`
+  (reasignar `blue` de Estructura → Manual; **el tono `blue` se conserva**, no se
+  quita).
 - `components/FileList.jsx`, `components/PDFLightbox.jsx` (chip; reescritura de
   `InspectView` con miniaturas/fit/nav; botón OCR; refresco post-OCR; input blanco).
 - `components/ScanProgress.jsx` (#11), `views/HospitalDetail.jsx` (#12),
