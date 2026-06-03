@@ -81,41 +81,52 @@ export default function FileList({ hospital, sigla }) {
       </div>
       <ul className="max-h-[60vh] overflow-y-auto">
         {filtered.map((f, i) => (
-          <li key={`${f.name}-${i}`} className="px-3 py-2 hover:bg-po-panel-hover transition">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => openLightbox(hospital, sigla, files.indexOf(f))}
-                className="flex items-center gap-2 flex-1 text-left"
-              >
-                <FileText size={14} strokeWidth={1.75} className="text-po-text-muted shrink-0" />
-                <span className="font-mono text-xs text-po-text truncate flex-1">{f.name}</span>
-                <span className="text-xs tabular-nums text-po-text-muted shrink-0">{f.page_count}pp</span>
-                {f.suspect && (
-                  <Tooltip content="Probable compilación">
-                    <span><FileStack size={14} strokeWidth={1.75} className="text-po-suspect shrink-0" /></span>
-                  </Tooltip>
-                )}
-              </button>
-              <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                <InlineEditCount
-                  value={f.effective_count ?? 1}
-                  onCommit={(newCount) => {
-                    setFiles((prev) =>
-                      prev.map((row) =>
-                        row.name === f.name
-                          ? { ...row, effective_count: newCount, override_count: newCount, origin: "manual" }
-                          : row,
-                      ),
-                    );
-                    savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount);
-                  }}
-                />
-                {f.page_count === 1
-                  ? <Badge variant="iris">trivial</Badge>
-                  : <OriginChip origin={f.origin ?? "R1"} />}
-              </div>
+          <li
+            key={`${f.name}-${i}`}
+            className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-2 px-3 py-2 hover:bg-po-panel-hover transition"
+          >
+            {/* icon + name — the lightbox trigger; name scrolls horizontally */}
+            <button
+              type="button"
+              onClick={() => openLightbox(hospital, sigla, files.indexOf(f))}
+              className="flex items-center gap-2 min-w-0 text-left"
+              title={f.name}
+            >
+              <FileText size={14} strokeWidth={1.75} className="text-po-text-muted shrink-0" />
+              <span className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs text-po-text">
+                {f.name}
+              </span>
+            </button>
+            {/* Npp — own column, non-interactive */}
+            <span className="text-xs tabular-nums text-po-text-muted shrink-0">{f.page_count}pp</span>
+            {/* compilation icon — own column (empty when not suspect), non-interactive */}
+            {f.suspect ? (
+              <Tooltip content="Probable compilación">
+                <span><FileStack size={14} strokeWidth={1.75} className="text-po-suspect shrink-0" /></span>
+              </Tooltip>
+            ) : (
+              <span />
+            )}
+            {/* count — editable, stops propagation */}
+            <div onClick={(e) => e.stopPropagation()}>
+              <InlineEditCount
+                value={f.effective_count ?? 1}
+                onCommit={(newCount) => {
+                  setFiles((prev) =>
+                    prev.map((row) =>
+                      row.name === f.name
+                        ? { ...row, effective_count: newCount, override_count: newCount, origin: "manual" }
+                        : row,
+                    ),
+                  );
+                  savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount);
+                }}
+              />
             </div>
+            {/* origin chip */}
+            {f.page_count === 1
+              ? <Badge variant="iris">trivial</Badge>
+              : <OriginChip origin={f.origin ?? "R1"} />}
           </li>
         ))}
       </ul>
