@@ -12,6 +12,8 @@ export default function FileList({ hospital, sigla }) {
   const session = useSessionStore((s) => s.session);
   const openLightbox = useSessionStore((s) => s.openLightbox);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
+  // Re-fetch after an OCR scan finishes for this cell (G3, review #5/#6).
+  const tick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
   const [files, setFiles] = useState(null);
   const [search, setSearch] = useState("");
 
@@ -24,7 +26,7 @@ export default function FileList({ hospital, sigla }) {
     api.getCellFiles(session.session_id, hospital, sigla)
       .then(setFiles)
       .catch((err) => setFiles({ error: String(err) }));
-  }, [session?.session_id, hospital, sigla]);
+  }, [session?.session_id, hospital, sigla, tick]);
 
   if (!sigla) {
     return (

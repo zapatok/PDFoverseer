@@ -73,6 +73,10 @@ export default function PDFLightbox() {
   const closeLightbox = useSessionStore((s) => s.closeLightbox);
   const session = useSessionStore((s) => s.session);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
+  // Re-fetch after an OCR scan finishes for this cell (G3, review #5/#6).
+  const tick = useSessionStore((s) =>
+    lightbox ? (s.filesTick[`${lightbox.hospital}|${lightbox.sigla}`] ?? 0) : 0,
+  );
   const [files, setFiles] = useState(null);
 
   useEffect(() => {
@@ -80,7 +84,7 @@ export default function PDFLightbox() {
     api.getCellFiles(session.session_id, lightbox.hospital, lightbox.sigla)
       .then(setFiles)
       .catch(() => setFiles([]));
-  }, [lightbox?.hospital, lightbox?.sigla, session?.session_id]);
+  }, [lightbox?.hospital, lightbox?.sigla, session?.session_id, tick]);
 
   if (!lightbox || !session) return null;
 
