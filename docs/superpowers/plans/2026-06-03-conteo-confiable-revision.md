@@ -138,6 +138,14 @@ At the call site (inside the `for pdf` loop, after `page_count` is computed):
                 "origin": _origin_for(pdf.name, override, page_count),
 ```
 
+- [ ] **Step 3b: Update the EXISTING assertions in `tests/test_cell_files_endpoint.py`.**
+The casing change breaks any test asserting the old lowercase `"manual"`. Grep
+`tests/test_cell_files_endpoint.py` for `== "manual"` (there is at least one, ~line
+64) and change `"manual"` → `"Manual"`. Also re-check any assertion that expects an
+old multipage file to be `"R1"`: a multipage `filename_glob` file now returns
+`"Pendiente"` — update those to `"Pendiente"` (and 1-page ones stay `"R1"`). Read the
+file and reconcile every `origin` assertion with the new rule before moving on.
+
 - [ ] **Step 4 (deferred run):** test would PASS.
 
 - [ ] **Step 5: Commit**
@@ -249,7 +257,8 @@ export function formatEta(ms) {
           {hospitalMode === "manual" ? "documentos ingresados" : "documentos detectados"}
         </span>
 ```
-(Replaces the bare `headerCountLabel` "detectados"/"ingresadas". Keep `headerCountLabel` only if used elsewhere; otherwise inline as above and delete it.)
+Then **delete the now-unused `const headerCountLabel = …` declaration** at
+`HospitalDetail.jsx:45` (it's only referenced at line 60, which this edit replaces).
 - [ ] **Step 2: Commit** `fix(frontend): label hospital total as documents`.
 
 ### Task 2.3: #13 single Excel toast
@@ -329,14 +338,22 @@ import { METHOD_INFO } from "../lib/method-info";
 **Files:** `src/store/session.js`
 
 - [ ] **Step 1:** Add `filesTick: {}` to the initial store state (near `scanningCells`/`scanProgress`).
-- [ ] **Step 2:** In the WS `cell_done` handler (the place that calls `apply_ocr_result`-equivalent store update, ~462-481) AND the `scan_cancelled`/cell-error terminal handler, after applying the result, increment the tick:
+- [ ] **Step 2:** Increment the tick in the **`cell_done`** handler only (~462-481) —
+that event carries `event.hospital`/`event.sigla` and is the one that just wrote new
+`per_file` to the DB. After applying the cell result, bump:
 ```js
         set((prev) => {
           const key = `${event.hospital}|${event.sigla}`;
           return { filesTick: { ...prev.filesTick, [key]: (prev.filesTick[key] ?? 0) + 1 } };
         });
 ```
-(Read the WS handler section first; integrate the increment into the existing terminal-event `set` rather than adding a second `set` if cleaner.)
+(Integrate into the existing `cell_done` `set` if cleaner than a second `set`.)
+
+> **Do NOT** add this to `scan_cancelled` (`session.js:~535-545`): that is a run-level
+> event with **no `hospital`/`sigla`** → the key would be `"undefined|undefined"`
+> (a garbage no-op). A cancelled scan didn't change `per_file`, so no refresh is
+> needed there. `cell_error`: only bump if that event carries `hospital`/`sigla`
+> (read the handler; if it does, include it — otherwise skip).
 - [ ] **Step 3: Commit** `feat(store): filesTick counter bumped on terminal cell scan events`.
 
 ### Task 3.2: FileList + lightbox re-fetch on tick
@@ -428,7 +445,7 @@ Read `WorkerCountViewer.jsx` as the template. Build a paged inspect viewer:
   - Error/loading states preserved (the "No se pudo abrir el PDF." message stays).
   - A minimal zoom label `Math.round(zoom*100)%` + a "Ajustar" button that resets `zoom=1` (optional, mirror WorkerCountViewer's Maximize2).
 - [ ] **Step 2:** In `PDFLightbox`, pass `pageCount={files?.[lightbox.fileIndex]?.page_count ?? 0}` to `InspectView`, and ensure the inspect branch wraps `InspectView` + the per-file `aside` in a row so thumbnails | page | aside read left→right.
-- [ ] **Step 3:** Remove the `react-zoom-pan-pinch` import from `PDFLightbox.jsx` (TransformWrapper/TransformComponent no longer used here). Leave the dependency in `package.json` (it may be used elsewhere — grep first; if nowhere else, removing the dep is optional and out of scope).
+- [ ] **Step 3:** Remove the `react-zoom-pan-pinch` import from `PDFLightbox.jsx` (TransformWrapper/TransformComponent no longer used here). Grep confirmed `PDFLightbox.jsx` is the **only** consumer, so also `npm uninstall react-zoom-pan-pinch` in `frontend/` (clean, zero remaining users). Re-grep to confirm before uninstalling.
 - [ ] **Step 4: Commit** `feat(frontend): paged file viewer — thumbnails, fit-to-window, scroll=page, shift+scroll=zoom`.
 
 ---
@@ -486,7 +503,10 @@ def list_outputs() -> list[dict]:
     out.sort(key=lambda o: o["mtime_iso"], reverse=True)
     return out
 ```
-Add imports (`re`, `datetime`, `FileResponse`, `HTTPException`) as needed.
+Add imports at the top of `output.py`: `import re`, `from datetime import datetime`
+(use exactly this form so `datetime.fromtimestamp(...)` works — NOT `import datetime`),
+`from fastapi import HTTPException`, `from fastapi.responses import FileResponse`.
+`output.py` currently imports none of these — verify and add.
 - [ ] **Step 3: Commit** `feat(api): serve + list generated RESUMEN Excel files`.
 
 ### Task 5.2: Frontend — last-Excel section on the home
@@ -524,7 +544,8 @@ Add imports (`re`, `datetime`, `FileResponse`, `HTTPException`) as needed.
 
 ### Task 6.3: Tag
 
-- [ ] **Step 1:** Move/refresh tag: `git tag -f -a conteo-confiable-mvp -m "Conteo confiable MVP + revisión post-MVP"` (or a new `conteo-confiable-rev` tag — confirm with Daniel). Local.
+- [ ] **Step 1:** Create a **new** tag (don't force-move the MVP tag — preserve that
+milestone): `git tag -a conteo-confiable-rev-1 -m "Conteo confiable — revisión post-MVP (14 fixes)"`. Local. Confirm tag name with Daniel.
 
 ---
 
