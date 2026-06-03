@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import { ORIGIN_VARIANT, originVariant } from "./OriginChip";
 
 describe("originVariant", () => {
-  it("maps the five canonical origins to tones", () => {
+  it("maps the canonical origins to tones", () => {
     expect(originVariant("R1")).toBe("jade");
     expect(originVariant("OCR")).toBe("iris");
     expect(originVariant("Manual")).toBe("blue");
     expect(originVariant("Pendiente")).toBe("amber");
+    expect(originVariant("Revisar")).toBe("state-error");
     expect(originVariant("Error")).toBe("state-error");
   });
 

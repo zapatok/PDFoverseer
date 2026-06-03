@@ -252,3 +252,43 @@ def test_origin_ocr_and_count_after_scan(tmp_path, monkeypatch):
         rows = {r["name"]: r for r in c.get(f"/api/sessions/{sid}/cells/HRB/odi/files").json()}
         assert rows["x.pdf"]["origin"] == "OCR"
         assert rows["x.pdf"]["effective_count"] == 3
+
+
+def test_origin_revisar_when_ocr_finds_zero(tmp_path, monkeypatch):
+    """An OCR-scanned file that read 0 documents (poor scan / no registered
+    flavor) shows 'Revisar', not a plain 'OCR' — the operator must check it by
+    hand (Bug A)."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test_revisar.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "good.pdf", 4)
+        _make_pdf(folder / "bad.pdf", 4)  # readable, but OCR found nothing
+
+        mgr.apply_ocr_result(
+            sid,
+            "HRB",
+            "odi",
+            ScanResult(
+                count=2,
+                confidence=ConfidenceLevel.LOW,
+                method="header_band_anchors",
+                breakdown=None,
+                flags=[],
+                errors=[],
+                duration_ms=1,
+                files_scanned=2,
+                per_file={"good.pdf": 2, "bad.pdf": 0},
+            ),
+        )
+
+        rows = {r["name"]: r for r in c.get(f"/api/sessions/{sid}/cells/HRB/odi/files").json()}
+        assert rows["good.pdf"]["origin"] == "OCR"
+        assert rows["bad.pdf"]["origin"] == "Revisar"

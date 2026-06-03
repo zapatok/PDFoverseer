@@ -8,6 +8,7 @@ export const ORIGIN_VARIANT = {
   OCR:       "iris",
   Manual:    "blue",
   Pendiente: "amber",
+  Revisar:   "state-error", // OCR ran but read 0 docs (poor scan / no flavor) → manual
   Error:     "state-error",
 };
 
