@@ -60,7 +60,7 @@ isolated DB `_smoke/smoke.db`, Vite :5173, Chrome :9222) — reuse for the Chunk
 ### Task 1.1: Backend — write `per_file_method` in both cell-run setters
 
 **Files:**
-- Modify: `api/state.py` (`apply_filename_result` ~145-153, `apply_ocr_result` ~182-189)
+- Modify: `api/state.py` (`apply_filename_result` per_file write ~153, `apply_ocr_result` per_file write ~193)
 - Test: `tests/unit/api/test_state.py`
 
 - [ ] **Step 1: Write the test** (append to `test_state.py`):
@@ -94,7 +94,9 @@ In `apply_ocr_result`, right after `cell["per_file"] = result.per_file`:
 ```python
         cell["per_file_method"] = {f: result.method for f in (result.per_file or {})}
 ```
-Add `cell.setdefault("per_file_method", {})` to the `setdefault` blocks of BOTH (so a cell that never scanned still has the key).
+No `setdefault` needed: an un-scanned/legacy cell simply lacks the key, and
+`_origin_for` already reads `cell.get("per_file_method") or {}` (Task 1.2), so absence
+falls back to `cell.method` cleanly.
 
 - [ ] **Step 4: Commit**
 ```bash
@@ -108,15 +110,20 @@ git commit -m "feat(state): record per_file_method on every cell run" -m "Co-Aut
 - Modify: `api/routes/sessions.py` (`get_cell_files`: extract `per_file_method` ~435; `_origin_for` ~441-473)
 - Test: `tests/test_cell_files_endpoint.py`
 
-- [ ] **Step 1: Write the test** (append): a cell with `per_file_method={"a.pdf":"header_band_anchors","b.pdf":"filename_glob"}`, `cell.method="filename_glob"`, both real multipage PDFs, `per_file={"a.pdf":3,"b.pdf":1}` → `a.pdf` origin `OCR`, `b.pdf` origin `Pendiente` (multipage filename_glob). Seed via `apply_ocr_result` then overwrite one file's method by a follow-up `apply_per_file_ocr_result`? Simpler: seed the cell state directly is not the pattern — instead seed with `apply_filename_result` (both `filename_glob`), then `apply_per_file_ocr_result` on `a.pdf` (Task 5.3 exists later). **Ordering note:** this test depends on Task 5.3's `apply_per_file_ocr_result`. To keep Chunk 1 self-contained, test the *fallback + mixed* purely via `apply_ocr_result` mixed counts instead:
-```python
-def test_origin_uses_per_file_method(client_with_pdfs_mixed):
-    # cell OCR-scanned: per_file_method all header_band_anchors; bad.pdf count 0
-    ...
-    assert rows["good.pdf"]["origin"] == "OCR"
-    assert rows["bad.pdf"]["origin"] == "Revisar"
-```
-(The genuine *mixed-method* case — one file OCR, another R1 in the same cell — is exercised by Task 5.3's test, which is where mixed state first becomes reachable.)
+- [ ] **Step 1: Write the test.** The existing chip tests (`test_origin_chip_rule`,
+`test_origin_revisar_when_ocr_finds_zero`, `test_origin_ocr_and_count_after_scan`,
+`test_get_cell_files_includes_per_file_and_origin`) must still pass once `_origin_for`
+resolves via `per_file_method` — after Task 1.1 those cells carry
+`per_file_method == cell.method`, so the resolved method matches and the origins are
+unchanged (no-regression guard; reuse the existing `client_with_pdfs` fixture, do not
+invent a new one). Add one explicit no-regression assertion if helpful, but no new
+fixture.
+
+> **Ordering note (acknowledged):** the *divergent* case — `per_file_method[file]`
+> differing from `cell.method` (e.g. one file OCR-ed individually inside a
+> filename_glob cell → that file `OCR`, the rest `R1/Pendiente`) — is only reachable
+> after Task 5.3's `apply_per_file_ocr_result`, so the genuine mixed-method test lives
+> in **Task 5.3 Step 1**, not here.
 
 - [ ] **Step 2 (deferred run).**
 
@@ -196,7 +203,7 @@ def scan_info_for(sigla: str) -> dict:
         return {"sigla": sigla, "kind": "anchors", "looks_for": looks_for}
     return {"sigla": sigla, "kind": strat}  # "pagination" | "none"
 ```
-Implement `siglas.py` (`GET /siglas/{sigla}/scan-info` → `scan_info_for(sigla)`; 400 if sigla unknown — validate against `SIGLAS`). Register router in `api/main.py` with `prefix="/api"`.
+Implement `siglas.py` (`GET /siglas/{sigla}/scan-info` → `scan_info_for(sigla)`; 400 if sigla unknown — validate against `SIGLAS` via `from core.domain import SIGLAS`). Register router in `api/main.py` with `prefix="/api"` (mirror the other `app.include_router(..., prefix="/api")` lines ~55-58).
 
 - [ ] **Step 4: Commit** `feat(api): scan-info endpoint deriving per-sigla OCR anchors`.
 
@@ -300,10 +307,12 @@ it("formats a range and a single value", () => {
 - [ ] **Step 2: Implement.** In `openMonth`, after `const session = await api.getSession(sessionId)` and the `set({...})`:
 ```js
       if (Object.keys(session.cells || {}).length === 0) {
-        get().runScan(sessionId);  // pase 1 only the first time (spec §7)
+        // pase 1 only the first time (spec §7); fire-and-forget, runScan owns `loading`.
+        get().runScan(sessionId).catch((e) => console.error(e));
       }
 ```
-(Use `get()` to reach `runScan`; do not await — let the existing `loading`/progress UI cover it.)
+(`runScan` is async; not awaited on purpose. The `.catch` avoids a silent unhandled
+rejection — runScan already manages the `loading`/progress UI itself.)
 
 - [ ] **Step 3: Commit** `feat(store): auto-run pase 1 when opening a month with no scanned data`.
 
@@ -334,7 +343,17 @@ it("formats a range and a single value", () => {
 - Modify: `core/orchestrator.py`
 - Test: `tests/unit/test_orchestrator_ocr_progress.py` (extend)
 
-- [ ] **Step 1: Write the test** — `scan_one_file_ocr("HPV", "odi", folder, "a.pdf", on_progress=events.append, cancel=...)` (1-page A7 PDFs, monkeypatch `get_page_count`→1): events include `file_scan_started` (with `pages_total`), at least one `file_page_progress` (page/pages_total), and a terminal `file_scan_done` whose `result.per_file == {"a.pdf": 1}` and `result.method` set.
+- [ ] **Step 1: Write the test** — register a fake scanner whose
+`count_ocr(folder, *, cancel, on_pdf=None, only=None, on_page=None)` calls
+`on_page(0, 2)` + `on_page(1, 2)` then returns
+`ScanResult(per_file={only: 2}, method="header_band_anchors", count=2, …)` (mirror the
+fake-scanner pattern in `tests/unit/scanners/test_orchestrator_ocr_anchors.py` — this
+keeps the test off real Tesseract while still exercising the `on_page`→event wiring).
+Call `scan_one_file_ocr("HPV", "odi", folder, "a.pdf", on_progress=events.append,
+cancel=CancellationToken())`. Assert: a `file_scan_started` (`pages_total == 2`), two
+`file_page_progress` (`page` 1 then 2, `pages_total == 2`), and a terminal
+`file_scan_done` whose `result.per_file == {"a.pdf": 2}` and
+`result.method == "header_band_anchors"`.
 
 - [ ] **Step 2 (deferred run).**
 
@@ -349,14 +368,15 @@ it("formats a range and a single value", () => {
 - Test: `tests/test_cell_files_endpoint.py` + `tests/unit/api/test_state.py`
 
 - [ ] **Step 1: Write the tests.**
-  - State: seed cell via `apply_ocr_result` `per_file={"a.pdf":3,"b.pdf":2}`; `apply_per_file_ocr_result(..., "a.pdf", count=5, method="header_band_anchors", near_matches=[])` → `per_file=={"a.pdf":5,"b.pdf":2}` (b untouched), `per_file_method["a.pdf"]=="header_band_anchors"`, `b` intact.
+  - State (merge): seed cell via `apply_ocr_result` `per_file={"a.pdf":3,"b.pdf":2}`; `apply_per_file_ocr_result(..., "a.pdf", count=5, method="header_band_anchors", near_matches=[])` → `per_file=={"a.pdf":5,"b.pdf":2}` (b untouched), `per_file_method["a.pdf"]=="header_band_anchors"`, `b` intact; near_matches for `a.pdf` replaced, for `b.pdf` intact.
+  - **Divergent mixed-method origin (moved here from Task 1.2):** seed a `filename_glob` cell (both files multipage, `apply_filename_result` → both `per_file_method=="filename_glob"`); then `apply_per_file_ocr_result("a.pdf", count=4, method="header_band_anchors", near_matches=[])`; `GET .../files` → `a.pdf` origin `OCR`, `b.pdf` origin `Pendiente` (proves `_origin_for` reads the per-file method, not `cell.method`).
   - Endpoint: `POST .../cells/HRB/odi/files/a.pdf/scan-ocr` returns 202/200 for an existing file; `.../files/missing.pdf/scan-ocr` → 404.
 
 - [ ] **Step 2 (deferred run).**
 
 - [ ] **Step 3: Implement.**
   - `apply_per_file_ocr_result(self, session_id, hospital, sigla, filename, *, count, method, near_matches)`: `cell.setdefault("per_file", {})[filename] = count`; `cell.setdefault("per_file_method", {})[filename] = method`; replace near_matches for that `pdf_name` (`others = [nm for nm in cell.get("near_matches", []) if nm["pdf_name"] != filename]; cell["near_matches"] = others + near_matches`); persist.
-  - Endpoint `POST /sessions/{id}/cells/{h}/{s}/files/{filename}/scan-ocr`: validate `session_id`; resolve `folder = _find_category_folder(Path(state["month_root"]) / hospital, sigla)`; 404 if `filename not in {p.name for p in folder.rglob("*.pdf")}`. Launch `scan_one_file_ocr` in the executor with an `on_progress` that (a) broadcasts each `file_*` event over the session WS, and (b) on `file_scan_done` calls `mgr.apply_per_file_ocr_result(...)` (mirror the batch `on_progress` cell_done handler at sessions.py ~204-237). Return `{"accepted": True, "filename": filename, "pages_total": ...}`.
+  - Endpoint `POST /sessions/{id}/cells/{h}/{s}/files/{filename}/scan-ocr`: validate `session_id`; resolve `folder = _find_category_folder(Path(state["month_root"]) / hospital, sigla)`; 404 if `filename not in {p.name for p in folder.rglob("*.pdf")}`. **Capture `loop = app.state.loop`** at the top of the handler (the lifespan event loop, exactly as the batch `/scan-ocr` does at sessions.py ~200) — the executor thread has no running loop. Launch `scan_one_file_ocr` in the executor with an `on_progress` that (a) `asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)` for each `file_*` event, and (b) on `file_scan_done` calls `mgr.apply_per_file_ocr_result(...)` reconstructing the args from `event["result"]` (mirror the batch `on_progress` cell_done handler at sessions.py ~202-241). Return `{"accepted": True, "filename": filename, "pages_total": ...}`.
 
 - [ ] **Step 4: Commit** `feat(api): single-file OCR endpoint + per-file merge`.
 
