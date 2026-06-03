@@ -61,35 +61,69 @@ su conteo por nombre es un supuesto.
 
 ### Regla del chip (autoridad: backend `_origin_for`)
 
-`_origin_for` vive en `api/routes/sessions.py:408-425` (anidado en `get_cell_files`),
-que ya conoce `page_count` por archivo, `cell_method` y `override`. Pasa a recibir
-`page_count` y devolver uno de los 5 valores, en este orden de prioridad:
+`_origin_for` vive **anidado en `get_cell_files`** (`api/routes/sessions.py`, hoy
+def en ~408 con cuerpo en ~415-425; la firma actual es
+`_origin_for(filename, override)` y devuelve `"manual" | "OCR" | "R1"`).
 
-1. `override is not None` → **`Manual`**
-2. `page_count == 0` (PDF ilegible / error de lectura) → **`Error`**
-3. `cell_method` en `{header_detect, corner_count, header_band_anchors, v4}` → **`OCR`**
-4. `cell_method == "page_count_pure"` (sigla fija) → **`R1`** *(D4)*
+**Cambio de firma obligatorio:** pasa a `_origin_for(filename, override, page_count)`.
+Hoy `page_count` se computa **dentro del `for pdf in sorted(...)`** (la línea
+`with fitz.open(pdf)...` ~430-433), que está **después** del `def _origin_for`, así
+que la función NO lo ve hasta que se le pasa. El sitio de llamada (hoy
+`"origin": _origin_for(pdf.name, override)` ~453) pasa a
+`_origin_for(pdf.name, override, page_count)`. **Sin este cambio, las ramas `Error`
+y `Pendiente` son inalcanzables.**
+
+Orden de prioridad (devuelve uno de los 5 valores **con la grafía exacta de
+abajo**, que es también el texto del chip):
+
+1. `override is not None` → **`"Manual"`**
+2. `page_count == 0` (PDF ilegible / error de lectura) → **`"Error"`**
+3. `cell_method` en `{header_detect, corner_count, header_band_anchors, v4}` → **`"OCR"`**
+4. `cell_method == "page_count_pure"` (sigla fija) → **`"R1"`** *(D4)*
 5. `cell_method == "filename_glob"`:
-   - `page_count == 1` → **`R1`** *(D5)*
-   - `page_count > 1` → **`Pendiente`** *(el fix #3/#10)*
-6. fallback → `R1`
+   - `page_count == 1` → **`"R1"`** *(D5)*
+   - `page_count > 1` → **`"Pendiente"`** *(el fix #3/#10)*
+6. fallback → **`"R1"`**
 
 > El orden importa: `Manual` y `Error` ganan sobre el método; `OCR` (celda
 > escaneada) gana sobre la heurística de páginas.
+>
+> Nota (advisory): para una celda `page_count_pure`, `simple_factory.py` ya escribe
+> `per_file = {fn: page_count}`, así que la rama 4 casi nunca verá `page_count == 0`
+> (la rama 2 ya lo habría atrapado). El orden 2 antes de 4 es seguro; dejar un
+> comentario corto.
 
-### Frontend
+### Grafía canónica de los chips (D1 — resolver el desajuste de mayúsculas)
 
-- **`OriginChip.jsx`**: `ORIGIN_VARIANT` pasa a `{ R1: "jade", OCR: "iris",
-  Manual: "blue", Pendiente: "amber", Error: "state-error" }`. Se elimina la
-  entrada `Estructura`. (`blue` queda libre al borrar Estructura → se reusa para
-  `Manual`; `Error` usa el tono `state-error` ya existente.)
-- **`FileList.jsx:114-116`**: se quita la rama `page_count === 1 ? trivial :
-  OriginChip`. Siempre `<OriginChip origin={f.origin} />` (el backend ya decide).
+Hoy conviven grafías mixtas: `_origin_for` devuelve `"manual"` (minúscula),
+`OriginChip.jsx` usa la clave `"manual"`, y `FileList.jsx`/`PDFLightbox.jsx`
+hardcodean `origin: "manual"` en el update optimista. El chip se muestra como
+`<Badge>{origin}</Badge>`, así que el **valor ES el texto visible**.
+
+**Decisión:** la grafía canónica (valor = etiqueta) es **`"R1" · "OCR" · "Manual" ·
+"Pendiente" · "Error"`** (Manual con M mayúscula). Todos estos sitios se alinean a
+esa grafía:
+- `_origin_for` devuelve `"Manual"` (antes `"manual"`).
+- `OriginChip.jsx` `ORIGIN_VARIANT` con claves `{ R1, OCR, Manual, Pendiente, Error }`.
+- `FileList.jsx` update optimista: `origin: "Manual"` (antes `"manual"`).
+- `PDFLightbox.jsx` `FileSummary`/editor optimista: `origin: "Manual"`.
+- `HistoryDrawer.jsx` `methodToOrigin`: devuelve `"Manual"` (antes `"manual"`) y
+  `"R1"` para `page_count_pure` (antes caía en "OCR"; ajuste de coherencia ya que
+  Estructura desaparece — history sigue fuera de alcance, solo este alineado).
+
+### Frontend (render)
+
+- **`OriginChip.jsx`**: `ORIGIN_VARIANT = { R1: "jade", OCR: "iris", Manual:
+  "blue", Pendiente: "amber", Error: "state-error" }`. Se **elimina** la entrada
+  `Estructura`. (`blue` queda libre al borrar Estructura → se reusa para `Manual`;
+  `Error` usa `state-error`.) Desconocido → `neutral` (fallback existente).
+- **`FileList.jsx:114-116`**: se quita la rama `page_count === 1 ? <Badge>trivial
+  </Badge> : OriginChip`. Siempre `<OriginChip origin={f.origin} />` (el backend ya
+  decide).
 - **`PDFLightbox.jsx` `FileSummary`**: idem — quita la rama `trivial`/Estructura,
   usa `<OriginChip origin={file.origin} />`.
-- **`HistoryDrawer.jsx` `methodToOrigin`**: el TODO sigue (history fuera de
-  alcance); `page_count_pure` ahí mapeará a "R1" (no "OCR") para coherencia visual
-  mínima — ajuste de 1 línea ya que Estructura desaparece.
+- **`Badge.jsx`**: la entrada `blue` ya existe (se agregó para Estructura); se
+  conserva (ahora la usa `Manual`). No se agregan tonos nuevos.
 
 ### Comportamiento intencional a documentar
 
@@ -200,13 +234,23 @@ sigla]`, no cuando termina el OCR.
   con su cost-guard). Visible solo si la sigla tiene `scan_strategy` OCR
   (anchors/pagination); para `none`/sin OCR, deshabilitado con tooltip. El estado de
   escaneo (spinner) se refleja con `scanningCells`/`scanProgress` ya existentes.
-- **Refresco al terminar:** ambos componentes se re-consultan `getCellFiles` cuando
-  el WS emite el evento terminal de la celda. Mecanismo: un contador/versión en el
-  store (`filesRefreshTick[`${h}|${s}`]` o un `lastScanCompletedCell`) que se
-  incrementa en el handler de `cell_done`/`scan_complete`; `FileList` y el visor lo
-  incluyen en las deps de su `useEffect` de fetch. (Alternativa equivalente: que el
-  store guarde el `per_file` por celda y los componentes deriven de ahí; se elige el
-  re-fetch por simplicidad y porque `origin`/`page_count` se calculan server-side.)
+- **Refresco al terminar (mecanismo explícito):** el handler de `cell_done` en
+  `store/session.js` (~462-481) hoy parchea `ocr_count/method/confidence/
+  duration_ms_ocr/near_matches` de la celda, **pero NO `per_file`** — tras el OCR el
+  `per_file` correcto vive solo en el estado DB y se obtiene vía `getCellFiles`. Por
+  eso el re-fetch es el camino (no derivar de la celda del store).
+  - **Estado nuevo en el store:** `filesTick: {}` — mapa `"${hospital}|${sigla}" →
+    number`. En el handler de `cell_done` (y en `scan_cancelled` por simetría), tras
+    aplicar el resultado, incrementar `filesTick[`${event.hospital}|${event.sigla}`]`
+    (set inmutable).
+  - **`FileList`**: agregar `const tick = useSessionStore((s) =>
+    s.filesTick[`${hospital}|${sigla}`] ?? 0)` y meter `tick` en el array de deps del
+    `useEffect` que llama `getCellFiles` (`FileList.jsx:19-28`). Igual en
+    `PDFLightbox` (su `useEffect` de `getCellFiles`, ~93-98), con
+    `lightbox.hospital|lightbox.sigla`.
+  - Resultado: al terminar el OCR de esa celda, ambos re-consultan `getCellFiles` →
+    chip `OCR` + `effective_count` por archivo correctos (resuelve #5 "sigue
+    mostrando 1 documento" y #6).
 - **Visor "1 documento" tras OCR (#5):** se resuelve con el mismo re-fetch —
   `FileSummary` lee `files[fileIndex].effective_count`, que tras el re-fetch toma el
   `per_file` del OCR.
@@ -251,10 +295,12 @@ en este PDF", sin el conteo). Se deja como fast-follow; se anota como deuda.
 - **#12 — Header del hospital.** `HospitalDetail.jsx:61-64`: "Total: XXX detectados"
   → "Total: XXX documentos" (espeja "documentos detectados" del HospitalCard). Es
   la suma de conteos de celda (documentos), no archivos ni PDFs.
-- **#13 — Toasts solapados.** `MonthOverview.jsx:42-55` dispara `toast.success` +
-  `toast.warning` síncronos → colisión de entrada. **Fix: un solo toast** —
-  `toast.success(titulo, { description: <advertencias> })` cuando hay
-  `worker_warnings`; sin segundo toast. (Elimina la carrera de timing.)
+- **#13 — Toasts solapados.** `MonthOverview.jsx:42-55` (`onGenerate`) dispara
+  `toast.success` + `toast.warning` síncronos en el mismo `.then()` → colisión de
+  entrada. **Fix: un solo toast en el éxito** — `toast.success(titulo, {
+  description: <advertencias si las hay> })`; se borra el segundo `toast.warning`.
+  El `catch` con `toast.error(...)` (~53) **se mantiene intacto** — solo se fusiona
+  el par éxito+advertencia, no se toca el manejo de error.
 
 ### Tests
 - **vitest**: `formatEta` (minutos), `method-info` (todos los tokens presentes).
@@ -268,16 +314,21 @@ en este PDF", sin el conteo). Se deja como fast-follow; se anota como deuda.
 **Objetivo:** en el home (MonthOverview) listar el/los Excel generados y poder
 abrirlos desde el navegador.
 
-### Backend (nuevo)
+### Backend (nuevo) — ambos endpoints en `api/routes/output.py`
+
+> **Ownership:** `output.py` ya define `POST /sessions/{id}/output` y el helper
+> `_output_dir()`. Los nuevos `GET` viven **en `output.py`** (no en `sessions.py`),
+> junto a su lógica. FastAPI permite `GET` y `POST` en el mismo path sin conflicto.
+
 - **`GET /api/sessions/{session_id}/output`** — sirve `RESUMEN_{session_id}.xlsx`
-  desde `OVERSEER_OUTPUT_DIR` con `FileResponse` (igual patrón de contención que
-  `get_cell_pdf`: validar `session_id` regex, 404 si no existe), `media_type`
+  desde `OVERSEER_OUTPUT_DIR` con `FileResponse` (mismo patrón de contención que
+  `get_cell_pdf`: validar `session_id` con el regex `YYYY-MM`, resolver dentro de
+  `OVERSEER_OUTPUT_DIR`, **404 si no existe**), `media_type`
   `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`,
-  `Content-Disposition: attachment; filename="RESUMEN_{id}.xlsx"`. Incluir `mtime`
-  vía un `GET …/output/meta` o devolver 404/exists en un HEAD; ver abajo.
+  `Content-Disposition: attachment; filename="RESUMEN_{id}.xlsx"`.
 - **`GET /api/outputs`** — lista los `RESUMEN_*.xlsx` presentes en
-  `OVERSEER_OUTPUT_DIR` con `{session_id, filename, mtime_iso, size}`, ordenados por
-  `mtime` desc. (Para "el último".)
+  `OVERSEER_OUTPUT_DIR` (glob), cada uno `{session_id, filename, mtime_iso, size}`,
+  ordenados por `mtime` desc. (Para "el último".) Dir inexistente → `[]`.
 
 > El `.xlsx` no se renderiza inline en el navegador: al hacer click se **descarga**
 > y el SO lo abre con Excel. Es el comportamiento web correcto para un binario
@@ -302,9 +353,10 @@ abrirlos desde el navegador.
 ## Estructura de archivos (resumen)
 
 **Backend**
-- `api/routes/sessions.py` — `_origin_for` (regla de 5 chips + `page_count`); nuevo
-  `GET …/output` (serve).
-- `api/routes/output.py` (o `outputs.py` nuevo) — `GET /api/outputs` (list).
+- `api/routes/sessions.py` — `_origin_for` (firma `+page_count`, regla de 5 chips,
+  grafía canónica).
+- `api/routes/output.py` — nuevos `GET /sessions/{id}/output` (serve, FileResponse)
+  y `GET /api/outputs` (list).
 - `tests/test_cell_files_endpoint.py`, `tests/test_output_serve_endpoint.py`.
 
 **Frontend**
