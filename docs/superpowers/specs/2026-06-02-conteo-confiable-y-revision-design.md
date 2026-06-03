@@ -50,9 +50,11 @@ Esta tanda hace tres cosas:
 (líneas 36-43). El conteo es `glob_result.count` (archivos) y `per_file = {fn: 1}`
 (línea 55).
 
-**Cambio.** `count` lee los page-counts por archivo (reutiliza `_page_count` de
-`page_count_heuristic.py`; el scanner ya abre los PDFs ahí para el flag de
-compilación, así que el costo ya está casi pagado) y aplica:
+**Cambio.** `count` lee los page-counts de los archivos matched llamando
+`_page_count` (de `page_count_heuristic.py`) **directamente sobre
+`glob_result.matched_filenames`** (no reutiliza la lista folder-wide interna de
+`flag_compilation_suspect`; ese costo es aparte, aunque del mismo orden — abrir
+cada PDF una vez) y aplica:
 
 1. **Sigla de páginas fijas** (`sigla in FIXED_PAGE_SIGLAS`):
    - `count = Σ page_count` de los archivos matched.
@@ -92,6 +94,10 @@ mapea a origen **"OCR"**. Como no hubo OCR real, se añade un origen nuevo
   bool}` (toggle). Espeja el patrón de `worker-count` / override.
 - Un override de celda o de archivo ya implica revisión manual → la celda se
   considera lista igual que hoy (no se toca esa cascada).
+- **Persistencia entre escaneos:** `confirmed` se **preserva** cuando un escaneo
+  posterior reescribe la celda (`apply_filename_result` / OCR usan `setdefault` o
+  equivalente para no pisarlo). Solo el operador lo limpia con el toggle; un
+  re-escaneo no des-confirma.
 
 ### A3. Lista de categorías en orden de carpeta (frontend)
 
@@ -104,12 +110,19 @@ vs `compilations` por `compilation_suspect` y monta dos `CategoryGroup`).
 (`CATEGORY_FOLDERS[sigla]`, ej. "9.-Inspeccion Bodega"). En `mode==="manual"` se
 mantienen las 18 filas como hoy.
 
-**Punto verde/ámbar** (`CategoryRow.jsx:11-19`, `dotVariantFor`): se redefine a
+**Punto verde/ámbar** (`CategoryRow.jsx:11-19`, `dotVariantFor`; **y el equivalente
+en `HospitalCard.jsx:11-16`** — actualizar ambos consistentemente): se redefine a
 **listo vs pendiente**:
 - verde (`confidence-high`) si la celda está lista: `confidence === "high"` **o**
-  `confirmed` **o** tiene override.
-- ámbar (`state-suspect`/`confidence-low`) si pendiente.
+  `confirmed` **o** override.
+- ámbar (`confidence-low`) si pendiente.
 - se mantienen `state-scanning` y `state-error`.
+- **Decisión (revisión):** hoy una celda con override pinta `state-override` (color
+  propio). Al colapsar override en "listo/verde" se pierde ese color en el punto —
+  **es intencional**: el chip "Manual" de la fila (`CategoryRow.jsx:88`) ya marca
+  las celdas con override, así que no se pierde información. Si prefieres conservar
+  un punto distinto para override, es un ajuste menor (mantener `state-override`
+  como una tercera variante "listo").
 
 El chip "Compilación" (`CategoryRow.jsx:89-92`) deja de agrupar pero sigue
 mostrándose inline si `compilation_suspect`, como dato extra.
@@ -132,11 +145,14 @@ Compilaciones (desaparece con A3).
 
 ### A5. Cascada de conteo y Excel — sin cambio de contrato
 
-`compute_cell_count` / `cellCount.js` y el writer siguen leyendo
-`user_override ?? ocr_count ?? filename_count`. Para páginas fijas, el conteo por
-páginas entra como el `filename_count`/`count` del pase 1 (es el resultado del
-scanner de pase 1), así que la cascada no cambia. `confirmed` no entra en la
-cascada de número, solo en el estado visual de "listo".
+`compute_cell_count` / `cellCount.js` y el writer mantienen su cascada. **Ojo
+(revisión):** la cascada real tiene un nivel intermedio `per_file_overrides ∪
+per_file` **antes** de `filename_count`. Para páginas fijas el total sale de ese
+nivel — `per_file = {fn: page_count}`, que A1 ya pobla en el `ScanResult` y
+`apply_filename_result` persiste — **no** de `filename_count`. El número es el
+mismo, pero el implementador DEBE poblar `per_file` por páginas (lo hace A1); no
+basta con setear `filename_count`/`count`. `confirmed` no entra en la cascada de
+número, solo en el estado visual de "listo".
 
 ---
 
@@ -160,6 +176,10 @@ y empuja/recorta las columnas de la derecha.
   nombre a **columnas fijas propias**, alineadas fila a fila (como imagen 4).
 - Clic en icono/nombre abre el lightbox (`openLightbox`); conteo editable
   (`InlineEditCount`) y `OriginChip` mantienen su `stopPropagation`.
+- `Npp` y el ícono de compilación, al salir del botón del nombre a columnas
+  propias, **no** deben abrir el lightbox → quedan como elementos no-clickeables
+  (o el clic de la fila se maneja a nivel `li`, con `stopPropagation` en los
+  controles editables). Decidir el patrón exacto en el plan.
 - Sin cambios de datos ni de API. Layout puro (grid + min-w-0 + overflow-x).
 
 ---
