@@ -157,6 +157,8 @@ class SessionManager:
         cell.setdefault("user_override", None)
         cell.setdefault("override_note", None)
         cell.setdefault("excluded", False)
+        # Preserve a manual "marcar listo" across re-scans (never clear it here).
+        cell.setdefault("confirmed", False)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     def apply_ocr_result(
@@ -207,6 +209,8 @@ class SessionManager:
         cell.setdefault("user_override", None)
         cell.setdefault("override_note", None)
         cell.setdefault("excluded", False)
+        # Preserve a manual "marcar listo" across re-scans (never clear it here).
+        cell.setdefault("confirmed", False)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     def apply_user_override(
@@ -309,6 +313,36 @@ class SessionManager:
             cell["worker_status"] = status
         if cursor is not None:
             cell["worker_cursor"] = cursor
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    def apply_confirmed(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        *,
+        confirmed: bool,
+    ) -> None:
+        """Set the manual 'confirmed' (marcar listo) flag on a cell.
+
+        The flag is preserved across re-scans: both apply_filename_result and
+        apply_ocr_result re-assert it via ``setdefault``, so confirming a cell
+        survives a later pase-1 or OCR scan.
+
+        Args:
+            session_id: Target session identifier.
+            hospital: Hospital code (e.g. ``"HRB"``).
+            sigla: Category code (e.g. ``"exc"``).
+            confirmed: New flag value.
+
+        Raises:
+            KeyError: if the (hospital, sigla) cell is not in session state.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        cells = state.setdefault("cells", {})
+        if hospital not in cells or sigla not in cells.get(hospital, {}):
+            raise KeyError(f"Cell ({hospital}, {sigla}) not in session {session_id}")
+        cells[hospital][sigla]["confirmed"] = confirmed
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     def apply_cell_result(

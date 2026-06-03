@@ -380,6 +380,35 @@ def patch_worker_count(
     }
 
 
+class ConfirmRequest(BaseModel):
+    confirmed: bool
+
+
+@router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/confirm")
+def patch_confirm(
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    body: ConfirmRequest,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Marca/desmarca una celda como 'lista' a mano (flag confirmed).
+
+    El flag se preserva entre escaneos (apply_filename_result / apply_ocr_result
+    lo re-afirman con setdefault), así que confirmar una celda sobrevive a un
+    re-escaneo de pase 1 u OCR.
+    """
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    try:
+        mgr.apply_confirmed(session_id, hospital, sigla, confirmed=body.confirmed)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    state = mgr.get_session_state(session_id)
+    cell = state["cells"].get(hospital, {}).get(sigla, {})
+    return {"confirmed": cell.get("confirmed", False)}
+
+
 @router.get("/sessions/{session_id}/cells/{hospital}/{sigla}/files")
 def get_cell_files(
     session_id: str,

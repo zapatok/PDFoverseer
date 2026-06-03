@@ -260,6 +260,85 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
+  confirmCell: async (sessionId, hospital, sigla, confirmed) => {
+    const key = `${hospital}|${sigla}|confirm`;
+    const controller = new AbortController();
+
+    // Optimistic: flip the flag now so the dot turns listo/pendiente instantly
+    // (matters for the "Marcar seleccionadas como listas" bulk action).
+    set((prev) => {
+      if (!prev.session) return {};
+      const existing = prev._pendingSave.get(key);
+      if (existing?.controller) existing.controller.abort();
+      const nextPending = new Map(prev._pendingSave);
+      nextPending.set(key, { controller });
+      const cells = { ...prev.session.cells };
+      const hosp = { ...cells[hospital] };
+      hosp[sigla] = { ...hosp[sigla], confirmed };
+      cells[hospital] = hosp;
+      return {
+        session: { ...prev.session, cells },
+        _pendingSave: nextPending,
+        pendingSaves: { ...prev.pendingSaves, [key]: "saving" },
+      };
+    });
+
+    try {
+      const result = await api.patchConfirm(
+        sessionId, hospital, sigla, confirmed, { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
+
+      set((prev) => {
+        if (!prev.session) return {};
+        const cells = { ...prev.session.cells };
+        const hosp = { ...cells[hospital] };
+        hosp[sigla] = { ...hosp[sigla], confirmed: result.confirmed };
+        cells[hospital] = hosp;
+        const cleanedPending = new Map(prev._pendingSave);
+        if (cleanedPending.get(key)?.controller === controller) {
+          cleanedPending.delete(key);
+        }
+        return {
+          session: { ...prev.session, cells },
+          _pendingSave: cleanedPending,
+          pendingSaves: { ...prev.pendingSaves, [key]: "saved" },
+        };
+      });
+
+      setTimeout(() => {
+        set((prev) => {
+          if (prev.pendingSaves[key] !== "saved") return {};
+          const np = { ...prev.pendingSaves };
+          delete np[key];
+          return { pendingSaves: np };
+        });
+      }, 2000);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      // Revert the optimistic flag on failure.
+      set((prev) => {
+        const cleanedPending = new Map(prev._pendingSave);
+        if (cleanedPending.get(key)?.controller === controller) {
+          cleanedPending.delete(key);
+        }
+        const next = {
+          _pendingSave: cleanedPending,
+          pendingSaves: { ...prev.pendingSaves, [key]: "error" },
+          error: String(error),
+        };
+        if (prev.session) {
+          const cells = { ...prev.session.cells };
+          const hosp = { ...cells[hospital] };
+          hosp[sigla] = { ...hosp[sigla], confirmed: !confirmed };
+          cells[hospital] = hosp;
+          next.session = { ...prev.session, cells };
+        }
+        return next;
+      });
+    }
+  },
+
   saveWorkerCount: async (sessionId, hospital, sigla, patch) => {
     const key = `${hospital}|${sigla}|workers`;
     const controller = new AbortController();
