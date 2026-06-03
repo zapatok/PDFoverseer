@@ -2,53 +2,39 @@ import { useEffect, useState } from "react";
 import { useSessionStore } from "../store/session";
 import { api } from "../lib/api";
 import Dialog from "../ui/Dialog";
-import OverridePanel from "./OverridePanel";
 import Badge from "../ui/Badge";
 import Tooltip from "../ui/Tooltip";
-import { FileStack, PenLine } from "lucide-react";
+import { FileStack } from "lucide-react";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
-import { METHOD_LABEL, CONFIDENCE_LABEL } from "../lib/method-labels";
+import OriginChip from "./OriginChip";
+import InlineEditCount from "./InlineEditCount";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
 import { usePdfDocument } from "../hooks/usePdfDocument";
 import { PdfPage } from "./PdfPage";
 import { WorkerCountViewer } from "./WorkerCountViewer";
 
-function effectiveCount(cell) {
-  return cell?.user_override ?? cell?.ocr_count ?? cell?.filename_count ?? cell?.count ?? 0;
-}
-
-function confidenceVariant(cell) {
-  if (cell?.confidence === "high") return "confidence-high";
-  if (cell?.confidence === "low") return "confidence-low";
-  return "neutral";
-}
-
-function CountSummary({ cell }) {
-  const isCompilationSuspect = cell?.flags?.includes("compilation_suspect");
-  const hasOverride = cell?.user_override !== null && cell?.user_override !== undefined;
+function FileSummary({ file }) {
+  if (!file) {
+    return <p className="text-sm text-po-text-muted">Cargando archivo…</p>;
+  }
   return (
     <div>
-      <p className="text-4xl font-semibold tabular-nums">{effectiveCount(cell).toLocaleString()}</p>
-      <p className="text-xs text-po-text-muted mt-0.5">documentos</p>
-      <div className="flex flex-wrap gap-2 mt-3">
-        {isCompilationSuspect && (
+      <p className="text-4xl font-semibold tabular-nums text-po-text">
+        {(file.effective_count ?? 1).toLocaleString()}
+      </p>
+      <p className="text-xs text-po-text-muted mt-0.5">documentos en este archivo</p>
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        {file.page_count === 1
+          ? <Badge variant="iris">trivial</Badge>
+          : <OriginChip origin={file.origin ?? "R1"} />}
+        <Badge variant="neutral">{file.page_count ?? "?"}pp</Badge>
+        {file.suspect && (
           <Tooltip content="Probable compilación">
             <span><Badge variant="state-suspect" icon={FileStack}>Compilación</Badge></span>
           </Tooltip>
         )}
-        {cell?.confidence && (
-          <Badge variant={confidenceVariant(cell)}>{CONFIDENCE_LABEL[cell.confidence] ?? cell.confidence}</Badge>
-        )}
-        {hasOverride && <Badge variant="state-override" icon={PenLine}>Manual</Badge>}
       </div>
-      <table className="w-full text-sm mt-4">
-        <tbody>
-          <tr><td className="text-po-text-muted py-1 text-xs">Por nombre</td><td className="text-right font-mono tabular-nums text-xs">{cell?.filename_count ?? "—"}</td></tr>
-          <tr><td className="text-po-text-muted py-1 text-xs">Por OCR</td><td className="text-right font-mono tabular-nums text-xs">{cell?.ocr_count ?? "—"}</td></tr>
-          <tr><td className="text-po-text-muted py-1 text-xs">Método</td><td className="text-right text-xs">{METHOD_LABEL[cell?.method] ?? cell?.method ?? "—"}</td></tr>
-        </tbody>
-      </table>
     </div>
   );
 }
@@ -88,6 +74,7 @@ export default function PDFLightbox() {
   const lightbox = useSessionStore((s) => s.lightbox);
   const closeLightbox = useSessionStore((s) => s.closeLightbox);
   const session = useSessionStore((s) => s.session);
+  const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
   const [files, setFiles] = useState(null);
 
   useEffect(() => {
@@ -99,7 +86,6 @@ export default function PDFLightbox() {
 
   if (!lightbox || !session) return null;
 
-  const cell = session.cells?.[lightbox.hospital]?.[lightbox.sigla] ?? null;
   const filename = files?.[lightbox.fileIndex]?.name ?? "…";
   const pageCount = files?.[lightbox.fileIndex]?.page_count;
   const pdfUrl = api.cellPdfUrl(session.session_id, lightbox.hospital, lightbox.sigla, lightbox.fileIndex);
@@ -144,9 +130,26 @@ export default function PDFLightbox() {
               <InspectView url={pdfUrl} />
             </div>
             <aside className="w-80 border-l border-po-border p-4 overflow-y-auto">
-              <CountSummary cell={cell} />
-              <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual</h4>
-              <OverridePanel hospital={lightbox.hospital} sigla={lightbox.sigla} cell={cell} />
+              <FileSummary file={files?.[lightbox.fileIndex]} />
+              <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual del archivo</h4>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-po-text">Documentos:</span>
+                <InlineEditCount
+                  value={files?.[lightbox.fileIndex]?.effective_count ?? 1}
+                  onCommit={(newCount) => {
+                    const name = files?.[lightbox.fileIndex]?.name;
+                    if (!name) return;
+                    setFiles((prev) =>
+                      prev?.map((row, idx) =>
+                        idx === lightbox.fileIndex
+                          ? { ...row, effective_count: newCount, override_count: newCount, origin: "manual" }
+                          : row,
+                      ),
+                    );
+                    savePerFileOverride(session.session_id, lightbox.hospital, lightbox.sigla, name, newCount);
+                  }}
+                />
+              </div>
             </aside>
           </>
         )}
