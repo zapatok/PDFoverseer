@@ -85,14 +85,16 @@ class SimpleFilenameScanner:
                 start=start,
             )
 
-        # Variable sigla: 1 file = 1 document, but only HIGH when every matched
-        # file is a single page (trivially one document). Any multi-page file
-        # is unverified -> LOW (amber). compilation_suspect stays an informative
-        # flag but no longer decides confidence.
-        all_one_page = bool(pages) and all(p == 1 for p in pages.values())
+        # Variable sigla: 1 file = 1 document. HIGH when no matched file is
+        # multi-page — every matched file is trivially one document (1 page =
+        # 1 doc), OR there are no matched files at all (count 0 from an empty or
+        # unrecognized folder is a certain zero, "cero seguro"; all() over an
+        # empty set is True). Any multi-page file is unverified -> LOW (amber).
+        # compilation_suspect stays informative but no longer decides confidence.
+        no_multipage = all(p == 1 for p in pages.values())
         if flag_compilation_suspect(folder, sigla=self.sigla):
             flags.append("compilation_suspect")
-        confidence = ConfidenceLevel.HIGH if all_one_page else ConfidenceLevel.LOW
+        confidence = ConfidenceLevel.HIGH if no_multipage else ConfidenceLevel.LOW
         return self._result(
             glob_result,
             breakdown,

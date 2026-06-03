@@ -92,6 +92,16 @@ def test_normal_sigla_with_multipage_low(tmp_path: Path):
     assert r.confidence == ConfidenceLevel.LOW
 
 
+def test_empty_existing_folder_high_zero(tmp_path: Path):
+    # Folder exists but has no matching PDFs -> count 0 is a certain zero
+    # ("cero seguro"), so it reports HIGH (green), not amber.
+    folder = tmp_path / "charla"
+    folder.mkdir()
+    r = make_simple_scanner("charla").count(folder)
+    assert r.count == 0
+    assert r.confidence == ConfidenceLevel.HIGH
+
+
 def test_missing_folder_high_zero(tmp_path: Path):
     r = make_simple_scanner("bodega").count(tmp_path / "nope")
     assert r.count == 0
