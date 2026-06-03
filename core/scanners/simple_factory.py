@@ -2,6 +2,12 @@
 
 In FASE 1 ALL 18 siglas use this factory. In FASE 2, 4 of them
 (art, irl, odi, charla) get replaced with specialized scanners.
+
+Pase-1 confidence is honest (conteo-confiable spec, Tema A1): a cell is HIGH
+(green/listo) only when its count is verifiable without OCR — every matched PDF
+is a single page (1 page = 1 document) or the sigla is a fixed-page sigla
+(pages = documents). A multi-page file of a variable sigla is unverified and
+reports LOW (amber/pendiente).
 """
 
 from __future__ import annotations
@@ -12,10 +18,16 @@ from pathlib import Path
 
 from core.scanners.base import ConfidenceLevel, Scanner, ScanResult
 from core.scanners.utils.filename_glob import (
+    GlobCountResult,
     count_pdfs_by_sigla,
+    extract_sigla,
     per_empresa_breakdown,
 )
-from core.scanners.utils.page_count_heuristic import flag_compilation_suspect
+from core.scanners.utils.page_count_heuristic import (
+    _page_count,
+    flag_compilation_suspect,
+)
+from core.utils import FIXED_PAGE_SIGLAS, FIXED_PAGE_SIGLAS_INFERRED
 
 
 @dataclass
@@ -33,26 +45,91 @@ class SimpleFilenameScanner:
         breakdown = per_empresa_breakdown(folder)
         flags = list(glob_result.flags)
 
-        is_compilation = flag_compilation_suspect(folder, sigla=self.sigla)
-        if is_compilation:
-            flags.append("compilation_suspect")
-            confidence = ConfidenceLevel.LOW
-        elif "folder_missing" in flags:
-            confidence = ConfidenceLevel.HIGH  # 0 is correct for missing
-        else:
-            confidence = ConfidenceLevel.HIGH
+        if "folder_missing" in flags:
+            return self._result(
+                glob_result,
+                breakdown,
+                flags,
+                count=0,
+                per_file={},
+                method="filename_glob",
+                confidence=ConfidenceLevel.HIGH,  # 0 is correct for missing
+                start=start,
+            )
 
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return ScanResult(
+        # Matched basenames may live in empresa subfolders (count_pdfs_by_sigla
+        # globs recursively but returns basenames). Resolve each to its on-disk
+        # path so _page_count opens the right file; open each matched PDF once.
+        path_by_name = {
+            p.name: p for p in folder.rglob("*.pdf") if extract_sigla(p.name) == self.sigla
+        }
+        pages = {
+            fn: _page_count(path_by_name[fn])
+            for fn in glob_result.matched_filenames
+            if fn in path_by_name
+        }
+
+        # Fixed-page sigla: pages = documents. Sum pages, report each file's
+        # pages in per_file, HIGH confidence (no OCR needed).
+        if self.sigla in FIXED_PAGE_SIGLAS:
+            if self.sigla in FIXED_PAGE_SIGLAS_INFERRED:
+                flags.append("fixed_pages_inferred")
+            return self._result(
+                glob_result,
+                breakdown,
+                flags,
+                count=sum(pages.values()),
+                per_file=dict(pages),
+                method="page_count_pure",
+                confidence=ConfidenceLevel.HIGH,
+                start=start,
+            )
+
+        # Variable sigla: 1 file = 1 document, but only HIGH when every matched
+        # file is a single page (trivially one document). Any multi-page file
+        # is unverified -> LOW (amber). compilation_suspect stays an informative
+        # flag but no longer decides confidence.
+        all_one_page = bool(pages) and all(p == 1 for p in pages.values())
+        if flag_compilation_suspect(folder, sigla=self.sigla):
+            flags.append("compilation_suspect")
+        confidence = ConfidenceLevel.HIGH if all_one_page else ConfidenceLevel.LOW
+        return self._result(
+            glob_result,
+            breakdown,
+            flags,
             count=glob_result.count,
-            confidence=confidence,
+            per_file={fn: 1 for fn in glob_result.matched_filenames},
             method="filename_glob",
+            confidence=confidence,
+            start=start,
+        )
+
+    def _result(
+        self,
+        glob_result: GlobCountResult,
+        breakdown: dict[str, int],
+        flags: list[str],
+        *,
+        count: int,
+        per_file: dict[str, int],
+        method: str,
+        confidence: ConfidenceLevel,
+        start: float,
+    ) -> ScanResult:
+        """Build a ScanResult from the shared glob/breakdown/flags + variable
+        fields. DRY helper (ScanResult is a frozen dataclass, so this lives on
+        the scanner, not on the result).
+        """
+        return ScanResult(
+            count=count,
+            confidence=confidence,
+            method=method,
             breakdown=breakdown if breakdown else None,
             flags=flags,
             errors=[],
-            duration_ms=duration_ms,
+            duration_ms=int((time.perf_counter() - start) * 1000),
             files_scanned=glob_result.files_scanned,
-            per_file={fn: 1 for fn in glob_result.matched_filenames},
+            per_file=per_file,
         )
 
 

@@ -29,6 +29,20 @@ OCR_RETRY_BACKOFF_S = 0.5  # pausa entre intentos
 COMPILATION_PAGE_FACTOR = 3  # a PDF is suspect if pages > expected x this
 COMPILATION_RATIO_FACTOR = 2  # a folder is suspect if avg pages/PDF > expected x this
 
+# Siglas whose every document is a fixed number of pages -> count = total pages.
+# For these, pase 1 counts documents by summing page counts (no OCR needed) and
+# reports HIGH confidence. Source: corpus audit 2026-05-11 + OCR per-sigla spec
+# §9/§11/§13/§15/§16 + calibration Fase A/B. All divisor 1 (1 page = 1 document).
+FIXED_PAGE_SIGLAS: dict[str, int] = {
+    "bodega": 1,  # documented + Fase A confirmed
+    "ext": 1,  # documented + Fase A confirmed (canonical LCH-18/37)
+    "caliente": 1,  # inferred (Fase B: 20 pages -> 20 covers)
+    "herramientas_elec": 1,  # inferred (Fase B: 38 covers / 40 pages)
+    "exc": 1,  # inferred (Fase A: 2 covers / 2 pages, small sample)
+}
+# Subset whose page-per-doc is inferred (less evidence) -> UI "verificar" hint.
+FIXED_PAGE_SIGLAS_INFERRED: frozenset[str] = frozenset({"caliente", "herramientas_elec", "exc"})
+
 MIN_CONF_FOR_NEW_DOC = 0.55  # sweep2 (2026-03-24, 40 fixtures incl. degraded)
 ANOMALY_DROPOUT = 0.0
 PHASE4_FALLBACK_CONF = 0.15  # re-enabled: recovers pages the gap solver missed
@@ -40,7 +54,8 @@ PAGE_PATTERN_VERSION = (
     "v1-baseline"  # restored baseline: P-prefix only, tot<=10, Unicode quotes intact
 )
 SCANNER_PATTERNS_VERSION = (
-    "v1-ocr-per-sigla"  # patterns.py registry: 18 siglas, anchors + V4 pagination
+    # v2: pase-1 honest confidence + page-count for FIXED_PAGE_SIGLAS
+    "v2-conteo-confiable"
 )
 
 # ============================================================================
