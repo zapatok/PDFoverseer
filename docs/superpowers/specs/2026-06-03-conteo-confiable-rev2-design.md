@@ -49,10 +49,19 @@ por nombre, `cell.method` sigue siendo `filename_glob` → ese archivo mostrarí
 archivos (no escaneados individualmente) se mostrarían como OCR sin serlo.
 
 **Decisión.** Añadir un mapa **`cell["per_file_method"]`**: `{filename: method}`.
-- Lo escribe **toda** corrida OCR (full-cell o single-file) para los archivos que
-  tocó; pase 1 lo deja en `filename_glob` (o vacío → fallback).
-- `_origin_for` usa `per_file_method.get(filename)` si existe; si no, cae al
-  `cell.method` (compatibilidad con celdas viejas).
+- Lo escriben **todas** las corridas que tocan `per_file`, en sincronía con él:
+  - `apply_filename_result` → `per_file_method = {f: result.method for f in result.per_file}`
+    (pase 1: `filename_glob` o `page_count_pure`).
+  - `apply_ocr_result` → idem con el método OCR (`header_band_anchors`/`v4`/…).
+  - `apply_per_file_ocr_result` (single-file, §4.2) → setea solo `per_file_method[filename]`.
+  - Las cuatro `setdefault("per_file_method", {})` antes de escribir.
+- `_origin_for` usa `per_file_method.get(filename)` si existe; si no, cae a
+  `cell.method` (compatibilidad con celdas viejas sin el mapa).
+- **Por qué todas y no solo el single-file:** si solo el single-file lo escribiera,
+  un re-pase-1 dejaría `cell.method = filename_glob` y los archivos no presentes en
+  el mapa saltarían de "OCR" a "R1/Pendiente" (inconsistencia silenciosa). Con el mapa
+  escrito por cada corrida, el método por archivo siempre refleja cómo se contó ese
+  archivo, sin depender de `cell.method`.
 - El total de la celda sigue siendo `computeCellCount` (suma de `per_file` con
   overrides) — sin cambios.
 
@@ -70,6 +79,20 @@ donde `method = per_file_method.get(filename) or cell.method`.
 
 > Esto absorbe el fix de Bug A (Revisar) y lo hace per-archivo correcto: un único
 > archivo OCR-eado a 0 muestra Revisar aunque la celda se haya contado por nombre.
+
+### 3.1 Call site (`get_cell_files`, `api/routes/sessions.py`)
+
+`get_cell_files` ya extrae `per_file`/`per_file_overrides`/`cell_method` antes de
+definir el closure `_origin_for`. Añadir, en el mismo bloque:
+```python
+per_file_method = cell.get("per_file_method") or {}
+```
+y dentro de `_origin_for` resolver el método como
+`method = per_file_method.get(filename) or cell_method`, usando ese `method` en
+todas las ramas (en vez de `cell_method` directo). La firma del closure puede leer
+`per_file_method` por cierre (igual que ya lee `cell_method`/`per_file`), sin
+parámetro nuevo. El resto del call site (`_origin_for(pdf.name, override,
+page_count, inferred)`) no cambia.
 
 ---
 
@@ -94,9 +117,13 @@ donde `method = per_file_method.get(filename) or cell.method`.
   - `count_covers_by_anchors` (header_band_anchors.py:128, loop
     `for page_idx in range(pages_total)`) gana un callback opcional
     `on_page: Callable[[int, int], None]` invocado por página `(page_idx, pages_total)`.
-    `count_ocr` lo propaga. (PaginationScanner/V4: equivalente vía su adapter, o
-    —si el hook por página es costoso allí— emite progreso por PDF como hoy y la
-    barra del visor cae a indeterminada para esas 2 siglas; decidir en el plan.)
+    `count_ocr` lo propaga. **PaginationScanner/V4 (insgral, altura): decisión del
+    plan.** El path V4 (`core/scanners/utils/v4_count.py` → `pipeline.analyze_pdf`)
+    itera páginas internamente pero **no** acepta hoy un `on_page`; el plan decide
+    entre (a) cablearlo por `count_documents_v4`/`analyze_pdf` (esfuerzo medio) o
+    (b) dejar la barra del visor **indeterminada** solo para esas 2 siglas (progreso
+    por PDF como hoy). Recomendación: (b) — esas 2 siglas son raras en el visor y el
+    costo de (a) no se justifica en esta ronda.
 - **Orquestador — corrida de un archivo.** Nuevo helper
   `scan_one_file_ocr(hospital, sigla, folder, filename, *, on_progress, cancel)`
   que corre el scanner con `only=filename` + `on_page`, emitiendo eventos:
@@ -106,17 +133,24 @@ donde `method = per_file_method.get(filename) or cell.method`.
   `file_scan_error`. (Eventos nuevos, namespaced `file_*`, para no chocar con el
   batch de celda.)
 - **Endpoint.** `POST /api/sessions/{id}/cells/{h}/{s}/files/{filename}/scan-ocr`
-  (filename URL-encoded; validar que el archivo exista en la celda → 404 si no).
-  Lanza la corrida en el executor y transmite los eventos `file_*` por el WS de la
-  sesión.
+  (filename URL-encoded). **Resolución de carpeta — igual que `get_cell_files`:**
+  `folder = _find_category_folder(Path(state["month_root"]) / hospital, sigla)`;
+  validar que `filename` esté en `{p.name for p in folder.rglob("*.pdf")}` → 404 si
+  no (mismo guard de `_SESSION_ID_RE` para `session_id`). Lanza la corrida en el
+  executor y transmite los eventos `file_*` por el WS de la sesión.
 - **Merge de estado.** Nuevo método `SessionManager.apply_per_file_ocr_result(
   session_id, hospital, sigla, filename, *, count, method, near_matches)`:
-  - `cell["per_file"][filename] = count`
+  - `cell.setdefault("per_file", {})[filename] = count`
   - `cell.setdefault("per_file_method", {})[filename] = method`
   - Reemplaza en `cell["near_matches"]` las entradas de **ese** `pdf_name` por las
     nuevas (deja las de otros archivos intactas).
   - **No** toca `per_file` de otros archivos, ni `user_override`, ni `confirmed`.
   - No re-deriva `ocr_count` de la celda (el total se calcula con `compute_cell_count`).
+- **`per_file_method` en las corridas de celda.** Además del merge single-file,
+  `apply_ocr_result` **y** `apply_filename_result` setean
+  `cell["per_file_method"] = {f: result.method for f in (result.per_file or {})}`
+  (ver §3 — sin esto, un re-pase-1 desincronizaría los chips). Es el único cambio
+  que esas dos funciones suman a lo ya existente.
 
 ### 4.3 Frontend
 - `src/lib/api.js`: `scanFileOcr(sessionId, hospital, sigla, filename)` →
@@ -131,8 +165,12 @@ donde `method = per_file_method.get(filename) or cell.method`.
   el botón para siglas sin OCR.
 
 ### 4.4 Edge cases
-- Archivo de 1 página → A7 (cuenta 1, sin OCR); la barra salta 0→1, método del
-  archivo queda `header_band_anchors`/su sigla, chip `OCR` (1 doc) — coherente.
+- Archivo de 1 página → A7 (cuenta 1, sin OCR); la barra salta 0→1. **Decisión:** el
+  `per_file_method` del archivo hereda el método de la corrida (`header_band_anchors`/
+  su sigla), así su chip es `OCR` con 1 doc — trivialmente correcto (1 página = 1
+  documento) y vive en una celda de estrategia OCR. No distinguimos A7 a nivel de
+  método per-archivo en esta ronda (sería un matiz extra; si más adelante se quiere
+  que los 1-página lean `R1` aun en celdas OCR, es un ajuste aparte).
 - Cancelación: el WS de la sesión ya tiene `cancel`; un `file_scan` cancelado emite
   `file_scan_error`/terminal y no fusiona nada.
 - Mientras corre un `file_scan`, deshabilitar el botón de escaneo de celda para esa
