@@ -26,7 +26,9 @@ def test_abril_hpv_art_high_count():
     r = results[("HPV", "art")]
     # 2026-05-11 corpus snapshot has ~767; bound liberally
     assert 700 <= r.count <= 900
-    assert r.confidence == ConfidenceLevel.HIGH
+    # ART files are multi-page and ART is NOT a fixed-page sigla, so the honest
+    # pase-1 rule reports LOW (unverified) — not HIGH (conteo-confiable Tema A1).
+    assert r.confidence == ConfidenceLevel.LOW
 
 
 @pytest.mark.slow

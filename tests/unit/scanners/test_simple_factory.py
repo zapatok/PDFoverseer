@@ -17,7 +17,10 @@ def test_simple_scanner_counts_correctly_in_hpv_art():
     scanner = get("art")
     result = scanner.count(ABRIL / "HPV" / "7.-ART")
     assert result.count > 0
-    assert result.confidence in (ConfidenceLevel.HIGH, ConfidenceLevel.MEDIUM)
+    # ART forms are multi-page (multi-worker sheets) and ART is NOT a fixed-page
+    # sigla, so the honest pase-1 rule reports LOW — the filename count is a
+    # guess until OCR/confirm verifies it (conteo-confiable spec, Tema A1).
+    assert result.confidence == ConfidenceLevel.LOW
     assert result.method == "filename_glob"
 
 
