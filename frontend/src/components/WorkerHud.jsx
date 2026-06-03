@@ -3,6 +3,7 @@ import { Mic, MicOff } from "lucide-react";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import SaveIndicator from "../ui/SaveIndicator";
+import { WORKER_SHORTCUTS } from "../lib/worker-shortcuts";
 
 function Metric({ label, value }) {
   return (
@@ -81,6 +82,22 @@ export function WorkerHud({
       >
         {status === "terminado" ? "Marcar en progreso" : "Terminé esta categoría"}
       </Button>
+
+      <div className="shrink-0 border-t border-po-border pt-3">
+        <p className="mb-1.5 text-xs uppercase tracking-wider text-po-text-muted">Atajos</p>
+        <ul className="flex flex-col gap-1">
+          {WORKER_SHORTCUTS.map((s) => (
+            <li key={s.action} className="flex items-center justify-between gap-2 text-xs">
+              <span className="flex shrink-0 gap-1">
+                {s.keys.map((k) => (
+                  <Badge key={k} variant="neutral" className="font-mono">{k}</Badge>
+                ))}
+              </span>
+              <span className="text-right text-po-text-subtle">{s.action}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </aside>
   );
 }
