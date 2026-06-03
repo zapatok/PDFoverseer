@@ -6,17 +6,8 @@ import Badge from "../ui/Badge";
 import Dot from "../ui/Dot";
 import Tooltip from "../ui/Tooltip";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
+import { dotVariantFor, hasOverride } from "../lib/cell-status";
 import InlineEditCount from "./InlineEditCount";
-
-function dotVariantFor(cell, isScanning, hasOverride) {
-  if (isScanning) return "state-scanning";
-  if (cell?.errors?.length > 0) return "state-error";
-  if (hasOverride) return "state-override";
-  if (cell?.flags?.includes("compilation_suspect")) return "state-suspect";
-  if (cell?.confidence === "high") return "confidence-high";
-  if (cell?.confidence === "low") return "confidence-low";
-  return "neutral";
-}
 
 function effectiveCount(cell) {
   return cell?.user_override ?? cell?.ocr_count ?? cell?.filename_count ?? cell?.count ?? 0;
@@ -43,7 +34,7 @@ export default function CategoryRow({
   const cellKey = `${hospital}|${sigla}`;
   const isScanning = scanningCells.has(cellKey);
   const isPendingSave = pendingSaves[cellKey] === "saving";
-  const hasOverride = cell?.user_override !== null && cell?.user_override !== undefined;
+  const cellHasOverride = hasOverride(cell);
   const isCompilationSuspect = cell?.flags?.includes("compilation_suspect");
   const hasError = cell?.errors?.length > 0;
   const showMethodChip = mode === "scanned" && cell?.count != null;
@@ -73,7 +64,7 @@ export default function CategoryRow({
       <Tooltip content={SIGLA_LABELS[sigla] ?? null}>
         <span className="font-mono text-xs text-po-text">{sigla}</span>
       </Tooltip>
-      <Dot variant={dotVariantFor(cell, isScanning, hasOverride)} className={isPendingSave ? "animate-pulse" : ""} />
+      <Dot variant={dotVariantFor(cell, { isScanning })} className={isPendingSave ? "animate-pulse" : ""} />
 
       <div className="ml-auto flex items-center gap-2">
         {isScanning ? (
@@ -85,8 +76,8 @@ export default function CategoryRow({
                 <span><Badge variant="state-error" icon={AlertCircle}>Error</Badge></span>
               </Tooltip>
             )}
-            {showMethodChip && hasOverride && <Badge variant="state-override" icon={PenLine}>Manual</Badge>}
-            {showMethodChip && isCompilationSuspect && !hasOverride && (
+            {showMethodChip && cellHasOverride && <Badge variant="state-override" icon={PenLine}>Manual</Badge>}
+            {showMethodChip && isCompilationSuspect && !cellHasOverride && (
               <Tooltip content="Probable compilación (PDF con >5× páginas esperadas)">
                 <span><Badge variant="state-suspect" icon={FileStack}>Compilación</Badge></span>
               </Tooltip>

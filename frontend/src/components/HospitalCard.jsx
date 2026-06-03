@@ -4,17 +4,8 @@ import EmptyState from "../ui/EmptyState";
 import Tooltip from "../ui/Tooltip";
 import { CTA_LLENAR_MANUAL } from "../lib/constants";
 import { SIGLAS } from "../lib/sigla-labels";
+import { dotVariantFor } from "../lib/cell-status";
 import { useSessionStore } from "../store/session";
-
-function dotVariantFor(cell) {
-  if (!cell) return "neutral";
-  if (cell.errors?.length > 0) return "state-error";
-  if (cell.user_override !== null && cell.user_override !== undefined) return "state-override";
-  if (cell.flags?.includes("compilation_suspect")) return "state-suspect";
-  if (cell.confidence === "high") return "confidence-high";
-  if (cell.confidence === "low") return "confidence-low";
-  return "neutral";
-}
 
 export default function HospitalCard({ hospital, total, cells, status, onClick }) {
   const selectHospital = useSessionStore((s) => s.selectHospital);
