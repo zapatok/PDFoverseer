@@ -1,0 +1,6 @@
+{
+  "fixture": "f_odi_01_p1.pdf",
+  "pages": 2,
+  "covers_expected": 1,
+  "notes": "2-page ODI visita form. P1 is the cover ('obligacion de informar visita' + 'nombre completo'). P2 is the continuation page with 'induccion inicial' content."
+}

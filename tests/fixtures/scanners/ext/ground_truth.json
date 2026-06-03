@@ -1,0 +1,6 @@
+{
+  "fixture": "ext_chequeos.pdf",
+  "pages": 15,
+  "covers_expected": 15,
+  "notes": "15 pages; each page is a standalone 1-page extintor checklist (Pagina 1 de 1); all are covers"
+}

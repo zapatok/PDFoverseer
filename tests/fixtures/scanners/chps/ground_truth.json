@@ -1,0 +1,6 @@
+{
+  "fixture": "f_ar_01_p1_acta_reunion.pdf",
+  "pages": 3,
+  "covers_expected": 1,
+  "notes": "HPV 2026-04-30 CHPS acta de reunion PDF (F-CRS-AR-01). Single 3-page meeting-minutes document: p1=cover (lista de convocados + desarrollo), p2=continuation (acuerdos), p3=continuation (acuerdos). OCR-verified at top_fraction=0.25 — p1 matches 5 anchors; p2/p3 match only 2 ('acta de reunion' + 'f-crs-ar-01' in the running header), falling below min_match=3."
+}

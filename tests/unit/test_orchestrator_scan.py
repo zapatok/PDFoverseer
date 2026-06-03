@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from core.orchestrator import enumerate_month, scan_cell, scan_month
 from core.scanners.base import ConfidenceLevel  # noqa: F401 (used by callers)
 
@@ -23,8 +21,8 @@ def test_scan_cell_hpv_art_returns_count():
 def test_scan_month_returns_result_per_cell():
     inv = enumerate_month(ABRIL)
     results = scan_month(inv)
-    # 3 hospitals × 18 cats = 54 cells
-    assert len(results) == 54
+    # 4 hospitals × 18 cats = 72 cells
+    assert len(results) == 72
     # All have a count (possibly zero)
     for (hosp, sigla), r in results.items():
         assert r.count >= 0

@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import EmptyState from "../ui/EmptyState";
 import Skeleton from "../ui/Skeleton";
 import Tooltip from "../ui/Tooltip";
+import Badge from "../ui/Badge";
 import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
 
@@ -110,7 +111,9 @@ export default function FileList({ hospital, sigla }) {
                     savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount);
                   }}
                 />
-                <OriginChip origin={f.origin ?? "R1"} />
+                {f.page_count === 1
+                  ? <Badge variant="iris">trivial</Badge>
+                  : <OriginChip origin={f.origin ?? "R1"} />}
               </div>
             </div>
           </li>

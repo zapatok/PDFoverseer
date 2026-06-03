@@ -112,3 +112,48 @@ def test_get_cell_files_r1_origin_for_filename_glob(tmp_path, monkeypatch):
         assert by_name["c.pdf"]["override_count"] is None
         assert by_name["c.pdf"]["effective_count"] == 2
         assert by_name["c.pdf"]["origin"] == "R1"
+
+
+def test_effective_count_defaults_to_one_for_unscanned_file(tmp_path, monkeypatch):
+    """Audit #7: a PDF present on disk but absent from per_file/overrides
+    defaults to effective_count=1 in the per-file view — intentionally
+    asymmetric with api.state.compute_cell_count, which defaults a dataless
+    cell to 0. The divergence is presentation-only and pre-scan."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test_eff.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid_state = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))
+        sid = sid_state["session_id"]
+
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        (folder / "a.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+        (folder / "b.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+
+        # Scan recorded only a.pdf; b.pdf is on disk but absent from per_file.
+        mgr.apply_filename_result(
+            sid,
+            "HRB",
+            "odi",
+            ScanResult(
+                count=1,
+                confidence=ConfidenceLevel.HIGH,
+                method="filename_glob",
+                breakdown=None,
+                flags=[],
+                errors=[],
+                duration_ms=10,
+                files_scanned=1,
+                per_file={"a.pdf": 1},
+            ),
+        )
+
+        files = c.get(f"/api/sessions/{sid}/cells/HRB/odi/files").json()
+        by_name = {f["name"]: f for f in files}
+        assert by_name["b.pdf"]["per_file_count"] is None
+        assert by_name["b.pdf"]["override_count"] is None
+        assert by_name["b.pdf"]["effective_count"] == 1

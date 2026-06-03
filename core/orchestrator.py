@@ -215,20 +215,41 @@ def scan_month(
 # ======================================================================
 
 _WORKER_EVENT: Any = None  # set per-subprocess by _init_ocr_worker
+_WORKER_PROGRESS_Q: Any = None  # mp.Queue for per-PDF progress (None in sync path)
 
 
-def _init_ocr_worker(event: Any) -> None:
-    """ProcessPoolExecutor initializer — caches the cancellation event in the
-    subprocess so the worker can build a CancellationToken without re-sending
-    the event with every call."""
-    global _WORKER_EVENT
+def _init_ocr_worker(event: Any, progress_q: Any = None) -> None:
+    """ProcessPoolExecutor initializer — caches the cancellation event AND the
+    per-PDF progress queue in the subprocess, so the worker can report progress
+    and build a CancellationToken without re-sending them with every call."""
+    global _WORKER_EVENT, _WORKER_PROGRESS_Q
     _WORKER_EVENT = event
+    _WORKER_PROGRESS_Q = progress_q
+
+
+def _eta_ms(t0: float, done: int, total: int) -> int | None:
+    """Linear ETA in milliseconds extrapolated from elapsed time.
+
+    Returns None until there is at least one completed item to extrapolate
+    from, and once the work is finished (``done >= total``).
+    """
+    if done <= 0 or total <= done:
+        return None
+    per_item = (time.perf_counter() - t0) / done
+    return int(per_item * (total - done) * 1000)
 
 
 def _ocr_worker(
     cell_tuple: tuple[str, str, str],
+    on_pdf: Callable[[str], None] | None = None,
 ) -> tuple[str, str, ScanResult | None, str | None]:
-    """Run OCR for a single cell. Runs in a worker subprocess.
+    """Run OCR for a single cell. Runs in a worker subprocess (multi-worker
+    path) or in-process (synchronous ``max_workers==1`` path).
+
+    Per-PDF progress is reported via ``on_pdf`` when passed directly (sync
+    path) or, in the multi-worker path, via the cached IPC queue
+    (``_WORKER_PROGRESS_Q``): the worker emits ``cell_started`` when the cell
+    actually begins and ``pdf_done`` after each PDF is processed.
 
     On a transient failure the scan is retried up to ``OCR_RETRY_COUNT`` times
     with a short backoff (FASE 5 Feature 3). A cancelled token never triggers a
@@ -240,6 +261,9 @@ def _ocr_worker(
         CancellationToken,
         CancelledError,
     )
+    from core.scanners.utils.cell_enumeration import (  # noqa: E402
+        enumerate_cell_pdfs,
+    )
     from core.utils import OCR_RETRY_BACKOFF_S, OCR_RETRY_COUNT  # noqa: E402
 
     hosp, sigla, folder_str = cell_tuple
@@ -247,13 +271,33 @@ def _ocr_worker(
     scanner = scanner_registry.get(sigla)
     token = CancellationToken.from_event(_WORKER_EVENT) if _WORKER_EVENT else CancellationToken()
 
+    # Signal that the cell actually started — multi-worker only (the sync
+    # caller emits cell_scanning itself before invoking the worker). Fixes the
+    # audit's #1b: cell_scanning used to be emitted only after fut.result().
+    if _WORKER_PROGRESS_Q is not None:
+        _WORKER_PROGRESS_Q.put({"type": "cell_started", "hospital": hosp, "sigla": sigla})
+
+    # Resolve the per-PDF progress callback: direct (sync) or via the queue.
+    pdf_cb = on_pdf
+    if pdf_cb is None and _WORKER_PROGRESS_Q is not None:
+
+        def pdf_cb(name: str) -> None:  # noqa: F811
+            _WORKER_PROGRESS_Q.put(
+                {"type": "pdf_done", "hospital": hosp, "sigla": sigla, "pdf_name": name}
+            )
+
     fn = getattr(scanner, "count_ocr", None)
     if fn is None:
-        # No OCR technique for this sigla — single filename_glob attempt, no retry.
+        # No OCR technique for this sigla (scan_strategy "none", e.g. reunion):
+        # single filename_glob attempt, no retry. Still tick each PDF so the
+        # progress bar's done matches the pre-counted total.
         try:
             result = scanner.count(folder)
         except Exception as exc:  # noqa: BLE001
             return (hosp, sigla, None, f"{type(exc).__name__}: {exc}")
+        if pdf_cb is not None:
+            for pdf in enumerate_cell_pdfs(folder):
+                pdf_cb(pdf.name)
         return (hosp, sigla, result, None)
 
     last_err: str | None = None
@@ -261,7 +305,7 @@ def _ocr_worker(
         if token.cancelled:
             return (hosp, sigla, None, "cancelled")
         try:
-            result = fn(folder, cancel=token)
+            result = fn(folder, cancel=token, on_pdf=pdf_cb)
             return (hosp, sigla, result, None)
         except CancelledError:
             return (hosp, sigla, None, "cancelled")
@@ -297,12 +341,18 @@ def scan_cells_ocr(
         errored or were cancelled are absent from the dict — their state is
         reported only via events.
     """
+    import multiprocessing as mp  # noqa: E402
+    import queue as _queue  # noqa: E402
+    import threading  # noqa: E402
     from concurrent.futures import (  # noqa: E402
         ProcessPoolExecutor,
         as_completed,
     )
 
     from core.scanners.cancellation import CancellationToken  # noqa: E402, F401
+    from core.scanners.utils.cell_enumeration import (  # noqa: E402
+        enumerate_cell_pdfs,
+    )
 
     results: dict[tuple[str, str], ScanResult] = {}
     total = len(cells)
@@ -312,16 +362,38 @@ def scan_cells_ocr(
         on_progress({"type": "scan_cancelled", "scanned": 0, "total": total})
         return results
 
+    # Pre-count PDFs across the selected cells so the bar has a real
+    # denominator. Uses the same enumeration the scanners iterate, so `done`
+    # (one tick per processed PDF) converges exactly on `total_pdfs`.
+    total_pdfs = sum(len(enumerate_cell_pdfs(f)) for (_, _, f) in cells)
+    on_progress({"type": "scan_started", "total_cells": total, "total_pdfs": total_pdfs})
+    t0 = time.perf_counter()
+    pdfs_done = 0
+
     if max_workers == 1:
         scanned = 0
         errors = 0
+
+        def _emit_pdf(name: str) -> None:
+            nonlocal pdfs_done
+            pdfs_done += 1
+            on_progress(
+                {
+                    "type": "pdf_progress",
+                    "done": min(pdfs_done, total_pdfs),
+                    "total": total_pdfs,
+                    "pdf_name": name,
+                    "eta_ms": _eta_ms(t0, pdfs_done, total_pdfs),
+                }
+            )
+
         for ct in cell_tuples:
             if cancel.cancelled:
                 on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})
                 return results
             hosp, sigla, _ = ct
             on_progress({"type": "cell_scanning", "hospital": hosp, "sigla": sigla})
-            h, s, result, err = _ocr_worker(ct)
+            h, s, result, err = _ocr_worker(ct, on_pdf=_emit_pdf)
             if err == "cancelled":
                 on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})
                 return results
@@ -330,6 +402,21 @@ def scan_cells_ocr(
                 on_progress({"type": "cell_error", "hospital": h, "sigla": s, "error": err})
             else:
                 results[(h, s)] = result  # type: ignore[assignment]
+                telemetry = result.telemetry
+                near_matches = (
+                    [
+                        {
+                            "pdf_name": nm.pdf_name,
+                            "page_index": nm.page_index,
+                            "flavor_name": nm.flavor_name,
+                            "matched_anchors": list(nm.matched_anchors),
+                            "missing_anchors": list(nm.missing_anchors),
+                        }
+                        for nm in telemetry.near_matches
+                    ]
+                    if telemetry
+                    else []
+                )
                 on_progress(
                     {
                         "type": "cell_done",
@@ -340,6 +427,7 @@ def scan_cells_ocr(
                             "method": result.method,
                             "confidence": result.confidence.value,
                             "duration_ms_ocr": result.duration_ms,
+                            "near_matches": near_matches,
                         },
                     }
                 )
@@ -355,15 +443,52 @@ def scan_cells_ocr(
         )
         return results
 
-    # Multi-worker path — real ProcessPoolExecutor.
+    # Multi-worker path — real ProcessPoolExecutor with an IPC progress queue.
     event = getattr(cancel, "_event", None)
     scanned = 0
     errors = 0
     cancelled = 0
+
+    # Workers (subprocesses) push cell_started / pdf_done onto this queue; a
+    # daemon drain thread on the main process forwards them as cell_scanning /
+    # pdf_progress. on_progress is safe to call from both this thread and the
+    # as_completed loop: it only schedules a coroutine (run_coroutine_threadsafe)
+    # and mutates session state on cell_done, which is emitted solely here.
+    progress_q = mp.Queue()
+    _DRAIN_STOP = "__drain_stop__"
+
+    def _drain() -> None:
+        nonlocal pdfs_done
+        while True:
+            try:
+                ev = progress_q.get(timeout=0.5)
+            except _queue.Empty:
+                continue
+            if ev.get("type") == _DRAIN_STOP:
+                return
+            if ev["type"] == "cell_started":
+                on_progress(
+                    {"type": "cell_scanning", "hospital": ev["hospital"], "sigla": ev["sigla"]}
+                )
+            elif ev["type"] == "pdf_done":
+                pdfs_done += 1
+                on_progress(
+                    {
+                        "type": "pdf_progress",
+                        "done": min(pdfs_done, total_pdfs),
+                        "total": total_pdfs,
+                        "pdf_name": ev["pdf_name"],
+                        "eta_ms": _eta_ms(t0, pdfs_done, total_pdfs),
+                    }
+                )
+
+    drain_thread = threading.Thread(target=_drain, daemon=True)
+    drain_thread.start()
+
     with ProcessPoolExecutor(
         max_workers=max_workers,
         initializer=_init_ocr_worker,
-        initargs=(event,),
+        initargs=(event, progress_q),
     ) as pool:
         future_to_cell = {pool.submit(_ocr_worker, ct): ct for ct in cell_tuples}
         for fut in as_completed(future_to_cell):
@@ -378,7 +503,8 @@ def scan_cells_ocr(
                 # down at their own next checkpoint.
                 pool.shutdown(wait=False, cancel_futures=True)
             h, s, result, err = fut.result()
-            on_progress({"type": "cell_scanning", "hospital": h, "sigla": s})
+            # cell_scanning is emitted by the drain (worker's cell_started) when
+            # the cell actually starts — not here after the result (audit #1b).
             if err == "cancelled":
                 cancelled += 1
             elif err:
@@ -386,6 +512,21 @@ def scan_cells_ocr(
                 on_progress({"type": "cell_error", "hospital": h, "sigla": s, "error": err})
             else:
                 results[(h, s)] = result  # type: ignore[assignment]
+                telemetry = result.telemetry
+                near_matches = (
+                    [
+                        {
+                            "pdf_name": nm.pdf_name,
+                            "page_index": nm.page_index,
+                            "flavor_name": nm.flavor_name,
+                            "matched_anchors": list(nm.matched_anchors),
+                            "missing_anchors": list(nm.missing_anchors),
+                        }
+                        for nm in telemetry.near_matches
+                    ]
+                    if telemetry
+                    else []
+                )
                 on_progress(
                     {
                         "type": "cell_done",
@@ -396,11 +537,18 @@ def scan_cells_ocr(
                             "method": result.method,
                             "confidence": result.confidence.value,
                             "duration_ms_ocr": result.duration_ms,
+                            "near_matches": near_matches,
                         },
                     }
                 )
             scanned += 1
             on_progress({"type": "scan_progress", "done": scanned, "total": total})
+
+    # All workers have finished -> no more queue puts. The sentinel lets the
+    # drain flush whatever's still buffered and stop cleanly (Queue.empty() is
+    # racy across processes, so we don't rely on it).
+    progress_q.put({"type": _DRAIN_STOP})
+    drain_thread.join(timeout=5.0)
 
     if cancelled > 0:
         on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})

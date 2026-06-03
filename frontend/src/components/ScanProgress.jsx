@@ -10,7 +10,7 @@ export default function ScanProgress() {
 
   if (!scanProgress) return null;
 
-  const { done, total, etaMs, terminal } = scanProgress;
+  const { done, total, etaMs, terminal, pdfName } = scanProgress;
   const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
 
   let icon, label, iconColorClass;
@@ -33,6 +33,11 @@ export default function ScanProgress() {
       <div className="flex items-center gap-3 mb-2">
         <span className={iconColorClass}>{icon}</span>
         <span className="text-sm font-medium text-po-text">{label}</span>
+        {pdfName && !terminal && (
+          <span className="text-xs text-po-text-muted truncate max-w-[180px]" title={pdfName}>
+            {pdfName}
+          </span>
+        )}
         <Badge variant="neutral" className="ml-auto">{done}/{total}</Badge>
         {etaMs && !terminal && (
           <span className="text-xs text-po-text-muted">~{Math.round(etaMs / 1000)}s</span>

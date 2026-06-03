@@ -1,0 +1,6 @@
+{
+  "fixture": "2026-05-08_insgral_lavado_de_ruedas.pdf",
+  "pages": 10,
+  "covers_expected": 10,
+  "notes": "Real HRB insgral compilation: 10 standalone 'CHEQUEO SISTEMA LAVADO DE RUEDAS' (F-CRS-LCH-94) forms bound into one PDF, each stamped 'Página 1 de 1' (verified by rendering pages 1, 2, 6 — distinct dates per page). V4 counts 10 documents, all read directly. Exercises the PaginationScanner -> V4 path for an open-universe sigla."
+}

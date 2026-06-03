@@ -7,13 +7,13 @@ ABRIL = Path("A:/informe mensual/ABRIL")
 
 def test_enumerate_month_returns_4_hospitals():
     inv = enumerate_month(ABRIL)
-    assert sorted(inv.hospitals_present) == ["HLU", "HPV", "HRB"]  # HLL not normalized
-    assert "HLL" in inv.hospitals_missing
+    assert sorted(inv.hospitals_present) == ["HLL", "HLU", "HPV", "HRB"]
+    assert not inv.hospitals_missing
 
 
 def test_enumerate_month_populates_18_categories_per_hospital():
     inv = enumerate_month(ABRIL)
-    for hosp in ("HPV", "HRB", "HLU"):
+    for hosp in ("HPV", "HRB", "HLU", "HLL"):
         assert len(inv.cells[hosp]) == 18
 
 

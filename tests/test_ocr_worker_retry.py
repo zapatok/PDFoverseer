@@ -12,7 +12,7 @@ class _FlakyScanner:
         self.fail_times = fail_times
         self.calls = 0
 
-    def count_ocr(self, folder, *, cancel):
+    def count_ocr(self, folder, *, cancel, on_pdf=None):
         self.calls += 1
         if self.calls <= self.fail_times:
             raise RuntimeError("transient tesseract crash")
@@ -52,7 +52,7 @@ def test_cancelled_does_not_retry(monkeypatch):
         def __init__(self):
             self.calls = 0
 
-        def count_ocr(self, folder, *, cancel):
+        def count_ocr(self, folder, *, cancel, on_pdf=None):
             self.calls += 1
             raise CancelledError()
 

@@ -1,6 +1,21 @@
 # core/ — OCR Pipeline & Inference Engine
 
-## V4 Pipeline (pipeline.py)
+## Counting architecture (read first)
+
+PDFoverseer counts documents per (hospital, sigla) in two passes, dispatched by
+`core/scanners/patterns.py` (one `scan_strategy` per sigla):
+
+- **Pase 1 — filename glob** (`SimpleFilenameScanner`): ~90% of cells. 1 PDF = 1
+  document, no OCR. Counts recursively via `count_pdfs_by_sigla`.
+- **Pase 2 — OCR** (`AnchorsScanner` / `PaginationScanner`): the implicit
+  compilations. See **Scanner Architecture** at the end for the triad.
+
+The **V4 pipeline** documented immediately below is **no longer a standalone
+scanner** — it is an internal engine reached **only** through `PaginationScanner`
+(via `utils/v4_count.py`). The V4 / inference sections describe that engine's
+internals; the active, current design is the scanner triad.
+
+## V4 Pipeline (pipeline.py — internal engine, reached via PaginationScanner)
 
 **Tess-SR only** (EasyOCR removed 2026-03-26, see postmortem):
 1. **Producers** (6 parallel workers): PyMuPDF rendering + Tesseract (Tier 1 direct + Tier 2 w/ 4x SR GPU bicubic)
@@ -84,3 +99,61 @@ INF:3 x̄=72% 1✓1~1✗
 
 XVAL entry format: `<pdf_page>:<left_neighbor>><curr>/<total>@<conf%>><right_neighbor>`
 Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records only), `i`=inferred, `f`=failed, `v`=vlm_ollama, `V`=vlm_claude
+
+
+## Scanner Architecture (ocr-per-sigla, `v1-ocr-per-sigla`)
+
+The pase-2 OCR counting layer lives in `core/scanners/` and is **data-driven**:
+`patterns.py` is the single source of truth — one entry per sigla for all 18
+SIGLAS (enforced by a completeness-gate test).
+
+### The scanner triad
+
+`register_defaults()` builds one scanner per sigla, picked by the
+`scan_strategy` field of its `patterns.py` entry:
+
+| scan_strategy | Scanner | Counting technique |
+|---------------|---------|--------------------|
+| `none` | `SimpleFilenameScanner` | filename glob only (pase 1) |
+| `anchors` | `AnchorsScanner` | OCR the header band, match flavor anchors |
+| `pagination` | `PaginationScanner` | count documents via the V4 pipeline |
+
+Distribution today: 1 `none` (reunion), 15 `anchors`, 2 `pagination`
+(insgral, altura).
+
+### AnchorsScanner
+
+OCRs the top fraction of each page (`top_fraction`, default 0.25) and counts a
+page as a document **cover** when it matches at least `min_match` of a flavor's
+text **anchors**. A sigla may declare several **flavors** (template variants);
+a flavor may declare **anti_anchors** that reject a page even when anchors
+match (kills cross-category misfiles and shadow covers). Anchors are structural
+text — titles, field labels, pagination — never raw form codes (decision A12).
+
+### PaginationScanner + V4
+
+For the open-universe siglas (insgral, altura — heterogeneous templates, no
+stable anchor set) `PaginationScanner` counts documents by their
+"Página N de M" pagination. The engine is the **full V4 pipeline**
+(`pipeline.analyze_pdf`), reached through the `utils/v4_count.py` adapter —
+V4's autocorrelation period-detection + Dempster-Shafer inference recover
+OCR-failed pages. A count built mostly from inferred (guessed) reads
+downgrades the cell to LOW confidence for operator review.
+
+> V4 (`pipeline.py`) is no longer a standalone scanner — it is reached ONLY
+> through `PaginationScanner`. The earlier lightweight `corner_count` helper
+> was deleted after it undercounted the real corpus (13/18 documents where
+> V4 recovered 18/18).
+
+### Uniform behaviors
+
+- **A7** — a 1-page PDF counts as 1 document, locked, without OCR.
+- **A8** — a missing sigla folder yields count 0 with a `folder_missing` flag,
+  never an error.
+- **A14** — a page matching `min_match - 1` anchors is surfaced as near-match
+  telemetry (`ScanResult.telemetry.near_matches`) — a candidate for a new
+  flavor.
+
+Bump `SCANNER_PATTERNS_VERSION` in `utils.py` on any change to the anchor sets
+or scan strategies. Fixture/ground-truth conventions: see
+`tests/fixtures/scanners/README.md`.

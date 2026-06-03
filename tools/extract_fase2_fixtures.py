@@ -21,8 +21,11 @@ SRC_ROOT = Path("A:/informe mensual/ABRIL")
 DST_ROOT = PROJECT_ROOT / "tests" / "fixtures" / "scanners_ocr"
 
 # (subfolder_name, dest_filename, source_folder, sigla, min_pages)
-# min_pages = EXPECTED_PAGES_PER_DOC[sigla] * 5 (the _TIGHT_FACTOR used by
-# flag_compilation_suspect - see core/scanners/utils/page_count_heuristic.py)
+# min_pages is a fixture-SELECTION threshold (which real PDFs are large enough
+# to extract as multi-doc fixtures); the values below were originally derived as
+# EXPECTED_PAGES_PER_DOC[sigla] * 5. It is intentionally decoupled from the
+# runtime compilation heuristic in core/scanners/utils/page_count_heuristic.py
+# (which now uses COMPILATION_PAGE_FACTOR, ×3) — do not re-link them.
 FIXTURES = [
     ("art_multidoc", "art_multidoc.pdf", SRC_ROOT / "HLU" / "7.-ART", "art", 50),
     ("odi_compilation", "HRB_odi_compilation.pdf", SRC_ROOT / "HRB" / "3.-ODI Visitas", "odi", 10),

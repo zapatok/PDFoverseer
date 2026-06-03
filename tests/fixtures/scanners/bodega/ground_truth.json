@@ -1,0 +1,6 @@
+{
+  "fixture": "f_pets_07_03_p1_chequeo.pdf",
+  "pages": 4,
+  "covers_expected": 4,
+  "notes": "HPV 2026-05-08 bodega PDF. Contains 4 separate Chequeo Bodega SUSPEL/RESPEL documents (F-PETS-CRS-07-03), each 1 page (Pagina 1 de 1), compiled into a single PDF. All 4 pages are covers. OCR-verified at top_fraction=0.25 — anchors 'chequeo bodega', 'f-pets-crs-07-03', 'bodega suspel' fire on every page (min_match=3)."
+}

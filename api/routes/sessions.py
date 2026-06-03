@@ -25,8 +25,9 @@ from core.orchestrator import (
     scan_cells_ocr,
     scan_month,
 )
-from core.scanners.base import ConfidenceLevel, ScanResult
+from core.scanners.base import ConfidenceLevel, NearMatchEntry, ScanResult, ScanTelemetry
 from core.scanners.cancellation import CancellationToken
+from core.scanners.utils.cell_enumeration import enumerate_cell_pdfs
 
 # Single thread per session is plenty — Daniel's machine has one user, and
 # scan_cells_ocr already uses a ProcessPoolExecutor internally for parallelism.
@@ -186,6 +187,11 @@ def scan_ocr(
             raise HTTPException(404, f"Folder missing for {hosp}/{sigla}")
         cells_with_paths.append((hosp, sigla, folder_path))
 
+    # Pre-count PDFs across the selected cells so the client can size the
+    # progress bar immediately (audit #1). Uses the same enumeration the OCR
+    # scanners iterate, so the scan's `done` converges exactly on total_pdfs.
+    total_pdfs = sum(len(enumerate_cell_pdfs(f)) for (_, _, f) in cells_with_paths)
+
     # Atomic check-then-set: setdefault returns the value already in the dict if
     # it existed, otherwise installs and returns the new one.
     handle = make_handle(session_id=session_id, total=len(cells_with_paths))
@@ -197,6 +203,26 @@ def scan_ocr(
         asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
         if event.get("type") == "cell_done":
             r = event["result"]
+            # A14: reconstruct ScanTelemetry from the near_matches the
+            # orchestrator serialised into the event so apply_ocr_result
+            # can persist them alongside the rest of the cell state.
+            raw_nms = r.get("near_matches") or []
+            telemetry = (
+                ScanTelemetry(
+                    near_matches=[
+                        NearMatchEntry(
+                            pdf_name=nm["pdf_name"],
+                            page_index=nm["page_index"],
+                            flavor_name=nm["flavor_name"],
+                            matched_anchors=nm["matched_anchors"],
+                            missing_anchors=nm["missing_anchors"],
+                        )
+                        for nm in raw_nms
+                    ]
+                )
+                if raw_nms
+                else None
+            )
             result = ScanResult(
                 count=r["ocr_count"],
                 confidence=ConfidenceLevel(r["confidence"]),
@@ -206,6 +232,7 @@ def scan_ocr(
                 errors=[],
                 duration_ms=r["duration_ms_ocr"],
                 files_scanned=1,
+                telemetry=telemetry,
             )
             mgr.apply_ocr_result(session_id, event["hospital"], event["sigla"], result)
 
@@ -240,7 +267,7 @@ def scan_ocr(
             app.state.batches.pop(session_id, None)
 
     handle.future = _DISPATCH_POOL.submit(_run)
-    return {"accepted": True, "total": len(cells_with_paths)}
+    return {"accepted": True, "total": len(cells_with_paths), "total_pdfs": total_pdfs}
 
 
 @router.post("/sessions/{session_id}/cancel")
@@ -379,10 +406,21 @@ def get_cell_files(
     cell_method = cell.get("method") or "filename_glob"
 
     def _origin_for(filename: str, override: int | None) -> str:
-        """OriginChip variant: manual if override, OCR if scanner ran, else R1."""
+        """OriginChip variant: manual if override, OCR if scanner ran, else R1.
+
+        The OCR method set covers both the legacy scanners (header_detect,
+        corner_count, page_count_pure — still present in historical records)
+        and the ocr-per-sigla scanners (header_band_anchors, v4).
+        """
         if override is not None:
             return "manual"
-        if cell_method in ("header_detect", "corner_count", "page_count_pure"):
+        if cell_method in (
+            "header_detect",
+            "corner_count",
+            "page_count_pure",
+            "header_band_anchors",
+            "v4",
+        ):
             return "OCR"
         return "R1"
 
@@ -396,6 +434,13 @@ def get_cell_files(
         subfolder = pdf.parent.name if pdf.parent != folder else None
         override = per_file_overrides.get(pdf.name)
         inferred = per_file.get(pdf.name)
+        # effective_count defaults to 1 here — a PDF the operator is looking at
+        # counts as at least one document. This is intentionally asymmetric with
+        # api.state.compute_cell_count, which defaults a dataless cell to 0
+        # (audit #7). The divergence is presentation-only and pre-scan: after a
+        # scan, per_file covers every PDF and the two agree. Kept at 1 because
+        # it is the intuitive per-file view for the operator.
+        effective = override if override is not None else (inferred if inferred is not None else 1)
         out.append(
             {
                 "name": pdf.name,
@@ -404,9 +449,7 @@ def get_cell_files(
                 "suspect": page_count >= 10,
                 "per_file_count": inferred,
                 "override_count": override,
-                "effective_count": override
-                if override is not None
-                else (inferred if inferred is not None else 1),
+                "effective_count": effective,
                 "origin": _origin_for(pdf.name, override),
             }
         )

@@ -1,0 +1,28 @@
+{
+  "fixtures": [
+    {
+      "file": "f_lch_xx_p1p3_extensiones.pdf",
+      "pages": 3,
+      "covers_expected": 3,
+      "notes": "HPV extensiones elec (LCH-04 variant): 3 standalone covers, each 'pagina 1 de 1'. Flavor f_lch_xx."
+    },
+    {
+      "file": "f_hll_17_p1p2_herr_hll.pdf",
+      "pages": 2,
+      "covers_expected": 2,
+      "notes": "HLL REG-SSO-HLL-17 proprietary form: 2 standalone covers. Flavor f_hll_17."
+    },
+    {
+      "file": "f_titan_p1p2_martillo_tronzadora.pdf",
+      "pages": 2,
+      "covers_expected": 2,
+      "notes": "TITAN TN-SGSSO-RG proprietary form: 2 standalone covers (martillo demoledor + tronzadora). Flavor f_titan. OCR-verified: both pages fire 'titan' + at least one of 'sistema de gestion de seguridad y salud'/'tn sgsso rg'/'inspeccion'/'herramienta'."
+    },
+    {
+      "file": "f_lch_xx_shadow_epp.pdf",
+      "pages": 2,
+      "covers_expected": 0,
+      "notes": "Anti-anchor shadow: 2-page EPP checklist (F-CRS-LCH-02) misfiled in herramientas_elec folder. Both pages carry 'constructora region sur' + 'pagina 1 de' (would fire f_lch_xx without anti-anchor), but 'chequeo de elementos' fires on both pages → anti-anchor rejects them → 0 covers. OCR-verified 2026-05-22. Note: standalone 1-page EPP PDFs are A7-locked (1 doc, no OCR); anti-anchors only protect multi-page PDFs."
+    }
+  ]
+}
