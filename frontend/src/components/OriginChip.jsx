@@ -1,12 +1,17 @@
 import Badge from "../ui/Badge";
 
-const ORIGIN_VARIANT = {
-  OCR:    "iris",
-  R1:     "jade",
-  manual: "amber",
+export const ORIGIN_VARIANT = {
+  OCR:        "iris",
+  R1:         "jade",
+  manual:     "amber",
+  Estructura: "blue", // page_count_pure — counted by document structure, no OCR
 };
 
+// Pure mapping helper (node-env testable): unknown origins fall back to neutral.
+export function originVariant(origin) {
+  return ORIGIN_VARIANT[origin] ?? "neutral";
+}
+
 export default function OriginChip({ origin }) {
-  const variant = ORIGIN_VARIANT[origin] ?? "neutral";
-  return <Badge variant={variant}>{origin}</Badge>;
+  return <Badge variant={originVariant(origin)}>{origin}</Badge>;
 }

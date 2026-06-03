@@ -406,18 +406,21 @@ def get_cell_files(
     cell_method = cell.get("method") or "filename_glob"
 
     def _origin_for(filename: str, override: int | None) -> str:
-        """OriginChip variant: manual if override, OCR if scanner ran, else R1.
+        """OriginChip variant: manual if override, Estructura for page-count,
+        OCR if an OCR scanner ran, else R1.
 
-        The OCR method set covers both the legacy scanners (header_detect,
-        corner_count, page_count_pure — still present in historical records)
-        and the ocr-per-sigla scanners (header_band_anchors, v4).
+        page_count_pure is the fixed-page (pages = documents) method — no OCR
+        runs, so it gets its own "Estructura" origin instead of reading as OCR.
+        The OCR set covers the legacy scanners (header_detect, corner_count) and
+        the ocr-per-sigla scanners (header_band_anchors, v4).
         """
         if override is not None:
             return "manual"
+        if cell_method == "page_count_pure":
+            return "Estructura"
         if cell_method in (
             "header_detect",
             "corner_count",
-            "page_count_pure",
             "header_band_anchors",
             "v4",
         ):

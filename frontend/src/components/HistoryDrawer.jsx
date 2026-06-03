@@ -5,6 +5,10 @@ import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { anomalyTone } from "../lib/anomaly";
 
 // Método de historical_counts → variante de OriginChip.
+// TODO(conteo-confiable): page_count_pure ahora tiene origen propio "Estructura"
+// en _origin_for (sessions.py). Aquí sigue mapeando a "OCR", así que las celdas
+// históricas de páginas fijas se leerán "OCR" en el drawer. Alinear cuando se
+// retome el historial (fuera de alcance de esta obra; el historial no se toca).
 function methodToOrigin(method) {
   if (method === "manual") return "manual";
   if (method === "filename_glob") return "R1";

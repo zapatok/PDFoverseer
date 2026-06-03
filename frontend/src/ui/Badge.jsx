@@ -6,10 +6,11 @@ const VARIANTS = {
   "state-error":     "bg-po-error-bg text-po-error border border-po-error-border",
   "state-override":  "bg-po-override-bg text-po-override border border-po-override-border",
   "neutral":         "bg-po-panel-hover text-po-text-muted border border-po-border",
-  // Origin variants — iris/jade/amber via existing po-* token groups
+  // Origin variants — iris/jade/amber/blue via existing po-* token groups
   "iris":            "bg-po-override-bg text-po-override border border-po-override-border",
   "jade":            "bg-po-confidence-high-bg text-po-confidence-high border border-po-confidence-high-border",
   "amber":           "bg-po-suspect-bg text-po-suspect border border-po-suspect-border",
+  "blue":            "bg-po-scanning-bg text-po-scanning border border-po-scanning-border",
 };
 
 export default function Badge({ variant = "neutral", icon: Icon, children, className = "" }) {
