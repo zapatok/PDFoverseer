@@ -1,19 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSessionStore } from "../store/session";
 import { api } from "../lib/api";
 import Dialog from "../ui/Dialog";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
-import { FileStack, ScanSearch } from "lucide-react";
+import { FileStack, ScanSearch, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
+import { wheelToPageStep } from "../lib/viewer-nav";
 import OriginChip from "./OriginChip";
 import InlineEditCount from "./InlineEditCount";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
 import { usePdfDocument } from "../hooks/usePdfDocument";
+import { useFitScale } from "../hooks/useFitScale";
 import { PdfPage } from "./PdfPage";
+import { WorkerThumbnails } from "./WorkerThumbnails";
 import { WorkerCountViewer } from "./WorkerCountViewer";
+
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 4;
+const ZOOM_STEP = 0.2;
 
 function FileSummary({ file }) {
   if (!file) {
@@ -38,8 +44,59 @@ function FileSummary({ file }) {
   );
 }
 
-function InspectView({ url }) {
-  const { doc, numPages, error, loading } = usePdfDocument(url);
+// Paged inspect viewer on the proven WorkerCountViewer pattern: a thumbnails
+// column, fit-to-window by default, one page at a time. Nav (review #9, Daniel's
+// choice): scroll = page, Shift+scroll = zoom; +/- and PgUp/Dn also work.
+function InspectView({ url, pageCount }) {
+  const { doc, error, loading } = usePdfDocument(url);
+  const [page, setPage] = useState(1);
+  const [zoom, setZoom] = useState(1);
+  const wheelAcc = useRef(0);
+
+  const safePageCount = Math.max(pageCount || 0, 1);
+  const clampPage = (p) => Math.min(Math.max(p, 1), safePageCount);
+
+  // Reset to page 1 when the file changes; zoom is per-page (resets on page).
+  useEffect(() => { setPage(1); }, [url]);
+  useEffect(() => { setZoom(1); }, [page]);
+
+  const { panelRef, fitScale } = useFitScale(doc, page);
+  const effectiveScale = Math.max(0.1, fitScale * zoom);
+
+  const zoomIn = () => setZoom((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)));
+  const zoomOut = () => setZoom((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)));
+
+  const onWheel = (e) => {
+    if (e.shiftKey) {
+      e.preventDefault();
+      if (e.deltaY < 0) zoomIn();
+      else zoomOut();
+      return;
+    }
+    const { step, acc } = wheelToPageStep(e.deltaY, wheelAcc.current);
+    wheelAcc.current = acc;
+    if (step !== 0) {
+      e.preventDefault();
+      setPage((p) => clampPage(p + step));
+    }
+  };
+
+  // Keyboard nav while the viewer is alive. Ignore when focus is in the
+  // manual-adjust input so digits / "-" don't move the page.
+  useEffect(() => {
+    const onKey = (e) => {
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      if (e.key === "PageDown" || e.key === "ArrowDown") { e.preventDefault(); setPage((p) => clampPage(p + 1)); }
+      else if (e.key === "PageUp" || e.key === "ArrowUp") { e.preventDefault(); setPage((p) => clampPage(p - 1)); }
+      else if (e.key === "+" || e.key === "=") { e.preventDefault(); zoomIn(); }
+      else if (e.key === "-" || e.key === "_") { e.preventDefault(); zoomOut(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safePageCount]);
 
   if (error) {
     return (
@@ -48,24 +105,39 @@ function InspectView({ url }) {
       </div>
     );
   }
-  if (loading || !doc) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-po-text-muted">
-        Cargando…
-      </div>
-    );
-  }
+
   return (
-    <TransformWrapper minScale={0.5} maxScale={4} doubleClick={{ disabled: true }}>
-      <TransformComponent
-        wrapperClass="!w-full !h-full"
-        contentClass="flex flex-col items-center gap-3 p-4"
+    <div className="flex h-full w-full">
+      <WorkerThumbnails
+        doc={doc}
+        pageCount={safePageCount}
+        currentPage={page}
+        marks={[]}
+        onSelect={(p) => setPage(clampPage(p))}
+      />
+      <div
+        ref={panelRef}
+        onWheel={onWheel}
+        className="relative flex-1 overflow-auto bg-black p-4 flex items-start justify-center"
       >
-        {Array.from({ length: numPages }, (_, i) => (
-          <PdfPage key={i + 1} doc={doc} pageNumber={i + 1} />
-        ))}
-      </TransformComponent>
-    </TransformWrapper>
+        {loading || !doc ? (
+          <div className="flex h-full items-center justify-center text-sm text-po-text-muted">
+            Cargando…
+          </div>
+        ) : (
+          <PdfPage doc={doc} pageNumber={page} scale={effectiveScale} />
+        )}
+        {doc && !loading && (
+          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg bg-po-panel/90 p-1 shadow-sm ring-1 ring-po-border backdrop-blur">
+            <Button size="sm" variant="ghost" icon={ZoomOut} onClick={zoomOut} aria-label="Alejar" />
+            <Button size="sm" variant="ghost" icon={Maximize2} onClick={() => setZoom(1)} aria-label="Ajustar a ventana">
+              {Math.round(zoom * 100)}%
+            </Button>
+            <Button size="sm" variant="ghost" icon={ZoomIn} onClick={zoomIn} aria-label="Acercar" />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -134,7 +206,7 @@ export default function PDFLightbox() {
         ) : (
           <>
             <div className="flex-1 overflow-hidden bg-black">
-              <InspectView url={pdfUrl} />
+              <InspectView url={pdfUrl} pageCount={pageCount ?? 0} />
             </div>
             <aside className="w-80 border-l border-po-border p-4 overflow-y-auto">
               <FileSummary file={files?.[lightbox.fileIndex]} />

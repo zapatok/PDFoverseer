@@ -19,7 +19,6 @@
     "pdfjs-dist": "^5.7.284",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-zoom-pan-pinch": "^3.7.0",
     "sonner": "^1.7.4",
     "zustand": "^5.0.12"
   },
