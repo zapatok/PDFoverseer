@@ -244,10 +244,12 @@ expandir siglas; lo dudoso va marcado para que Daniel lo ajuste):
 | caliente | Inspección trabajos en caliente | Chequeo/permiso de trabajos en caliente. |
 | herramientas_elec | Inspección herramientas eléctricas | Inspección de herramientas eléctricas. |
 | andamios | Andamios | Lista de chequeo de andamios. |
-| chps | CHPS | ⚠️ confirmar significado con Daniel. |
+| chps | CHPS | Acta del Comité Paritario de Higiene y Seguridad. |
 
-> Marcadas para confirmar: **chps** (sigla sin label expandido), y los números de
-> Decreto Supremo (irl). Daniel ajusta en la revisión del spec.
+> **chps** = Comité Paritario de Higiene y Seguridad (confirmado por Daniel/Carla).
+> El *token* de sigla `chps` viene mal de la fuente (debería ser CPHS); se mantiene
+> como está en esta ronda — corregirlo cruza varios proyectos del pipeline y se
+> difiere a futuro. El resto de las descripciones quedaron OK en la revisión de Daniel.
 
 ### 6.3 Contenido — rangos de páginas (del corpus)
 - Script de auditoría one-off `tools/audit_sigla_page_ranges.py`: recorre
