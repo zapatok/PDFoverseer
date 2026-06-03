@@ -434,19 +434,19 @@ def get_cell_files(
     per_file_overrides = cell.get("per_file_overrides") or {}
     cell_method = cell.get("method") or "filename_glob"
 
-    def _origin_for(filename: str, override: int | None) -> str:
-        """OriginChip variant: manual if override, Estructura for page-count,
-        OCR if an OCR scanner ran, else R1.
+    def _origin_for(filename: str, override: int | None, page_count: int) -> str:
+        """Per-file chip (spec G1): Manual/Error/OCR/R1/Pendiente. Canonical casing.
 
-        page_count_pure is the fixed-page (pages = documents) method — no OCR
-        runs, so it gets its own "Estructura" origin instead of reading as OCR.
-        The OCR set covers the legacy scanners (header_detect, corner_count) and
-        the ocr-per-sigla scanners (header_band_anchors, v4).
+        Priority cascade: a manual override always wins (human judgement over a
+        read failure), then an unreadable PDF (page_count == 0) → Error, then the
+        OCR scanners, then the auto-reliable methods. A plain filename_glob file
+        is only trustworthy when it is a single page (one file = one document);
+        a multipage filename_glob file still needs OCR/manual → Pendiente.
         """
         if override is not None:
-            return "manual"
-        if cell_method == "page_count_pure":
-            return "Estructura"
+            return "Manual"
+        if page_count == 0:  # unreadable PDF
+            return "Error"
         if cell_method in (
             "header_detect",
             "corner_count",
@@ -454,6 +454,10 @@ def get_cell_files(
             "v4",
         ):
             return "OCR"
+        if cell_method == "page_count_pure":
+            return "R1"  # fixed-page sigla, auto-reliable (was "Estructura")
+        if cell_method == "filename_glob":
+            return "R1" if page_count == 1 else "Pendiente"
         return "R1"
 
     out: list[dict] = []
@@ -482,7 +486,7 @@ def get_cell_files(
                 "per_file_count": inferred,
                 "override_count": override,
                 "effective_count": effective,
-                "origin": _origin_for(pdf.name, override),
+                "origin": _origin_for(pdf.name, override, page_count),
             }
         )
     return out

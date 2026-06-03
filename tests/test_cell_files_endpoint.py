@@ -9,6 +9,21 @@ from api.main import create_app
 from core.scanners.base import ConfidenceLevel, ScanResult
 
 
+def _make_pdf(path, pages: int) -> None:
+    """Write a real `pages`-page PDF so the endpoint reports a true page_count.
+
+    The origin rule (spec G1) treats page_count == 0 (an unreadable file) as
+    "Error", so stub bytes no longer suffice where origin is asserted.
+    """
+    import fitz
+
+    doc = fitz.open()
+    for _ in range(pages):
+        doc.new_page()
+    doc.save(str(path))
+    doc.close()
+
+
 @pytest.fixture
 def client_with_pdfs(tmp_path, monkeypatch):
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
@@ -22,10 +37,12 @@ def client_with_pdfs(tmp_path, monkeypatch):
         sid = sid_state["session_id"]
 
         # Seed the cell folder so the endpoint can find the PDFs on disk.
+        # Real PDFs: b.pdf must read a true page_count (>0) so the OCR method
+        # surfaces "OCR" rather than the page_count==0 "Error" branch.
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
-        (folder / "a.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
-        (folder / "b.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+        _make_pdf(folder / "a.pdf", 5)
+        _make_pdf(folder / "b.pdf", 3)
 
         # Apply an OCR result so per_file is populated on the cell.
         mgr.apply_ocr_result(
@@ -57,11 +74,11 @@ def test_get_cell_files_includes_per_file_and_origin(client_with_pdfs):
     files = r.json()
     by_name = {f["name"]: f for f in files}
 
-    # a.pdf has per_file=5 and override=7 → effective=7, origin=manual
+    # a.pdf has per_file=5 and override=7 → effective=7, origin=Manual
     assert by_name["a.pdf"]["per_file_count"] == 5
     assert by_name["a.pdf"]["override_count"] == 7
     assert by_name["a.pdf"]["effective_count"] == 7
-    assert by_name["a.pdf"]["origin"] == "manual"
+    assert by_name["a.pdf"]["origin"] == "Manual"
 
     # b.pdf has per_file=3, no override → effective=3, origin=OCR
     assert by_name["b.pdf"]["per_file_count"] == 3
@@ -84,7 +101,8 @@ def test_get_cell_files_r1_origin_for_filename_glob(tmp_path, monkeypatch):
 
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
-        (folder / "c.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+        # Real 1-page PDF: filename_glob + page_count == 1 → "R1".
+        _make_pdf(folder / "c.pdf", 1)
 
         mgr.apply_filename_result(
             sid,
@@ -112,6 +130,45 @@ def test_get_cell_files_r1_origin_for_filename_glob(tmp_path, monkeypatch):
         assert by_name["c.pdf"]["override_count"] is None
         assert by_name["c.pdf"]["effective_count"] == 2
         assert by_name["c.pdf"]["origin"] == "R1"
+
+
+def test_origin_chip_rule(tmp_path, monkeypatch):
+    """_origin_for: a filename_glob 1-page file → R1, a multipage one → Pendiente."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test_rule.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "one.pdf", 1)
+        _make_pdf(folder / "many.pdf", 28)
+
+        # filename_glob (not OCR): the rule decides per page_count.
+        mgr.apply_filename_result(
+            sid,
+            "HRB",
+            "odi",
+            ScanResult(
+                count=2,
+                confidence=ConfidenceLevel.LOW,
+                method="filename_glob",
+                breakdown=None,
+                flags=[],
+                errors=[],
+                duration_ms=1,
+                files_scanned=2,
+                per_file={"one.pdf": 1, "many.pdf": 1},
+            ),
+        )
+
+        rows = {r["name"]: r for r in c.get(f"/api/sessions/{sid}/cells/HRB/odi/files").json()}
+        assert rows["one.pdf"]["origin"] == "R1"  # 1 page
+        assert rows["many.pdf"]["origin"] == "Pendiente"  # multipage, filename_glob
 
 
 def test_effective_count_defaults_to_one_for_unscanned_file(tmp_path, monkeypatch):
