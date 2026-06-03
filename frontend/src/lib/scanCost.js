@@ -15,6 +15,15 @@ export function shouldConfirmScan(totalPdfs, threshold) {
 }
 
 /**
+ * Human-facing scan ETA in whole minutes (review #11). OCR scans run minutes,
+ * not seconds, so a seconds readout churns distractingly; round to minutes and
+ * never show 0 (a running scan always takes "at least a minute" to the eye).
+ */
+export function formatEta(ms) {
+  return `~${Math.max(1, Math.round(ms / 60000))} min`;
+}
+
+/**
  * Best client-side proxy for the number of PDFs an OCR scan will process: the
  * pase-1 filename count (≈ sigla-matching PDFs in the cell folder). For the
  * cells the guard actually targets — many-PDF regime-1 categories like

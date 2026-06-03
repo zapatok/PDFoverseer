@@ -2,6 +2,7 @@ import { CheckCircle2, X, Loader2 } from "lucide-react";
 import { useSessionStore } from "../store/session";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
+import { formatEta } from "../lib/scanCost";
 
 export default function ScanProgress() {
   const scanProgress = useSessionStore((s) => s.scanProgress);
@@ -40,7 +41,7 @@ export default function ScanProgress() {
         )}
         <Badge variant="neutral" className="ml-auto">{done}/{total}</Badge>
         {etaMs && !terminal && (
-          <span className="text-xs text-po-text-muted">~{Math.round(etaMs / 1000)}s</span>
+          <span className="text-xs text-po-text-muted">{formatEta(etaMs)}</span>
         )}
         {!terminal && (
           <Button

@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 
-import { estimateScanSeconds, shouldConfirmScan, totalPdfsForPairs } from "./scanCost";
+import { estimateScanSeconds, formatEta, shouldConfirmScan, totalPdfsForPairs } from "./scanCost";
+
+describe("formatEta", () => {
+  it("rounds to whole minutes, min 1", () => {
+    expect(formatEta(90_000)).toBe("~2 min"); // 1.5 min -> 2
+    expect(formatEta(20_000)).toBe("~1 min"); // <1 min -> 1
+    expect(formatEta(600_000)).toBe("~10 min");
+  });
+});
 
 describe("scanCost", () => {
   it("confirms strictly above the threshold", () => {
