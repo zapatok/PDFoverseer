@@ -3,8 +3,9 @@ import { useSessionStore } from "../store/session";
 import { api } from "../lib/api";
 import Dialog from "../ui/Dialog";
 import Badge from "../ui/Badge";
+import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
-import { FileStack } from "lucide-react";
+import { FileStack, ScanSearch } from "lucide-react";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
 import OriginChip from "./OriginChip";
 import InlineEditCount from "./InlineEditCount";
@@ -73,9 +74,13 @@ export default function PDFLightbox() {
   const closeLightbox = useSessionStore((s) => s.closeLightbox);
   const session = useSessionStore((s) => s.session);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
+  const scanOcr = useSessionStore((s) => s.scanOcr);
   // Re-fetch after an OCR scan finishes for this cell (G3, review #5/#6).
   const tick = useSessionStore((s) =>
     lightbox ? (s.filesTick[`${lightbox.hospital}|${lightbox.sigla}`] ?? 0) : 0,
+  );
+  const isScanning = useSessionStore((s) =>
+    lightbox ? s.scanningCells.has(`${lightbox.hospital}|${lightbox.sigla}`) : false,
   );
   const [files, setFiles] = useState(null);
 
@@ -133,6 +138,16 @@ export default function PDFLightbox() {
             </div>
             <aside className="w-80 border-l border-po-border p-4 overflow-y-auto">
               <FileSummary file={files?.[lightbox.fileIndex]} />
+              <Button
+                variant="primary"
+                icon={ScanSearch}
+                size="sm"
+                disabled={isScanning}
+                onClick={() => scanOcr(session.session_id, [[lightbox.hospital, lightbox.sigla]])}
+                className="mt-4 w-full justify-center"
+              >
+                {isScanning ? "Escaneando…" : "Escanear con OCR"}
+              </Button>
               <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual del archivo</h4>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-po-text">Documentos:</span>
