@@ -25,9 +25,7 @@ function FileSummary({ file }) {
       </p>
       <p className="text-xs text-po-text-muted mt-0.5">documentos en este archivo</p>
       <div className="flex flex-wrap items-center gap-2 mt-3">
-        {file.page_count === 1
-          ? <Badge variant="iris">trivial</Badge>
-          : <OriginChip origin={file.origin ?? "R1"} />}
+        <OriginChip origin={file.origin ?? "R1"} />
         <Badge variant="neutral">{file.page_count ?? "?"}pp</Badge>
         {file.suspect && (
           <Tooltip content="Probable compilación">
@@ -142,7 +140,7 @@ export default function PDFLightbox() {
                     setFiles((prev) =>
                       prev?.map((row, idx) =>
                         idx === lightbox.fileIndex
-                          ? { ...row, effective_count: newCount, override_count: newCount, origin: "manual" }
+                          ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
                           : row,
                       ),
                     );

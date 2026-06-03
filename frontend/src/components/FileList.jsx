@@ -5,7 +5,6 @@ import { api } from "../lib/api";
 import EmptyState from "../ui/EmptyState";
 import Skeleton from "../ui/Skeleton";
 import Tooltip from "../ui/Tooltip";
-import Badge from "../ui/Badge";
 import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
 
@@ -115,7 +114,7 @@ export default function FileList({ hospital, sigla }) {
                   setFiles((prev) =>
                     prev.map((row) =>
                       row.name === f.name
-                        ? { ...row, effective_count: newCount, override_count: newCount, origin: "manual" }
+                        ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
                         : row,
                     ),
                   );
@@ -123,10 +122,8 @@ export default function FileList({ hospital, sigla }) {
                 }}
               />
             </div>
-            {/* origin chip */}
-            {f.page_count === 1
-              ? <Badge variant="iris">trivial</Badge>
-              : <OriginChip origin={f.origin ?? "R1"} />}
+            {/* origin chip — honest per-file vocabulary (R1/OCR/Manual/Pendiente/Error) */}
+            <OriginChip origin={f.origin ?? "R1"} />
           </li>
         ))}
       </ul>
