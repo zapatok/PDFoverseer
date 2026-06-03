@@ -21,6 +21,7 @@ export const useSessionStore = create((set, get) => ({
   // FASE 2 additions
   scanningCells: new Set(),            // "HPV|odi" strings, mirrored in CategoryRow
   scanProgress: null,                  // {done, total, pdfName?, etaMs?, unit?, terminal?} | null
+  filesTick: {},                       // "HPV|odi" → counter; bumped on cell_done so FileList/lightbox re-fetch per_file (G3)
   lightbox: null,                      // {hospital, sigla, fileIndex, mode} | null
   _ws: null,
 
@@ -462,6 +463,14 @@ export const useSessionStore = create((set, get) => ({
       case "cell_done": {
         const next = new Set(state.scanningCells);
         next.delete(cellKey(event.hospital, event.sigla));
+        // Bump filesTick: this event just wrote fresh per_file to the DB, so
+        // FileList + lightbox must re-fetch to show the new chip + count (G3,
+        // review #5/#6). Key matches the cellKey/subscription format.
+        const tickKey = cellKey(event.hospital, event.sigla);
+        const filesTick = {
+          ...state.filesTick,
+          [tickKey]: (state.filesTick[tickKey] ?? 0) + 1,
+        };
         const session = state.session;
         if (session) {
           const cells = { ...session.cells };
@@ -475,9 +484,9 @@ export const useSessionStore = create((set, get) => ({
             near_matches: event.result.near_matches ?? [],
           };
           cells[event.hospital] = hosp;
-          set({ scanningCells: next, session: { ...session, cells } });
+          set({ scanningCells: next, session: { ...session, cells }, filesTick });
         } else {
-          set({ scanningCells: next });
+          set({ scanningCells: next, filesTick });
         }
         break;
       }
