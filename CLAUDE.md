@@ -163,6 +163,36 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 - **VLM integration:** ~~Attempted~~ REVERTED (2026-03-30). See postmortem in Links.
 - **Browse UX:** `/api/browse` uses server-side tkinter chooser — only works with local display
 
+## Consolidación de `po_overhaul` (2026-06-03)
+
+`po_overhaul` es ahora la **rama única** con todos los avances: se fusionaron
+`feature/ocr-per-sigla` (PR #1, refinamiento OCR per-sigla) y
+`feature/worker-viewer-ux` — **merges limpios, cero conflictos**. HEAD `a81a016`.
+Verificado: backend `598 passed / 52 skipped / 0 failed` + ruff limpio; frontend
+vitest `55/55` + build OK. (`crop-selector`/`ocr-matcher` son ramas viejas ajenas.)
+
+## Worker-viewer UX — `po_overhaul` (shipped 2026-06-02, tag `worker-viewer-ux-mvp`)
+
+Mejoras al visor de conteo de trabajadores (Feature 1): **columna de miniaturas**
+del PDF actual (lazy + WeakMap cache, badge de conteo por página), **ajuste-a-ventana
++ zoom manual por página** (`useFitScale` + `computeFitScale`; el zoom se resetea al
+cambiar de página), **leyenda de atajos persistente** (`WORKER_SHORTCUTS` fuente única),
+y un **fix del conteo parcial → 0** en el DetailPanel: `computeWorkerCount` filtraba
+todas las marcas cuando `fileNames` era un array vacío (`[]` truthy en JS); ahora
+espeja al backend (`compute_worker_count`, que no filtra con `per_file` vacío).
+Spec/plan: `docs/superpowers/{specs,plans}/2026-06-02-*worker-viewer-ux*`.
+
+## Conteo confiable / orden de carpeta / revisión por archivo — PLANEADO (spec+plan listos)
+
+Próxima obra sobre `po_overhaul` consolidado (ejecución in-session, worktree
+`.worktrees/conteo-confiable`). Modelo de "listo" honesto (verde solo si todos los
+archivos 1-página, o sigla de páginas-fijas, o OCR/override/`confirmed`),
+`FIXED_PAGE_SIGLAS={bodega,ext,caliente,herramientas_elec,exc}` (páginas=docs sin OCR),
+flag `confirmed` + endpoint, lista 1-18 sin agrupar, origen "Estructura", FileList en
+grilla + scroll del nombre, lightbox per-file. **Spec:**
+`docs/superpowers/specs/2026-06-02-conteo-confiable-y-revision-design.md`. **Plan:**
+`docs/superpowers/plans/2026-06-02-pdfoverseer-conteo-confiable.md` (9 tasks, 3 chunks).
+
 ## Feature 1 — Conteo asistido de trabajadores firmantes — `po_overhaul` branch (shipped 2026-05-17)
 
 Conteo manual asistido de los trabajadores que firman las listas de asistencia
