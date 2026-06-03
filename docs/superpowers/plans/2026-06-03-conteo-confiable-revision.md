@@ -63,8 +63,8 @@ for the Chunk-6 smoke. Verify `file:line` anchors below before editing; re-pin i
 ### Task 1.1: Backend `_origin_for` — `page_count` + 5-chip rule
 
 **Files:**
-- Modify: `api/routes/sessions.py` (`_origin_for` nested in `get_cell_files`, def ~408, body ~415-425; call site ~453)
-- Test: `tests/test_cell_files_endpoint.py` (extend)
+- Modify: `api/routes/sessions.py` (`_origin_for` nested in `get_cell_files`, **def ~437, body ~445-457; call site ~485** — re-pin before editing, anchors drift)
+- Test: `tests/test_cell_files_endpoint.py` (extend + fix existing fixtures)
 
 - [ ] **Step 1: Write the failing test** (append to `tests/test_cell_files_endpoint.py`)
 
@@ -138,13 +138,17 @@ At the call site (inside the `for pdf` loop, after `page_count` is computed):
                 "origin": _origin_for(pdf.name, override, page_count),
 ```
 
-- [ ] **Step 3b: Update the EXISTING assertions in `tests/test_cell_files_endpoint.py`.**
-The casing change breaks any test asserting the old lowercase `"manual"`. Grep
-`tests/test_cell_files_endpoint.py` for `== "manual"` (there is at least one, ~line
-64) and change `"manual"` → `"Manual"`. Also re-check any assertion that expects an
-old multipage file to be `"R1"`: a multipage `filename_glob` file now returns
-`"Pendiente"` — update those to `"Pendiente"` (and 1-page ones stay `"R1"`). Read the
-file and reconcile every `origin` assertion with the new rule before moving on.
+- [ ] **Step 3b: Reconcile the EXISTING tests in `tests/test_cell_files_endpoint.py`
+with the new rule.** Read the whole file; the new rule breaks two things:
+  1. **Casing:** the `== "manual"` assertion (~line 64) → `"Manual"`.
+  2. **Stub-PDF → "Error" (real blocker):** `test_get_cell_files_r1_origin_for_filename_glob`
+     (~lines 87-114) writes a **stub** PDF (`b"%PDF-1.4\n%%EOF"`) and asserts
+     `origin == "R1"`. Under the new rule that stub yields `page_count == 0` (fitz
+     can't parse it) → branch 2 → **`"Error"`**, so the assertion fails. **Fix the
+     fixture:** create a real 1-page PDF with `fitz` (same helper as the new
+     `test_origin_chip_rule`) so it legitimately hits `page_count == 1 → "R1"`.
+  3. Any other assertion expecting a multipage `filename_glob` file to be `"R1"` →
+     now `"Pendiente"`. Reconcile every `origin` assertion with the rule.
 
 - [ ] **Step 4 (deferred run):** test would PASS.
 
@@ -157,7 +161,7 @@ git commit -m "feat(api): per-file chip rule R1/OCR/Manual/Pendiente/Error" -m "
 ### Task 1.2: Frontend chip — OriginChip 5 variants + drop trivial/Estructura
 
 **Files:**
-- Modify: `src/components/OriginChip.jsx`, `src/components/FileList.jsx` (~114-116), `src/components/PDFLightbox.jsx` (`FileSummary` ~the trivial branch), `src/components/HistoryDrawer.jsx` (`methodToOrigin` + remove TODO)
+- Modify: `src/components/OriginChip.jsx`, `src/components/FileList.jsx` (**trivial ternary ~127-129**), `src/components/PDFLightbox.jsx` (`FileSummary` ~the trivial branch), `src/components/HistoryDrawer.jsx` (`methodToOrigin` + remove TODO)
 - Test: `src/components/OriginChip.test.js` (extend)
 
 - [ ] **Step 1: Update `OriginChip.test.js`** — replace the Estructura case with the 5-variant set:
@@ -248,7 +252,7 @@ export function formatEta(ms) {
 
 ### Task 2.2: #12 hospital header copy
 
-**Files:** `src/views/HospitalDetail.jsx:61-64`
+**Files:** `src/views/HospitalDetail.jsx` (header `<span>` ~58-61; `headerCountLabel` const at line 45)
 
 - [ ] **Step 1:** Change the header label so the count reads as documents:
 ```jsx
@@ -281,7 +285,7 @@ Then **delete the now-unused `const headerCountLabel = …` declaration** at
 
 ### Task 2.4: #8 (i) on Método (`method-info.js`)
 
-**Files:** Create `src/lib/method-info.js` + `src/lib/method-info.test.js`; Modify `src/components/DetailPanel.jsx` (the "Método" row)
+**Files:** Create `src/lib/method-info.js` + `src/lib/method-info.test.js`; Modify `src/components/DetailPanel.jsx` (the "Método" row) and `src/lib/method-labels.js` (`METHOD_LABEL`)
 
 - [ ] **Step 1: Test** (`method-info.test.js`):
 ```js
@@ -308,6 +312,16 @@ export const METHOD_INFO = {
   manual: "Valor ingresado a mano por el operador.",
 };
 ```
+- [ ] **Step 2b: `method-labels.js`** — `METHOD_LABEL` today only has 5 keys and is
+  **missing `header_band_anchors` and `v4`** (both live OCR methods), so cells scanned
+  with them show the raw token in the Método row. Add them:
+  ```js
+    header_band_anchors: "OCR encabezados",
+    v4:                  "Paginación OCR",
+  ```
+  (This keeps the `method-info.test.js` invariant honest: every labelled method now
+  also has an info string.)
+
 - [ ] **Step 3: `DetailPanel.jsx`** — next to the "Método" value, add an `Info` icon (lucide) wrapped in the existing `Tooltip` primitive, content `METHOD_INFO[cell?.method]` (only when present):
 ```jsx
 import { Info } from "lucide-react";
@@ -358,7 +372,7 @@ that event carries `event.hospital`/`event.sigla` and is the one that just wrote
 
 ### Task 3.2: FileList + lightbox re-fetch on tick
 
-**Files:** `src/components/FileList.jsx` (useEffect ~19-28), `src/components/PDFLightbox.jsx` (useEffect ~80-85 / ~93-98)
+**Files:** `src/components/FileList.jsx` (getCellFiles useEffect ~19-28), `src/components/PDFLightbox.jsx` (getCellFiles useEffect **~80-85**, deps at line 85)
 
 - [ ] **Step 1: FileList** — subscribe to the tick and add it to the fetch effect deps:
 ```jsx
@@ -503,10 +517,10 @@ def list_outputs() -> list[dict]:
     out.sort(key=lambda o: o["mtime_iso"], reverse=True)
     return out
 ```
-Add imports at the top of `output.py`: `import re`, `from datetime import datetime`
-(use exactly this form so `datetime.fromtimestamp(...)` works — NOT `import datetime`),
-`from fastapi import HTTPException`, `from fastapi.responses import FileResponse`.
-`output.py` currently imports none of these — verify and add.
+Imports: `output.py` **already imports `re` (line 6) and `HTTPException` (line 9)** —
+do NOT duplicate them. Add only the two genuinely missing: `from datetime import
+datetime` (this exact form, so `datetime.fromtimestamp(...)` works — NOT `import
+datetime`) and `from fastapi.responses import FileResponse`.
 - [ ] **Step 3: Commit** `feat(api): serve + list generated RESUMEN Excel files`.
 
 ### Task 5.2: Frontend — last-Excel section on the home
