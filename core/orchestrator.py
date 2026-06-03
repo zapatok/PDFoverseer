@@ -428,6 +428,7 @@ def scan_cells_ocr(
                             "confidence": result.confidence.value,
                             "duration_ms_ocr": result.duration_ms,
                             "near_matches": near_matches,
+                            "per_file": result.per_file,
                         },
                     }
                 )
@@ -538,6 +539,7 @@ def scan_cells_ocr(
                             "confidence": result.confidence.value,
                             "duration_ms_ocr": result.duration_ms,
                             "near_matches": near_matches,
+                            "per_file": result.per_file,
                         },
                     }
                 )

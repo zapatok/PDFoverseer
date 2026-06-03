@@ -232,6 +232,10 @@ def scan_ocr(
                 errors=[],
                 duration_ms=r["duration_ms_ocr"],
                 files_scanned=1,
+                # per_file carries the per-PDF document count the scanner found;
+                # without it apply_ocr_result wipes the cell's per_file to None
+                # and the FileList/lightbox fall back to "1" (review #2/#3).
+                per_file=r.get("per_file"),
                 telemetry=telemetry,
             )
             mgr.apply_ocr_result(session_id, event["hospital"], event["sigla"], result)

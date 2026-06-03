@@ -35,6 +35,32 @@ def test_scan_cells_ocr_emits_pdf_progress(tmp_path, monkeypatch):
     assert types[-1] == "scan_complete"
 
 
+def test_scan_cells_ocr_cell_done_carries_per_file(tmp_path, monkeypatch):
+    """Regression (review #2/#3): the cell_done event must carry per_file.
+
+    The scanner computes a per-PDF document count, but the orchestrator event
+    used to drop it, so apply_ocr_result wiped the cell's per_file to None and
+    the FileList/lightbox fell back to a flat "1" per file. The event now
+    forwards result.per_file end to end.
+    """
+    folder = tmp_path / "3.-ODI Visitas"
+    folder.mkdir()
+    for name in ("a.pdf", "b.pdf"):
+        (folder / name).write_bytes(b"%PDF-1.4\n%%EOF\n")
+    # A7 path: each 1-page PDF counts as 1 document, no Tesseract.
+    monkeypatch.setattr("core.scanners.anchors_scanner.get_page_count", lambda p: 1)
+
+    events: list[dict] = []
+    scan_cells_ocr(
+        [("HPV", "odi", folder)],
+        on_progress=events.append,
+        cancel=CancellationToken(),
+        max_workers=1,
+    )
+    done = next(e for e in events if e["type"] == "cell_done")
+    assert done["result"]["per_file"] == {"a.pdf": 1, "b.pdf": 1}
+
+
 def test_scan_cells_ocr_zero_pdfs_still_completes(tmp_path):
     folder = tmp_path / "empty"
     folder.mkdir()
