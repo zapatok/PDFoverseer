@@ -34,7 +34,7 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
           setDraft(value ?? "");
           setEditing(true);
         }}
-        className="font-mono tabular-nums text-sm w-14 text-right hover:text-po-accent focus-visible:outline-none focus-visible:text-po-accent"
+        className="font-mono tabular-nums text-sm w-14 text-right text-po-text hover:text-po-accent focus-visible:outline-none focus-visible:text-po-accent"
       >
         {displayValue}
       </button>
@@ -58,7 +58,7 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
         }
       }}
       onBlur={() => setEditing(false)}
-      className="font-mono tabular-nums text-sm w-14 text-right bg-po-bg border border-po-accent rounded px-1 focus-visible:outline-none"
+      className="font-mono tabular-nums text-sm w-14 text-right text-po-text bg-po-bg border border-po-accent rounded px-1 focus-visible:outline-none"
     />
   );
 }
