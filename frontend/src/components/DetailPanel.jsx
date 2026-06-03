@@ -208,14 +208,20 @@ export default function DetailPanel({ hospital, sigla, cell }) {
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Conteo automático</h4>
       <table className="w-full text-sm">
         <tbody>
-          <tr>
-            <td className="text-po-text-muted py-1">Por nombre de archivo</td>
-            <td className="text-right font-mono tabular-nums">{cell.filename_count ?? "—"}</td>
-          </tr>
-          <tr>
-            <td className="text-po-text-muted py-1">Por OCR</td>
-            <td className="text-right font-mono tabular-nums">{cell.ocr_count ?? "—"}</td>
-          </tr>
+          {/* Solo el método automático vigente de la cascada (review #4):
+              OCR si ya se escaneó, si no el conteo por nombre. El override
+              manual vive aparte, en "Ajuste manual". */}
+          {cell.ocr_count != null ? (
+            <tr>
+              <td className="text-po-text-muted py-1">Por OCR</td>
+              <td className="text-right font-mono tabular-nums">{cell.ocr_count}</td>
+            </tr>
+          ) : (
+            <tr>
+              <td className="text-po-text-muted py-1">Por nombre de archivo</td>
+              <td className="text-right font-mono tabular-nums">{cell.filename_count ?? "—"}</td>
+            </tr>
+          )}
           <tr>
             <td className="text-po-text-muted py-1">Método</td>
             <td className="text-right">
