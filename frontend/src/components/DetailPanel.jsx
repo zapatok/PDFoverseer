@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy } from "lucide-react";
+import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info } from "lucide-react";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
 import Badge from "../ui/Badge";
@@ -8,6 +8,7 @@ import Tooltip from "../ui/Tooltip";
 import PdfCoverViewer from "./PdfCoverViewer";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { METHOD_LABEL, CONFIDENCE_LABEL } from "../lib/method-labels";
+import { METHOD_INFO } from "../lib/method-info";
 import { useSessionStore } from "../store/session";
 import { computeWorkerCount } from "../lib/worker-count";
 import { copyFlavorStub } from "../lib/flavorStub";
@@ -218,9 +219,18 @@ export default function DetailPanel({ hospital, sigla, cell }) {
           <tr>
             <td className="text-po-text-muted py-1">Método</td>
             <td className="text-right">
-              <Tooltip content={`Token interno: ${cell.method ?? "—"}`}>
-                <span>{METHOD_LABEL[cell.method] ?? cell.method ?? "—"}</span>
-              </Tooltip>
+              <span className="inline-flex items-center justify-end gap-1">
+                <Tooltip content={`Token interno: ${cell.method ?? "—"}`}>
+                  <span>{METHOD_LABEL[cell.method] ?? cell.method ?? "—"}</span>
+                </Tooltip>
+                {METHOD_INFO[cell.method] && (
+                  <Tooltip content={METHOD_INFO[cell.method]}>
+                    <span className="inline-flex">
+                      <Info size={13} strokeWidth={1.75} className="text-po-text-muted cursor-help" />
+                    </span>
+                  </Tooltip>
+                )}
+              </span>
             </td>
           </tr>
         </tbody>
