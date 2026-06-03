@@ -11,13 +11,10 @@ import { METHOD_LABEL, CONFIDENCE_LABEL } from "../lib/method-labels";
 import { METHOD_INFO } from "../lib/method-info";
 import { useSessionStore } from "../store/session";
 import { computeWorkerCount } from "../lib/worker-count";
+import { computeCellCount } from "../lib/cellCount";
 import { copyFlavorStub } from "../lib/flavorStub";
 import { api } from "../lib/api";
 import { toast } from "sonner";
-
-function effectiveCount(cell) {
-  return cell?.user_override ?? cell?.ocr_count ?? cell?.filename_count ?? cell?.count ?? 0;
-}
 
 function confidenceVariant(cell) {
   if (cell?.confidence === "high") return "confidence-high";
@@ -174,7 +171,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
 
   const isCompilationSuspect = cell.flags?.includes("compilation_suspect");
   const hasOverride = cell.user_override !== null && cell.user_override !== undefined;
-  const total = effectiveCount(cell);
+  const total = computeCellCount(cell);
   const label = SIGLA_LABELS[sigla];
   const showLabel = label && label.toLowerCase() !== sigla.toLowerCase();
 

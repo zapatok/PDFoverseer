@@ -242,8 +242,12 @@ export const useSessionStore = create((set, get) => ({
         if (cleanedPending.get(key)?.controller === controller) {
           cleanedPending.delete(key);
         }
+        // Bump filesTick so the FileList + lightbox re-fetch this cell and show
+        // the new per-file count + the Manual chip for the edited file (Bug C).
+        const tickKey = `${hospital}|${sigla}`;
         return {
           session: { ...prev.session, cells },
+          filesTick: { ...prev.filesTick, [tickKey]: (prev.filesTick[tickKey] ?? 0) + 1 },
           _pendingSave: cleanedPending,
           pendingSaves: { ...prev.pendingSaves, [key]: "saved" },
         };
@@ -482,6 +486,9 @@ export const useSessionStore = create((set, get) => ({
             confidence: event.result.confidence,
             duration_ms_ocr: event.result.duration_ms_ocr,
             near_matches: event.result.near_matches ?? [],
+            // Keep per_file fresh so the DetailPanel can locate a near-match's
+            // PDF (Bug B) and computeCellCount reflects the OCR per-file counts.
+            per_file: event.result.per_file ?? hosp[event.sigla]?.per_file ?? {},
           };
           cells[event.hospital] = hosp;
           set({ scanningCells: next, session: { ...session, cells }, filesTick });

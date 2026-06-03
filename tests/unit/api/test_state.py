@@ -128,6 +128,47 @@ def test_apply_ocr_result_with_filename_glob_fallback_method(manager):
     assert cell["method"] == "filename_glob"
 
 
+def test_apply_filename_result_clears_stale_near_matches(manager):
+    """A pase-1 re-scan clears OCR near-matches (Bug B): a stale entry points
+    the DetailPanel's 'Ver portada' at a PDF the fresh per_file no longer has."""
+    from core.scanners.base import (
+        ConfidenceLevel,
+        NearMatchEntry,
+        ScanResult,
+        ScanTelemetry,
+    )
+
+    ocr = ScanResult(
+        count=1,
+        confidence=ConfidenceLevel.LOW,
+        method="header_band_anchors",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=1,
+        duration_ms=1,
+        per_file={"old.pdf": 1},
+        telemetry=ScanTelemetry(
+            near_matches=[
+                NearMatchEntry(
+                    pdf_name="old.pdf",
+                    page_index=0,
+                    flavor_name="f",
+                    matched_anchors=["a"],
+                    missing_anchors=["b"],
+                )
+            ]
+        ),
+    )
+    manager.apply_ocr_result("2026-04", "HRB", "odi", ocr)
+    cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
+    assert cell["near_matches"]  # the OCR run populated it
+
+    manager.apply_filename_result("2026-04", "HRB", "odi", _filename_result(1))
+    cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
+    assert cell["near_matches"] == []  # pase 1 cleared it
+
+
 def test_apply_user_override_sets_value_and_note(manager):
     manager.apply_filename_result("2026-04", "HRB", "odi", _filename_result(1))
     manager.apply_user_override("2026-04", "HRB", "odi", value=17, note="17 ODIs in 1 PDF")

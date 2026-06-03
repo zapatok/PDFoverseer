@@ -151,6 +151,10 @@ class SessionManager:
         cell["files_scanned"] = result.files_scanned
         cell["duration_ms_filename"] = result.duration_ms
         cell["per_file"] = result.per_file
+        # Pase 1 produces no near-matches; clear any left over from a prior OCR
+        # run so the DetailPanel never points "Ver portada" at a PDF that the
+        # fresh per_file no longer contains (Bug B).
+        cell["near_matches"] = []
         cell.setdefault("per_file_overrides", {})
         cell.setdefault("manual_entry", False)
         cell.setdefault("ocr_count", None)
