@@ -7,6 +7,7 @@ import Skeleton from "../ui/Skeleton";
 import Tooltip from "../ui/Tooltip";
 import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
+import { fileCountDisplay } from "../lib/file-origin";
 
 export default function FileList({ hospital, sigla }) {
   const session = useSessionStore((s) => s.session);
@@ -108,21 +109,28 @@ export default function FileList({ hospital, sigla }) {
             ) : (
               <span />
             )}
-            {/* count — editable, stops propagation */}
+            {/* count — editable, stops propagation. Pendiente shows "—" (not
+                counted yet), Revisar shows its real 0; both stay editable. */}
             <div onClick={(e) => e.stopPropagation()}>
-              <InlineEditCount
-                value={f.effective_count ?? 1}
-                onCommit={(newCount) => {
-                  setFiles((prev) =>
-                    prev.map((row) =>
-                      row.name === f.name
-                        ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
-                        : row,
-                    ),
-                  );
-                  savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount);
-                }}
-              />
+              {(() => {
+                const { value, placeholder } = fileCountDisplay(f.origin, f.effective_count);
+                return (
+                  <InlineEditCount
+                    value={value}
+                    placeholder={placeholder}
+                    onCommit={(newCount) => {
+                      setFiles((prev) =>
+                        prev.map((row) =>
+                          row.name === f.name
+                            ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
+                            : row,
+                        ),
+                      );
+                      savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount);
+                    }}
+                  />
+                );
+              })()}
             </div>
             {/* origin chip — honest per-file vocabulary (R1/OCR/Manual/Pendiente/Error/Revisar) */}
             <div className="flex justify-start"><OriginChip origin={f.origin ?? "R1"} /></div>
