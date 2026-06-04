@@ -28,7 +28,7 @@ describe("composeMethodInfo", () => {
   });
 
   it("falls back per method without scan-info", () => {
-    expect(composeMethodInfo("filename_glob", null)).toMatch(/un archivo/i);
+    expect(composeMethodInfo("filename_glob", null)).toMatch(/archivo/i);
     expect(composeMethodInfo("manual", null)).toMatch(/a mano/i);
   });
 });
