@@ -292,3 +292,76 @@ def test_origin_revisar_when_ocr_finds_zero(tmp_path, monkeypatch):
         rows = {r["name"]: r for r in c.get(f"/api/sessions/{sid}/cells/HRB/odi/files").json()}
         assert rows["good.pdf"]["origin"] == "OCR"
         assert rows["bad.pdf"]["origin"] == "Revisar"
+
+
+def test_origin_divergent_per_file_method_after_single_file_ocr(tmp_path, monkeypatch):
+    """rev-2 §3/#1: OCR-ing one file of a filename_glob cell makes that file's
+    chip 'OCR' while the rest stay 'Pendiente' — _origin_for reads per_file_method,
+    not cell.method."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test_div.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "a.pdf", 6)
+        _make_pdf(folder / "b.pdf", 6)
+
+        mgr.apply_filename_result(
+            sid,
+            "HRB",
+            "odi",
+            ScanResult(
+                count=2,
+                confidence=ConfidenceLevel.LOW,
+                method="filename_glob",
+                breakdown=None,
+                flags=[],
+                errors=[],
+                duration_ms=1,
+                files_scanned=2,
+                per_file={"a.pdf": 1, "b.pdf": 1},
+            ),
+        )
+        # OCR only a.pdf → its per_file_method diverges from the cell's.
+        mgr.apply_per_file_ocr_result(
+            sid,
+            "HRB",
+            "odi",
+            "a.pdf",
+            count=4,
+            method="header_band_anchors",
+            near_matches=[],
+        )
+
+        rows = {r["name"]: r for r in c.get(f"/api/sessions/{sid}/cells/HRB/odi/files").json()}
+        assert rows["a.pdf"]["origin"] == "OCR"  # per-file method
+        assert rows["b.pdf"]["origin"] == "Pendiente"  # cell method (multipage)
+
+
+def test_scan_file_ocr_endpoint_accept_and_404(tmp_path, monkeypatch):
+    """The single-file scan endpoint accepts an existing file, 404s a missing one."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test_endpoint.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "a.pdf", 1)
+
+        ok = c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr")
+        assert ok.status_code == 200, ok.text
+        assert ok.json()["accepted"] is True
+
+        missing = c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/missing.pdf/scan-ocr")
+        assert missing.status_code == 404

@@ -210,6 +210,49 @@ def test_apply_results_write_per_file_method(manager):
     }
 
 
+def test_apply_per_file_ocr_result_merges_one_file(manager):
+    """rev-2 #1: a single-file OCR merge touches only that file's count, method
+    and near-matches; everything else in the cell is preserved."""
+    from core.scanners.base import ConfidenceLevel, ScanResult
+
+    seed = ScanResult(
+        count=5,
+        confidence=ConfidenceLevel.HIGH,
+        method="header_band_anchors",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=2,
+        duration_ms=1,
+        per_file={"a.pdf": 3, "b.pdf": 2},
+    )
+    manager.apply_ocr_result("2026-04", "HRB", "odi", seed)
+
+    manager.apply_per_file_ocr_result(
+        "2026-04",
+        "HRB",
+        "odi",
+        "a.pdf",
+        count=5,
+        method="header_band_anchors",
+        near_matches=[
+            {
+                "pdf_name": "a.pdf",
+                "page_index": 0,
+                "flavor_name": "f",
+                "matched_anchors": ["x"],
+                "missing_anchors": ["y"],
+            }
+        ],
+    )
+
+    cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
+    assert cell["per_file"] == {"a.pdf": 5, "b.pdf": 2}  # b untouched
+    assert cell["per_file_method"]["a.pdf"] == "header_band_anchors"
+    assert cell["per_file_method"]["b.pdf"] == "header_band_anchors"  # from the seed
+    assert [nm["pdf_name"] for nm in cell["near_matches"]] == ["a.pdf"]
+
+
 def test_apply_user_override_sets_value_and_note(manager):
     manager.apply_filename_result("2026-04", "HRB", "odi", _filename_result(1))
     manager.apply_user_override("2026-04", "HRB", "odi", value=17, note="17 ODIs in 1 PDF")

@@ -286,6 +286,67 @@ def cancel(request: Request, session_id: str) -> dict:
 from core.orchestrator import _find_category_folder  # noqa: E402
 
 
+@router.post("/sessions/{session_id}/cells/{hospital}/{sigla}/files/{filename}/scan-ocr")
+def scan_file_ocr(
+    request: Request,
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    filename: str,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Pase 2 for a single file (rev-2 #1): OCR-scan one PDF of a cell and merge.
+
+    Resolves the cell folder like ``get_cell_files``, validates the file exists,
+    then runs ``scan_one_file_ocr`` on the dispatch pool — broadcasting ``file_*``
+    events over the session WS and merging the result on ``file_scan_done``.
+    """
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    try:
+        state = mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, f"Session not found: {session_id}") from exc
+    folder = _find_category_folder(Path(state.get("month_root", "")) / hospital, sigla)
+    if not folder.exists() or filename not in {p.name for p in folder.rglob("*.pdf")}:
+        raise HTTPException(404, f"File not found in cell: {filename}")
+
+    app = request.app
+    loop = app.state.loop
+
+    def on_progress(event: dict) -> None:
+        asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
+        if event.get("type") == "file_scan_done":
+            r = event["result"]
+            mgr.apply_per_file_ocr_result(
+                session_id,
+                hospital,
+                sigla,
+                filename,
+                count=r["ocr_count"],
+                method=r["method"],
+                near_matches=r.get("near_matches") or [],
+            )
+
+    cancel_token = CancellationToken()
+
+    def _run() -> None:
+        try:
+            scan_one_file_ocr(
+                hospital,
+                sigla,
+                folder,
+                filename,
+                on_progress=on_progress,
+                cancel=cancel_token,
+            )
+        except Exception:
+            logger.exception("scan_one_file_ocr crashed for %s/%s/%s", hospital, sigla, filename)
+
+    _DISPATCH_POOL.submit(_run)
+    return {"accepted": True, "filename": filename}
+
+
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/override")
 def patch_override(
     session_id: str,

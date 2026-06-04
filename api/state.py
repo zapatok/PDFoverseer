@@ -291,6 +291,41 @@ class SessionManager:
         cell["per_file_overrides"][filename] = count
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    def apply_per_file_ocr_result(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        filename: str,
+        *,
+        count: int,
+        method: str,
+        near_matches: list[dict],
+    ) -> None:
+        """Merge a single-file OCR scan into the cell (rev-2 #1 / §4.2).
+
+        Updates only this file's ``per_file`` count and ``per_file_method``, and
+        replaces its near-matches while keeping the others' — leaving the rest of
+        the cell untouched (other files, overrides, confirmed, cell-level method).
+        The cell total is derived elsewhere via ``compute_cell_count``.
+
+        Args:
+            session_id: target session.
+            hospital: hospital code.
+            sigla: category code.
+            filename: the scanned PDF's name.
+            count: documents found in that file (0 is valid → its chip reads Revisar).
+            method: the OCR method used (e.g. ``"header_band_anchors"``).
+            near_matches: serialized near-match dicts for this file (may be empty).
+        """
+        state, _ = self._load_and_migrate(session_id)
+        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+        cell.setdefault("per_file", {})[filename] = count
+        cell.setdefault("per_file_method", {})[filename] = method
+        others = [nm for nm in (cell.get("near_matches") or []) if nm.get("pdf_name") != filename]
+        cell["near_matches"] = others + list(near_matches or [])
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
     def apply_worker_count(
         self,
         session_id: str,
