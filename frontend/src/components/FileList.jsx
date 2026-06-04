@@ -7,7 +7,7 @@ import Skeleton from "../ui/Skeleton";
 import Tooltip from "../ui/Tooltip";
 import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
-import { fileCountDisplay } from "../lib/file-origin";
+import { compareByOrigin, fileCountDisplay } from "../lib/file-origin";
 
 export default function FileList({ hospital, sigla }) {
   const session = useSessionStore((s) => s.session);
@@ -67,9 +67,11 @@ export default function FileList({ hospital, sigla }) {
     );
   }
 
-  const filtered = files.filter((f) =>
-    f.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  // Sort the displayed copy by attention precedence; the source `files` array
+  // stays intact so the lightbox index (files.indexOf(f)) remains correct.
+  const filtered = files
+    .filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
+    .sort(compareByOrigin);
 
   return (
     <div className="rounded-xl bg-po-panel border border-po-border overflow-hidden">
