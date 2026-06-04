@@ -7,6 +7,7 @@ import SparkGrid from "../components/SparkGrid";
 import HistoryDrawer from "../components/HistoryDrawer";
 import Button from "../ui/Button";
 import { api } from "../lib/api";
+import { computeCellCount } from "../lib/cellCount";
 import { useHistory } from "../lib/useHistoryStore";
 
 const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
@@ -43,7 +44,7 @@ export default function MonthOverview() {
     HOSPITALS.map((h) => {
       const hospCells = cells[h] || {};
       const total = Object.values(hospCells).reduce(
-        (s, cell) => s + (cell.user_override ?? cell.ocr_count ?? cell.filename_count ?? cell.count ?? 0),
+        (s, cell) => s + computeCellCount(cell),
         0,
       );
       return [h, total];

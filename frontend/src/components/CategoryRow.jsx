@@ -7,11 +7,8 @@ import Dot from "../ui/Dot";
 import Tooltip from "../ui/Tooltip";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { dotVariantFor, hasOverride } from "../lib/cell-status";
+import { computeCellCount } from "../lib/cellCount";
 import InlineEditCount from "./InlineEditCount";
-
-function effectiveCount(cell) {
-  return cell?.user_override ?? cell?.ocr_count ?? cell?.filename_count ?? cell?.count ?? 0;
-}
 
 
 export default function CategoryRow({
@@ -83,7 +80,7 @@ export default function CategoryRow({
               </Tooltip>
             )}
             <InlineEditCount
-              value={effectiveCount(cell)}
+              value={computeCellCount(cell)}
               onCommit={onCommitCount}
               placeholder={placeholder}
               autoFocus={autoFocus}

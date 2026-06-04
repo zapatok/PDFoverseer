@@ -7,6 +7,7 @@ import FileList from "../components/FileList";
 import DetailPanel from "../components/DetailPanel";
 import ScanControls from "../components/ScanControls";
 import { SIGLAS } from "../lib/sigla-labels";
+import { computeCellCount } from "../lib/cellCount";
 
 export default function HospitalDetail({ hospital, onBack }) {
   const { session } = useSessionStore();
@@ -16,10 +17,7 @@ export default function HospitalDetail({ hospital, onBack }) {
   const [selectedSet, setSelectedSet] = useState(new Set());
 
   const cells = session?.cells?.[hospital] || {};
-  const total = Object.values(cells).reduce(
-    (s, c) => s + (c.user_override ?? c.ocr_count ?? c.filename_count ?? c.count ?? 0),
-    0,
-  );
+  const total = Object.values(cells).reduce((s, c) => s + computeCellCount(c), 0);
 
   // One list, folder order (1-18). No Normalizadas/Compilaciones split — the
   // dot already says listo/pendiente and compilation_suspect is just a chip.
