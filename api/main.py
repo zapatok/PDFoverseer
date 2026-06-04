@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(sessions.router, prefix="/api")
     app.include_router(output.router, prefix="/api")
     app.include_router(history.router, prefix="/api")
+    app.include_router(siglas.router, prefix="/api")
     app.include_router(ws.router)
     return app
 
