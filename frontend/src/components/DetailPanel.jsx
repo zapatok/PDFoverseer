@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info } from "lucide-react";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
@@ -8,7 +8,7 @@ import Tooltip from "../ui/Tooltip";
 import PdfCoverViewer from "./PdfCoverViewer";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { METHOD_LABEL, CONFIDENCE_LABEL } from "../lib/method-labels";
-import { METHOD_INFO } from "../lib/method-info";
+import { composeMethodInfo } from "../lib/method-info";
 import { useSessionStore } from "../store/session";
 import { computeWorkerCount } from "../lib/worker-count";
 import { computeCellCount } from "../lib/cellCount";
@@ -158,6 +158,15 @@ function WorkerCountModule({ hospital, sigla, cell }) {
 
 export default function DetailPanel({ hospital, sigla, cell }) {
   const sessionId = useSessionStore((s) => s.session?.session_id);
+  const [scanInfo, setScanInfo] = useState(null);
+
+  // rev-2 #5 — what the sigla's OCR looks for, for the method (i) tooltip.
+  useEffect(() => {
+    if (!sigla) { setScanInfo(null); return; }
+    let alive = true;
+    api.getScanInfo(sigla).then((s) => { if (alive) setScanInfo(s); }).catch(() => {});
+    return () => { alive = false; };
+  }, [sigla]);
 
   if (!cell || !sigla) {
     return (
@@ -226,8 +235,8 @@ export default function DetailPanel({ hospital, sigla, cell }) {
                 <Tooltip content={`Token interno: ${cell.method ?? "—"}`}>
                   <span>{METHOD_LABEL[cell.method] ?? cell.method ?? "—"}</span>
                 </Tooltip>
-                {METHOD_INFO[cell.method] && (
-                  <Tooltip content={METHOD_INFO[cell.method]}>
+                {cell.method && (
+                  <Tooltip content={composeMethodInfo(cell.method, scanInfo)}>
                     <span className="inline-flex">
                       <Info size={13} strokeWidth={1.75} className="text-po-text-muted cursor-help" />
                     </span>

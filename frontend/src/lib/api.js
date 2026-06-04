@@ -112,6 +112,9 @@ export const api = {
   outputUrl: (sessionId) => `${BASE}/sessions/${sessionId}/output`,
   listOutputs: () => fetch(`${BASE}/outputs`).then(jsonOrThrow),
 
+  // rev-2 #5 — what the sigla's OCR looks for (for the method (i) tooltip).
+  getScanInfo: (sigla) => fetch(`${BASE}/siglas/${sigla}/scan-info`).then(jsonOrThrow),
+
   getHistory: async (sessionId, n = 12) => {
     const r = await fetch(`${BASE}/sessions/${sessionId}/history?n=${n}`);
     if (!r.ok) throw new Error(await r.text());

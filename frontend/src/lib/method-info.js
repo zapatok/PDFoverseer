@@ -11,3 +11,22 @@ export const METHOD_INFO = {
   v4: "Cuenta documentos por la numeración 'Página N de M' detectada por OCR.",
   manual: "Valor ingresado a mano por el operador.",
 };
+
+// Sigla-aware tooltip text (rev-2 §5): when the cell uses anchor OCR, surface the
+// actual fields the scanner looks for (from scan-info, derived from patterns.py);
+// otherwise fall back to the static per-method line.
+const _FALLBACK = {
+  filename_glob: "Un documento por archivo PDF.",
+  page_count_pure: "Un documento por página.",
+  manual: "Valor ingresado a mano por el operador.",
+};
+
+export function composeMethodInfo(method, scanInfo) {
+  if (scanInfo?.kind === "anchors" && scanInfo.looks_for?.length) {
+    return `OCR de encabezado. Busca: ${scanInfo.looks_for.join(" · ")}.`;
+  }
+  if (scanInfo?.kind === "pagination" || method === "v4") {
+    return "Cuenta documentos por la numeración 'Página N de M'.";
+  }
+  return _FALLBACK[method] ?? METHOD_INFO[method] ?? "Conteo por nombre de archivo.";
+}
