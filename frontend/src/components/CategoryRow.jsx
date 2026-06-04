@@ -1,12 +1,10 @@
-import {
-  Loader2, AlertCircle, FileStack, PenLine,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useSessionStore } from "../store/session";
 import Badge from "../ui/Badge";
 import Dot from "../ui/Dot";
 import Tooltip from "../ui/Tooltip";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
-import { dotVariantFor, hasOverride } from "../lib/cell-status";
+import { dotVariantFor } from "../lib/cell-status";
 import { computeCellCount } from "../lib/cellCount";
 import InlineEditCount from "./InlineEditCount";
 
@@ -31,10 +29,6 @@ export default function CategoryRow({
   const cellKey = `${hospital}|${sigla}`;
   const isScanning = scanningCells.has(cellKey);
   const isPendingSave = pendingSaves[cellKey] === "saving";
-  const cellHasOverride = hasOverride(cell);
-  const isCompilationSuspect = cell?.flags?.includes("compilation_suspect");
-  const hasError = cell?.errors?.length > 0;
-  const showMethodChip = mode === "scanned" && cell?.count != null;
   const placeholder = mode === "manual" ? "—" : null;
 
   const onCommitCount = (v) => {
@@ -63,29 +57,20 @@ export default function CategoryRow({
       </Tooltip>
       <Dot variant={dotVariantFor(cell, { isScanning })} className={isPendingSave ? "animate-pulse" : ""} />
 
+      {/* Trailing slot: only the count now. Status (error/manual/compilación)
+          lives in the Detalle column; error reads as the red dot beside the
+          sigla. The space is reserved for a future "user working here" chip.
+          "Escaneando…" stays — it is transient live feedback, not a status. */}
       <div className="ml-auto flex items-center gap-2">
         {isScanning ? (
           <Badge variant="state-scanning" icon={Loader2}>Escaneando…</Badge>
         ) : (
-          <>
-            {hasError && (
-              <Tooltip content={cell.errors[0]}>
-                <span><Badge variant="state-error" icon={AlertCircle}>Error</Badge></span>
-              </Tooltip>
-            )}
-            {showMethodChip && cellHasOverride && <Badge variant="state-override" icon={PenLine}>Manual</Badge>}
-            {showMethodChip && isCompilationSuspect && !cellHasOverride && (
-              <Tooltip content="Probable compilación (PDF con >5× páginas esperadas)">
-                <span><Badge variant="state-suspect" icon={FileStack}>Compilación</Badge></span>
-              </Tooltip>
-            )}
-            <InlineEditCount
-              value={computeCellCount(cell)}
-              onCommit={onCommitCount}
-              placeholder={placeholder}
-              autoFocus={autoFocus}
-            />
-          </>
+          <InlineEditCount
+            value={computeCellCount(cell)}
+            onCommit={onCommitCount}
+            placeholder={placeholder}
+            autoFocus={autoFocus}
+          />
         )}
       </div>
     </div>
