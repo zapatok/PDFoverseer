@@ -169,6 +169,47 @@ def test_apply_filename_result_clears_stale_near_matches(manager):
     assert cell["near_matches"] == []  # pase 1 cleared it
 
 
+def test_apply_results_write_per_file_method(manager):
+    """Every cell run records how each file was counted (rev-2 §3)."""
+    from core.scanners.base import ConfidenceLevel, ScanResult
+
+    fr = ScanResult(
+        count=2,
+        confidence=ConfidenceLevel.HIGH,
+        method="filename_glob",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=2,
+        duration_ms=1,
+        per_file={"a.pdf": 1, "b.pdf": 1},
+    )
+    manager.apply_filename_result("2026-04", "HRB", "odi", fr)
+    cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
+    assert cell["per_file_method"] == {
+        "a.pdf": "filename_glob",
+        "b.pdf": "filename_glob",
+    }
+
+    orr = ScanResult(
+        count=3,
+        confidence=ConfidenceLevel.HIGH,
+        method="header_band_anchors",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=2,
+        duration_ms=1,
+        per_file={"a.pdf": 3, "b.pdf": 0},
+    )
+    manager.apply_ocr_result("2026-04", "HRB", "odi", orr)
+    cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
+    assert cell["per_file_method"] == {
+        "a.pdf": "header_band_anchors",
+        "b.pdf": "header_band_anchors",
+    }
+
+
 def test_apply_user_override_sets_value_and_note(manager):
     manager.apply_filename_result("2026-04", "HRB", "odi", _filename_result(1))
     manager.apply_user_override("2026-04", "HRB", "odi", value=17, note="17 ODIs in 1 PDF")

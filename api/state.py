@@ -151,6 +151,9 @@ class SessionManager:
         cell["files_scanned"] = result.files_scanned
         cell["duration_ms_filename"] = result.duration_ms
         cell["per_file"] = result.per_file
+        # Each file carries how it was counted (rev-2 §3) so _origin_for picks the
+        # per-file chip without depending on the cell-level method.
+        cell["per_file_method"] = {f: result.method for f in (result.per_file or {})}
         # Pase 1 produces no near-matches; clear any left over from a prior OCR
         # run so the DetailPanel never points "Ver portada" at a PDF that the
         # fresh per_file no longer contains (Bug B).
@@ -191,6 +194,9 @@ class SessionManager:
         cell["errors"] = list(result.errors)
         cell["duration_ms_ocr"] = result.duration_ms
         cell["per_file"] = result.per_file
+        # Each file carries how it was counted (rev-2 §3); for a full-cell OCR run
+        # that is this run's OCR method for every scanned file.
+        cell["per_file_method"] = {f: result.method for f in (result.per_file or {})}
         # A14: persist near-match telemetry so the UI can surface candidates.
         telemetry = result.telemetry
         cell["near_matches"] = (
