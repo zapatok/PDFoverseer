@@ -84,7 +84,7 @@ export default function FileList({ hospital, sigla }) {
         {filtered.map((f, i) => (
           <li
             key={`${f.name}-${i}`}
-            className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-2 px-3 py-2 hover:bg-po-panel-hover transition"
+            className="grid grid-cols-[minmax(0,1fr)_3rem_1.25rem_3.5rem_5.5rem] items-center gap-2 px-3 py-2 hover:bg-po-panel-hover transition"
           >
             {/* icon + name — the lightbox trigger; name scrolls horizontally */}
             <button
@@ -99,11 +99,11 @@ export default function FileList({ hospital, sigla }) {
               </span>
             </button>
             {/* Npp — own column, non-interactive */}
-            <span className="text-xs tabular-nums text-po-text-muted shrink-0">{f.page_count}pp</span>
+            <span className="text-xs tabular-nums text-po-text-muted text-right">{f.page_count}pp</span>
             {/* compilation icon — own column (empty when not suspect), non-interactive */}
             {f.suspect ? (
               <Tooltip content="Probable compilación">
-                <span><FileStack size={14} strokeWidth={1.75} className="text-po-suspect shrink-0" /></span>
+                <span className="flex justify-center"><FileStack size={14} strokeWidth={1.75} className="text-po-suspect" /></span>
               </Tooltip>
             ) : (
               <span />
@@ -124,8 +124,8 @@ export default function FileList({ hospital, sigla }) {
                 }}
               />
             </div>
-            {/* origin chip — honest per-file vocabulary (R1/OCR/Manual/Pendiente/Error) */}
-            <OriginChip origin={f.origin ?? "R1"} />
+            {/* origin chip — honest per-file vocabulary (R1/OCR/Manual/Pendiente/Error/Revisar) */}
+            <div className="flex justify-start"><OriginChip origin={f.origin ?? "R1"} /></div>
           </li>
         ))}
       </ul>
