@@ -163,13 +163,18 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 - **VLM integration:** ~~Attempted~~ REVERTED (2026-03-30). See postmortem in Links.
 - **Browse UX:** `/api/browse` uses server-side tkinter chooser — only works with local display
 
-## Consolidación de `po_overhaul` (2026-06-03)
+## Consolidación de `po_overhaul` — rama única, sincronizada con origin (2026-06-03)
 
-`po_overhaul` es ahora la **rama única** con todos los avances: se fusionaron
-`feature/ocr-per-sigla` (PR #1, refinamiento OCR per-sigla) y
-`feature/worker-viewer-ux` — **merges limpios, cero conflictos**. HEAD `a81a016`.
-Verificado: backend `598 passed / 52 skipped / 0 failed` + ruff limpio; frontend
-vitest `55/55` + build OK. (`crop-selector`/`ocr-matcher` son ramas viejas ajenas.)
+`po_overhaul` es la **rama única** del proyecto, con **todos** los avances
+(ocr-per-sigla, worker-viewer-ux, y conteo-confiable MVP + rev-1 + rev-2) y
+**pusheada a origin** (`origin/po_overhaul` == local, tags `conteo-confiable-*` +
+demás milestones en origin). `crop-selector`/`ocr-matcher` son ramas viejas ajenas.
+
+**Convención de trabajo (para que la deuda de merges no reaparezca):** trabajar
+**directo en `po_overhaul`** en el repo principal y **pushear al cierre de cada
+ronda**. NO abrir feature worktrees que quedan sin mergear. Si se usa un worktree
+para algo aislado, cerrarlo (fast-forward a po_overhaul + push + borrar) antes de
+darlo por terminado.
 
 ## Worker-viewer UX — `po_overhaul` (shipped 2026-06-02, tag `worker-viewer-ux-mvp`)
 
@@ -182,16 +187,33 @@ todas las marcas cuando `fileNames` era un array vacío (`[]` truthy en JS); aho
 espeja al backend (`compute_worker_count`, que no filtra con `per_file` vacío).
 Spec/plan: `docs/superpowers/{specs,plans}/2026-06-02-*worker-viewer-ux*`.
 
-## Conteo confiable / orden de carpeta / revisión por archivo — PLANEADO (spec+plan listos)
+## Conteo confiable — SHIPPED en `po_overhaul` (MVP + rev-1 + rev-2, 2026-06-03)
 
-Próxima obra sobre `po_overhaul` consolidado (ejecución in-session, worktree
-`.worktrees/conteo-confiable`). Modelo de "listo" honesto (verde solo si todos los
-archivos 1-página, o sigla de páginas-fijas, o OCR/override/`confirmed`),
-`FIXED_PAGE_SIGLAS={bodega,ext,caliente,herramientas_elec,exc}` (páginas=docs sin OCR),
-flag `confirmed` + endpoint, lista 1-18 sin agrupar, origen "Estructura", FileList en
-grilla + scroll del nombre, lightbox per-file. **Spec:**
-`docs/superpowers/specs/2026-06-02-conteo-confiable-y-revision-design.md`. **Plan:**
-`docs/superpowers/plans/2026-06-02-pdfoverseer-conteo-confiable.md` (9 tasks, 3 chunks).
+Conteo por archivo como fuente de verdad + revisión por archivo. Tres entregas,
+todas en `po_overhaul`/origin:
+
+- **MVP** (tag `conteo-confiable-mvp`): modelo de "listo" honesto (verde solo si
+  todos 1-página, o sigla de páginas-fijas, o OCR/override/`confirmed`),
+  `FIXED_PAGE_SIGLAS={bodega,ext,caliente,herramientas_elec,exc}`, flag `confirmed`,
+  lista 1-18, FileList en grilla, lightbox per-file. Carpeta vacía (count 0) → verde.
+- **rev-1** (tag `conteo-confiable-rev-1`): chips honestos
+  `R1·OCR·Manual·Pendiente·Error`, visor paginado (miniaturas + fit + scroll=página /
+  Shift+scroll=zoom; se quitó react-zoom-pan-pinch), OCR-desde-visor + `filesTick`,
+  5 fixes (ETA min, header, toast único, (i) método, input blanco), Excel-home.
+- **rev-2** (tag `conteo-confiable-rev-2`): **`per_file_method`** (cada archivo lleva
+  su método; `_origin_for` lo resuelve) + chip **Revisar** (OCR=0); **OCR por-archivo**
+  desde el visor (`only=` + `on_page` → eventos `file_*` vía `scan_one_file_ocr`, merge
+  `apply_per_file_ocr_result` sin tocar otros archivos, barra por página); **tooltip de
+  método desde anclas** (`scan_info_for` + `GET /api/siglas/{s}/scan-info`); **ficha por
+  sigla** (descripción + rango de páginas p25–p75 del corpus, `tools/audit_sigla_page_ranges.py`);
+  **R1-auto** al abrir un mes vacío. Más 7 bugs (per_file plumbing en el evento
+  `cell_done`, "Ver portada", override per-archivo). Y unificación: todo conteo de
+  celda usa `computeCellCount` (lista, total hospital, cards, DetailPanel).
+
+Specs/planes en `docs/superpowers/{specs,plans}/2026-06-0{2,3}-*conteo-confiable*`.
+**Gotcha de tooling:** el hook ruff-autofix (PostToolUse) borra un import en el mismo
+edit que lo agrega (antes de que exista el uso) — re-verificar imports / correr ruff al
+final.
 
 ## Feature 1 — Conteo asistido de trabajadores firmantes — `po_overhaul` branch (shipped 2026-05-17)
 
