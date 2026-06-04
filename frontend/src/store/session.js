@@ -22,6 +22,7 @@ export const useSessionStore = create((set, get) => ({
   scanningCells: new Set(),            // "HPV|odi" strings, mirrored in CategoryRow
   scanProgress: null,                  // {done, total, pdfName?, etaMs?, unit?, terminal?} | null
   filesTick: {},                       // "HPV|odi" → counter; bumped on cell_done so FileList/lightbox re-fetch per_file (G3)
+  fileScan: null,                      // {hospital, sigla, filename, page, pagesTotal, terminal} | null — single-file OCR (rev-2 #1)
   lightbox: null,                      // {hospital, sigla, fileIndex, mode} | null
   _ws: null,
 
@@ -108,6 +109,16 @@ export const useSessionStore = create((set, get) => ({
       // Size the bar from the real PDF count (audit #1); scan_started will
       // confirm it over the WS moments later.
       set({ scanProgress: { done: 0, total: resp?.total_pdfs ?? 0, unit: "pdf" } });
+    } catch (error) {
+      set({ error: String(error) });
+    }
+  },
+
+  // rev-2 #1 — OCR-scan a single file of a cell. Progress (file_*) + the merge
+  // arrive over the WS; this just kicks it off.
+  scanFileOcr: async (sessionId, hospital, sigla, filename) => {
+    try {
+      await api.scanFileOcr(sessionId, hospital, sigla, filename);
     } catch (error) {
       set({ error: String(error) });
     }
@@ -564,6 +575,44 @@ export const useSessionStore = create((set, get) => ({
           scanProgress: { ...state.scanProgress, terminal: "cancelled" },
         });
         setTimeout(() => set((s) => (s.scanProgress?.terminal === "cancelled" ? { scanProgress: null } : s)), 5000);
+        break;
+      // --- single-file OCR (rev-2 #1) ---
+      case "file_scan_started":
+        set({
+          fileScan: {
+            hospital: event.hospital,
+            sigla: event.sigla,
+            filename: event.filename,
+            page: 0,
+            pagesTotal: event.pages_total ?? 0,
+            terminal: null,
+          },
+        });
+        break;
+      case "file_page_progress":
+        set((s) =>
+          s.fileScan && s.fileScan.filename === event.filename
+            ? { fileScan: { ...s.fileScan, page: event.page, pagesTotal: event.pages_total ?? s.fileScan.pagesTotal } }
+            : {},
+        );
+        break;
+      case "file_scan_done": {
+        // Backend merged this file's per_file → bump filesTick so the FileList +
+        // lightbox re-fetch (mirror cell_done); mark the bar done, then dismiss.
+        const fkey = `${event.hospital}|${event.sigla}`;
+        set((s) => ({
+          filesTick: { ...s.filesTick, [fkey]: (s.filesTick[fkey] ?? 0) + 1 },
+          fileScan: s.fileScan ? { ...s.fileScan, terminal: "done" } : null,
+        }));
+        setTimeout(() => set((s) => (s.fileScan?.terminal === "done" ? { fileScan: null } : s)), 1500);
+        break;
+      }
+      case "file_scan_error":
+        set((s) => ({
+          fileScan: s.fileScan ? { ...s.fileScan, terminal: "error" } : null,
+          error: event.error ?? "Error al escanear el archivo",
+        }));
+        setTimeout(() => set((s) => (s.fileScan?.terminal === "error" ? { fileScan: null } : s)), 4000);
         break;
       case "ping":
         break;     // keepalive — no-op

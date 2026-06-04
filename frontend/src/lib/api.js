@@ -115,6 +115,13 @@ export const api = {
   // rev-2 #5 — what the sigla's OCR looks for (for the method (i) tooltip).
   getScanInfo: (sigla) => fetch(`${BASE}/siglas/${sigla}/scan-info`).then(jsonOrThrow),
 
+  // rev-2 #1 — OCR-scan a single file of a cell (progress streams over the WS).
+  scanFileOcr: (sessionId, hospital, sigla, filename) =>
+    fetch(
+      `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/files/${encodeURIComponent(filename)}/scan-ocr`,
+      { method: "POST" },
+    ).then(jsonOrThrow),
+
   getHistory: async (sessionId, n = 12) => {
     const r = await fetch(`${BASE}/sessions/${sessionId}/history?n=${n}`);
     if (!r.ok) throw new Error(await r.text());
