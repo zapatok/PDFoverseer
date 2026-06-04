@@ -5,7 +5,7 @@ import Dialog from "../ui/Dialog";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
-import { FileStack, ScanSearch, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
+import { FileStack, ScanSearch, Maximize2, ZoomIn, ZoomOut, ChevronLeft, ChevronRight } from "lucide-react";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { wheelToPageStep } from "../lib/viewer-nav";
 import OriginChip from "./OriginChip";
@@ -145,6 +145,7 @@ function InspectView({ url, pageCount }) {
 export default function PDFLightbox() {
   const lightbox = useSessionStore((s) => s.lightbox);
   const closeLightbox = useSessionStore((s) => s.closeLightbox);
+  const openLightbox = useSessionStore((s) => s.openLightbox);
   const session = useSessionStore((s) => s.session);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
   const scanFileOcr = useSessionStore((s) => s.scanFileOcr);
@@ -171,7 +172,37 @@ export default function PDFLightbox() {
       .catch(() => setFiles([]));
   }, [lightbox?.hospital, lightbox?.sigla, session?.session_id, tick]);
 
+  // E4 — step to prev/next file with ←/→ (inspect mode only). Page nav (↑↓/PgUp/Dn)
+  // is owned by InspectView; Left/Right are free.
+  useEffect(() => {
+    if (!lightbox || lightbox.mode === "count_workers") return;
+    const onKey = (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      if (!files || files.length === 0) return;
+      e.preventDefault();
+      const delta = e.key === "ArrowRight" ? 1 : -1;
+      const next = Math.min(Math.max(lightbox.fileIndex + delta, 0), files.length - 1);
+      if (next !== lightbox.fileIndex) {
+        openLightbox(lightbox.hospital, lightbox.sigla, next, lightbox.mode);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox, files, openLightbox]);
+
   if (!lightbox || !session) return null;
+
+  const stepFile = (delta) => {
+    if (!files || files.length === 0) return;
+    const next = Math.min(Math.max(lightbox.fileIndex + delta, 0), files.length - 1);
+    if (next !== lightbox.fileIndex) {
+      openLightbox(lightbox.hospital, lightbox.sigla, next, lightbox.mode);
+    }
+  };
+  const canStep = !!files && files.length > 1 && lightbox.mode !== "count_workers";
 
   const filename = files?.[lightbox.fileIndex]?.name ?? "…";
   const pageCount = files?.[lightbox.fileIndex]?.page_count;
@@ -203,8 +234,27 @@ export default function PDFLightbox() {
             </>
           )}
         </div>
-        <div className="font-mono text-xs text-po-text-muted truncate mt-0.5">
-          {filename}{pageCount ? ` · ${pageCount}pp` : ""}
+        <div className="flex items-center justify-between gap-2 mt-0.5">
+          <div className="font-mono text-xs text-po-text-muted truncate">
+            {filename}{pageCount ? ` · ${pageCount}pp` : ""}
+          </div>
+          {canStep && (
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                size="sm" variant="ghost" icon={ChevronLeft}
+                onClick={() => stepFile(-1)} disabled={lightbox.fileIndex <= 0}
+                aria-label="Archivo anterior"
+              />
+              <span className="text-xs tabular-nums text-po-text-muted whitespace-nowrap">
+                {lightbox.fileIndex + 1} de {files.length}
+              </span>
+              <Button
+                size="sm" variant="ghost" icon={ChevronRight}
+                onClick={() => stepFile(1)} disabled={lightbox.fileIndex >= files.length - 1}
+                aria-label="Archivo siguiente"
+              />
+            </div>
+          )}
         </div>
       </Dialog.Header>
       <Dialog.Body>
