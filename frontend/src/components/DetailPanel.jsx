@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info } from "lucide-react";
+import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2 } from "lucide-react";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
 import Badge from "../ui/Badge";
@@ -25,6 +25,7 @@ function confidenceVariant(cell) {
 
 function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
   const [viewerOpen, setViewerOpen] = useState(false);
+  const clearNearMatches = useSessionStore((s) => s.clearNearMatches);
   // pdfIndex < 0 means the near-match PDF name was not found among the
   // cell's per_file keys (e.g. nested-folder name forms diverge). Opening
   // any URL would silently show the wrong PDF, so the viewer is disabled.
@@ -77,6 +78,18 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
         >
           Marcar como nuevo flavor
         </Button>
+        <Button
+          variant="ghost"
+          icon={X}
+          onClick={() =>
+            clearNearMatches(sessionId, hospital, sigla, {
+              pdf_name: nm.pdf_name,
+              page_index: nm.page_index,
+            })
+          }
+        >
+          Descartar
+        </Button>
       </div>
       {viewerOpen && pdfUrl && (
         <PdfCoverViewer
@@ -92,6 +105,7 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
 }
 
 function NearMatchesSection({ hospital, sigla, cell, sessionId }) {
+  const clearNearMatches = useSessionStore((s) => s.clearNearMatches);
   const nearMatches = cell.near_matches;
   if (!nearMatches || nearMatches.length === 0) return null;
 
@@ -101,10 +115,19 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId }) {
 
   return (
     <div className="mt-6">
-      <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mb-2 flex items-center gap-2">
-        Casi-matches
-        <Badge variant="amber">{nearMatches.length} candidato{nearMatches.length !== 1 ? "s" : ""} a flavor nuevo</Badge>
-      </h4>
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted flex items-center gap-2">
+          Casi-matches
+          <Badge variant="amber">{nearMatches.length} candidato{nearMatches.length !== 1 ? "s" : ""} a flavor nuevo</Badge>
+        </h4>
+        <button
+          type="button"
+          onClick={() => clearNearMatches(sessionId, hospital, sigla)}
+          className="inline-flex items-center gap-1 text-xs text-po-text-muted hover:text-po-error transition shrink-0"
+        >
+          <Trash2 size={13} strokeWidth={1.75} /> Limpiar todo
+        </button>
+      </div>
       <ul className="divide-y-0">
         {nearMatches.map((nm, i) => {
           const pdfIndex = sortedNames.indexOf(nm.pdf_name);

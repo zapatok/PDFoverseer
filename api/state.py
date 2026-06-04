@@ -326,6 +326,43 @@ class SessionManager:
         cell["near_matches"] = others + list(near_matches or [])
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    def clear_near_matches(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        *,
+        pdf_name: str | None = None,
+        page_index: int | None = None,
+    ) -> None:
+        """Drop near-match suspects from a cell — one entry or the whole list (E5).
+
+        A near-match is only a maintenance hint (a candidate for a new flavor), so
+        clearing it never changes a count. When ``pdf_name``/``page_index`` identify
+        an entry, only that one is dropped; otherwise the whole list is cleared.
+        No-op when the cell or its list is absent.
+
+        Args:
+            session_id: target session.
+            hospital: hospital code.
+            sigla: category code.
+            pdf_name: with ``page_index``, the specific entry to drop.
+            page_index: page index of the entry to drop.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        cell = (state.get("cells", {}).get(hospital, {}) or {}).get(sigla)
+        if not cell or not cell.get("near_matches"):
+            return
+        if pdf_name is None and page_index is None:
+            cell["near_matches"] = []
+        else:
+            cell["near_matches"] = [
+                nm
+                for nm in cell["near_matches"]
+                if not (nm.get("pdf_name") == pdf_name and nm.get("page_index") == page_index)
+            ]
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
     def apply_worker_count(
         self,
         session_id: str,

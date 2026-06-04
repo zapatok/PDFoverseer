@@ -122,6 +122,18 @@ export const api = {
       { method: "POST" },
     ).then(jsonOrThrow),
 
+  // E5 — clear near-match suspects for a cell. Omit `entry` = clear all;
+  // pass { pdf_name, page_index } to drop a single candidate.
+  clearNearMatches: (sessionId, hospital, sigla, entry) =>
+    fetch(
+      `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/near-matches/clear`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry ?? {}),
+      },
+    ).then(jsonOrThrow),
+
   getHistory: async (sessionId, n = 12) => {
     const r = await fetch(`${BASE}/sessions/${sessionId}/history?n=${n}`);
     if (!r.ok) throw new Error(await r.text());

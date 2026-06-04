@@ -406,6 +406,34 @@ def patch_per_file_override(
     }
 
 
+class ClearNearMatchBody(BaseModel):
+    """Body for the near-matches clear route. Omit both fields = clear all."""
+
+    pdf_name: str | None = None
+    page_index: int | None = None
+
+
+@router.post("/sessions/{session_id}/cells/{hospital}/{sigla}/near-matches/clear")
+def clear_near_matches(
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    body: ClearNearMatchBody | None = Body(None),
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Clear near-match suspects for a cell — all, or one entry (E5)."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    mgr.clear_near_matches(
+        session_id,
+        hospital,
+        sigla,
+        pdf_name=body.pdf_name if body else None,
+        page_index=body.page_index if body else None,
+    )
+    return {"ok": True}
+
+
 class WorkerCountPatch(BaseModel):
     """Body del PATCH worker-count. Patch parcial: los campos None no se tocan."""
 

@@ -124,6 +124,32 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
+  // E5 — clear near-match suspects for a cell. `entry` = { pdf_name, page_index }
+  // drops one; omit it to clear all. Optimistic, then persists.
+  clearNearMatches: async (sessionId, hospital, sigla, entry) => {
+    set((prev) => {
+      const session = prev.session;
+      const cell = session?.cells?.[hospital]?.[sigla];
+      if (!cell) return {};
+      const list = cell.near_matches || [];
+      const nextList = entry
+        ? list.filter(
+            (nm) => !(nm.pdf_name === entry.pdf_name && nm.page_index === entry.page_index),
+          )
+        : [];
+      const cells = { ...session.cells };
+      const hosp = { ...cells[hospital] };
+      hosp[sigla] = { ...cell, near_matches: nextList };
+      cells[hospital] = hosp;
+      return { session: { ...session, cells } };
+    });
+    try {
+      await api.clearNearMatches(sessionId, hospital, sigla, entry);
+    } catch (error) {
+      set({ error: String(error) });
+    }
+  },
+
   // Scan only the pendiente (amber) cells of a hospital with OCR. Reuses
   // scanOcr (and its cost guard) — never duplicates the threshold.
   scanPending: (sessionId, hospital) => {
