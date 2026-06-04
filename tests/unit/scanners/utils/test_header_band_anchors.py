@@ -8,7 +8,6 @@ from PIL import Image
 
 from core.scanners.patterns import Flavor
 from core.scanners.utils.header_band_anchors import (
-    FlavorMatchResult,
     _match_flavor,
     _normalize_text,
 )
@@ -152,16 +151,17 @@ def test_count_covers_uses_first_passing_flavor(monkeypatch):
     def fake_get_page_count(_path):
         return len(page_texts)
 
+    current_page = {"idx": 0}
+
     def fake_render(_path, page_idx, **_):
-        # Return placeholder image; real OCR is stubbed below
+        # Return placeholder image; real OCR is stubbed below. Track the page so
+        # the two-pass retry of the same page returns the same text (a page's
+        # band always OCRs to the same text, raw or preprocessed).
+        current_page["idx"] = page_idx
         return Image.new("RGB", (10, 10), "white")
 
-    fake_ocr_call_count = {"n": 0}
-
     def patched_ocr(img, **kw):
-        text = page_texts[fake_ocr_call_count["n"]]
-        fake_ocr_call_count["n"] += 1
-        return text
+        return page_texts[current_page["idx"]]
 
     monkeypatch.setattr(mod, "get_page_count", fake_get_page_count)
     monkeypatch.setattr(mod, "render_page_region", fake_render)

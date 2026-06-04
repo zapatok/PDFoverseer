@@ -129,6 +129,30 @@ class AnchorCountResult:
     method: str = "header_band_anchors"
 
 
+def _match_page(
+    normalized_text: str, flavors: list[Flavor], page_idx: int
+) -> tuple[str | None, NearMatch | None]:
+    """Match one page's OCR text against the flavors.
+
+    Returns ``(owning_flavor_name, near_match)``: the first flavor that passes
+    owns the page (its name, no near-match). If none passes, the first near-match
+    (``min_match - 1`` anchors) is returned for telemetry.
+    """
+    page_near: NearMatch | None = None
+    for flavor in flavors:
+        res = _match_flavor(normalized_text, flavor)
+        if res.passes:
+            return flavor["name"], None
+        if res.near_match and page_near is None:
+            page_near = NearMatch(
+                page_index=page_idx,
+                flavor_name=flavor["name"],
+                matched_anchors=res.matched_anchors,
+                missing_anchors=res.missing_anchors,
+            )
+    return None, page_near
+
+
 def count_covers_by_anchors(
     pdf_path: Path,
     *,
@@ -178,32 +202,24 @@ def count_covers_by_anchors(
         if on_page is not None:
             on_page(page_idx, pages_total)
         pil: Image.Image = render_page_region(pdf_path, page_idx, bbox=bbox, dpi=dpi)
-        # E6 — V4 preprocessing cascade before OCR: deskew + color removal +
-        # inpaint + grayscale + unsharp. Near no-op on clean bands; lifts degraded
-        # scans (andamios/ART). Shared with the V4 page-number OCR via core.image.
-        bgr = cv2.cvtColor(np.asarray(pil.convert("RGB")), cv2.COLOR_RGB2BGR)
-        gray = clean_for_ocr(_deskew(bgr))
-        text = pytesseract.image_to_string(gray, config="--psm 6 --oem 1", lang="spa+eng")
-        normalized = _normalize_text(text)
 
-        # First passing flavor wins this page; record near-match only if no flavor passes
-        owned = False
-        page_near: NearMatch | None = None
-        for flavor in flavors:
-            res = _match_flavor(normalized, flavor)
-            if res.passes:
-                matches_per_flavor[flavor["name"]] += 1
-                cover_pages += 1
-                owned = True
-                break
-            if res.near_match and page_near is None:
-                page_near = NearMatch(
-                    page_index=page_idx,
-                    flavor_name=flavor["name"],
-                    matched_anchors=res.matched_anchors,
-                    missing_anchors=res.missing_anchors,
-                )
-        if not owned and page_near is not None:
+        # E6 — two-pass OCR. Pass 1: raw band (clean scans read fine, no
+        # preprocessing artifacts). Pass 2: only if pass 1 found no cover, retry
+        # with the V4 cascade (deskew + color removal + inpaint + grayscale +
+        # unsharp) — lifts degraded scans (andamios/ART) while never re-reading a
+        # cover the raw pass already found, so clean cells never regress.
+        raw = pytesseract.image_to_string(pil, config="--psm 6 --oem 1", lang="spa+eng")
+        owned, page_near = _match_page(_normalize_text(raw), flavors, page_idx)
+        if owned is None:
+            bgr = cv2.cvtColor(np.asarray(pil.convert("RGB")), cv2.COLOR_RGB2BGR)
+            gray = clean_for_ocr(_deskew(bgr))
+            prep = pytesseract.image_to_string(gray, config="--psm 6 --oem 1", lang="spa+eng")
+            owned, page_near = _match_page(_normalize_text(prep), flavors, page_idx)
+
+        if owned is not None:
+            matches_per_flavor[owned] += 1
+            cover_pages += 1
+        elif page_near is not None:
             near_matches.append(page_near)
 
     return AnchorCountResult(
