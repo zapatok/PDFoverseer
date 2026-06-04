@@ -7,7 +7,7 @@ import Skeleton from "../ui/Skeleton";
 import Tooltip from "../ui/Tooltip";
 import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
-import { compareByOrigin, fileCountDisplay } from "../lib/file-origin";
+import { fileCountDisplay } from "../lib/file-origin";
 
 export default function FileList({ hospital, sigla }) {
   const session = useSessionStore((s) => s.session);
@@ -67,11 +67,11 @@ export default function FileList({ hospital, sigla }) {
     );
   }
 
-  // Sort the displayed copy by attention precedence; the source `files` array
-  // stays intact so the lightbox index (files.indexOf(f)) remains correct.
-  const filtered = files
-    .filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
-    .sort(compareByOrigin);
+  // Stable order — files keep the backend's folder/filename order so a row stays
+  // put where the operator acts on it (no reordering on edit).
+  const filtered = files.filter((f) =>
+    f.name.toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
     <div className="rounded-xl bg-po-panel border border-po-border overflow-hidden">

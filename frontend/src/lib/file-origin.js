@@ -11,20 +11,3 @@ export function fileCountDisplay(origin, effectiveCount) {
     placeholder: undefined,
   };
 }
-
-// G3 — precedence for the per-file rows: most-urgent first. Unknown origins last.
-export const ORIGIN_RANK = {
-  Error: 0,
-  Pendiente: 1,
-  Revisar: 2,
-  Manual: 3,
-  OCR: 4,
-  R1: 5,
-};
-
-export function compareByOrigin(a, b) {
-  const ra = ORIGIN_RANK[a.origin] ?? 99;
-  const rb = ORIGIN_RANK[b.origin] ?? 99;
-  if (ra !== rb) return ra - rb;
-  return (a.name ?? "").localeCompare(b.name ?? "");
-}
