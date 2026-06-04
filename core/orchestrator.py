@@ -316,6 +316,108 @@ def _ocr_worker(
     return (hosp, sigla, None, last_err)
 
 
+def _serialize_near_matches(result: ScanResult) -> list[dict]:
+    telemetry = result.telemetry
+    if not telemetry:
+        return []
+    return [
+        {
+            "pdf_name": nm.pdf_name,
+            "page_index": nm.page_index,
+            "flavor_name": nm.flavor_name,
+            "matched_anchors": list(nm.matched_anchors),
+            "missing_anchors": list(nm.missing_anchors),
+        }
+        for nm in telemetry.near_matches
+    ]
+
+
+def scan_one_file_ocr(
+    hospital: str,
+    sigla: str,
+    folder: Path,
+    filename: str,
+    *,
+    on_progress: Callable[[dict], None],
+    cancel: CancellationToken,
+) -> None:
+    """OCR-scan a single PDF of a cell with its sigla's engine (rev-2 #1).
+
+    Runs in-process (the route submits it to the executor). Emits
+    ``file_scan_started`` → ``file_page_progress`` (per page, anchors siglas) →
+    ``file_scan_done`` (or ``file_scan_error``). The terminal event carries the
+    single file's ``per_file``/``method`` so the route can merge it into the cell
+    without touching the other files.
+
+    Args:
+        hospital: hospital key.
+        sigla: category key (must have an OCR strategy).
+        folder: the cell's category folder.
+        filename: the PDF name to scan (must live in ``folder``).
+        on_progress: sink for the ``file_*`` events.
+        cancel: cooperative cancellation token.
+    """
+    from core import scanners as scanner_registry
+    from core.scanners.utils.pdf_render import get_page_count
+
+    scanner = scanner_registry.get(sigla)
+    try:
+        pages_total = get_page_count(folder / filename)
+    except Exception:  # noqa: BLE001 — a broken header still reports a started/done pair
+        pages_total = 0
+
+    on_progress(
+        {
+            "type": "file_scan_started",
+            "hospital": hospital,
+            "sigla": sigla,
+            "filename": filename,
+            "pages_total": pages_total,
+        }
+    )
+
+    def _on_page(page_idx: int, total: int) -> None:
+        on_progress(
+            {
+                "type": "file_page_progress",
+                "hospital": hospital,
+                "sigla": sigla,
+                "filename": filename,
+                "page": page_idx + 1,
+                "pages_total": total,
+            }
+        )
+
+    try:
+        result = scanner.count_ocr(folder, cancel=cancel, only=filename, on_page=_on_page)
+    except Exception as exc:  # noqa: BLE001 — surface any scan failure to the UI
+        on_progress(
+            {
+                "type": "file_scan_error",
+                "hospital": hospital,
+                "sigla": sigla,
+                "filename": filename,
+                "error": str(exc),
+            }
+        )
+        return
+
+    on_progress(
+        {
+            "type": "file_scan_done",
+            "hospital": hospital,
+            "sigla": sigla,
+            "filename": filename,
+            "result": {
+                "ocr_count": result.count,
+                "method": result.method,
+                "per_file": result.per_file,
+                "near_matches": _serialize_near_matches(result),
+            },
+        }
+    )
+
+
 def scan_cells_ocr(
     cells: list[tuple[str, str, Path]],
     *,

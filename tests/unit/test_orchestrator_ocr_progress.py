@@ -4,8 +4,65 @@ The synchronous path (max_workers=1) drives on_pdf directly; the multi-worker
 path routes per-PDF progress through an IPC queue drained on the main thread.
 """
 
-from core.orchestrator import scan_cells_ocr
+from core.orchestrator import scan_cells_ocr, scan_one_file_ocr
 from core.scanners.cancellation import CancellationToken
+
+
+def test_scan_one_file_ocr_emits_file_events(tmp_path, monkeypatch):
+    """rev-2 #1: scan_one_file_ocr emits file_scan_started/page_progress/done
+    for a single PDF, wiring the scanner's on_page hook to file_page_progress."""
+    import core.scanners as scanner_registry
+    from core.scanners.anchors_scanner import AnchorsScanner
+    from core.scanners.base import ConfidenceLevel, ScanResult
+
+    folder = tmp_path / "3.-ODI Visitas"
+    folder.mkdir()
+    (folder / "a.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+
+    # get_page_count drives file_scan_started.pages_total (local import in the fn).
+    monkeypatch.setattr("core.scanners.utils.pdf_render.get_page_count", lambda _: 2)
+
+    def fake_count_ocr(self, folder, *, cancel, on_pdf=None, only=None, on_page=None):
+        if on_page is not None:
+            on_page(0, 2)
+            on_page(1, 2)
+        return ScanResult(
+            count=2,
+            confidence=ConfidenceLevel.HIGH,
+            method="header_band_anchors",
+            breakdown=None,
+            flags=[],
+            errors=[],
+            duration_ms=1,
+            files_scanned=1,
+            per_file={only: 2},
+        )
+
+    monkeypatch.setattr(AnchorsScanner, "count_ocr", fake_count_ocr)
+    scanner_registry.clear()
+    scanner_registry.register(AnchorsScanner(sigla="odi"))
+    try:
+        events: list[dict] = []
+        scan_one_file_ocr(
+            "HRB",
+            "odi",
+            folder,
+            "a.pdf",
+            on_progress=events.append,
+            cancel=CancellationToken(),
+        )
+    finally:
+        scanner_registry.clear()
+        scanner_registry.register_defaults()
+
+    started = next(e for e in events if e["type"] == "file_scan_started")
+    assert started["pages_total"] == 2
+    pp = [e for e in events if e["type"] == "file_page_progress"]
+    assert [e["page"] for e in pp] == [1, 2]
+    assert all(e["pages_total"] == 2 for e in pp)
+    done = next(e for e in events if e["type"] == "file_scan_done")
+    assert done["result"]["per_file"] == {"a.pdf": 2}
+    assert done["result"]["method"] == "header_band_anchors"
 
 
 def test_scan_cells_ocr_emits_pdf_progress(tmp_path, monkeypatch):
