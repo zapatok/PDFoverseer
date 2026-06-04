@@ -7,6 +7,7 @@ import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
 import PdfCoverViewer from "./PdfCoverViewer";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
+import { SIGLA_DESCRIPTION, SIGLA_PAGE_RANGE, formatPageRange } from "../lib/sigla-info";
 import { METHOD_LABEL, CONFIDENCE_LABEL } from "../lib/method-labels";
 import { composeMethodInfo } from "../lib/method-info";
 import { useSessionStore } from "../store/session";
@@ -210,6 +211,17 @@ export default function DetailPanel({ hospital, sigla, cell }) {
         )}
         {hasOverride && <Badge variant="state-override" icon={PenLine}>Manual</Badge>}
       </div>
+
+      {SIGLA_DESCRIPTION[sigla] && (
+        <div className="mt-4 rounded-lg border border-po-border bg-po-panel-hover px-3 py-2">
+          <p className="text-sm text-po-text">{SIGLA_DESCRIPTION[sigla]}</p>
+          {SIGLA_PAGE_RANGE[sigla] && (
+            <p className="text-xs text-po-text-muted mt-1">
+              {formatPageRange(SIGLA_PAGE_RANGE[sigla])}
+            </p>
+          )}
+        </div>
+      )}
 
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Conteo automático</h4>
       <table className="w-full text-sm">
