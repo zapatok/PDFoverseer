@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
 from api.state import SessionManager
-from core.db.connection import open_connection
+from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
 
 
@@ -15,7 +16,10 @@ from core.db.migrations import init_schema
 def manager(tmp_path):
     conn = open_connection(tmp_path / "clear_nm.db")
     init_schema(conn)
-    return SessionManager(conn=conn)
+    mgr = SessionManager(conn=conn)
+    mgr.open_session(year=2026, month=4, month_root=Path("A:/informe mensual/ABRIL"))
+    yield mgr
+    close_all()
 
 
 def _seed(manager, *, near_matches):
