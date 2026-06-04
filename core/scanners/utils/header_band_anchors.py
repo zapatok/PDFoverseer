@@ -20,9 +20,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import cv2
+import numpy as np
 import pytesseract
 from PIL import Image
 
+from core.image import _deskew, clean_for_ocr
 from core.scanners.patterns import (
     DEFAULT_ANTI_MIN_MATCH,
     DEFAULT_MIN_MATCH,
@@ -174,8 +177,13 @@ def count_covers_by_anchors(
             cancel.check()
         if on_page is not None:
             on_page(page_idx, pages_total)
-        img: Image.Image = render_page_region(pdf_path, page_idx, bbox=bbox, dpi=dpi)
-        text = pytesseract.image_to_string(img, config="--psm 6 --oem 1", lang="spa+eng")
+        pil: Image.Image = render_page_region(pdf_path, page_idx, bbox=bbox, dpi=dpi)
+        # E6 — V4 preprocessing cascade before OCR: deskew + color removal +
+        # inpaint + grayscale + unsharp. Near no-op on clean bands; lifts degraded
+        # scans (andamios/ART). Shared with the V4 page-number OCR via core.image.
+        bgr = cv2.cvtColor(np.asarray(pil.convert("RGB")), cv2.COLOR_RGB2BGR)
+        gray = clean_for_ocr(_deskew(bgr))
+        text = pytesseract.image_to_string(gray, config="--psm 6 --oem 1", lang="spa+eng")
         normalized = _normalize_text(text)
 
         # First passing flavor wins this page; record near-match only if no flavor passes

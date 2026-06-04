@@ -1,4 +1,5 @@
 """Image processing: rendering PDF clips."""
+
 from __future__ import annotations
 
 import warnings
@@ -10,6 +11,7 @@ import numpy as np
 from core.utils import CROP_X_START, CROP_Y_END, DPI
 
 # ── PyMuPDF clip rendering ───────────────────────────────────────────────────
+
 
 def _render_clip(page: fitz.Page, dpi: int = DPI) -> np.ndarray:
     """Render only the top-right corner of a PDF page. Returns BGR numpy array."""
@@ -33,9 +35,9 @@ def _render_clip(page: fitz.Page, dpi: int = DPI) -> np.ndarray:
 
 # ── Deskew (projection profile) ─────────────────────────────────────────────
 
-_DESKEW_ANGLES = [a * 0.5 for a in range(-22, 23)]   # -11.0° … +11.0° in 0.5° steps
-_DESKEW_MIN    = 0.5    # skip corrections smaller than this (independent of step size)
-_DESKEW_MAX    = 10.0   # skip corrections larger than this (likely false detection)
+_DESKEW_ANGLES = [a * 0.5 for a in range(-22, 23)]  # -11.0° … +11.0° in 0.5° steps
+_DESKEW_MIN = 0.5  # skip corrections smaller than this (independent of step size)
+_DESKEW_MAX = 10.0  # skip corrections larger than this (likely false detection)
 
 
 def _deskew(bgr: np.ndarray) -> np.ndarray:
@@ -56,25 +58,54 @@ def _deskew(bgr: np.ndarray) -> np.ndarray:
 
         h, w = binary.shape
         center = (w / 2.0, h / 2.0)
-        best_angle    = 0.0
+        best_angle = 0.0
         best_variance = -1.0
 
         for angle in _DESKEW_ANGLES:
             M = cv2.getRotationMatrix2D(center, angle, 1.0)
-            rotated  = cv2.warpAffine(binary, M, (w, h),
-                                      flags=cv2.INTER_NEAREST, borderValue=0)
+            rotated = cv2.warpAffine(binary, M, (w, h), flags=cv2.INTER_NEAREST, borderValue=0)
             variance = rotated.sum(axis=1).astype(np.float64).var()
             if variance > best_variance:
                 best_variance = variance
-                best_angle    = angle
+                best_angle = angle
 
         if abs(best_angle) < _DESKEW_MIN or abs(best_angle) > _DESKEW_MAX:
             return bgr
 
         M = cv2.getRotationMatrix2D(center, best_angle, 1.0)
-        return cv2.warpAffine(bgr, M, (w, h),
-                              flags=cv2.INTER_LINEAR,
-                              borderValue=(255, 255, 255))
+        return cv2.warpAffine(bgr, M, (w, h), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255))
     except Exception as exc:  # noqa: BLE001
         warnings.warn(f"_deskew: failed ({exc}), returning original", stacklevel=2)
         return bgr
+
+
+# ── OCR image cleaning (V4 cascade, shared) ──────────────────────────────────
+
+
+def clean_for_ocr(bgr: np.ndarray) -> np.ndarray:
+    """Clean an image for Tesseract: remove blue ink, grayscale, unsharp.
+
+    The V4 page-number preprocessing, extracted so both the V4 OCR worker and the
+    anchor-band OCR share one cascade. On a clean black-text image the blue-mask
+    inpaint is a near no-op (no blue → empty mask); the unsharp mask sharpens.
+    Pure OpenCV, GPU-free — safe in the Tesseract worker threads.
+
+    Args:
+        bgr: a BGR (3-channel) or already-grayscale (2-D) uint8 image.
+
+    Returns:
+        A 2-D grayscale uint8 image ready for ``pytesseract.image_to_string``.
+    """
+    if len(bgr.shape) == 2 or bgr.shape[2] == 1:
+        gray = bgr
+    else:
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        lower_blue = np.array([90, 50, 50])
+        upper_blue = np.array([150, 255, 255])
+        mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
+        bgr_clean = cv2.inpaint(bgr, mask_blue, 3, cv2.INPAINT_NS)
+        gray = cv2.cvtColor(bgr_clean, cv2.COLOR_BGR2GRAY)
+
+    # Unsharp mask (sweep-tuned: sigma=1.0, strength=0.3)
+    blurred = cv2.GaussianBlur(gray, (0, 0), 1.0)
+    return cv2.addWeighted(gray, 1.3, blurred, -0.3, 0)
