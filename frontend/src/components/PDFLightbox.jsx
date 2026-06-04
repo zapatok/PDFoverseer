@@ -10,6 +10,7 @@ import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { wheelToPageStep } from "../lib/viewer-nav";
 import OriginChip from "./OriginChip";
 import InlineEditCount from "./InlineEditCount";
+import FileViewerProgress from "./FileViewerProgress";
 
 import { usePdfDocument } from "../hooks/usePdfDocument";
 import { useFitScale } from "../hooks/useFitScale";
@@ -146,15 +147,22 @@ export default function PDFLightbox() {
   const closeLightbox = useSessionStore((s) => s.closeLightbox);
   const session = useSessionStore((s) => s.session);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
-  const scanOcr = useSessionStore((s) => s.scanOcr);
-  // Re-fetch after an OCR scan finishes for this cell (G3, review #5/#6).
+  const scanFileOcr = useSessionStore((s) => s.scanFileOcr);
+  const fileScan = useSessionStore((s) => s.fileScan);
+  // Re-fetch after an OCR scan finishes for this cell (G3 / rev-2 #1).
   const tick = useSessionStore((s) =>
     lightbox ? (s.filesTick[`${lightbox.hospital}|${lightbox.sigla}`] ?? 0) : 0,
   );
-  const isScanning = useSessionStore((s) =>
-    lightbox ? s.scanningCells.has(`${lightbox.hospital}|${lightbox.sigla}`) : false,
-  );
   const [files, setFiles] = useState(null);
+  const [scanInfo, setScanInfo] = useState(null);
+
+  // rev-2 #1 — know whether this sigla has an OCR strategy (else disable the button).
+  useEffect(() => {
+    if (!lightbox?.sigla) { setScanInfo(null); return; }
+    let alive = true;
+    api.getScanInfo(lightbox.sigla).then((s) => { if (alive) setScanInfo(s); }).catch(() => {});
+    return () => { alive = false; };
+  }, [lightbox?.sigla]);
 
   useEffect(() => {
     if (!lightbox) { setFiles(null); return; }
@@ -167,6 +175,10 @@ export default function PDFLightbox() {
 
   const filename = files?.[lightbox.fileIndex]?.name ?? "…";
   const pageCount = files?.[lightbox.fileIndex]?.page_count;
+  const currentFile = files?.[lightbox.fileIndex];
+  const noOcr = scanInfo?.kind === "none";
+  const scanningThisFile =
+    !!fileScan && fileScan.filename === currentFile?.name && !fileScan.terminal;
   const pdfUrl = api.cellPdfUrl(session.session_id, lightbox.hospital, lightbox.sigla, lightbox.fileIndex);
   const label = SIGLA_LABELS[lightbox.sigla];
   const showLabel = label && label.toLowerCase() !== lightbox.sigla.toLowerCase();
@@ -210,16 +222,23 @@ export default function PDFLightbox() {
             </div>
             <aside className="w-80 border-l border-po-border p-4 overflow-y-auto">
               <FileSummary file={files?.[lightbox.fileIndex]} />
-              <Button
-                variant="primary"
-                icon={ScanSearch}
-                size="sm"
-                disabled={isScanning}
-                onClick={() => scanOcr(session.session_id, [[lightbox.hospital, lightbox.sigla]])}
-                className="mt-4 w-full justify-center"
-              >
-                {isScanning ? "Escaneando…" : "Escanear con OCR"}
-              </Button>
+              {scanningThisFile ? (
+                <FileViewerProgress page={fileScan.page} pagesTotal={fileScan.pagesTotal} />
+              ) : (
+                <Button
+                  variant="primary"
+                  icon={ScanSearch}
+                  size="sm"
+                  disabled={noOcr || !currentFile}
+                  onClick={() =>
+                    scanFileOcr(session.session_id, lightbox.hospital, lightbox.sigla, currentFile.name)
+                  }
+                  className="mt-4 w-full justify-center"
+                  title={noOcr ? "Esta categoría no usa OCR" : undefined}
+                >
+                  Escanear con OCR
+                </Button>
+              )}
               <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual del archivo</h4>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-po-text">Documentos:</span>
