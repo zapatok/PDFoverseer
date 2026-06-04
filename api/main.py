@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import history, months, output, sessions, ws
+from api.routes import history, months, output, sessions, siglas, ws
 from api.routes.sessions import get_manager
 from api.state import SessionManager
 from core.db.connection import close_all, open_connection

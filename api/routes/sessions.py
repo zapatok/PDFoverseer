@@ -24,6 +24,7 @@ from core.orchestrator import (
     enumerate_month,
     scan_cells_ocr,
     scan_month,
+    scan_one_file_ocr,
 )
 from core.scanners.base import ConfidenceLevel, NearMatchEntry, ScanResult, ScanTelemetry
 from core.scanners.cancellation import CancellationToken
