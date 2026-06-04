@@ -61,6 +61,12 @@ export const useSessionStore = create((set, get) => ({
       get()._ws?.close();
       const ws = createWSClient(sessionId, { onEvent: get()._handleWSEvent });
       set({ session, loading: false, _ws: ws, scanningCells: new Set(), scanProgress: null, historyDrawer: null });
+      if (Object.keys(session.cells || {}).length === 0) {
+        // pase 1 only the first time the month is opened (spec §7); fire-and-forget,
+        // runScan owns `loading`. Re-opening a scanned month never re-scans (it would
+        // wipe OCR/per-file results).
+        get().runScan(sessionId).catch((e) => console.error(e));
+      }
     } catch (error) {
       set({ error: String(error), loading: false });
     }
