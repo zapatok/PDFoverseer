@@ -436,6 +436,7 @@ def get_cell_files(
         return []
     per_file = cell.get("per_file") or {}
     per_file_overrides = cell.get("per_file_overrides") or {}
+    per_file_method = cell.get("per_file_method") or {}
     cell_method = cell.get("method") or "filename_glob"
 
     def _origin_for(
@@ -446,19 +447,25 @@ def get_cell_files(
     ) -> str:
         """Per-file chip: Manual/Error/Revisar/OCR/R1/Pendiente. Canonical casing.
 
+        The method is resolved **per file** (rev-2 §3): `per_file_method[filename]`
+        if present, else the cell-level method. This lets a single file OCR-ed on
+        its own read "OCR"/"Revisar" while the rest of a filename_glob cell stays
+        "R1"/"Pendiente".
+
         Priority cascade: a manual override always wins (human judgement over a
         read failure), then an unreadable PDF (page_count == 0) → Error. For an
-        OCR-scanned file the chip turns to "Revisar" when OCR found 0 documents
+        OCR-counted file the chip turns to "Revisar" when OCR found 0 documents
         (poor scan or a template with no registered flavor — manual is the way
         out); otherwise "OCR". Then the auto-reliable methods. A plain
         filename_glob file is only trustworthy when it is a single page (one
         file = one document); a multipage filename_glob file → Pendiente.
         """
+        method = per_file_method.get(filename) or cell_method
         if override is not None:
             return "Manual"
         if page_count == 0:  # unreadable PDF
             return "Error"
-        if cell_method in (
+        if method in (
             "header_detect",
             "corner_count",
             "header_band_anchors",
@@ -466,9 +473,9 @@ def get_cell_files(
         ):
             # OCR ran but read nothing for this file → needs manual review.
             return "Revisar" if per_file_count == 0 else "OCR"
-        if cell_method == "page_count_pure":
+        if method == "page_count_pure":
             return "R1"  # fixed-page sigla, auto-reliable (was "Estructura")
-        if cell_method == "filename_glob":
+        if method == "filename_glob":
             return "R1" if page_count == 1 else "Pendiente"
         return "R1"
 
