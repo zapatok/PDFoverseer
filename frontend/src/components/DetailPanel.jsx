@@ -6,7 +6,7 @@ import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
 import PdfCoverViewer from "./PdfCoverViewer";
-import { SIGLA_LABELS } from "../lib/sigla-labels";
+import { SIGLA_LABELS, siglaDisplay } from "../lib/sigla-labels";
 import { SIGLA_DESCRIPTION, SIGLA_PAGE_RANGE, formatPageRange } from "../lib/sigla-info";
 import { METHOD_LABEL, CONFIDENCE_LABEL } from "../lib/method-labels";
 import { composeMethodInfo } from "../lib/method-info";
@@ -188,7 +188,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   return (
     <div className="rounded-xl bg-po-panel border border-po-border p-5">
       <div className="flex items-baseline gap-2 mb-1">
-        <span className="font-mono text-sm text-po-text">{sigla}</span>
+        <span className="font-mono text-sm text-po-text">{siglaDisplay(sigla)}</span>
         {showLabel && (
           <>
             <span className="text-po-text-muted">·</span>

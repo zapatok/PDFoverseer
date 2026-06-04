@@ -3,7 +3,7 @@ import { useSessionStore } from "../store/session";
 import Badge from "../ui/Badge";
 import Dot from "../ui/Dot";
 import Tooltip from "../ui/Tooltip";
-import { SIGLA_LABELS } from "../lib/sigla-labels";
+import { SIGLA_LABELS, siglaDisplay } from "../lib/sigla-labels";
 import { dotVariantFor } from "../lib/cell-status";
 import { computeCellCount } from "../lib/cellCount";
 import InlineEditCount from "./InlineEditCount";
@@ -53,7 +53,7 @@ export default function CategoryRow({
         className="accent-po-accent"
       />
       <Tooltip content={SIGLA_LABELS[sigla] ?? null}>
-        <span className="font-mono text-xs text-po-text">{sigla}</span>
+        <span className="font-mono text-xs text-po-text">{siglaDisplay(sigla)}</span>
       </Tooltip>
       <Dot variant={dotVariantFor(cell, { isScanning })} className={isPendingSave ? "animate-pulse" : ""} />
 

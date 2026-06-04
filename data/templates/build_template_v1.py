@@ -80,8 +80,9 @@ def build() -> tuple[int, int]:
     ws = wb.active
     sheet_name = ws.title
 
-    # Add CHPS label at row 31 (the sample leaves it empty)
-    ws.cell(row=31, column=2, value=("CHPS — Comité Paritario de Higiene y Seguridad"))
+    # Add CPHS label at row 31 (the sample leaves it empty). Visible label is
+    # CPHS (correct acronym); the internal sigla key stays "chps".
+    ws.cell(row=31, column=2, value=("CPHS — Comité Paritario de Higiene y Seguridad"))
     ws.cell(row=31, column=6, value="—")  # periodicidad column
 
     # Cantidad named ranges + blank pre-existing values

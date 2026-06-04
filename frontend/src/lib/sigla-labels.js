@@ -1,6 +1,6 @@
 // Source of truth: core/domain.py CATEGORY_FOLDERS. Do NOT fabricate domain
 // meaning — folder name IS the label (prefix N.- stripped, tildes added).
-// Acronyms (ART, ODI, IRL, PTS, CHPS) stay as-is — Daniel uses them.
+// Acronyms (ART, ODI, IRL, PTS, CPHS) stay as-is — Daniel uses them.
 //
 // If a label reads awkwardly in tooltips/Detail header, ASK Daniel before
 // changing it. Don't expand acronyms unilaterally.
@@ -22,8 +22,14 @@ export const SIGLA_LABELS = {
   caliente: "Inspección trabajos en caliente",
   herramientas_elec: "Inspección herramientas eléctricas",
   andamios: "Andamios",
-  chps: "CHPS",
+  chps: "CPHS",
 };
+
+// Display override for the lowercase raw-key code shown in the category list and
+// the Detail header. The internal key stays "chps" (glob/folder/DB/named ranges);
+// only the visible code is corrected. Lowercase to match the other sigla codes.
+export const SIGLA_DISPLAY = { chps: "cphs" };
+export const siglaDisplay = (s) => SIGLA_DISPLAY[s] ?? s;
 
 // Canonical sigla order — the 18 categories in the order they appear in the
 // monthly Excel. Single source of truth for HospitalCard, HospitalDetail
