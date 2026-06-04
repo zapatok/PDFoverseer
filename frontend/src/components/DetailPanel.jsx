@@ -263,16 +263,18 @@ export default function DetailPanel({ hospital, sigla, cell }) {
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual</h4>
       <OverridePanel hospital={hospital} sigla={sigla} cell={cell} />
 
+      {/* Worker counting is a primary action for charla/chintegral — keep it
+          above the near-match suspects so a long suspects list never buries it. */}
+      {(sigla === "charla" || sigla === "chintegral") && (
+        <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} />
+      )}
+
       <NearMatchesSection
         hospital={hospital}
         sigla={sigla}
         cell={cell}
         sessionId={sessionId}
       />
-
-      {(sigla === "charla" || sigla === "chintegral") && (
-        <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} />
-      )}
     </div>
   );
 }
