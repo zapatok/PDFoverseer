@@ -60,6 +60,8 @@ class PaginationScanner:
         *,
         cancel: CancellationToken,
         on_pdf: Callable[[str], None] | None = None,
+        only: str | None = None,
+        on_page: Callable[[int, int], None] | None = None,
     ) -> ScanResult:
         """Run pase-2 OCR by counting "Página N de M" documents via V4.
 
@@ -97,6 +99,11 @@ class PaginationScanner:
             return base  # A8
 
         pdfs = enumerate_cell_pdfs(folder)
+        if only is not None:
+            # Single-file scan (rev-2 #1). `on_page` is accepted for interface
+            # parity but ignored: V4 (pipeline.analyze_pdf) has no per-page hook,
+            # so the viewer bar stays indeterminate for insgral/altura.
+            pdfs = [p for p in pdfs if p.name == only]
         if not pdfs:
             return base
 

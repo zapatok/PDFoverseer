@@ -132,6 +132,7 @@ def count_covers_by_anchors(
     top_fraction: float = DEFAULT_TOP_FRACTION,
     dpi: int = 200,
     cancel: CancellationToken | None = None,
+    on_page: Callable[[int, int], None] | None = None,
 ) -> AnchorCountResult:
     """OCR the top band of each page; count pages that match any flavor (A4).
 
@@ -170,6 +171,8 @@ def count_covers_by_anchors(
     for page_idx in range(pages_total):
         if cancel is not None:
             cancel.check()
+        if on_page is not None:
+            on_page(page_idx, pages_total)
         img: Image.Image = render_page_region(pdf_path, page_idx, bbox=bbox, dpi=dpi)
         text = pytesseract.image_to_string(img, config="--psm 6 --oem 1", lang="spa+eng")
         normalized = _normalize_text(text)

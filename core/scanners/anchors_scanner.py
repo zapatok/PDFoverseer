@@ -45,6 +45,8 @@ class AnchorsScanner:
         *,
         cancel: CancellationToken,
         on_pdf: Callable[[str], None] | None = None,
+        only: str | None = None,
+        on_page: Callable[[int, int], None] | None = None,
     ) -> ScanResult:
         """Run pase-2 OCR using header-band anchors (A2) with A7 one-page lock.
 
@@ -79,6 +81,10 @@ class AnchorsScanner:
             return base  # A8: nothing to OCR
 
         pdfs = enumerate_cell_pdfs(folder)
+        if only is not None:
+            # Single-file scan (rev-2 #1): scope to just this PDF; per_file/count
+            # below cover only it, leaving the rest of the cell untouched.
+            pdfs = [p for p in pdfs if p.name == only]
         if not pdfs:
             return base
 
@@ -124,6 +130,7 @@ class AnchorsScanner:
                         flavors=flavors,
                         top_fraction=top_fraction,
                         cancel=cancel,
+                        on_page=on_page,
                     )
                 except CancelledError:
                     raise

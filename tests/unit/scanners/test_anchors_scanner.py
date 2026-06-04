@@ -157,6 +157,47 @@ def test_anchors_scanner_a7_one_page_pdfs_counted_as_one(tmp_path: Path, monkeyp
     assert "a7_one_page_locked" in result.flags
 
 
+def test_anchors_scanner_count_ocr_only_and_on_page(tmp_path: Path, monkeypatch):
+    """rev-2 #1: `only=` scopes the scan to one PDF; `on_page` fires per page.
+
+    Runs the real count_covers_by_anchors loop (render + OCR stubbed) so the
+    per-page callback is genuinely exercised.
+    """
+    from PIL import Image
+
+    pdf_a = tmp_path / "2026-04-01_andamios_a.pdf"
+    pdf_b = tmp_path / "2026-04-02_andamios_b.pdf"
+    for p in (pdf_a, pdf_b):
+        p.write_bytes(b"%PDF-1.4\n")
+
+    import core.scanners.anchors_scanner as _mod
+    from core.scanners.utils import header_band_anchors as hba
+
+    monkeypatch.setattr(_mod, "PATTERNS", {"andamios": _FAKE_PATTERN})
+    monkeypatch.setattr(_mod, "get_page_count", lambda _: 2)  # force the OCR path
+    # Stub render + OCR so the real loop runs without I/O and finds no anchors.
+    monkeypatch.setattr(hba, "get_page_count", lambda _: 2)
+    monkeypatch.setattr(hba, "render_page_region", lambda *a, **k: Image.new("RGB", (1, 1)))
+    monkeypatch.setattr(hba.pytesseract, "image_to_string", lambda *a, **k: "")
+
+    pages_seen: list[tuple[int, int]] = []
+
+    scanner = AnchorsScanner(sigla="andamios")
+    result = scanner.count_ocr(
+        tmp_path,
+        cancel=CancellationToken(),
+        only="2026-04-01_andamios_a.pdf",
+        on_page=lambda i, n: pages_seen.append((i, n)),
+    )
+
+    # Only a.pdf was scanned; b.pdf is absent from per_file.
+    assert set(result.per_file) == {"2026-04-01_andamios_a.pdf"}
+    assert result.per_file["2026-04-01_andamios_a.pdf"] == 0  # no anchors matched
+    assert result.files_scanned == 1
+    # on_page fired once per page of the single file.
+    assert pages_seen == [(0, 2), (1, 2)]
+
+
 def test_anchors_scanner_carpeta_inexistente(tmp_path: Path):
     """A8: missing folder → count=0, confidence=HIGH, flag folder_missing."""
     missing = tmp_path / "DOES_NOT_EXIST"
