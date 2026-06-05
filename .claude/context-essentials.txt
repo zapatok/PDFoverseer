@@ -28,5 +28,5 @@ KEY FILES:
 - Pipeline: core/pipeline.py (V4, 6 parallel Tesseract workers)
 - Inference: core/inference.py (phases 1-5 + MP + 5b, Dempster-Shafer)
 - Constants: core/utils.py (DPI, CROP_*, thresholds)
-- API: server.py -> api/routes/{files,sessions,pipeline}.py
+- API: server.py -> api/routes/{months,output,sessions,siglas,history,ws}.py
 - Ground truth: eval/fixtures/ground_truth.json (22 real + 15 synthetic + 7 degraded)

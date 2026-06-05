@@ -8,6 +8,6 @@ conditions:
   - field: content, operator: regex_match, pattern: (def _infer|def phase_|MIN_CONF|CLASH_BOUNDARY|PH5B_|ANOMALY_DROPOUT|PHASE4_FALLBACK)
 ---
 
-**BLOCKED: Do not edit inference logic in `core/inference.py` directly.**
+**WARNING: Prototype inference changes in eval before editing `core/inference.py`.**
 
-All inference changes MUST be prototyped and validated in `eval/inference.py` first. Never port changes to `core/inference.py` without the user's explicit approval. Ask before touching core.
+All inference changes should be prototyped and validated in `eval/inference_tuning/inference.py` first. Don't port changes to `core/inference.py` without the user's explicit approval — ask before touching core.

@@ -56,15 +56,17 @@ pip install -r requirements-gpu.txt
 ### Git Info
 
 - **Main branch:** `master`
-- **Active worktrees:** `.worktrees/crop-selector`, `.worktrees/ocr-matcher`
+- **Working branch:** `po_overhaul` — the single active branch (see "Consolidación" below). Work here directly; push at the end of each round.
 
 ### Worktrees
 
 **Location:** `.worktrees/` (project-local, hidden)
 
-**Active worktrees:**
-- `.worktrees/crop-selector` → `feature/crop-selector` — UI crop region selector (unmerged, MVP complete)
-- `.worktrees/ocr-matcher` → `feature/ocr-matcher` — fuzzy OCR pattern generator for "Pagina N de M" variants (unmerged)
+**Convention:** Work directly on `po_overhaul` in the main checkout. Do **not** leave feature worktrees unmerged — that debt has bitten us before. If a worktree is used for isolation, fast-forward it into `po_overhaul`, push, and delete it before calling the work done.
+
+**Old foreign worktrees** (NOT merged into `po_overhaul` — predate the consolidation, unrelated to current work; kept only as branch refs):
+- `feature/crop-selector` — UI crop region selector (unmerged MVP)
+- `feature/ocr-matcher` — fuzzy OCR pattern generator (unmerged)
 
 **Other branches:**
 - `research/pixel-density` — pixel density research (no worktree, checked out directly when needed)
@@ -85,11 +87,10 @@ pip install -r requirements-gpu.txt
 ### Git & Workflow
 - **Commits:** English, format: `type(scope): message`
   - Examples: `feat(ocr): add SR tier 2`, `fix(inference): D-S calibration`
-- **Branches:** Feature branches from `master` (or `cuda-gpu` when working on GPU features)
-  - Pattern: `feature/name` or `fix/issue-name`
+- **Branches:** Work directly on `po_overhaul` (the single active branch); only branch off for genuinely isolated experiments, and fast-forward + delete them when done
 - **Tests:** Always pass before merge (no skipped/pending tests)
 - **DB mocking:** Avoid mocking in tests — use real fixtures where possible
-- **Worktrees:** Use `.worktrees/<name>` for isolated feature work (see `superpowers:using-git-worktrees`)
+- **Worktrees:** Use `.worktrees/<name>` only for isolated experiments, and close them (FF → push → delete) before declaring done — do not accumulate unmerged worktrees
 
 ### Code Quality
 - **Linting:** `ruff check .` must report **0 violations** before committing
@@ -107,6 +108,7 @@ pip install -r requirements-gpu.txt
 - **Constants:** Magic numbers belong in `core/utils.py` (pipeline/inference config) or at module level — never inline
 - **One responsibility per file:** Each module has a single clear purpose; if a file is doing two things, split it
 - **Module docs:** New packages/modules get a `README.md` explaining their purpose, files, and usage
+- **Frontend design tokens:** Always use `po-*` tokens in JSX (defined in `frontend/tailwind.config.js`), never raw `bg-slate-*`/`bg-indigo-*`/etc. 8 shared primitives live under `frontend/src/ui/`; `Badge.jsx` tones `iris/jade/amber` map to the existing `po-override-*`/`po-confidence-high-*`/`po-suspect-*` tokens. See `CategoryRow` + `DetailPanel` for reference usage.
 
 ### Guardrails & Hooks
 
@@ -114,21 +116,24 @@ pip install -r requirements-gpu.txt
 
 | Rule | Type | Purpose |
 |------|------|---------|
-| **eval-before-core** | warn | Inference changes must be tested in `eval/inference.py` first |
+| **eval-before-core** | warn | Inference changes must be prototyped in `eval/inference_tuning/inference.py` first |
 | **no-bare-except** | **BLOCK** | All exception handlers must catch specific types |
 | **no-shell-true** | **BLOCK** | Never use `shell=True` in subprocess calls |
 | **no-sql-fstrings** | **BLOCK** | SQL queries must use `?` parameterized form |
 | **no-print-in-libs** | warn | Use `logging.getLogger(__name__)` in library code |
 | **ruff-before-done** | warn | Verify `ruff check .` passes before stopping |
 | **no-legacy-typing** | warn | Use Python 3.10+ syntax (`X \| None` not `Optional[X]`) |
-| **bump-version-tags** | warn | Update version tags after pipeline changes |
+| **bump-version-tags** | **BLOCK** | Bump a version tag in `core/utils.py` before editing `core/{pipeline,ocr,inference,image}.py` or `vlm/*.py` |
 | **constants-in-utils** | warn | Pipeline constants belong in `core/utils.py` |
 | **no-db-mocking** | warn | Never mock database in tests |
 | **torch-try-except** | warn | Torch imports must be wrapped in try/except |
 
 **Native hooks** (`.claude/settings.json`):
-- **PostToolUse** (Edit|Write): Auto-runs `ruff check --fix` + `ruff format` on `.py` files
+- **PreToolUse** (Write|Edit): Guards hand-editable deliverables (`.xlsx/.docx/.pptx/.pdf`). If the target already exists, makes a dated `<file>.bak-<ts>` backup and returns `permissionDecision: ask` so the overwrite is confirmed — never lose hand-edited work again (`guard-editable-deliverables.py`)
+- **PostToolUse** (Edit|Write): Auto-runs `ruff format` on `.py` files (format only — `--fix` was removed so the autofix can't strip an import mid-edit; lint reporting is left to `ruff-before-done` + the pre-commit `ruff check .` gate)
+- **PostToolUse** (WebFetch|WebSearch): Injects an "untrusted web content" prompt-injection warning next to fetched content
 - **PostCompact**: Re-injects `.claude/context-essentials.txt` after context compaction
+- **Stop**: Non-blocking reminder when the current branch is ahead of its remote (`origin/<branch>`) — surfaces "N commits sin pushear" via `systemMessage`, honoring the push-at-close convention (`remind-push.py`)
 
 ## Compaction
 
@@ -176,238 +181,24 @@ ronda**. NO abrir feature worktrees que quedan sin mergear. Si se usa un worktre
 para algo aislado, cerrarlo (fast-forward a po_overhaul + push + borrar) antes de
 darlo por terminado.
 
-## Worker-viewer UX — `po_overhaul` (shipped 2026-06-02, tag `worker-viewer-ux-mvp`)
+## Project history
 
-Mejoras al visor de conteo de trabajadores (Feature 1): **columna de miniaturas**
-del PDF actual (lazy + WeakMap cache, badge de conteo por página), **ajuste-a-ventana
-+ zoom manual por página** (`useFitScale` + `computeFitScale`; el zoom se resetea al
-cambiar de página), **leyenda de atajos persistente** (`WORKER_SHORTCUTS` fuente única),
-y un **fix del conteo parcial → 0** en el DetailPanel: `computeWorkerCount` filtraba
-todas las marcas cuando `fileNames` era un array vacío (`[]` truthy en JS); ahora
-espeja al backend (`compute_worker_count`, que no filtra con `per_file` vacío).
-Spec/plan: `docs/superpowers/{specs,plans}/2026-06-02-*worker-viewer-ux*`.
+Shipped milestones on `po_overhaul`, newest first. The full narrative (smoke notes,
+"bugs caught", bundle deltas, new deps) lives in the per-milestone memory files
+(`~/.claude/projects/.../memory/project_*`) and the git tags; specs/plans under
+`docs/superpowers/{specs,plans}/`.
 
-## Conteo confiable — SHIPPED en `po_overhaul` (MVP + rev-1 + rev-2, 2026-06-03)
+- **2026-06-04** — Refinement batches: filelist polish (alignment, chips → red dot), Excel `#REF!` fix + `no-store`, CPHS visible-only rename, V4 double-pass OCR preprocessing. Memory: `project_refinements_2026_06_04`.
+- **2026-06-03 · tags `conteo-confiable-{mvp,rev-1,rev-2}`** — Per-file count as source of truth: honest "ready" model, `FIXED_PAGE_SIGLAS`, `per_file_method` chips, per-file OCR from the viewer, per-sigla cards (p25–p75 corpus range). Memory: `project_conteo_confiable_shipped`, `project_conteo_confiable_revision_planned`.
+- **2026-06-02 · tag `worker-viewer-ux-mvp`** — Worker-count viewer UX: thumbnail column (lazy + WeakMap), fit-to-window + manual zoom, persistent shortcut legend, partial-count→0 fix (`compute_worker_count`).
+- **2026-05-23 · tag `ocr-per-sigla-mvp`** — Per-sigla OCR flavors (22 verbatim) + Fase A/B calibration; audited 2026-06-01 (7 findings fixed). Memory: `project_ocr_per_sigla_shipped`.
+- **2026-05-17 · tag `conteo-trabajadores-mvp`** — Feature 1: assisted worker-signer count; pdf.js viewer, keyboard + voice (es-CL via Web Speech). Memory: `project_feature1_shipped`.
+- **2026-05-15 · tag `fase-5-mvp`** — History drill-in (`HistoryDrawer`), page-level cancel (<3 s), OCR auto-retry. Memory: `project_fase5_shipped`.
+- **2026-05-14 · tag `fase-4-mvp`** — HLL manual entry, per-file docs in FileList, multi-month trend (SparkGrid). Memory: `project_fase4_shipped`.
+- **2026-05-13 · tag `fase-3-polish`** — Design system (`po-*` tokens, 8 primitives), inline-edit cells, autosave indicator, sonner toasts. Memory: `project_fase3_shipped`.
+- **2026-05-12 · tag `fase-2-mvp`** — Pass 1 (`filename_glob`, ~4 s on ABRIL) + pass 2 (OCR per cell, opt-in) + manual override + PDF lightbox; cell-state cascade (`filename_count`/`ocr_count`/`user_override`) resolved by the Excel writer.
+- **2026-05-11 · tag `fase-1-mvp`** — Folder-driven overhaul: open `A:\informe mensual\<MES>\` → count 4 hospitals × 18 categories with filename-glob → write `RESUMEN_<YYYY>-<MM>.xlsx` from `data/templates/RESUMEN_template_v1.xlsx`.
 
-Conteo por archivo como fuente de verdad + revisión por archivo. Tres entregas,
-todas en `po_overhaul`/origin:
+**Voice (Feature 1):** Chrome + cloud Web Speech works (validated 2026-05-18); Brave impossible (strips Google's voice key, no SODA); on-device discarded. Keyboard counting works everywhere. Detail in `project_feature1_shipped`.
 
-- **MVP** (tag `conteo-confiable-mvp`): modelo de "listo" honesto (verde solo si
-  todos 1-página, o sigla de páginas-fijas, o OCR/override/`confirmed`),
-  `FIXED_PAGE_SIGLAS={bodega,ext,caliente,herramientas_elec,exc}`, flag `confirmed`,
-  lista 1-18, FileList en grilla, lightbox per-file. Carpeta vacía (count 0) → verde.
-- **rev-1** (tag `conteo-confiable-rev-1`): chips honestos
-  `R1·OCR·Manual·Pendiente·Error`, visor paginado (miniaturas + fit + scroll=página /
-  Shift+scroll=zoom; se quitó react-zoom-pan-pinch), OCR-desde-visor + `filesTick`,
-  5 fixes (ETA min, header, toast único, (i) método, input blanco), Excel-home.
-- **rev-2** (tag `conteo-confiable-rev-2`): **`per_file_method`** (cada archivo lleva
-  su método; `_origin_for` lo resuelve) + chip **Revisar** (OCR=0); **OCR por-archivo**
-  desde el visor (`only=` + `on_page` → eventos `file_*` vía `scan_one_file_ocr`, merge
-  `apply_per_file_ocr_result` sin tocar otros archivos, barra por página); **tooltip de
-  método desde anclas** (`scan_info_for` + `GET /api/siglas/{s}/scan-info`); **ficha por
-  sigla** (descripción + rango de páginas p25–p75 del corpus, `tools/audit_sigla_page_ranges.py`);
-  **R1-auto** al abrir un mes vacío. Más 7 bugs (per_file plumbing en el evento
-  `cell_done`, "Ver portada", override per-archivo). Y unificación: todo conteo de
-  celda usa `computeCellCount` (lista, total hospital, cards, DetailPanel).
-
-Specs/planes en `docs/superpowers/{specs,plans}/2026-06-0{2,3}-*conteo-confiable*`.
-**Gotcha de tooling:** el hook ruff-autofix (PostToolUse) borra un import en el mismo
-edit que lo agrega (antes de que exista el uso) — re-verificar imports / correr ruff al
-final.
-
-## Feature 1 — Conteo asistido de trabajadores firmantes — `po_overhaul` branch (shipped 2026-05-17)
-
-Conteo manual asistido de los trabajadores que firman las listas de asistencia
-en los PDFs de `charla` / `chintegral`. El operador abre un visor pdf.js, marca
-el número de firmantes por página (teclado o voz) y la suma alimenta el Excel.
-
-1. **Modelo de datos + cascada (backend)**: la celda gana `worker_marks`
-   (`{archivo: [{page, count}]}`), `worker_status` (`en_progreso`/`terminado`)
-   y `worker_cursor`; el total se deriva con `compute_worker_count` — nunca se
-   almacena. `PATCH …/cells/{h}/{s}/worker-count` persiste las marcas. El writer
-   emite los rangos `{HOSP}_workers_{purpose}`
-   (`WORKER_PURPOSE = {charla: chgen, chintegral: chintegral}`) → filas 29/30
-   del template; las filas HH 13/14 ya traen las fórmulas (`=fila29*0.25`,
-   `=fila30*0.5`). `/output` devuelve `worker_warnings` con las celdas
-   charla/chintegral incompletas.
-2. **Visor pdf.js (frontend)**: `WorkerCountViewer` monta `pdfjs-dist` con
-   paginación continua multi-PDF; `WorkerBubble` (marca flotante de 3 estados),
-   `WorkerHud` (panel lateral con total + `SaveIndicator`), autosave debounced.
-   Un PDF que no abre se puede saltar — el HUD y el teclado siguen vivos.
-3. **Conteo por teclado y voz**: teclado (dígitos, `PgDn`/`PgUp` fija-avanza,
-   `Supr`, `E`, `M`); voz vía `useSpeechNumber` (Web Speech API, es-CL) +
-   `parseSpanishNumber` (números 0-999, suite vitest). `M` pausa el micrófono;
-   el chip de micrófono reusa el primitive `Badge`.
-4. **Integración UI**: módulo "Conteo de trabajadores" en el `DetailPanel` de
-   las celdas charla/chintegral; al "Generar Excel", `MonthOverview` muestra un
-   `toast.warning` con las celdas incompletas junto al toast de éxito.
-
-- **Spec:** `docs/superpowers/specs/2026-05-16-conteo-trabajadores-design.md`
-- **Plan:** `docs/superpowers/plans/2026-05-16-pdfoverseer-conteo-trabajadores.md`
-  (22 tasks, 4 chunks + Spike S1)
-- **Tag:** `conteo-trabajadores-mvp` (local, awaiting push approval)
-- **Bundle:** main JS gzipped 93.66 → 243.57 kB — el salto es `pdfjs-dist`,
-  intrínseco a un visor de PDF; el `pdf.worker.min.mjs` (~1.2 MB) se sirve como
-  archivo aparte. Sin presupuesto que vigilar para esta app single-user/LAN.
-- **New deps:** `pdfjs-dist` (visor), `vitest` (devDep — suite del parser).
-
-### Bugs caught en revisión (commits 2f15036, b792faa, 4555a8e)
-1. `PdfPage` no liberaba los recursos del `PDFPageProxy` en el cleanup → fuga
-   de memoria al paginar. Fix: `page.cleanup()`.
-2. `WorkerCountViewer` hacía early-return ante un error de carga, matando el
-   HUD y el handler de teclado → un PDF roto bloqueaba la celda entera. Fix:
-   el error se muestra en el panel izquierdo y el visor sigue vivo (spec §10).
-3. `useSpeechNumber` dejaba el chip en "error" tras un reinicio automático del
-   reconocedor. Fix: un handler `onstart` restablece "listening" en cada
-   (re)arranque.
-
-### Voz — validada 2026-05-18 (Spike S1 resuelto)
-El smoke de integración (teclado, Excel, `worker_warnings`) pasó. La voz se
-depuró a fondo con chrome-devtools:
-- **Chrome: funciona** — Web Speech API de nube; Daniel validó el dictado real,
-  latencia aceptable. Hay una pausa breve (~0.8 s) entre guardar un número y
-  reanudar la escucha — es el `audiostart` del reinicio del reconocedor en modo
-  `continuous`, inherente al Web Speech API; no se optimiza.
-- **Brave: imposible** — quita la API key del servicio de voz de Google (la
-  nube queda como no-op silencioso) y tampoco distribuye el componente SODA
-  (on-device también muerto). Para voz hay que usar Chrome; el conteo por
-  teclado sí funciona en Brave.
-- **On-device (`SpeechRecognition` con `processLocally`): descartado** — se
-  probó (Chrome 148 instala el modelo `SODA es-ES`), pero el motor on-device
-  oye el audio (`speechstart` dispara) y no transcribe nada (0 eventos
-  `onresult`, es-CL/es-ES, con y sin flags). El puente Web Speech → on-device
-  para español no funciona. NO reintentar; `useSpeechNumber.js` se mantiene en
-  la ruta de nube.
-
-### Next (roadmap restante)
-- Refinamiento de motores OCR por tipo de documento (cada doc type con sus
-  parámetros propios; ver memoria `project_ocr_refinement_deferred`).
-- Feature 2 — badges de inicio-de-documento en el visor + toggle que corrige el
-  conteo (ver memoria `project_feature2_boundary_badges`). Orden del roadmap:
-  refinamiento OCR → feature 2.
-
-### FASE 5 UX slice — predecessor, `po_overhaul` branch (shipped 2026-05-15)
-
-Slice UX cerrando 3 pendientes del roadmap post-FASE 4:
-
-1. **Histórico drill-in**: click en celda del SparkGrid abre `HistoryDrawer`
-   (primitive `ui/Drawer.jsx` no-modal); serie de 12 meses con stats, gráfico
-   de línea y tabla mes-a-mes con chips de método. Read-only, estado
-   `historyDrawer` en Zustand, cero backend (lee la cache de `useHistoryStore`).
-2. **Cancelación a nivel de página**: `count_paginations` y `count_form_codes`
-   reciben el `CancellationToken` y lo chequean por página (levanta
-   `CancelledError`); un cancel se honra en <3 s.
-3. **Auto-retry OCR**: `_ocr_worker` reintenta un scan fallido 2× en silencio
-   (`OCR_RETRY_COUNT`/`OCR_RETRY_BACKOFF_S` en `core/utils.py`); un
-   `CancelledError` nunca dispara retry.
-
-- **Spec:** `docs/superpowers/specs/2026-05-15-fase-5-design.md`
-- **Plan:** `docs/superpowers/plans/2026-05-15-pdfoverseer-fase-5.md`
-- **Tag:** `fase-5-mvp` (local, awaiting push approval)
-- **Bundle delta:** +1.28 kB gzipped (baseline FASE 4 92.38 kB → 93.66 kB).
-  Sin nuevas deps; todo sobre primitives existentes.
-- **New deps:** ninguna
-
-#### Smoke bugs caught (commits 9e4b312, 9afddfe, 0a7e7c5)
-1. `Drawer` dejaba el foco atrapado dentro del panel `aria-hidden` al cerrar
-   con la X. Fix: al cerrar, devuelve el foco al elemento que lo abrió.
-2. `HistoryDrawer` parpadeaba al estado vacío durante los 200 ms de la
-   animación de cierre (los props caen a null). Fix: congela el último
-   contenido real mientras se desliza fuera.
-3. Una celda OCR interrumpida quedaba atascada en "Escaneando…" — el evento
-   `scan_cancelled` actualizaba `scanProgress` pero nunca limpiaba
-   `scanningCells`. Fix: ambos eventos terminales vacían el set.
-
-#### Next (roadmap restante)
-- Refinamiento de motores OCR por tipo de documento (fase FINAL — cada doc
-  type con sus parámetros propios; ver memoria `project_ocr_refinement_deferred`).
-
-### FASE 4 UX slice — predecessor, `po_overhaul` branch (shipped 2026-05-14)
-
-Slice UX cerrando 3 pendientes del roadmap post-FASE 3:
-
-1. **HLL manual-entry**: HospitalCard CTA "Llenar manualmente →" cuando
-   `state==="missing"`, HospitalDetail `mode="manual"` (Zustand-based, no
-   router), focus auto-shift en Enter, 18 siglas siempre visibles, audit
-   trail con `method="manual"` (literal FASE 2 reusado).
-2. **Docs por archivo en FileList**: `ScanResult.per_file` propagado por
-   scanners (simple_factory, art, charla, _header_detect_base); FileList
-   row con `Npp + Ndocs editable + OriginChip` (OCR/R1/manual);
-   `compute_cell_count` Python + `cellCount.js` JS espejados con fixture
-   compartido en `tests/fixtures/cell_count_cases.json`.
-3. **Multi-mes tendencia**: Toggle [Mes actual]/[Histórico] en
-   MonthOverview (state Zustand, sin URL); SparkGrid 18×4 con sparklines
-   de 12 meses sobre `historical_counts` via `query_range`; anomalías
-   >30% en ámbar (`po-suspect`, baseline ≥6); `useHistoryStore` con cache
-   módulo-level singleton.
-
-- **Spec:** `docs/superpowers/specs/2026-05-14-fase-4-design.md`
-- **Plan:** `docs/superpowers/plans/2026-05-14-pdfoverseer-fase-4.md`
-- **Tag:** `fase-4-mvp` (local, awaiting push approval)
-- **Bundle delta:** +2.17 kB gzipped (baseline FASE 3 90.23 kB → 92.40 kB).
-  Casi todo construido sobre primitives FASE 3, sin nuevas deps.
-- **New deps:** ninguna
-
-#### Smoke bugs caught (commit cf5e1cb)
-1. `HospitalCard` referenced `<Tooltip>` sin importarlo (latent FASE 3 bug).
-2. `HospitalDetail` filtraba siglas con `cells[s]` truthy → HLL manual mode
-   landing en lista vacía. Fix: en `mode="manual"` siempre 18 rows.
-3. `FileList` no refrescaba el row tras `savePerFileOverride` (cell state
-   updated, files-state stale). Fix: optimistic local update en `onCommit`.
-
-#### Next (FASE 5)
-- Per-sigla OCR engine refinement contra el corpus real
-- Page-level cancellation (target <3s)
-- Drill-in del histórico (vista detalle de serie completa con números
-  mes-a-mes)
-- Auto-retry on OCR failure
-- Refactor: extract `SIGLAS` a `frontend/src/lib/sigla-labels.js` (3 copias
-  duplicadas en HospitalCard, HospitalDetail, SparkGrid)
-
-### FASE 3 polish — predecessor, `po_overhaul` branch (shipped 2026-05-13)
-
-UI polish pass on top of FASE 2: design system con Radix Color tokens
-+ lucide-react icons, 8 shared primitives under `frontend/src/ui/`,
-inline-edit count cells, visible autosave indicator, Radix Dialog wrap
-for PDFLightbox (a11y), sonner toasts, full Spanish microcopy.
-
-- **Spec:** `docs/superpowers/specs/2026-05-13-fase-3-polish-design.md`
-- **Plan:** `docs/superpowers/plans/2026-05-13-pdfoverseer-fase-3.md`
-- **Tag:** `fase-3-polish` (local, awaiting push approval)
-- **Bundle delta:** +38.93 kB gzipped (baseline 51.30 kB → 90.23 kB).
-- **New deps:** `lucide-react`, `@radix-ui/colors`, `@radix-ui/react-dialog`,
-  `@radix-ui/react-tooltip`, `sonner`, `@fontsource/inter`,
-  `@fontsource/jetbrains-mono`
-
-#### Design tokens
-Defined in `frontend/tailwind.config.js`. Always use `po-*` tokens in JSX,
-never raw `bg-slate-*` / `bg-indigo-*` / etc. (grep audit enforced at
-commit-time; see CategoryRow + DetailPanel for reference usage). FASE 4
-extendió `Badge.jsx` con tones `iris/jade/amber` mapeados a `po-override-*`
-/ `po-confidence-high-*` / `po-suspect-*` ya existentes (sin nuevos tokens).
-
-### FASE 2 MVP — predecessor, `po_overhaul` branch (shipped 2026-05-12)
-
-Pase 1 (filename_glob, ~4s on ABRIL) + pase 2 (OCR per cell, opt-in
-via UI) + manual override + PDF preview lightbox. Cell state stores
-`filename_count`, `ocr_count`, `user_override`, `override_note` as
-independent fields; Excel writer applies the priority cascade. The
-`/output` endpoint now also UPSERTs `historical_counts` with a `method`
-audit (`override` vs OCR technique vs `filename_glob`).
-
-- **Spec:** `docs/superpowers/specs/2026-05-12-fase-2-design.md`
-- **Plan:** `docs/superpowers/plans/2026-05-12-pdfoverseer-fase-2.md`
-- **Tag:** `fase-2-mvp` (local, awaiting push approval)
-- **FASE 3 polished it (above):** auto-retry on OCR failure, page-level cancellation,
-  per-sigla OCR engine refinement against the real corpus (header_detect
-  semantic, ART corner_count gap — see Known Limitations in the plan).
-
-### FASE 1 MVP — predecessor, `research/pixel-density` branch (shipped 2026-05-11)
-
-Folder-driven overhaul of the UI: open `A:\informe mensual\<MES>\` and the
-app counts 4 hospitals × 18 categories with filename-glob, then writes
-`RESUMEN_<YYYY>-<MM>.xlsx` via `data/templates/RESUMEN_template_v1.xlsx`.
-
-- **Spec:** `docs/superpowers/specs/2026-05-11-pdfoverseer-overhaul-design.md`
-- **Plan:** `docs/superpowers/plans/2026-05-11-pdfoverseer-overhaul-fase-1.md`
-- **Tag:** `fase-1-mvp`
+**Reverted/parked:** VLM integration (reverted 2026-03-30 — see postmortem in Links); Feature 2 boundary badges (parked — see `project_feature2_boundary_badges`).
