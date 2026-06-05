@@ -5,6 +5,18 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/guard-editable-deliverables.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
@@ -33,6 +45,17 @@
           {
             "type": "command",
             "command": ".claude/hooks/post-compact.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/remind-push.sh",
             "timeout": 10
           }
         ]
