@@ -183,10 +183,13 @@ def serve_output(session_id: str) -> FileResponse:
     # is_relative_to guards against any traversal once the name is templated.
     if not path.is_file() or not path.is_relative_to(out_dir):
         raise HTTPException(404, "no output for that month")
+    # no-store: the file is regenerated in place on each /output POST, so the
+    # browser must never serve a stale download for this stable URL.
     return FileResponse(
         path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=f"RESUMEN_{session_id}.xlsx",
+        headers={"Cache-Control": "no-store"},
     )
 
 
