@@ -7,10 +7,11 @@ Self-contained — does NOT import from core/.
 Public API:
     run_pipeline(reads: list[PageRead], params: dict) -> list[Document]
 
-params must contain all keys required by eval/inference.py (phases 0-6)
-AND all keys required by eval/graph_inference.py (HMM/Viterbi).
+params must contain all keys required by eval/inference_tuning/inference.py (phases 0-6)
+AND all keys required by eval/graph_inference/engine.py (HMM/Viterbi).
 These key sets are disjoint so a merged dict works directly.
 """
+
 from __future__ import annotations
 
 import copy

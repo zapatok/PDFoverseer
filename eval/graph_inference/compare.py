@@ -2,14 +2,15 @@
 Compare three inference engines on all active fixtures.
 
 Engines:
-    existing  — eval/inference.py      (multi-phase + D-S)
-    graph     — eval/graph_inference.py (pure HMM+Viterbi)
-    hybrid    — eval/hybrid_inference.py (phases 0-6 → Viterbi)
+    existing  — eval/inference_tuning/inference.py (multi-phase + D-S)
+    graph     — eval/graph_inference/engine.py     (pure HMM+Viterbi)
+    hybrid    — eval/graph_inference/hybrid.py      (phases 0-6 → Viterbi)
 
 Usage:
     cd a:/PROJECTS/PDFoverseer
     python eval/compare_engines.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -24,30 +25,51 @@ from eval.shared.loaders import load_fixtures, load_ground_truth  # noqa: E402
 from eval.shared.types import PageRead  # noqa: E402
 
 SYNTHETIC_NAMES = {
-    "ins31_gap", "undercount_chain", "ambiguous_start",
-    "noisy_period", "seq_break", "ds_conflict",
+    "ins31_gap",
+    "undercount_chain",
+    "ambiguous_start",
+    "noisy_period",
+    "seq_break",
+    "ds_conflict",
 }
 
 # ── Best known params ─────────────────────────────────────────────────────────
 
 # Best existing engine params (composite=139, sweep_20260323_195204.json rank-1)
 BEST_EXISTING = {
-    "fwd_conf": 1.0, "new_doc_base": 0.6, "new_doc_hom_mul": 0.25,
-    "back_conf": 0.85, "xval_cap": 0.5,
-    "ds_period_weight": 0.1, "ds_neighbor_weight": 0.08,
-    "ds_prior_weight": 0.09, "ds_boost_max": 0.2,
-    "ph5b_conf_min": 0.65, "ph5b_ratio_min": 0.93,
-    "min_conf_for_new_doc": 0.7, "anomaly_dropout": 0.0,
-    "clash_w_local": 1.5, "clash_w_period": 3.0,
-    "phase4_conf": 0.1, "clash_boundary_pen": 2.0,
-    "window": 9, "hom_threshold": 0.8,
+    "fwd_conf": 1.0,
+    "new_doc_base": 0.6,
+    "new_doc_hom_mul": 0.25,
+    "back_conf": 0.85,
+    "xval_cap": 0.5,
+    "ds_period_weight": 0.1,
+    "ds_neighbor_weight": 0.08,
+    "ds_prior_weight": 0.09,
+    "ds_boost_max": 0.2,
+    "ph5b_conf_min": 0.65,
+    "ph5b_ratio_min": 0.93,
+    "min_conf_for_new_doc": 0.7,
+    "anomaly_dropout": 0.0,
+    "clash_w_local": 1.5,
+    "clash_w_period": 3.0,
+    "phase4_conf": 0.1,
+    "clash_boundary_pen": 2.0,
+    "window": 9,
+    "hom_threshold": 0.8,
 }
 
 # Best graph (HMM-only) params (composite=85, graph_sweep_20260323_211859.json rank-1)
 BEST_GRAPH = {
-    "trans_continue": 0.95, "trans_new_doc": 0.05, "trans_skip": 0.01,
-    "emit_match": 0.9, "emit_conf_scale": 1.0, "emit_partial": 0.1,
-    "emit_null": 0.5, "max_total": 20, "boundary_bonus": 2.0, "period_prior": 0.5,
+    "trans_continue": 0.95,
+    "trans_new_doc": 0.05,
+    "trans_skip": 0.01,
+    "emit_match": 0.9,
+    "emit_conf_scale": 1.0,
+    "emit_partial": 0.1,
+    "emit_null": 0.5,
+    "max_total": 20,
+    "boundary_bonus": 2.0,
+    "period_prior": 0.5,
 }
 
 # Hybrid: merged (key sets are disjoint)
@@ -55,6 +77,7 @@ BEST_HYBRID = {**BEST_EXISTING, **BEST_GRAPH}
 
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
+
 
 def score_all(run_fn, params, fixtures, gt):
     """Returns {fixture_name: "pass"/"fail"} and aggregate scores."""
@@ -70,13 +93,13 @@ def score_all(run_fn, params, fixtures, gt):
         is_real = fx.get("source", "synthetic") == "real"
         docs = run_fn(fx["reads"], params)
 
-        got_docs     = len(docs)
+        got_docs = len(docs)
         got_complete = sum(1 for d in docs if d.is_complete)
         got_inferred = sum(len(d.inferred_pages) for d in docs)
         d_doc = abs(got_docs - truth["doc_count"])
 
         if is_real:
-            passed = (d_doc == 0)
+            passed = d_doc == 0
             if d_doc == 0:
                 doc_exact += 5
             else:
@@ -84,10 +107,9 @@ def score_all(run_fn, params, fixtures, gt):
             if got_complete >= truth["complete_count"]:
                 complete_exact += 2
         else:
-            d_comp = (got_docs == truth["doc_count"]
-                      and got_complete == truth["complete_count"])
-            d_inf  = abs(got_inferred - truth["inferred_count"])
-            passed = (d_doc == 0 and d_comp)
+            d_comp = got_docs == truth["doc_count"] and got_complete == truth["complete_count"]
+            d_inf = abs(got_inferred - truth["inferred_count"])
+            passed = d_doc == 0 and d_comp
             if d_doc == 0:
                 doc_exact += 3
             if d_comp:
@@ -97,21 +119,18 @@ def score_all(run_fn, params, fixtures, gt):
 
         results[name] = "pass" if passed else "fail"
 
-    composite = (doc_exact + complete_exact
-                 - real_doc_delta * 3
-                 - syn_doc_delta
-                 - inf_delta)
+    composite = doc_exact + complete_exact - real_doc_delta * 3 - syn_doc_delta - inf_delta
     passes = sum(1 for v in results.values() if v == "pass")
     return results, composite, passes
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+
 def main():
     fixtures = load_fixtures()
     gt = load_ground_truth()
-    active_gt = {k: v for k, v in gt.items()
-                 if k in SYNTHETIC_NAMES or v["doc_count"] > 0}
+    active_gt = {k: v for k, v in gt.items() if k in SYNTHETIC_NAMES or v["doc_count"] > 0}
     active_fixtures = [fx for fx in fixtures if fx["name"] in active_gt]
     n = len(active_fixtures)
     print(f"Loaded {len(fixtures)} fixtures, {n} active\n")

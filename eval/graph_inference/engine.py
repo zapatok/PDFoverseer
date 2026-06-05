@@ -1,6 +1,6 @@
 """
 Graph-based inference engine using Hidden Markov Model + Viterbi decoding.
-Self-contained — does NOT import from core/. Follows eval/inference.py pattern.
+Self-contained — does NOT import from core/. Follows eval/inference_tuning/inference.py pattern.
 
 Public API:
     run_pipeline(reads: list[PageRead], params: dict) -> list[Document]
@@ -13,6 +13,7 @@ params keys (all required):
     boundary_bonus                                — Complete-doc transition boost
     period_prior                                  — Modal total prior weight
 """
+
 from __future__ import annotations
 
 import copy  # used in run_pipeline (Task 6)
@@ -86,8 +87,7 @@ def compute_log_emission(read: PageRead, state, params: dict) -> float:
     return math.log(max(residual / n_other_totals * scaled_conf, 1e-15))
 
 
-def _raw_transition_weight(state_from, state_to, params: dict,
-                            modal_total: int | None) -> float:
+def _raw_transition_weight(state_from, state_to, params: dict, modal_total: int | None) -> float:
     """Compute unnormalized transition weight (will be row-normalized later).
 
     Transition types:
@@ -136,8 +136,7 @@ def _raw_transition_weight(state_from, state_to, params: dict,
     return 1e-10
 
 
-def compute_log_transition(state_from, state_to, params: dict,
-                           modal_total: int | None) -> float:
+def compute_log_transition(state_from, state_to, params: dict, modal_total: int | None) -> float:
     """Log transition weight (unnormalized — for unit tests only).
     The actual Viterbi uses the row-normalized matrix from _build_log_transition_matrix.
     """
@@ -147,15 +146,15 @@ def compute_log_transition(state_from, state_to, params: dict,
 
 def _detect_modal_total(reads: list[PageRead]) -> int | None:
     """Find most common declared total from confirmed reads."""
-    totals = [r.total for r in reads
-              if r.total is not None and r.method not in ("failed", "excluded")]
+    totals = [
+        r.total for r in reads if r.total is not None and r.method not in ("failed", "excluded")
+    ]
     if not totals:
         return None
     return Counter(totals).most_common(1)[0][0]
 
 
-def _build_log_transition_matrix(states: list, params: dict,
-                                  modal_total: int | None) -> np.ndarray:
+def _build_log_transition_matrix(states: list, params: dict, modal_total: int | None) -> np.ndarray:
     """Precompute S×S log-transition matrix with row normalization.
 
     Raw weights are computed per-pair, then each row is normalized to sum to 1.0
@@ -165,8 +164,7 @@ def _build_log_transition_matrix(states: list, params: dict,
     raw = np.zeros((S, S), dtype=np.float64)
     for i in range(S):
         for j in range(S):
-            raw[i, j] = _raw_transition_weight(
-                states[i], states[j], params, modal_total)
+            raw[i, j] = _raw_transition_weight(states[i], states[j], params, modal_total)
     # Row-normalize
     row_sums = raw.sum(axis=1, keepdims=True)
     row_sums = np.maximum(row_sums, 1e-15)  # avoid division by zero
@@ -194,18 +192,16 @@ def viterbi_decode(reads: list[PageRead], params: dict) -> list:
 
     # Init
     log_prior = math.log(1.0 / (S - 1))
-    log_emit_0 = np.array([compute_log_emission(reads[0], states[s], params)
-                           for s in range(S)])
+    log_emit_0 = np.array([compute_log_emission(reads[0], states[s], params) for s in range(S)])
     V[0, 1:] = log_prior + log_emit_0[1:]
     V[0, 0] = _LOG_FLOOR + log_emit_0[0]
 
     # Recursion — vectorized inner loop
     for t in range(1, n):
-        log_emit_t = np.array([compute_log_emission(reads[t], states[s], params)
-                               for s in range(S)])
+        log_emit_t = np.array([compute_log_emission(reads[t], states[s], params) for s in range(S)])
         # scores[i, j] = V[t-1, i] + log_trans[i, j]
         scores = V[t - 1, :, np.newaxis] + log_trans  # shape (S, S)
-        backptr[t] = np.argmax(scores, axis=0)         # best prev for each state
+        backptr[t] = np.argmax(scores, axis=0)  # best prev for each state
         V[t] = np.max(scores, axis=0) + log_emit_t
 
     # Backtrace
@@ -250,9 +246,9 @@ def extract_documents(reads: list[PageRead], path: list) -> list[Document]:
 
         # New document boundary
         is_new_doc = (
-            t_curr != t_prev           # total changed
-            or c_curr == 1             # explicit restart
-            or c_curr <= c_prev        # regression (not a skip forward)
+            t_curr != t_prev  # total changed
+            or c_curr == 1  # explicit restart
+            or c_curr <= c_prev  # regression (not a skip forward)
         )
 
         if is_new_doc and not (t_curr == t_prev and c_curr == c_prev + 1):
@@ -267,8 +263,7 @@ def extract_documents(reads: list[PageRead], path: list) -> list[Document]:
     return docs
 
 
-def _make_doc(index: int, reads: list[PageRead], path: list,
-              start: int, end: int) -> Document:
+def _make_doc(index: int, reads: list[PageRead], path: list, start: int, end: int) -> Document:
     """Build a Document from a segment of the decoded path."""
     segment_states = path[start:end]
     segment_reads = reads[start:end]

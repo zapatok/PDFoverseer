@@ -4,7 +4,7 @@
 
 **Goal:** Build an isolated HMM+Viterbi inference module that decodes globally optimal document boundaries from raw OCR page reads, compatible with the existing eval/sweep harness.
 
-**Architecture:** Each PDF page is an observation of a hidden state `(curr, total)`. A Viterbi decoder finds the globally optimal state sequence, then document boundaries are extracted from state transitions. The module is self-contained in `eval/` (no imports from `core/`), following the established pattern of `eval/inference.py`.
+**Architecture:** Each PDF page is an observation of a hidden state `(curr, total)`. A Viterbi decoder finds the globally optimal state sequence, then document boundaries are extracted from state transitions. The module is self-contained in `eval/` (no imports from `core/`), following the established pattern of `eval/inference_tuning/inference.py`.
 
 **Tech Stack:** Pure Python + numpy (already a dependency). No new dependencies.
 
@@ -71,7 +71,7 @@ Expected: FAIL — `ImportError: cannot import name 'build_state_space'`
 # eval/graph_inference.py
 """
 Graph-based inference engine using Hidden Markov Model + Viterbi decoding.
-Self-contained — does NOT import from core/. Follows eval/inference.py pattern.
+Self-contained — does NOT import from core/. Follows eval/inference_tuning/inference.py pattern.
 
 Public API:
     run_pipeline(reads: list[PageRead], params: dict) -> list[Document]
