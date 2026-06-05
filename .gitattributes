@@ -1,0 +1,4 @@
+# Shell scripts must stay LF. core.autocrlf=true would otherwise convert them to
+# CRLF on checkout, and bash chokes on a `#!/bin/bash\r` shebang — which would
+# silently break every .claude/hooks/*.sh hook on a fresh clone.
+*.sh text eol=lf
