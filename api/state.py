@@ -46,8 +46,11 @@ def _cell_has_work(cell: dict) -> bool:
     silently revert its total (which sums ``per_file``) — the 2026-06-05
     incident. A cell is considered worked when it has any of: a full-cell OCR
     count, a cell-level override, a manual "marcar listo", a per-file override,
-    or a per-file OCR method (a single file OCR'd from the viewer leaves
-    ``ocr_count`` None, so the per-file methods must be inspected too).
+    a per-file OCR method (a single file OCR'd from the viewer leaves
+    ``ocr_count`` None, so the per-file methods must be inspected too), or
+    worker-signer marks (Feature 1 charla/chintegral counting, which
+    ``compute_worker_count`` links to ``per_file`` — clobbering per_file would
+    orphan the marks).
     """
     if cell.get("ocr_count") is not None:
         return True
@@ -56,6 +59,8 @@ def _cell_has_work(cell: dict) -> bool:
     if cell.get("confirmed"):
         return True
     if cell.get("per_file_overrides"):
+        return True
+    if cell.get("worker_marks"):
         return True
     per_file_method = cell.get("per_file_method") or {}
     return any(m and m != "filename_glob" for m in per_file_method.values())

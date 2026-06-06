@@ -304,6 +304,65 @@ def test_filename_rescan_still_refreshes_fresh_cell(manager):
     assert len(cell["per_file"]) == 5
 
 
+def test_worker_marks_alone_mark_cell_as_worked():
+    """A charla/chintegral cell counted only via worker marks (Feature 1) — no
+    OCR, override, 'listo' or per-file override — must still count as worked, so a
+    bulk filename re-scan does not clobber the per_file its marks are linked to."""
+    from api.state import _cell_has_work
+
+    cell = {
+        "filename_count": 5,
+        "per_file": {"a.pdf": 5},
+        "per_file_method": {"a.pdf": "filename_glob"},
+    }
+    assert _cell_has_work(cell) is False  # plain filename cell
+    cell["worker_marks"] = {"a.pdf": [{"page": 0, "count": 12}]}
+    assert _cell_has_work(cell) is True
+
+
+def test_filename_rescan_preserves_worker_counted_cell(manager):
+    """End-to-end: a worker-counted cell that is NOT yet marked 'listo' survives a
+    bulk filename re-scan that brings new files — its per_file is left intact so the
+    worker total stays correct."""
+    from core.scanners.base import ConfidenceLevel, ScanResult
+
+    seed = ScanResult(
+        count=1,
+        confidence=ConfidenceLevel.HIGH,
+        method="filename_glob",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=1,
+        duration_ms=1,
+        per_file={"charla1.pdf": 1},
+    )
+    manager.apply_filename_result("2026-04", "HRB", "charla", seed)
+    manager.apply_worker_count(
+        "2026-04",
+        "HRB",
+        "charla",
+        marks={"charla1.pdf": [{"page": 0, "count": 12}]},
+        status="en_progreso",
+    )
+    rescan = ScanResult(
+        count=2,
+        confidence=ConfidenceLevel.HIGH,
+        method="filename_glob",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=2,
+        duration_ms=1,
+        per_file={"charla1.pdf": 1, "charla2.pdf": 1},
+    )
+    manager.apply_filename_result("2026-04", "HRB", "charla", rescan)
+
+    cell = manager.get_session_state("2026-04")["cells"]["HRB"]["charla"]
+    assert cell["per_file"] == {"charla1.pdf": 1}, "worker cell per_file was clobbered"
+    assert compute_worker_count(cell) == 12
+
+
 def test_apply_per_file_ocr_result_merges_one_file(manager):
     """rev-2 #1: a single-file OCR merge touches only that file's count, method
     and near-matches; everything else in the cell is preserved."""
