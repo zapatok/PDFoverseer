@@ -19,16 +19,26 @@ import sys
 from pathlib import Path
 
 import openpyxl
+from openpyxl.drawing.image import Image as XLImage
 from openpyxl.workbook.defined_name import DefinedName
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SRC = PROJECT_ROOT / "data" / "output_sample" / "RESUMEN_ABRIL_2026.xlsx"
 DST = PROJECT_ROOT / "data" / "templates" / "RESUMEN_template_v1.xlsx"
+LOGO = PROJECT_ROOT / "data" / "templates" / "logoConstructoraSur.png"
+
+# NOTE: the shipped RESUMEN_template_v1.xlsx is the AUTHORITATIVE artifact and
+# carries hand-patches not reproduced here (e.g. the 2026-06-04 O11/O12 #REF!
+# fix). Re-running this recipe rebuilds from the sample and would drop those —
+# treat the committed .xlsx as source of truth; keep this script in sync as a
+# best-effort recipe, do not blindly regenerate over the live template.
+
+# Rows that exist in the sample but map to no canonical sigla (no named range).
+# They ship as an explicit 0 in every hospital column so the report never shows
+# a blank where the other hospitals show 0 (Daniel's 2026-06-06 report).
+ORPHAN_ROWS: tuple[int, ...] = (22, 26)
 
 # Sigla → row index in the worksheet.
-# Rows 22 (Revisión Documentación) and 26 (Espacios Confinados) exist in the
-# sample but don't map to any of our 18 canonical siglas — they stay as
-# orphan rows in the template, no named range.
 SIGLA_ROW: dict[str, int] = {
     "reunion": 10,
     "irl": 11,
@@ -84,6 +94,20 @@ def build() -> tuple[int, int]:
     # CPHS (correct acronym); the internal sigla key stays "chps".
     ws.cell(row=31, column=2, value=("CPHS — Comité Paritario de Higiene y Seguridad"))
     ws.cell(row=31, column=6, value="—")  # periodicidad column
+
+    # B2 holds a stale #VALUE! in the sample (a missing logo reference). Clear it
+    # and drop in the constructora logo, ~110x110 px, anchored in the B2:D5 box.
+    ws["B2"] = None
+    if LOGO.exists():
+        img = XLImage(str(LOGO))
+        img.width = 110
+        img.height = 110
+        ws.add_image(img, "B2")
+
+    # Orphan rows ship as explicit 0 in every hospital cantidad column.
+    for row in ORPHAN_ROWS:
+        for col in CANTIDAD_COL.values():
+            ws[f"{col}{row}"] = 0
 
     # Cantidad named ranges + blank pre-existing values
     cantidad_count = 0
@@ -146,6 +170,18 @@ def verify() -> None:
             val = ws[f"{col}{row}"].value
             if val is not None:
                 raise AssertionError(f"Cell {col}{row} should be blank in template, has {val!r}")
+
+    # Orphan rows must ship as 0 in every hospital column (no blanks)
+    for col in CANTIDAD_COL.values():
+        for row in ORPHAN_ROWS:
+            if ws[f"{col}{row}"].value != 0:
+                raise AssertionError(
+                    f"Orphan cell {col}{row} should be 0, has {ws[f'{col}{row}'].value!r}"
+                )
+
+    # The stale #VALUE! logo cell must be cleared
+    if ws["B2"].value is not None:
+        raise AssertionError(f"B2 should be cleared (logo lives there), has {ws['B2'].value!r}")
 
     # HH formulas: row 13 = chgen ×0.25, row 14 = chintegral ×0.5
     for col in HH_COL.values():
