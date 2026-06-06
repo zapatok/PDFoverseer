@@ -128,9 +128,12 @@ def test_apply_ocr_result_with_filename_glob_fallback_method(manager):
     assert cell["method"] == "filename_glob"
 
 
-def test_apply_filename_result_clears_stale_near_matches(manager):
-    """A pase-1 re-scan clears OCR near-matches (Bug B): a stale entry points
-    the DetailPanel's 'Ver portada' at a PDF the fresh per_file no longer has."""
+def test_filename_rescan_preserves_near_matches_for_ocr_cell(manager):
+    """Supersedes the old Bug-B "clear on pase-1" behavior: the 2026-06-05 fix
+    stops a bulk filename re-scan from touching an OCR-counted cell's per_file,
+    so its near-matches stay consistent with that per_file and must be preserved
+    too. A fresh per_file (and fresh near-matches) only land on an intentional
+    re-OCR of the cell, not on the bulk "add a hospital" pass."""
     from core.scanners.base import (
         ConfidenceLevel,
         NearMatchEntry,
@@ -166,7 +169,8 @@ def test_apply_filename_result_clears_stale_near_matches(manager):
 
     manager.apply_filename_result("2026-04", "HRB", "odi", _filename_result(1))
     cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
-    assert cell["near_matches"] == []  # pase 1 cleared it
+    assert cell["near_matches"]  # preserved — the OCR cell was not clobbered
+    assert cell["per_file"] == {"old.pdf": 1}  # OCR per_file intact too
 
 
 def test_apply_results_write_per_file_method(manager):
@@ -208,6 +212,96 @@ def test_apply_results_write_per_file_method(manager):
         "a.pdf": "header_band_anchors",
         "b.pdf": "header_band_anchors",
     }
+
+
+def test_filename_rescan_preserves_full_cell_ocr_count(manager):
+    """Regression (real incident 2026-06-05): 'Escanear todos los hospitales'
+    runs pase 1 over EVERY cell — including hospitals already counted by OCR.
+    It must NOT overwrite an OCR-counted cell's per_file with filename counts,
+    or the displayed total (which sums per_file) silently reverts. Adding HLL
+    reset HRB/art from its OCR count back to the filename count."""
+    from api.state import compute_cell_count
+    from core.scanners.base import ConfidenceLevel, ScanResult
+
+    ocr = ScanResult(
+        count=3,
+        confidence=ConfidenceLevel.HIGH,
+        method="header_band_anchors",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=2,
+        duration_ms=1,
+        per_file={"big.pdf": 2, "small.pdf": 1},
+    )
+    manager.apply_ocr_result("2026-04", "HRB", "art", ocr)
+    assert compute_cell_count(manager.get_session_state("2026-04")["cells"]["HRB"]["art"]) == 3
+
+    # A later bulk pase-1 re-scan sees the same 2 files → 1 doc each by name.
+    rescan = ScanResult(
+        count=2,
+        confidence=ConfidenceLevel.HIGH,
+        method="filename_glob",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=2,
+        duration_ms=1,
+        per_file={"big.pdf": 1, "small.pdf": 1},
+    )
+    manager.apply_filename_result("2026-04", "HRB", "art", rescan)
+
+    cell = manager.get_session_state("2026-04")["cells"]["HRB"]["art"]
+    assert cell["per_file"] == {"big.pdf": 2, "small.pdf": 1}, "OCR per_file was clobbered"
+    assert cell["ocr_count"] == 3
+    assert cell["method"] == "header_band_anchors"
+    assert compute_cell_count(cell) == 3  # not 2
+    # The filename hint may still refresh, but it must not drive the count.
+    assert cell["filename_count"] == 2
+
+
+def test_filename_rescan_preserves_per_file_ocr_only_cell(manager):
+    """A cell OCR'd file-by-file from the viewer (rev-2 #1) carries per_file OCR
+    data while ocr_count stays None. A bulk filename re-scan must still leave it
+    intact — the guard cannot key on ocr_count alone."""
+    manager.apply_filename_result("2026-04", "HRB", "art", _filename_result(2))
+    manager.apply_per_file_ocr_result(
+        "2026-04",
+        "HRB",
+        "art",
+        "big.pdf",
+        count=7,
+        method="header_band_anchors",
+        near_matches=[],
+    )
+    manager.apply_filename_result("2026-04", "HRB", "art", _filename_result(2))
+
+    cell = manager.get_session_state("2026-04")["cells"]["HRB"]["art"]
+    assert cell["per_file"].get("big.pdf") == 7, "per-file OCR count was reset by re-scan"
+    assert cell["per_file_method"].get("big.pdf") == "header_band_anchors"
+
+
+def test_filename_rescan_still_refreshes_fresh_cell(manager):
+    """A cell with no OCR/manual work is still fully refreshed by a re-scan, so
+    a brand-new hospital (all cells fresh) and added files are picked up."""
+    from core.scanners.base import ConfidenceLevel, ScanResult
+
+    manager.apply_filename_result("2026-04", "HLL", "art", _filename_result(2))
+    bigger = ScanResult(
+        count=5,
+        confidence=ConfidenceLevel.HIGH,
+        method="filename_glob",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=5,
+        duration_ms=1,
+        per_file={"a.pdf": 1, "b.pdf": 1, "c.pdf": 1, "d.pdf": 1, "e.pdf": 1},
+    )
+    manager.apply_filename_result("2026-04", "HLL", "art", bigger)
+    cell = manager.get_session_state("2026-04")["cells"]["HLL"]["art"]
+    assert cell["filename_count"] == 5
+    assert len(cell["per_file"]) == 5
 
 
 def test_apply_per_file_ocr_result_merges_one_file(manager):

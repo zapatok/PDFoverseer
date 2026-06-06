@@ -36,6 +36,31 @@ def compute_cell_count(cell: dict) -> int:
     return cell.get("ocr_count") or cell.get("filename_count") or 0
 
 
+def _cell_has_work(cell: dict) -> bool:
+    """True when a cell carries OCR results or user edits that a bulk filename
+    re-scan must not overwrite.
+
+    A pase-1 re-scan ("Escanear todos los hospitales", e.g. to add a new
+    hospital) runs over every cell. For a cell that was already counted by OCR
+    or touched by the user, overwriting ``per_file`` with filename counts would
+    silently revert its total (which sums ``per_file``) — the 2026-06-05
+    incident. A cell is considered worked when it has any of: a full-cell OCR
+    count, a cell-level override, a manual "marcar listo", a per-file override,
+    or a per-file OCR method (a single file OCR'd from the viewer leaves
+    ``ocr_count`` None, so the per-file methods must be inspected too).
+    """
+    if cell.get("ocr_count") is not None:
+        return True
+    if cell.get("user_override") is not None:
+        return True
+    if cell.get("confirmed"):
+        return True
+    if cell.get("per_file_overrides"):
+        return True
+    per_file_method = cell.get("per_file_method") or {}
+    return any(m and m != "filename_glob" for m in per_file_method.values())
+
+
 def compute_worker_count(cell: dict) -> int:
     """Total de trabajadores firmantes de una celda charla/chintegral.
 
@@ -139,9 +164,31 @@ class SessionManager:
         """Persist a filename_glob scanner result. Touches the filename pass
         fields and shared metadata (method, confidence, flags, errors,
         breakdown). Never touches ocr_count, user_override, or override_note.
+
+        A bulk re-scan runs over every cell, including ones already counted by
+        OCR or edited by the user (e.g. "Escanear todos los hospitales" to add a
+        new hospital). For those (see :func:`_cell_has_work`) only the plain
+        filename hint and scan telemetry are refreshed; ``per_file``,
+        ``per_file_method``, ``near_matches`` and the OCR/manual state are left
+        intact so the displayed count never silently regresses (2026-06-05).
         """
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+
+        if _cell_has_work(cell):
+            cell["filename_count"] = result.count
+            cell["files_scanned"] = result.files_scanned
+            cell["duration_ms_filename"] = result.duration_ms
+            cell.setdefault("per_file_overrides", {})
+            cell.setdefault("manual_entry", False)
+            cell.setdefault("ocr_count", None)
+            cell.setdefault("user_override", None)
+            cell.setdefault("override_note", None)
+            cell.setdefault("excluded", False)
+            cell.setdefault("confirmed", False)
+            update_session_state(self._conn, session_id, state_json=json.dumps(state))
+            return
+
         cell["filename_count"] = result.count
         cell["confidence"] = result.confidence.value
         cell["method"] = result.method
@@ -320,8 +367,12 @@ class SessionManager:
         """
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
-        cell.setdefault("per_file", {})[filename] = count
-        cell.setdefault("per_file_method", {})[filename] = method
+        # per_file may be an explicit None (a filename scan can leave it unset),
+        # so setdefault is not enough — coerce to a dict before assigning.
+        per_file = cell["per_file"] = cell.get("per_file") or {}
+        per_file[filename] = count
+        per_file_method = cell["per_file_method"] = cell.get("per_file_method") or {}
+        per_file_method[filename] = method
         others = [nm for nm in (cell.get("near_matches") or []) if nm.get("pdf_name") != filename]
         cell["near_matches"] = others + list(near_matches or [])
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
