@@ -81,6 +81,37 @@ def test_writer_priority_override_over_ocr_over_filename(tmp_path):
     assert resolve_cell_value({"user_override": 0, "ocr_count": 16, "filename_count": 1}) == 0
 
 
+def test_resolve_cell_value_honors_per_file_overrides():
+    """An Excel cell must use the same count as the UI (compute_cell_count): a
+    per-file override on a compilation (1 PDF, filename_count 1, override says 486)
+    must yield 486, not 1. Regression for the 2026-06-06 Excel mismatch where
+    per-file-corrected cells (charla/art/...) wrote their stale filename count."""
+    from core.excel.writer import resolve_cell_value
+
+    cell = {
+        "filename_count": 1,
+        "ocr_count": None,
+        "user_override": None,
+        "per_file": {"compilation.pdf": 1},
+        "per_file_overrides": {"compilation.pdf": 486},
+        "confirmed": True,
+    }
+    assert resolve_cell_value(cell) == 486
+
+
+def test_resolve_cell_value_sums_per_file():
+    from core.excel.writer import resolve_cell_value
+
+    assert resolve_cell_value({"per_file": {"a.pdf": 3, "b.pdf": 2}, "filename_count": 5}) == 5
+    # a per-file override on one file is layered over per_file
+    assert (
+        resolve_cell_value(
+            {"per_file": {"a.pdf": 3, "b.pdf": 2}, "per_file_overrides": {"a.pdf": 10}}
+        )
+        == 12
+    )
+
+
 def test_writer_uses_priority_in_generate_resumen(tmp_path):
     """Smoke test: generate_resumen uses resolve_cell_value internally."""
     from core.excel.writer import generate_resumen

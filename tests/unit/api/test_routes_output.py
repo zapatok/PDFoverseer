@@ -123,6 +123,48 @@ def test_worker_warnings_flag_en_progreso_cell(client, tmp_path):
     assert ("HLL", "charla") in warned
 
 
+def test_build_cell_values_emits_zero_for_uncounted_cells():
+    """Cells absent from session state (a hospital not yet counted) must be written
+    as 0, not left blank. Regression for the 2026-06-06 empty-cell report."""
+    from api.routes.output import _build_cell_values
+    from core.domain import HOSPITALS, SIGLAS
+
+    state = {"cells": {"HLL": {"art": {"user_override": 5}}}}
+    vals = _build_cell_values(state)
+    assert vals["HLL_art_count"] == 5
+    assert vals["HLU_reunion_count"] == 0  # never counted → explicit 0
+    assert len(vals) == len(HOSPITALS) * len(SIGLAS)
+
+
+def test_build_cell_values_skips_excluded():
+    from api.routes.output import _build_cell_values
+    from core.domain import HOSPITALS, SIGLAS
+
+    state = {"cells": {"HLL": {"art": {"user_override": 5, "excluded": True}}}}
+    vals = _build_cell_values(state)
+    assert "HLL_art_count" not in vals  # excluded → skipped, left blank
+    assert len(vals) == len(HOSPITALS) * len(SIGLAS) - 1
+
+
+def test_build_cell_values_honors_per_file_overrides():
+    """End-to-end of the writer fix at the route layer: a per-file-corrected cell
+    emits the corrected count, not the stale filename count."""
+    from api.routes.output import _build_cell_values
+
+    state = {
+        "cells": {
+            "HLL": {
+                "charla": {
+                    "filename_count": 1,
+                    "per_file": {"comp.pdf": 1},
+                    "per_file_overrides": {"comp.pdf": 486},
+                }
+            }
+        }
+    }
+    assert _build_cell_values(state)["HLL_charla_count"] == 486
+
+
 def test_worker_warnings_silent_when_no_pdfs(client, tmp_path):
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     mgr = client.app.dependency_overrides[get_manager]()

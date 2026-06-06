@@ -11,8 +11,9 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from api.routes.sessions import get_manager
-from api.state import SessionManager, compute_worker_count
+from api.state import SessionManager, compute_cell_count, compute_worker_count
 from core.db.historical_repo import upsert_count
+from core.domain import HOSPITALS, SIGLAS
 from core.excel.writer import generate_resumen
 
 router = APIRouter()
@@ -48,13 +49,20 @@ def _output_dir() -> Path:
 
 
 def _build_cell_values(state: dict) -> dict[str, int]:
-    """Translate session.cells into named-range-keyed dict for the writer."""
+    """Translate session.cells into named-range-keyed dict for the writer.
+
+    Iterates the full canonical HOSPITALS × SIGLAS grid (not just the cells
+    present in state) so a hospital not yet counted writes explicit 0s instead of
+    leaving the template blank. Excluded cells return None and are skipped.
+    """
     from core.excel.writer import resolve_cell_value
 
+    cells = state.get("cells", {})
     out: dict[str, int] = {}
-    for hosp, sigla_map in state.get("cells", {}).items():
-        for sigla, cell in sigla_map.items():
-            value = resolve_cell_value(cell)
+    for hosp in HOSPITALS:
+        hosp_cells = cells.get(hosp, {})
+        for sigla in SIGLAS:
+            value = resolve_cell_value(hosp_cells.get(sigla, {}))
             if value is None:
                 continue
             out[f"{hosp}_{sigla}_count"] = value
@@ -136,15 +144,7 @@ def generate(
         for sigla, cell in hosp_cells.items():
             if cell.get("excluded"):
                 continue
-            effective_count = (
-                cell.get("user_override")
-                if cell.get("user_override") is not None
-                else cell.get("ocr_count")
-                if cell.get("ocr_count") is not None
-                else cell.get("filename_count")
-                if cell.get("filename_count") is not None
-                else cell.get("count", 0)
-            )
+            effective_count = compute_cell_count(cell)
             upsert_count(
                 mgr._conn,
                 year=year,

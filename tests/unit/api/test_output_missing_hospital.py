@@ -1,71 +1,48 @@
-"""Regression guard for FASE 4 pre-flight: _build_cell_values tolerates a
-hospital with no cells in session state.
+"""Contract for _build_cell_values: it emits the FULL canonical grid.
 
-Pre-condition for HLL manual-entry flow: when HLL has no normalized folder
-and the user generates Excel without filling values, the writer must skip
-HLL named ranges (leave template defaults in place) without error.
+Updated 2026-06-06: a hospital or cell with no data must write an explicit 0 — not
+be skipped — so the RESUMEN shows 0 instead of a blank for anything not yet counted
+(Daniel's report: uncounted cells appeared empty). Excluded cells are the only ones
+still skipped. This supersedes the earlier "skip missing hospital, leave template
+default" behavior.
 """
 
 from api.routes.output import _build_cell_values
+from core.domain import HOSPITALS, SIGLAS
+
+_GRID = len(HOSPITALS) * len(SIGLAS)
 
 
-def test_build_cell_values_skips_missing_hospital():
-    """3 hospitales con cells, HLL ausente → output dict no contiene HLL keys."""
-    state = {
-        "cells": {
-            "HPV": {
-                f"sigla_{i}": {
-                    "filename_count": 5,
-                    "ocr_count": None,
-                    "user_override": None,
-                    "excluded": False,
-                }
-                for i in range(1, 19)
-            },
-            "HRB": {
-                f"sigla_{i}": {
-                    "filename_count": 3,
-                    "ocr_count": None,
-                    "user_override": None,
-                    "excluded": False,
-                }
-                for i in range(1, 19)
-            },
-            "HLU": {
-                f"sigla_{i}": {
-                    "filename_count": 1,
-                    "ocr_count": None,
-                    "user_override": None,
-                    "excluded": False,
-                }
-                for i in range(1, 19)
-            },
-            # HLL deliberately omitted
+def _cells(filename_count: int) -> dict:
+    return {
+        sigla: {
+            "filename_count": filename_count,
+            "ocr_count": None,
+            "user_override": None,
+            "excluded": False,
         }
+        for sigla in SIGLAS
     }
 
+
+def test_build_cell_values_emits_zero_for_missing_hospital():
+    """3 hospitals with cells, HLL omitted → HLL keys present and 0 (not skipped)."""
+    state = {"cells": {"HPV": _cells(5), "HRB": _cells(3), "HLU": _cells(1)}}
     out = _build_cell_values(state)
-
-    # Sanity: 3 hospitals × 18 siglas = 54 keys (assuming all values are non-None
-    # which they are: filename_count >= 1 for every cell).
-    assert len(out) == 54
-    # HLL keys must not be present
-    assert not any(k.startswith("HLL_") for k in out.keys())
-    # Other hospitals are present
-    assert "HPV_sigla_1_count" in out
-    assert "HRB_sigla_1_count" in out
-    assert "HLU_sigla_1_count" in out
+    assert len(out) == _GRID  # full grid, nothing skipped
+    assert all(out[f"HLL_{s}_count"] == 0 for s in SIGLAS)  # missing hospital → 0
+    assert out[f"HPV_{SIGLAS[0]}_count"] == 5
 
 
-def test_build_cell_values_handles_completely_empty_state():
-    """state["cells"] = {} → output dict is empty (no crash)."""
-    state = {"cells": {}}
-    out = _build_cell_values(state)
-    assert out == {}
+def test_build_cell_values_completely_empty_state_emits_all_zeros():
+    """state["cells"] = {} → full grid of 0s (no crash, no blanks)."""
+    out = _build_cell_values({"cells": {}})
+    assert len(out) == _GRID
+    assert set(out.values()) == {0}
 
 
 def test_build_cell_values_handles_missing_cells_key():
-    """state without "cells" key → output dict is empty (no crash)."""
-    state = {}
-    out = _build_cell_values(state)
-    assert out == {}
+    """state without a "cells" key → full grid of 0s (no crash)."""
+    out = _build_cell_values({})
+    assert len(out) == _GRID
+    assert set(out.values()) == {0}
