@@ -3,13 +3,27 @@
 Takes the production RESUMEN_ABRIL_2026.xlsx as a layout base, then:
   1. Adds 72 named ranges for cantidad cells (4 hospitals × 18 siglas)
   2. Adds 8 named ranges for workforce cells (chgen + chintegral × 4 hospitals)
-  3. Blanks any pre-existing cantidad values so the template ships clean
-  4. Adds a CHPS row (sigla #18) at row 31 — the sample doesn't include it
+  3. Adds the `report_title` named range (E2) for the dynamic month title
+  4. Blanks any pre-existing cantidad values so the template ships clean
+  5. Adds a CHPS row (sigla #18) at row 31 — the sample doesn't include it
+  6. Clears the stale #VALUE! in B2 and drops in the constructora logo
+  7. Fills the orphan rows (22, 26) with 0 in every hospital column
 
 Run from project root:
-    python data/templates/build_template_v1.py
+    python data/templates/build_template_v1.py --force
 
-Re-running is idempotent. Bump filename suffix when shipping a v2.
+⚠️ AUTHORITATIVE ARTIFACT IS THE SHIPPED .xlsx, NOT THIS SCRIPT. The committed
+RESUMEN_template_v1.xlsx carries hand-patches this bootstrap does NOT reproduce
+(they were applied directly to the .xlsx and verified via render):
+  - 2026-06-04: O11/O12 #REF! formula fix.
+  - 2026-06-06: logo inset (90px OneCellAnchor), bodega (row 18) font, header
+    merges narrowed to the table edge + Q:Z borders cleared, number formats
+    (cantidad #,##0 / HH #,##0.00), worker rows 29-30 restyled, consistent
+    border grid.
+Re-running rebuilds from the sample and would DROP all of the above, producing an
+outdated template. `main()` refuses to overwrite an existing template unless
+`--force` is given. Treat this script as the historical v1 scaffold; for real
+changes edit the .xlsx (or build a fresh v2).
 """
 
 from __future__ import annotations
@@ -128,6 +142,10 @@ def build() -> tuple[int, int]:
             _set_or_replace_name(wb, name, ref)
             workforce_count += 1
 
+    # Title named range — the output route writes the session's month into E2
+    # (the sample hardcodes "MARZO 2026"); without this range the title stays static.
+    _set_or_replace_name(wb, "report_title", f"'{sheet_name}'!$E$2")
+
     # Fix HH formula + blank stale workforce values (spec §8.2).
     # The sample's H14 points to row 29 (chgen); chintegral lives in row 30.
     ws["H14"] = "=H30*0.5"
@@ -198,6 +216,14 @@ def verify() -> None:
 
 
 def main() -> int:
+    if DST.exists() and "--force" not in sys.argv:
+        print(
+            f"Refusing to overwrite the authoritative template:\n  {DST}\n"
+            "It carries hand-patches this bootstrap does not reproduce (see module "
+            "docstring). Pass --force only if you intend to rebuild from the sample "
+            "and re-apply those patches by hand."
+        )
+        return 1
     cant, work = build()
     verify()
     print(f"Built: {DST}")
