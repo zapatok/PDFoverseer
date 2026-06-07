@@ -48,6 +48,44 @@ def _output_dir() -> Path:
     )
 
 
+_MESES = (
+    "ENERO",
+    "FEBRERO",
+    "MARZO",
+    "ABRIL",
+    "MAYO",
+    "JUNIO",
+    "JULIO",
+    "AGOSTO",
+    "SEPTIEMBRE",
+    "OCTUBRE",
+    "NOVIEMBRE",
+    "DICIEMBRE",
+)
+
+_REPORT_TITLE_TMPL = (
+    "RESUMEN EJECUTIVO ACTIVIDADES DE PREVENCIÓN DE RIESGOS\n"
+    "{mes} {year}\n"
+    "PROYECTO RED LOS RÍOS - LOS LAGOS"
+)
+
+
+def _build_report_title(year: int, month: int) -> str:
+    """Build the report's header title for a session's month.
+
+    The month/year line is dynamic; the project line is constant. Replaces the
+    template's hardcoded 'MARZO 2026' so every month's RESUMEN reads correctly.
+
+    Args:
+        year: session year.
+        month: session month (1-12).
+
+    Returns:
+        The three-line title string for cell E2 (named range ``report_title``).
+    """
+    return _REPORT_TITLE_TMPL.format(mes=_MESES[month - 1], year=year)
+
+
 def _build_cell_values(state: dict) -> dict[str, int]:
     """Translate session.cells into named-range-keyed dict for the writer.
 
@@ -128,6 +166,7 @@ def generate(
         raise HTTPException(404, f"Session not found: {session_id}")
     cell_values = _build_cell_values(state)
     cell_values.update(_build_worker_values(state))
+    cell_values["report_title"] = _build_report_title(int(session_id[:4]), int(session_id[5:7]))
     output_dir = _output_dir()
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"RESUMEN_{session_id}.xlsx"

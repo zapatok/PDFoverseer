@@ -123,6 +123,33 @@ def test_worker_warnings_flag_en_progreso_cell(client, tmp_path):
     assert ("HLL", "charla") in warned
 
 
+def test_build_report_title_uses_session_month():
+    """The report title must reflect the session's month/year, not the template's
+    hardcoded 'MARZO 2026'. The project line stays constant."""
+    from api.routes.output import _build_report_title
+
+    assert _build_report_title(2026, 5) == (
+        "RESUMEN EJECUTIVO ACTIVIDADES DE PREVENCIÓN DE RIESGOS\n"
+        "MAYO 2026\n"
+        "PROYECTO RED LOS RÍOS - LOS LAGOS"
+    )
+    assert "ABRIL 2026" in _build_report_title(2026, 4)
+    assert "DICIEMBRE 2027" in _build_report_title(2027, 12)
+
+
+def test_output_writes_dynamic_month_title(client, tmp_path):
+    """End-to-end: the generated RESUMEN's title cell shows the session month."""
+    import openpyxl
+
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    out = client.post("/api/sessions/2026-04/output", json={}).json()
+    wb = openpyxl.load_workbook(out["output_path"])
+    sheet, coord = list(wb.defined_names["report_title"].destinations)[0]
+    val = str(wb[sheet][coord.replace("$", "")].value)
+    assert "ABRIL 2026" in val
+    assert "MARZO" not in val
+
+
 def test_build_cell_values_emits_zero_for_uncounted_cells():
     """Cells absent from session state (a hospital not yet counted) must be written
     as 0, not left blank. Regression for the 2026-06-06 empty-cell report."""
