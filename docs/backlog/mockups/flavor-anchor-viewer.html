@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mockup — visor de anclas + autoría de flavor (v1)</title>
+<style>
+  :root{
+    --bg:#111113;--panel:#18191b;--panel2:#212225;--border:#363a3f;--border2:#43484e;
+    --text:#edeef0;--muted:#b0b4ba;--subtle:#777b84;
+    --accent:#3e63dd;--indigo11:#9eb1ff;--indigoA:rgba(62,99,221,.16);--indigoB:rgba(62,99,221,.45);
+    --jade9:#29a383;--jade11:#41c4a0;--jadeA:rgba(41,163,131,.16);--jadeB:rgba(41,163,131,.42);
+    --amber11:#f1a10d;--amberA:rgba(255,197,61,.13);--amberB:rgba(255,197,61,.40);
+    --ruby11:#ff9592;--rubyA:rgba(229,72,77,.14);--rubyB:rgba(229,72,77,.40);
+    --iris9:#5b5bd6;--iris11:#b1a9ff;--irisA:rgba(91,91,214,.18);--irisB:rgba(91,91,214,.45);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;padding:22px}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;max-width:944px}
+  .mhead{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)}
+  .mhead .t{font-size:13px;font-weight:600}
+  .mhead .t .mono{font-family:"JetBrains Mono",monospace;color:var(--muted);font-weight:400}
+  .nav{display:flex;align-items:center;gap:10px}
+  .navbtn{font-size:12px;color:var(--muted);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer;background:transparent}
+  .nidx{font-size:11.5px;color:var(--subtle);font-variant-numeric:tabular-nums}
+  .x{color:var(--subtle);font-size:16px;margin-left:4px;cursor:pointer}
+
+  .body{display:flex}
+  .left{width:354px;padding:18px;border-right:1px solid var(--border);background:var(--bg)}
+  .right{flex:1;padding:18px 20px}
+
+  .cover{border:1px solid var(--border2);border-radius:6px;background:#1d1e20;padding:12px;height:420px;display:flex;flex-direction:column;gap:8px}
+  .cv-band{border:1px dashed var(--indigoB);border-radius:4px;padding:8px;background:var(--indigoA)}
+  .cv-band .tag{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--indigo11);margin-bottom:5px}
+  .cv-title{font-size:12px;font-weight:700;color:#cfd2d6;letter-spacing:.02em}
+  .cv-org{font-size:9.5px;color:#9aa0a6;margin-top:1px}
+  .cv-row{display:flex;gap:6px;margin-top:5px}
+  .cv-row .k{font-size:8.5px;color:#80868c;width:64px}
+  .cv-row .l{flex:1;border-bottom:1px solid #3a3c40}
+  .cv-grid{margin-top:auto;display:grid;grid-template-columns:repeat(5,1fr);gap:3px}
+  .cv-grid span{height:13px;background:#26282b;border:1px solid #34373b;border-radius:2px}
+  .cv-cap{font-size:10px;color:var(--subtle);text-align:center;margin-top:9px}
+
+  h4{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--subtle);margin:0 0 9px}
+  h4 .n{color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0}
+  h4 .mono{font-family:"JetBrains Mono",monospace}
+  .sec{margin-bottom:18px}
+
+  .anchor{display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0;font-family:"JetBrains Mono",monospace}
+  .anchor .mk{width:15px;text-align:center;font-weight:700}
+  .anchor.ok .mk{color:var(--jade11)} .anchor.ok{color:var(--text)}
+  .anchor.no .mk{color:var(--ruby11)} .anchor.no{color:var(--subtle)}
+
+  .tokens{display:flex;flex-wrap:wrap;gap:6px}
+  .tok{font-size:11.5px;font-family:"JetBrains Mono",monospace;border-radius:6px;padding:3.5px 9px;border:1px solid var(--border2);color:var(--muted);background:var(--panel2);cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:6px}
+  .tok.sel{background:var(--irisA);border-color:var(--irisB);color:var(--iris11)}
+  .tok .c{color:var(--iris11);font-size:10px}
+  .hint{font-size:11px;color:var(--subtle);margin-top:8px}
+
+  .author{border:1px solid var(--border);border-radius:10px;padding:15px 16px;background:var(--bg)}
+  .agrid{display:grid;grid-template-columns:84px 1fr;gap:11px 14px;align-items:center}
+  .agrid > .lab{font-size:11.5px;color:var(--muted)}
+  .agrid > .lab.top{align-self:start;padding-top:5px}
+  .inp{background:var(--panel2);border:1px solid var(--border2);border-radius:6px;padding:6px 9px;font-size:12.5px;color:var(--text);font-family:"JetBrains Mono",monospace;width:170px}
+  .stepper{display:inline-flex;align-items:center;border:1px solid var(--border2);border-radius:6px;overflow:hidden;width:max-content}
+  .stepper b{padding:5px 14px;font-size:12.5px;font-variant-numeric:tabular-nums}
+  .stepper button{border:0;background:var(--panel2);color:var(--muted);padding:5px 11px;cursor:pointer;font-size:13px}
+  .selanchors{display:flex;flex-wrap:wrap;gap:6px}
+  .pill{font-size:11px;font-family:"JetBrains Mono",monospace;border-radius:6px;padding:3px 8px;background:var(--irisA);color:var(--iris11);border:1px solid var(--irisB);display:inline-flex;gap:6px;align-items:center}
+  .pill .rm{opacity:.55}
+
+  .checks{margin-top:14px}
+  .check{display:flex;align-items:flex-start;gap:7px;font-size:11.5px;padding:7px 10px;border-radius:7px;margin-bottom:7px;line-height:1.4}
+  .check.ok{background:var(--jadeA);color:var(--jade11);border:1px solid var(--jadeB)}
+  .check.warn{background:var(--amberA);color:var(--amber11);border:1px solid var(--amberB)}
+  .check .ic{font-weight:700}
+  .actions{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+  .preview{font-size:12px;color:var(--muted)}
+  .preview b{color:var(--text);font-variant-numeric:tabular-nums}
+  .btns{display:flex;gap:9px}
+  .btn{background:var(--accent);color:#fff;border:0;border-radius:7px;padding:7px 16px;font-size:12.5px;font-weight:600;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--border2)}
+</style>
+</head>
+<body>
+  <div class="modal">
+    <div class="mhead">
+      <div class="t">Casi-match · chintegral — <span class="mono">capacitacion_acra_2026-05-12.pdf · p.1</span></div>
+      <div class="nav">
+        <span class="navbtn">‹ Anterior</span>
+        <span class="nidx">1 de 4</span>
+        <span class="navbtn">Siguiente ›</span>
+        <span class="x">✕</span>
+      </div>
+    </div>
+    <div class="body">
+      <div class="left">
+        <div class="cover">
+          <div class="cv-band">
+            <div class="tag">banda que lee el OCR (top ⅓)</div>
+            <div class="cv-title">REGISTRO DE CAPACITACIÓN</div>
+            <div class="cv-org">ACRA Montajes Industriales Ltda.</div>
+            <div class="cv-row"><span class="k">Tema tratado</span><span class="l"></span></div>
+            <div class="cv-row"><span class="k">Relator</span><span class="l"></span></div>
+            <div class="cv-row"><span class="k">Obra</span><span class="l"></span></div>
+            <div class="cv-row"><span class="k">N° asistentes</span><span class="l"></span></div>
+          </div>
+          <div class="cv-grid">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <div class="cv-cap">portada · página 1 de 1</div>
+      </div>
+
+      <div class="right">
+        <div class="sec">
+          <h4>Comparado con <span class="n mono">f_rch</span> <span class="n">· 2 de 12 anclas</span></h4>
+          <div class="anchor ok"><span class="mk">✓</span> obra</div>
+          <div class="anchor ok"><span class="mk">✓</span> relator</div>
+          <div class="anchor no"><span class="mk">✗</span> nombre de la charla</div>
+          <div class="anchor no"><span class="mk">✗</span> tipologia de charla</div>
+          <div class="anchor no"><span class="mk">✗</span> hora de inicio · hora de termino · … (8 más)</div>
+        </div>
+
+        <div class="sec">
+          <h4>Seleccionar anclas encontradas</h4>
+          <div class="tokens">
+            <span class="tok sel">registro de capacitacion <span class="c">✓</span></span>
+            <span class="tok sel">acra montajes industriales <span class="c">✓</span></span>
+            <span class="tok sel">tema tratado <span class="c">✓</span></span>
+            <span class="tok">relator</span>
+            <span class="tok">obra</span>
+            <span class="tok sel">n de asistentes <span class="c">✓</span></span>
+            <span class="tok">duracion</span>
+            <span class="tok">pagina 1 de 1</span>
+            <span class="tok">cargo</span>
+            <span class="tok">firma</span>
+          </div>
+          <div class="hint">Toca un token para sumarlo o quitarlo de las anclas del flavor nuevo.</div>
+        </div>
+
+        <div class="author">
+          <div class="agrid">
+            <span class="lab">Nombre</span>
+            <input class="inp" value="f_acra" />
+            <span class="lab top">Anclas (4)</span>
+            <div class="selanchors">
+              <span class="pill">registro de capacitacion <span class="rm">✕</span></span>
+              <span class="pill">acra montajes industriales <span class="rm">✕</span></span>
+              <span class="pill">tema tratado <span class="rm">✕</span></span>
+              <span class="pill">n de asistentes <span class="rm">✕</span></span>
+            </div>
+            <span class="lab">min_match</span>
+            <span class="stepper"><button>−</button><b>3</b><button>+</button></span>
+          </div>
+
+          <div class="checks">
+            <div class="check warn"><span class="ic">⚠</span><span>“registro de capacitacion” también aparece en chintegral · f_japa. Considera quitarla o apoyarte en las más distintivas (“acra montajes industriales”).</span></div>
+            <div class="check ok"><span class="ic">✓</span><span>El resto del set no colisiona con otras siglas (probado contra 340 portadas del corpus).</span></div>
+          </div>
+
+          <div class="actions">
+            <span class="preview">Match: <b>6 de 8</b></span>
+            <div class="btns">
+              <button class="btn ghost">Descartar</button>
+              <button class="btn">Guardar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
