@@ -90,3 +90,9 @@ data/overseer.db-wal
 data/outputs/
 data/output_sample/
 frontend/dist/
+
+# Local DB recovery backups (point-in-time snapshots, not source)
+data/_recovery-*/
+
+# Smoke-test screenshots (transient evidence, regenerable)
+docs/research/*smoke*.png
