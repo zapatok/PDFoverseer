@@ -44,8 +44,9 @@ class AnchorsScanner:
         folder: Path,
         *,
         cancel: CancellationToken,
-        on_pdf: Callable[[str], None] | None = None,
+        on_pdf: Callable[[str, int | None, str, list[dict]], None] | None = None,
         only: str | None = None,
+        skip: set[str] | None = None,
         on_page: Callable[[int, int], None] | None = None,
     ) -> ScanResult:
         """Run pase-2 OCR using header-band anchors (A2) with A7 one-page lock.
@@ -59,10 +60,16 @@ class AnchorsScanner:
             folder: Directory containing the PDFs to scan.
             cancel: Token checked before each PDF; raises ``CancelledError``
                 if the orchestrator has signalled cancellation.
-            on_pdf: Optional callback invoked with each PDF's filename once it
-                has been processed (A7, OCR, or handled error). Drives the
-                per-PDF progress bar; never called for a PDF aborted by
-                cancellation.
+            on_pdf: Optional callback invoked once per processed PDF as
+                ``on_pdf(filename, count, method, near_matches)`` (Incr. 1A):
+                ``count`` = docs found in that file (``None`` if unreadable →
+                the route does not merge it), ``method`` = per-file method
+                (``"filename_glob"`` for A7/1-page → chip R1, else
+                ``"header_band_anchors"``), ``near_matches`` = serialized dicts
+                for that file. Drives the per-PDF progress bar AND the
+                incremental merge; never called for a PDF aborted by cancellation.
+            only: scope the scan to a single filename (per-file re-scan).
+            skip: filenames to NOT scan — already reliable (R1/manual/prior OCR).
 
         Returns:
             A ``ScanResult`` with:
@@ -85,6 +92,10 @@ class AnchorsScanner:
             # Single-file scan (rev-2 #1): scope to just this PDF; per_file/count
             # below cover only it, leaving the rest of the cell untouched.
             pdfs = [p for p in pdfs if p.name == only]
+        if skip:
+            # Incr. 1A fusionar-y-saltar: el OCR de celda omite los archivos ya
+            # confiables (R1/manual/OCR previo); solo escanea los pendientes.
+            pdfs = [p for p in pdfs if p.name not in skip]
         if not pdfs:
             return base
 
@@ -93,9 +104,12 @@ class AnchorsScanner:
         if not flavors:
             # No anchor OCR work, but the pre-count already counted these PDFs;
             # emit one progress tick each so the bar's `done` matches `total`.
+            # method="filename_glob" → la ruta lo trata como solo-progreso (no
+            # fusiona), así no pisa el conteo de pase 1.
             if on_pdf is not None:
+                base_pf = base.per_file or {}
                 for pdf in pdfs:
-                    on_pdf(pdf.name)
+                    on_pdf(pdf.name, base_pf.get(pdf.name, 0), "filename_glob", [])
             return base
         top_fraction = pattern.get("top_fraction", DEFAULT_TOP_FRACTION)  # pattern is non-None here
 
@@ -110,18 +124,25 @@ class AnchorsScanner:
         for pdf in pdfs:
             cancel.check()  # outside the try: a pre-PDF cancel must not emit on_pdf
             emit = True
+            # Capturados por PDF para el callback enriquecido del `finally` (Incr.
+            # 1A): cada rama los fija ANTES de su `continue`. count=None → archivo
+            # ilegible (la ruta no lo fusiona). method filename_glob (A7) → chip R1.
+            file_count: int | None = None
+            file_method = "filename_glob"
+            file_nms: list[dict] = []
             try:
                 try:
                     page_count = get_page_count(pdf)
                 except PdfRenderError as exc:
                     errors.append(f"page_count_failed:{pdf.name}:{exc}")
-                    continue
+                    continue  # file_count stays None → no merge (Error/pendiente)
 
                 if page_count == 1:
-                    # A7 — 1 page = 1 doc trivial + locked
+                    # A7 — 1 page = 1 doc trivial + locked; method filename_glob → R1.
                     per_file[pdf.name] = 1
                     total_count += 1
                     a7_used = True
+                    file_count, file_method = 1, "filename_glob"
                     continue
 
                 try:
@@ -139,10 +160,12 @@ class AnchorsScanner:
                     # Fallback to 1 doc per PDF heuristic (conservative)
                     per_file[pdf.name] = 1
                     total_count += 1
+                    file_count, file_method = 1, "header_band_anchors"
                     continue
 
                 per_file[pdf.name] = ocr.count
                 total_count += ocr.count
+                file_count, file_method = ocr.count, "header_band_anchors"
                 for nm in ocr.near_matches:
                     near_matches.append(
                         NearMatchEntry(
@@ -153,6 +176,17 @@ class AnchorsScanner:
                             missing_anchors=nm.missing_anchors,
                         )
                     )
+                    # Serializado a dict para cruzar la cola IPC y para
+                    # apply_per_file_ocr_result (espera list[dict]).
+                    file_nms.append(
+                        {
+                            "pdf_name": pdf.name,
+                            "page_index": nm.page_index,
+                            "flavor_name": nm.flavor_name,
+                            "matched_anchors": list(nm.matched_anchors),
+                            "missing_anchors": list(nm.missing_anchors),
+                        }
+                    )
             except CancelledError:
                 # Cancelled mid-PDF: this file did not finish — do not tick it.
                 emit = False
@@ -161,7 +195,7 @@ class AnchorsScanner:
                 # `finally` runs through every `continue` above, so A7/error
                 # branches still count as one processed PDF.
                 if emit and on_pdf is not None:
-                    on_pdf(pdf.name)
+                    on_pdf(pdf.name, file_count, file_method, file_nms)
 
         if a7_used:
             flags.append("a7_one_page_locked")

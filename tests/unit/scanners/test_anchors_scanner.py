@@ -210,3 +210,72 @@ def test_anchors_scanner_carpeta_inexistente(tmp_path: Path):
     r2 = scanner.count_ocr(missing, cancel=CancellationToken())
     assert r2.count == 0
     assert "folder_missing" in r2.flags
+
+
+def test_count_ocr_skips_files_in_skip_set(tmp_path: Path, monkeypatch):
+    """Incr. 1A: `skip` excluye archivos del escaneo — no entran a per_file
+    ni al callback de progreso (los ya confiables: R1/manual/OCR previo)."""
+    keep = tmp_path / "2026-04_andamios_keep.pdf"
+    skip_pdf = tmp_path / "2026-04_andamios_skip.pdf"
+    for p in (keep, skip_pdf):
+        p.write_bytes(b"%PDF-1.4\n")
+
+    import core.scanners.anchors_scanner as _mod
+    from core.scanners.utils import header_band_anchors as hba
+
+    monkeypatch.setattr(_mod, "PATTERNS", {"andamios": _FAKE_PATTERN})
+    monkeypatch.setattr(_mod, "get_page_count", lambda _: 5)
+    monkeypatch.setattr(
+        "core.scanners.anchors_scanner.count_covers_by_anchors",
+        lambda *a, **k: hba.AnchorCountResult(
+            count=5, pages_total=5, matches_per_flavor={}, near_matches=[]
+        ),
+    )
+
+    seen: list[str] = []
+    scanner = AnchorsScanner(sigla="andamios")
+    result = scanner.count_ocr(
+        tmp_path,
+        cancel=CancellationToken(),
+        on_pdf=lambda name, count, method, nm: seen.append(name),
+        skip={"2026-04_andamios_skip.pdf"},
+    )
+    assert "2026-04_andamios_skip.pdf" not in seen
+    assert "2026-04_andamios_skip.pdf" not in (result.per_file or {})
+    assert "2026-04_andamios_keep.pdf" in (result.per_file or {})
+
+
+def test_count_ocr_enriched_callback_carries_count_method_nm(tmp_path: Path, monkeypatch):
+    """Incr. 1A: on_pdf recibe (name, count, method, near_matches) por archivo.
+    Multipágina → header_band_anchors; 1 página (A7) → filename_glob (chip R1)."""
+    multi = tmp_path / "2026-04_andamios_multi.pdf"
+    one = tmp_path / "2026-04-01_andamios_one.pdf"
+    for p in (multi, one):
+        p.write_bytes(b"%PDF-1.4\n")
+
+    import core.scanners.anchors_scanner as _mod
+    from core.scanners.utils import header_band_anchors as hba
+
+    monkeypatch.setattr(_mod, "PATTERNS", {"andamios": _FAKE_PATTERN})
+    monkeypatch.setattr(_mod, "get_page_count", lambda p: 1 if "one" in p.name else 4)
+    monkeypatch.setattr(
+        "core.scanners.anchors_scanner.count_covers_by_anchors",
+        lambda *a, **k: hba.AnchorCountResult(
+            count=4, pages_total=4, matches_per_flavor={}, near_matches=[]
+        ),
+    )
+
+    rows: list[tuple] = []
+    scanner = AnchorsScanner(sigla="andamios")
+    scanner.count_ocr(
+        tmp_path,
+        cancel=CancellationToken(),
+        on_pdf=lambda name, count, method, nm: rows.append((name, count, method, nm)),
+    )
+    by_name = {r[0]: r for r in rows}
+    assert by_name["2026-04_andamios_multi.pdf"][1] == 4
+    assert by_name["2026-04_andamios_multi.pdf"][2] == "header_band_anchors"
+    assert by_name["2026-04-01_andamios_one.pdf"][1] == 1
+    assert by_name["2026-04-01_andamios_one.pdf"][2] == "filename_glob"
+    # near_matches siempre lista serializable (dicts), nunca NearMatchEntry.
+    assert all(isinstance(r[3], list) for r in rows)

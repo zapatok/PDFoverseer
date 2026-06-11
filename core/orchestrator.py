@@ -281,9 +281,19 @@ def _ocr_worker(
     pdf_cb = on_pdf
     if pdf_cb is None and _WORKER_PROGRESS_Q is not None:
 
-        def pdf_cb(name: str) -> None:  # noqa: F811
+        def pdf_cb(name: str, count: int | None, method: str, nm: list[dict]) -> None:  # noqa: F811
+            # Incr. 1A: carga count/method/near_matches (ya dicts) para el merge
+            # incremental por-archivo en el proceso principal (lo usa el _drain).
             _WORKER_PROGRESS_Q.put(
-                {"type": "pdf_done", "hospital": hosp, "sigla": sigla, "pdf_name": name}
+                {
+                    "type": "pdf_done",
+                    "hospital": hosp,
+                    "sigla": sigla,
+                    "pdf_name": name,
+                    "count": count,
+                    "method": method,
+                    "near_matches": nm,
+                }
             )
 
     fn = getattr(scanner, "count_ocr", None)
@@ -296,8 +306,10 @@ def _ocr_worker(
         except Exception as exc:  # noqa: BLE001
             return (hosp, sigla, None, f"{type(exc).__name__}: {exc}")
         if pdf_cb is not None:
+            pf = result.per_file or {}
             for pdf in enumerate_cell_pdfs(folder):
-                pdf_cb(pdf.name)
+                # method filename_glob → la ruta lo trata como solo-progreso.
+                pdf_cb(pdf.name, pf.get(pdf.name, 0), "filename_glob", [])
         return (hosp, sigla, result, None)
 
     last_err: str | None = None
@@ -476,7 +488,9 @@ def scan_cells_ocr(
         scanned = 0
         errors = 0
 
-        def _emit_pdf(name: str) -> None:
+        def _emit_pdf(name: str, count: int | None, method: str, nm: list[dict]) -> None:
+            # Chunk 2: acepta la firma enriquecida; emite solo pdf_progress (sin
+            # cambio de comportamiento). El file_result + merge se cablea en Chunk 3.
             nonlocal pdfs_done
             pdfs_done += 1
             on_progress(

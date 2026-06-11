@@ -19,8 +19,9 @@ def test_count_ocr_invokes_on_pdf_per_file(tmp_path, monkeypatch):
     monkeypatch.setattr("core.scanners.anchors_scanner.get_page_count", lambda p: 1)
 
     seen: list[str] = []
+    # Incr. 1A: on_pdf(name, count, method, near_matches) — *a absorbe los extras.
     AnchorsScanner(sigla="odi").count_ocr(
-        tmp_path, cancel=CancellationToken(), on_pdf=lambda name: seen.append(name)
+        tmp_path, cancel=CancellationToken(), on_pdf=lambda name, *a: seen.append(name)
     )
     assert sorted(seen) == ["x.pdf", "y.pdf"]
 
@@ -41,5 +42,7 @@ def test_count_ocr_cancel_before_loop_emits_nothing(tmp_path, monkeypatch):
     tok.cancel()
     seen: list[str] = []
     with pytest.raises(CancelledError):
-        AnchorsScanner(sigla="odi").count_ocr(tmp_path, cancel=tok, on_pdf=seen.append)
+        AnchorsScanner(sigla="odi").count_ocr(
+            tmp_path, cancel=tok, on_pdf=lambda name, *a: seen.append(name)
+        )
     assert seen == []

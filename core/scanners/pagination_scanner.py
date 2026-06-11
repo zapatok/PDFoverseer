@@ -59,8 +59,9 @@ class PaginationScanner:
         folder: Path,
         *,
         cancel: CancellationToken,
-        on_pdf: Callable[[str], None] | None = None,
+        on_pdf: Callable[[str, int | None, str, list[dict]], None] | None = None,
         only: str | None = None,
+        skip: set[str] | None = None,
         on_page: Callable[[int, int], None] | None = None,
     ) -> ScanResult:
         """Run pase-2 OCR by counting "Página N de M" documents via V4.
@@ -74,10 +75,15 @@ class PaginationScanner:
             folder: Directory containing the PDFs to scan.
             cancel: Token checked before each PDF; raises ``CancelledError``
                 if the orchestrator has signalled cancellation.
-            on_pdf: Optional callback invoked with each PDF's filename once it
-                has been processed (A7, V4, or handled error). Drives the
-                per-PDF progress bar; never called for a PDF aborted by
-                cancellation.
+            on_pdf: Optional callback invoked once per processed PDF as
+                ``on_pdf(filename, count, method, near_matches)`` (Incr. 1A):
+                ``count`` = docs found (``None`` if unreadable), ``method`` =
+                ``"filename_glob"`` for A7/1-page (chip R1) else ``"v4"``,
+                ``near_matches`` = always ``[]`` (V4 has no near-matches). Drives
+                the per-PDF progress bar AND the incremental merge; never called
+                for a PDF aborted by cancellation.
+            only: scope the scan to a single filename (per-file re-scan).
+            skip: filenames to NOT scan — already reliable (R1/manual/prior OCR).
 
         Returns:
             A ``ScanResult`` with:
@@ -104,6 +110,9 @@ class PaginationScanner:
             # parity but ignored: V4 (pipeline.analyze_pdf) has no per-page hook,
             # so the viewer bar stays indeterminate for insgral/altura.
             pdfs = [p for p in pdfs if p.name == only]
+        if skip:
+            # Incr. 1A fusionar-y-saltar: omite los archivos ya confiables.
+            pdfs = [p for p in pdfs if p.name not in skip]
         if not pdfs:
             return base
 
@@ -118,17 +127,22 @@ class PaginationScanner:
         for pdf in pdfs:
             cancel.check()  # outside the try: a pre-PDF cancel must not emit on_pdf
             emit = True
+            # Capturados por PDF para el callback enriquecido (Incr. 1A): count=None
+            # → ilegible (la ruta no fusiona). method filename_glob (A7) → chip R1.
+            file_count: int | None = None
+            file_method = "filename_glob"
             try:
                 try:
                     pages = get_page_count(pdf)
                 except PdfRenderError as exc:
                     errors.append(f"page_count_failed:{pdf.name}:{exc}")
-                    continue
+                    continue  # file_count stays None → no merge (Error/pendiente)
                 if pages == 1:
-                    # A7 — 1 page = 1 document, locked, no OCR.
+                    # A7 — 1 page = 1 document, locked, no OCR; method R1.
                     per_file[pdf.name] = 1
                     total += 1
                     a7_used = True
+                    file_count, file_method = 1, "filename_glob"
                     continue
                 try:
                     v4 = count_documents_v4(pdf, cancel=cancel)
@@ -140,12 +154,14 @@ class PaginationScanner:
                     per_file[pdf.name] = 1
                     total += 1
                     low_confidence_files.append(pdf.name)
+                    file_count, file_method = 1, "v4"
                     continue
                 # A degenerate count of 0 for a multi-page PDF is never right —
                 # fall back to 1 and flag it.
                 pdf_count = v4.count if v4.count > 0 else 1
                 per_file[pdf.name] = pdf_count
                 total += pdf_count
+                file_count, file_method = pdf_count, "v4"
                 if not _v4_result_is_trustworthy(v4):
                     low_confidence_files.append(pdf.name)
             except CancelledError:
@@ -154,9 +170,9 @@ class PaginationScanner:
                 raise
             finally:
                 # `finally` runs through every `continue` above, so A7/error
-                # branches still count as one processed PDF.
+                # branches still count as one processed PDF. V4 has no near-matches.
                 if emit and on_pdf is not None:
-                    on_pdf(pdf.name)
+                    on_pdf(pdf.name, file_count, file_method, [])
 
         if a7_used:
             flags.append("a7_one_page_locked")
