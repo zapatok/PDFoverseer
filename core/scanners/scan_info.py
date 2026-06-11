@@ -6,7 +6,7 @@ flavor anchors — never hand-authored — so it can never drift from the scanne
 
 from __future__ import annotations
 
-from core.scanners.patterns import PATTERNS
+from core.scanners.patterns import PATTERNS, count_type_for
 
 # Generic V4 pagination anchors reused inside some flavors; not operator-facing
 # field names, so they are skipped when picking the distinctive anchors to show.
@@ -22,11 +22,14 @@ def scan_info_for(sigla: str) -> dict:
         sigla: the category key (e.g. ``"odi"``).
 
     Returns:
-        ``{"sigla", "kind"}`` where ``kind`` is ``"anchors" | "pagination" | "none"``;
-        for ``"anchors"`` also ``"looks_for"``: up to 3 distinctive anchor strings.
+        ``{"sigla", "kind", "count_type"}`` where ``kind`` is
+        ``"anchors" | "pagination" | "none"`` and ``count_type`` is
+        ``"documents" | "documents_workers" | "checks"``; for ``"anchors"`` also
+        ``"looks_for"``: up to 3 distinctive anchor strings.
     """
     pattern = PATTERNS.get(sigla)
     strategy = pattern.get("scan_strategy") if pattern else "none"
+    count_type = count_type_for(sigla)
 
     if strategy == "anchors" and pattern is not None:
         seen: set[str] = set()
@@ -44,6 +47,11 @@ def scan_info_for(sigla: str) -> dict:
                     break
             if len(looks_for) == _MAX_ANCHORS_SHOWN:
                 break
-        return {"sigla": sigla, "kind": "anchors", "looks_for": looks_for}
+        return {
+            "sigla": sigla,
+            "kind": "anchors",
+            "looks_for": looks_for,
+            "count_type": count_type,
+        }
 
-    return {"sigla": sigla, "kind": strategy}  # "pagination" | "none"
+    return {"sigla": sigla, "kind": strategy, "count_type": count_type}  # pagination | none

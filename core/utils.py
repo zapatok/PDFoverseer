@@ -55,8 +55,13 @@ PAGE_PATTERN_VERSION = (
 )
 SCANNER_PATTERNS_VERSION = (
     # v2: pase-1 honest confidence + page-count for FIXED_PAGE_SIGLAS
-    "v2-conteo-confiable"
+    # v3: count_type por sigla (documents/documents_workers/checks) — Incr. 1A
+    "v3-count-type"
 )
+
+# Tipos de conteo válidos por sigla (Decisión 4 / grupo F del triage). La
+# asignación por sigla vive en core.scanners.patterns.COUNT_TYPE_BY_SIGLA.
+COUNT_TYPES: frozenset[str] = frozenset({"documents", "documents_workers", "checks"})
 
 # ============================================================================
 # Page Number Patterns & Normalization

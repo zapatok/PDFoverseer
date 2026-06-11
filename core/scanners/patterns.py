@@ -839,3 +839,44 @@ def get_pattern(sigla: str) -> SiglaPattern:
     if sigla not in PATTERNS:
         raise KeyError(f"unknown_sigla: {sigla}")
     return PATTERNS[sigla]
+
+
+CountType = Literal["documents", "documents_workers", "checks"]
+
+# Per-sigla count type — Decisión 4 / grupo F del triage 2026-06-09. Qué cuenta
+# el número de la celda, ortogonal a CÓMO se escanea (scan_strategy):
+#   documents          — la mayoría: el número son documentos.
+#   documents_workers  — charla/chintegral/dif_pts: documentos a una columna del
+#                        Excel + trabajadores (contador por teclado) a otra (HH).
+#   checks             — maquinaria: chequeos = columnas de fecha marcadas (no
+#                        documentos; puede superar las páginas por diseño).
+# El gate de completitud (tests/unit/scanners/test_count_type.py) exige las 18.
+COUNT_TYPE_BY_SIGLA: dict[str, CountType] = {
+    "reunion": "documents",
+    "art": "documents",
+    "irl": "documents",
+    "odi": "documents",
+    "charla": "documents_workers",
+    "insgral": "documents",
+    "bodega": "documents",
+    "caliente": "documents",
+    "exc": "documents",
+    "senal": "documents",
+    "ext": "documents",
+    "maquinaria": "checks",
+    "altura": "documents",
+    "chps": "documents",
+    "chintegral": "documents_workers",
+    "dif_pts": "documents_workers",
+    "herramientas_elec": "documents",
+    "andamios": "documents",
+}
+
+
+def count_type_for(sigla: str) -> CountType:
+    """Tipo de conteo de la sigla (documents/documents_workers/checks).
+
+    Default ``"documents"`` para una sigla desconocida (no debería ocurrir: el
+    gate de completitud exige las 18 en ``COUNT_TYPE_BY_SIGLA``).
+    """
+    return COUNT_TYPE_BY_SIGLA.get(sigla, "documents")
