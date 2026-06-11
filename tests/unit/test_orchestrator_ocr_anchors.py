@@ -20,7 +20,7 @@ def test_orchestrator_invokes_anchors_scanner_count_ocr(tmp_path: Path, monkeypa
 
     called = {"value": False}
 
-    def fake_count_ocr(self, folder, *, cancel, on_pdf=None):
+    def fake_count_ocr(self, folder, *, cancel, on_pdf=None, skip=None):
         called["value"] = True
         from core.scanners.base import ConfidenceLevel, ScanResult
 
@@ -37,7 +37,7 @@ def test_orchestrator_invokes_anchors_scanner_count_ocr(tmp_path: Path, monkeypa
 
     monkeypatch.setattr(AnchorsScanner, "count_ocr", fake_count_ocr)
 
-    hosp, sigla, result, error = _ocr_worker(("HPV", "andamios", str(tmp_path)))
+    hosp, sigla, result, error = _ocr_worker(("HPV", "andamios", str(tmp_path), []))
     assert called["value"]
     assert error is None
     assert result is not None

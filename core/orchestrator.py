@@ -240,8 +240,8 @@ def _eta_ms(t0: float, done: int, total: int) -> int | None:
 
 
 def _ocr_worker(
-    cell_tuple: tuple[str, str, str],
-    on_pdf: Callable[[str], None] | None = None,
+    cell_tuple: tuple[str, str, str, list[str]],
+    on_pdf: Callable[[str, int | None, str, list[dict]], None] | None = None,
 ) -> tuple[str, str, ScanResult | None, str | None]:
     """Run OCR for a single cell. Runs in a worker subprocess (multi-worker
     path) or in-process (synchronous ``max_workers==1`` path).
@@ -266,10 +266,28 @@ def _ocr_worker(
     )
     from core.utils import OCR_RETRY_BACKOFF_S, OCR_RETRY_COUNT  # noqa: E402
 
-    hosp, sigla, folder_str = cell_tuple
+    hosp, sigla, folder_str, skip_list = cell_tuple
     folder = Path(folder_str)
+    skip = set(skip_list)  # Incr. 1A: archivos ya confiables que el OCR de celda omite.
     scanner = scanner_registry.get(sigla)
     token = CancellationToken.from_event(_WORKER_EVENT) if _WORKER_EVENT else CancellationToken()
+
+    def _finish(result: ScanResult) -> tuple[str, str, ScanResult, None]:
+        # Multi-worker: encola la metadata de la celda en la MISMA cola que los
+        # pdf_done y DESPUÉS de ellos, así el drain fusiona cada file_result antes
+        # de emitir cell_done (finalize ve un per_file completo, sin carrera). En
+        # el camino síncrono (_WORKER_PROGRESS_Q is None) el cell_done lo emite el
+        # llamador tras retornar este worker.
+        if _WORKER_PROGRESS_Q is not None:
+            _WORKER_PROGRESS_Q.put(
+                {
+                    "type": "cell_meta",
+                    "hospital": hosp,
+                    "sigla": sigla,
+                    "result": _cell_done_meta(result),
+                }
+            )
+        return (hosp, sigla, result, None)
 
     # Signal that the cell actually started — multi-worker only (the sync
     # caller emits cell_scanning itself before invoking the worker). Fixes the
@@ -308,17 +326,19 @@ def _ocr_worker(
         if pdf_cb is not None:
             pf = result.per_file or {}
             for pdf in enumerate_cell_pdfs(folder):
+                if pdf.name in skip:
+                    continue  # ya confiable; no se re-tickea (total_pdfs lo excluye)
                 # method filename_glob → la ruta lo trata como solo-progreso.
                 pdf_cb(pdf.name, pf.get(pdf.name, 0), "filename_glob", [])
-        return (hosp, sigla, result, None)
+        return _finish(result)
 
     last_err: str | None = None
     for attempt in range(OCR_RETRY_COUNT + 1):
         if token.cancelled:
             return (hosp, sigla, None, "cancelled")
         try:
-            result = fn(folder, cancel=token, on_pdf=pdf_cb)
-            return (hosp, sigla, result, None)
+            result = fn(folder, cancel=token, on_pdf=pdf_cb, skip=skip)
+            return _finish(result)
         except CancelledError:
             return (hosp, sigla, None, "cancelled")
         except Exception as exc:  # noqa: BLE001
@@ -342,6 +362,24 @@ def _serialize_near_matches(result: ScanResult) -> list[dict]:
         }
         for nm in telemetry.near_matches
     ]
+
+
+def _cell_done_meta(result: ScanResult) -> dict:
+    """Payload de metadata para ``cell_done`` (Incr. 1A).
+
+    ``per_file``/``near_matches`` se fusionan incrementalmente por archivo vía el
+    evento ``file_result``, así que ``cell_done`` solo finaliza método/confianza/
+    flags/errores/duración — lo consume ``finalize_cell_ocr`` en la ruta.
+    """
+    return {
+        "ocr_count": result.count,
+        "method": result.method,
+        "confidence": result.confidence.value,
+        "duration_ms_ocr": result.duration_ms,
+        "flags": list(result.flags),
+        "errors": list(result.errors),
+        "breakdown": result.breakdown,
+    }
 
 
 def scan_one_file_ocr(
@@ -436,6 +474,7 @@ def scan_cells_ocr(
     on_progress: Callable[[dict], None],
     cancel: CancellationToken,
     max_workers: int = 2,
+    skip_by_cell: dict[tuple[str, str], set[str]] | None = None,
 ) -> dict[tuple[str, str], ScanResult]:
     """Pase 2 — OCR scan a subset of cells with progress events.
 
@@ -468,18 +507,23 @@ def scan_cells_ocr(
         enumerate_cell_pdfs,
     )
 
+    skip_by_cell = skip_by_cell or {}
     results: dict[tuple[str, str], ScanResult] = {}
     total = len(cells)
-    cell_tuples = [(h, s, str(f)) for (h, s, f) in cells]
+    # 4-tupla: el skip por celda viaja al worker (subproceso) como lista picklable.
+    cell_tuples = [(h, s, str(f), sorted(skip_by_cell.get((h, s), set()))) for (h, s, f) in cells]
 
     if cancel.cancelled:
         on_progress({"type": "scan_cancelled", "scanned": 0, "total": total})
         return results
 
-    # Pre-count PDFs across the selected cells so the bar has a real
-    # denominator. Uses the same enumeration the scanners iterate, so `done`
-    # (one tick per processed PDF) converges exactly on `total_pdfs`.
-    total_pdfs = sum(len(enumerate_cell_pdfs(f)) for (_, _, f) in cells)
+    # Pre-count PDFs across the selected cells so the bar has a real denominator.
+    # Excluye los archivos saltados (skip) — `done` (un tick por PDF procesado)
+    # converge exactamente en `total_pdfs`.
+    total_pdfs = sum(
+        sum(1 for p in enumerate_cell_pdfs(f) if p.name not in skip_by_cell.get((h, s), set()))
+        for (h, s, f) in cells
+    )
     on_progress({"type": "scan_started", "total_cells": total, "total_pdfs": total_pdfs})
     t0 = time.perf_counter()
     pdfs_done = 0
@@ -487,10 +531,12 @@ def scan_cells_ocr(
     if max_workers == 1:
         scanned = 0
         errors = 0
+        cur_cell: dict[str, str] = {}  # (h, s) en curso, para anotar cada file_result
 
         def _emit_pdf(name: str, count: int | None, method: str, nm: list[dict]) -> None:
-            # Chunk 2: acepta la firma enriquecida; emite solo pdf_progress (sin
-            # cambio de comportamiento). El file_result + merge se cablea en Chunk 3.
+            # Incr. 1A: un tick de progreso por PDF + el file_result que la ruta
+            # fusiona incrementalmente (merge por-archivo + escritura por PDF). En
+            # síncrono corre inline dentro de _ocr_worker, antes del cell_done.
             nonlocal pdfs_done
             pdfs_done += 1
             on_progress(
@@ -502,12 +548,24 @@ def scan_cells_ocr(
                     "eta_ms": _eta_ms(t0, pdfs_done, total_pdfs),
                 }
             )
+            on_progress(
+                {
+                    "type": "file_result",
+                    "hospital": cur_cell["h"],
+                    "sigla": cur_cell["s"],
+                    "filename": name,
+                    "count": count,
+                    "method": method,
+                    "near_matches": nm,
+                }
+            )
 
         for ct in cell_tuples:
             if cancel.cancelled:
                 on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})
                 return results
-            hosp, sigla, _ = ct
+            hosp, sigla, _, _ = ct
+            cur_cell["h"], cur_cell["s"] = hosp, sigla
             on_progress({"type": "cell_scanning", "hospital": hosp, "sigla": sigla})
             h, s, result, err = _ocr_worker(ct, on_pdf=_emit_pdf)
             if err == "cancelled":
@@ -518,34 +576,15 @@ def scan_cells_ocr(
                 on_progress({"type": "cell_error", "hospital": h, "sigla": s, "error": err})
             else:
                 results[(h, s)] = result  # type: ignore[assignment]
-                telemetry = result.telemetry
-                near_matches = (
-                    [
-                        {
-                            "pdf_name": nm.pdf_name,
-                            "page_index": nm.page_index,
-                            "flavor_name": nm.flavor_name,
-                            "matched_anchors": list(nm.matched_anchors),
-                            "missing_anchors": list(nm.missing_anchors),
-                        }
-                        for nm in telemetry.near_matches
-                    ]
-                    if telemetry
-                    else []
-                )
+                # Los file_result (emitidos inline por _emit_pdf durante _ocr_worker)
+                # ya fusionaron el per_file de la celda; cell_done solo lleva la
+                # metadata de la corrida para finalize_cell_ocr.
                 on_progress(
                     {
                         "type": "cell_done",
                         "hospital": h,
                         "sigla": s,
-                        "result": {
-                            "ocr_count": result.count,
-                            "method": result.method,
-                            "confidence": result.confidence.value,
-                            "duration_ms_ocr": result.duration_ms,
-                            "near_matches": near_matches,
-                            "per_file": result.per_file,
-                        },
+                        "result": _cell_done_meta(result),
                     }
                 )
             scanned += 1
@@ -598,6 +637,31 @@ def scan_cells_ocr(
                         "eta_ms": _eta_ms(t0, pdfs_done, total_pdfs),
                     }
                 )
+                # Incr. 1A: tras el tick de la barra, el file_result que la ruta
+                # fusiona por archivo. Mismo hilo que el cell_meta de abajo ⇒ cada
+                # merge precede al cell_done de su celda (orden FIFO de la cola).
+                on_progress(
+                    {
+                        "type": "file_result",
+                        "hospital": ev["hospital"],
+                        "sigla": ev["sigla"],
+                        "filename": ev["pdf_name"],
+                        "count": ev["count"],
+                        "method": ev["method"],
+                        "near_matches": ev["near_matches"],
+                    }
+                )
+            elif ev["type"] == "cell_meta":
+                # Finalización de celda — encolada por el worker tras todos sus
+                # pdf_done, así llega después de fusionar todo su per_file.
+                on_progress(
+                    {
+                        "type": "cell_done",
+                        "hospital": ev["hospital"],
+                        "sigla": ev["sigla"],
+                        "result": ev["result"],
+                    }
+                )
 
     drain_thread = threading.Thread(target=_drain, daemon=True)
     drain_thread.start()
@@ -628,37 +692,11 @@ def scan_cells_ocr(
                 errors += 1
                 on_progress({"type": "cell_error", "hospital": h, "sigla": s, "error": err})
             else:
+                # cell_done lo emite el hilo de drain (desde el cell_meta del worker)
+                # DESPUÉS de fusionar cada file_result de esta celda, así
+                # finalize_cell_ocr ve un per_file completo. Aquí solo guardamos el
+                # ScanResult para el valor de retorno de scan_cells_ocr.
                 results[(h, s)] = result  # type: ignore[assignment]
-                telemetry = result.telemetry
-                near_matches = (
-                    [
-                        {
-                            "pdf_name": nm.pdf_name,
-                            "page_index": nm.page_index,
-                            "flavor_name": nm.flavor_name,
-                            "matched_anchors": list(nm.matched_anchors),
-                            "missing_anchors": list(nm.missing_anchors),
-                        }
-                        for nm in telemetry.near_matches
-                    ]
-                    if telemetry
-                    else []
-                )
-                on_progress(
-                    {
-                        "type": "cell_done",
-                        "hospital": h,
-                        "sigla": s,
-                        "result": {
-                            "ocr_count": result.count,
-                            "method": result.method,
-                            "confidence": result.confidence.value,
-                            "duration_ms_ocr": result.duration_ms,
-                            "near_matches": near_matches,
-                            "per_file": result.per_file,
-                        },
-                    }
-                )
             scanned += 1
             on_progress({"type": "scan_progress", "done": scanned, "total": total})
 

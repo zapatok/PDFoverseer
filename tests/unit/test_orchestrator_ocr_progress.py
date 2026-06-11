@@ -92,13 +92,15 @@ def test_scan_cells_ocr_emits_pdf_progress(tmp_path, monkeypatch):
     assert types[-1] == "scan_complete"
 
 
-def test_scan_cells_ocr_cell_done_carries_per_file(tmp_path, monkeypatch):
-    """Regression (review #2/#3): the cell_done event must carry per_file.
+def test_scan_cells_ocr_emits_per_file_via_file_result(tmp_path, monkeypatch):
+    """Incr. 1A: per-file counts flow through ``file_result`` (one per PDF).
 
-    The scanner computes a per-PDF document count, but the orchestrator event
-    used to drop it, so apply_ocr_result wiped the cell's per_file to None and
-    the FileList/lightbox fell back to a flat "1" per file. The event now
-    forwards result.per_file end to end.
+    Supersedes the rev-2 "cell_done carries per_file" guard. The anti-regression
+    intent — each PDF's document count reaches the cell, instead of the lightbox
+    falling back to a flat "1" — is preserved, but the channel moved: the route
+    merges each ``file_result`` incrementally (cancel-safe), and ``cell_done`` now
+    carries only run metadata (the full ``per_file`` is re-injected by the route
+    from the merged cell). So at the orchestrator layer we assert on file_result.
     """
     folder = tmp_path / "3.-ODI Visitas"
     folder.mkdir()
@@ -114,8 +116,14 @@ def test_scan_cells_ocr_cell_done_carries_per_file(tmp_path, monkeypatch):
         cancel=CancellationToken(),
         max_workers=1,
     )
+    file_results = [e for e in events if e["type"] == "file_result"]
+    assert {e["filename"]: e["count"] for e in file_results} == {"a.pdf": 1, "b.pdf": 1}
+    # A7 (1-page) files are counted trivially as filename_glob (chip R1), not OCR.
+    assert all(e["method"] == "filename_glob" for e in file_results)
+    # cell_done carries metadata only now — per_file is merged per-file upstream.
     done = next(e for e in events if e["type"] == "cell_done")
-    assert done["result"]["per_file"] == {"a.pdf": 1, "b.pdf": 1}
+    assert "per_file" not in done["result"]
+    assert done["result"]["ocr_count"] == 2  # _cell_done_meta uses result.count
 
 
 def test_scan_cells_ocr_zero_pdfs_still_completes(tmp_path):

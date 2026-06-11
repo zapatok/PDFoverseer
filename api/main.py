@@ -40,6 +40,21 @@ async def lifespan(app: FastAPI):
     app.state.batches = {}
     app.state.manager = manager
     yield
+    # Graceful shutdown: cancela cualquier batch OCR en vuelo y espera a que su
+    # hilo de dispatch termine ANTES de cerrar la DB. scan_cells_ocr hace join del
+    # hilo de drain antes de retornar, así esperar el future garantiza que el merge
+    # incremental por-archivo (Incr. 1A) no escriba sobre una conexión cerrada.
+    batches = getattr(app.state, "batches", {})
+    for handle in list(batches.values()):
+        if handle.cancel_event is not None:
+            handle.cancel_event.set()
+    for handle in list(batches.values()):
+        fut = getattr(handle, "future", None)
+        if fut is not None:
+            try:
+                fut.result(timeout=10)
+            except Exception:
+                pass
     close_all()
 
 

@@ -291,7 +291,7 @@ class SessionManager:
     @_synchronized
     def finalize_cell_ocr(
         self, session_id: str, hospital: str, sigla: str, result: ScanResult
-    ) -> None:
+    ) -> dict:
         """Finaliza la metadata de celda tras un OCR de celda *incremental* (Incr. 1A).
 
         NO toca ``per_file``/``per_file_method``: esos se fusionaron por archivo vía
@@ -307,6 +307,12 @@ class SessionManager:
             hospital: sigla del hospital.
             sigla: sigla de la categoría.
             result: ScanResult de metadata de la corrida (su ``per_file`` se ignora).
+
+        Returns:
+            El dict de la celda ya fusionada y finalizada. La ruta lo usa para emitir
+            el ``cell_done`` con el snapshot autoritativo (``per_file`` completo —
+            incluidos los archivos saltados —, ``ocr_count`` y ``near_matches``), sin
+            una segunda lectura del estado.
         """
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
@@ -326,6 +332,7 @@ class SessionManager:
         cell.setdefault("excluded", False)
         cell.setdefault("confirmed", False)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
+        return cell
 
     @_synchronized
     def apply_user_override(

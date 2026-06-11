@@ -12,7 +12,7 @@ class _FlakyScanner:
         self.fail_times = fail_times
         self.calls = 0
 
-    def count_ocr(self, folder, *, cancel, on_pdf=None):
+    def count_ocr(self, folder, *, cancel, on_pdf=None, skip=None):
         self.calls += 1
         if self.calls <= self.fail_times:
             raise RuntimeError("transient tesseract crash")
@@ -29,7 +29,7 @@ def test_recovers_after_retries(monkeypatch):
     scanner = _FlakyScanner(fail_times=2)
     _setup(monkeypatch, scanner)
 
-    h, s, result, err = orchestrator._ocr_worker(("HRB", "art", "/tmp/x"))
+    h, s, result, err = orchestrator._ocr_worker(("HRB", "art", "/tmp/x", []))
 
     assert err is None
     assert result == "OK_RESULT"
@@ -40,7 +40,7 @@ def test_gives_up_after_two_retries(monkeypatch):
     scanner = _FlakyScanner(fail_times=99)
     _setup(monkeypatch, scanner)
 
-    h, s, result, err = orchestrator._ocr_worker(("HRB", "art", "/tmp/x"))
+    h, s, result, err = orchestrator._ocr_worker(("HRB", "art", "/tmp/x", []))
 
     assert result is None
     assert "transient tesseract crash" in err
@@ -52,14 +52,14 @@ def test_cancelled_does_not_retry(monkeypatch):
         def __init__(self):
             self.calls = 0
 
-        def count_ocr(self, folder, *, cancel, on_pdf=None):
+        def count_ocr(self, folder, *, cancel, on_pdf=None, skip=None):
             self.calls += 1
             raise CancelledError()
 
     scanner = _CancelScanner()
     _setup(monkeypatch, scanner)
 
-    h, s, result, err = orchestrator._ocr_worker(("HRB", "art", "/tmp/x"))
+    h, s, result, err = orchestrator._ocr_worker(("HRB", "art", "/tmp/x", []))
 
     assert err == "cancelled"
     assert scanner.calls == 1  # sin reintento

@@ -26,7 +26,7 @@ from core.orchestrator import (
     scan_month,
     scan_one_file_ocr,
 )
-from core.scanners.base import ConfidenceLevel, NearMatchEntry, ScanResult, ScanTelemetry
+from core.scanners.base import ConfidenceLevel, ScanResult
 from core.scanners.cancellation import CancellationToken
 from core.scanners.utils.cell_enumeration import enumerate_cell_pdfs
 
@@ -142,6 +142,78 @@ def scan(
     }
 
 
+def _skip_files(cell: dict) -> set[str]:
+    """Archivos ya confiables que el OCR de celda NO re-escanea (Incr. 1A, spec §3.1).
+
+    Son los que tienen un método OCR previo (∉ ``filename_glob``) o un override
+    por-archivo. Los A7/``filename_glob`` NO entran al skip: se re-escanean (es
+    barato — solo cuentan páginas) y su per_file ya lo fijó pase-1.
+    """
+    method = cell.get("per_file_method") or {}
+    overrides = cell.get("per_file_overrides") or {}
+    return {f for f, m in method.items() if m and m != "filename_glob"} | set(overrides)
+
+
+def _apply_scan_event(mgr: SessionManager, session_id: str, event: dict) -> dict:
+    """Aplica un evento de progreso del OCR de celda al estado y devuelve el evento
+    a difundir (posiblemente enriquecido). Incr. 1A — núcleo del merge incremental:
+
+    - ``file_result``: merge incremental por-archivo **solo** si el método es OCR
+      real (∉ ``filename_glob``) y ``count`` no es ``None``; un tick ``filename_glob``
+      (A7/sin-flavors/``none``) o ``count=None`` (ilegible) es solo-progreso (su
+      per_file ya lo fijó pase-1; el batch no reescribe esa verdad — clobber-guard).
+    - ``cell_done``: finaliza la metadata y **reinyecta** el snapshot fusionado
+      (``per_file`` completo —incluidos los saltados—, ``ocr_count``, ``near_matches``)
+      para que el contrato del frontend quede idéntico al de pre-1A.
+    - cualquier otro evento se difunde tal cual.
+    """
+    etype = event.get("type")
+    if etype == "file_result":
+        count = event.get("count")
+        method = event.get("method")
+        if count is not None and method != "filename_glob":
+            mgr.apply_per_file_ocr_result(
+                session_id,
+                event["hospital"],
+                event["sigla"],
+                event["filename"],
+                count=count,
+                method=method,
+                near_matches=event.get("near_matches") or [],
+            )
+        return event
+    if etype == "cell_done":
+        cell = mgr.finalize_cell_ocr(
+            session_id, event["hospital"], event["sigla"], _meta_result(event["result"])
+        )
+        event["result"]["per_file"] = cell.get("per_file")
+        event["result"]["ocr_count"] = cell.get("ocr_count")
+        event["result"]["near_matches"] = cell.get("near_matches") or []
+        return event
+    return event
+
+
+def _meta_result(r: dict) -> ScanResult:
+    """Reconstruye un ScanResult de *solo metadata* desde el dict de un evento
+    ``cell_done`` (la salida de ``orchestrator._cell_done_meta``) para pasarlo a
+    :meth:`SessionManager.finalize_cell_ocr`.
+
+    ``count``/``per_file`` van dummy a propósito: ``finalize_cell_ocr`` ignora
+    ambos (el total real lo deriva del ``per_file`` ya fusionado por archivo).
+    """
+    return ScanResult(
+        count=r.get("ocr_count") or 0,
+        confidence=ConfidenceLevel(r["confidence"]),
+        method=r["method"],
+        breakdown=r.get("breakdown"),
+        flags=list(r.get("flags") or []),
+        errors=list(r.get("errors") or []),
+        duration_ms=r.get("duration_ms_ocr") or 0,
+        files_scanned=0,
+        per_file=None,
+    )
+
+
 @router.post("/sessions/{session_id}/scan-ocr")
 def scan_ocr(
     request: Request,
@@ -188,10 +260,25 @@ def scan_ocr(
             raise HTTPException(404, f"Folder missing for {hosp}/{sigla}")
         cells_with_paths.append((hosp, sigla, folder_path))
 
-    # Pre-count PDFs across the selected cells so the client can size the
-    # progress bar immediately (audit #1). Uses the same enumeration the OCR
-    # scanners iterate, so the scan's `done` converges exactly on total_pdfs.
-    total_pdfs = sum(len(enumerate_cell_pdfs(f)) for (_, _, f) in cells_with_paths)
+    # Incr. 1A fusionar-y-saltar: por celda, los archivos ya confiables que el OCR
+    # de celda NO re-escanea — los que tienen un método OCR previo (≠ filename_glob)
+    # o un override por-archivo. Los A7/filename_glob se re-escanean (son baratos:
+    # solo cuentan páginas), así que NO entran al skip.
+    cells_state = state.get("cells", {})
+    skip_by_cell: dict[tuple[str, str], set[str]] = {}
+    for hosp, sigla, _folder in cells_with_paths:
+        cell = (cells_state.get(hosp, {}) or {}).get(sigla) or {}
+        sk = _skip_files(cell)
+        if sk:
+            skip_by_cell[(hosp, sigla)] = sk
+
+    # Pre-count PDFs across the selected cells so the client can size the progress
+    # bar immediately (audit #1), EXCLUDING the skipped files so the scan's per-PDF
+    # `done` converges exactly on total_pdfs (the orchestrator counts the same way).
+    total_pdfs = sum(
+        sum(1 for p in enumerate_cell_pdfs(f) if p.name not in skip_by_cell.get((h, s), set()))
+        for (h, s, f) in cells_with_paths
+    )
 
     # Atomic check-then-set: setdefault returns the value already in the dict if
     # it existed, otherwise installs and returns the new one.
@@ -200,46 +287,22 @@ def scan_ocr(
         raise HTTPException(409, "another batch is already running for this session")
     loop = app.state.loop
 
+    def _safe_broadcast(event: dict) -> None:
+        # El scan corre en un hilo de fondo; si el event loop ya se cerró (apagado
+        # del server, o teardown del TestClient antes de que termine el batch), dejar
+        # caer el evento en vez de crashear el hilo de drain. is_closed() + except
+        # cubren el TOCTOU (el loop podría cerrarse entre el chequeo y el schedule).
+        try:
+            if not loop.is_closed():
+                asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
+        except RuntimeError:
+            pass
+
     def on_progress(event: dict) -> None:
-        asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
-        if event.get("type") == "cell_done":
-            r = event["result"]
-            # A14: reconstruct ScanTelemetry from the near_matches the
-            # orchestrator serialised into the event so apply_ocr_result
-            # can persist them alongside the rest of the cell state.
-            raw_nms = r.get("near_matches") or []
-            telemetry = (
-                ScanTelemetry(
-                    near_matches=[
-                        NearMatchEntry(
-                            pdf_name=nm["pdf_name"],
-                            page_index=nm["page_index"],
-                            flavor_name=nm["flavor_name"],
-                            matched_anchors=nm["matched_anchors"],
-                            missing_anchors=nm["missing_anchors"],
-                        )
-                        for nm in raw_nms
-                    ]
-                )
-                if raw_nms
-                else None
-            )
-            result = ScanResult(
-                count=r["ocr_count"],
-                confidence=ConfidenceLevel(r["confidence"]),
-                method=r["method"],
-                breakdown=None,
-                flags=[],
-                errors=[],
-                duration_ms=r["duration_ms_ocr"],
-                files_scanned=1,
-                # per_file carries the per-PDF document count the scanner found;
-                # without it apply_ocr_result wipes the cell's per_file to None
-                # and the FileList/lightbox fall back to "1" (review #2/#3).
-                per_file=r.get("per_file"),
-                telemetry=telemetry,
-            )
-            mgr.apply_ocr_result(session_id, event["hospital"], event["sigla"], result)
+        # Aplica el evento al estado (merge incremental / finalize) y difunde el
+        # resultado. La lógica vive en _apply_scan_event (módulo-nivel) para poder
+        # testearla sin la maquinaria async/ProcessPool.
+        _safe_broadcast(_apply_scan_event(mgr, session_id, event))
 
     cancel_token = CancellationToken.from_event(handle.cancel_event)
 
@@ -250,6 +313,7 @@ def scan_ocr(
                 on_progress=on_progress,
                 cancel=cancel_token,
                 max_workers=2,
+                skip_by_cell=skip_by_cell,
             )
         except Exception:
             logger.exception("scan_cells_ocr crashed for session %s", session_id)
