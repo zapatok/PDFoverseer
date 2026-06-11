@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import sqlite3
+import threading
 from pathlib import Path
 
 from core.cell_count import compute_cell_count  # noqa: F401  re-exported for api consumers
@@ -73,12 +75,32 @@ def compute_worker_count(cell: dict) -> int:
     return total
 
 
+def _synchronized(method):
+    """Serializa el método bajo ``self._lock`` (RLock): protege el
+    read-modify-write del blob de sesión contra escrituras concurrentes (merge
+    incremental por-PDF desde el hilo de drain + ediciones HTTP durante un scan).
+
+    RLock (no Lock): ``apply_cell_result`` delega en ``apply_filename_result``,
+    así que un hilo re-adquiere el mismo lock — con un Lock no reentrante eso
+    deadlockea.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
 class SessionManager:
     """Wrap session DB operations + maintain in-memory cell state."""
 
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
+        self._lock = threading.RLock()
 
+    @_synchronized
     def open_session(
         self,
         *,
@@ -111,6 +133,7 @@ class SessionManager:
         state["status"] = rec.status
         return state
 
+    @_synchronized
     def get_session_state(self, session_id: str) -> dict:
         """Return full session state dict for an existing session.
 
@@ -145,6 +168,7 @@ class SessionManager:
             update_session_state(self._conn, session_id, state_json=json.dumps(state))
         return state, rec
 
+    @_synchronized
     def apply_filename_result(
         self, session_id: str, hospital: str, sigla: str, result: ScanResult
     ) -> None:
@@ -202,6 +226,7 @@ class SessionManager:
         cell.setdefault("confirmed", False)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    @_synchronized
     def apply_ocr_result(
         self, session_id: str, hospital: str, sigla: str, result: ScanResult
     ) -> None:
@@ -257,6 +282,7 @@ class SessionManager:
         cell.setdefault("confirmed", False)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    @_synchronized
     def apply_user_override(
         self,
         session_id: str,
@@ -296,6 +322,7 @@ class SessionManager:
             cell["manual_entry"] = True
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    @_synchronized
     def apply_per_file_override(
         self,
         session_id: str,
@@ -325,6 +352,7 @@ class SessionManager:
         cell["per_file_overrides"][filename] = count
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    @_synchronized
     def apply_per_file_ocr_result(
         self,
         session_id: str,
@@ -364,6 +392,7 @@ class SessionManager:
         cell["near_matches"] = others + list(near_matches or [])
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    @_synchronized
     def clear_near_matches(
         self,
         session_id: str,
@@ -401,6 +430,7 @@ class SessionManager:
             ]
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    @_synchronized
     def apply_worker_count(
         self,
         session_id: str,
@@ -435,6 +465,7 @@ class SessionManager:
             cell["worker_cursor"] = cursor
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    @_synchronized
     def apply_confirmed(
         self,
         session_id: str,
@@ -465,6 +496,7 @@ class SessionManager:
         cells[hospital][sigla]["confirmed"] = confirmed
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
+    @_synchronized
     def apply_cell_result(
         self,
         session_id: str,
@@ -475,6 +507,7 @@ class SessionManager:
         """Deprecated. Use apply_filename_result for pase 1 results."""
         self.apply_filename_result(session_id, hospital, sigla, result)
 
+    @_synchronized
     def finalize(self, session_id: str) -> None:
         """Mark a session as finalized.
 
