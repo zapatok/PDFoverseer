@@ -230,7 +230,13 @@ class SessionManager:
     def apply_ocr_result(
         self, session_id: str, hospital: str, sigla: str, result: ScanResult
     ) -> None:
-        """Persist an OCR scanner result. Touches ocr_count, method,
+        """Persist an OCR scanner result (whole-cell ``per_file`` replacement).
+
+        .. deprecated:: Incr. 1A — el OCR de celda fusiona por archivo
+            (:meth:`apply_per_file_ocr_result`) + :meth:`finalize_cell_ocr` para la
+            metadata. Se mantiene para compat de tests legacy (migrar en Task 9).
+
+        Touches ocr_count, method,
         confidence, flags, errors, breakdown, duration_ms_ocr. method =
         ``result.method`` (header_detect, corner_count, page_count_pure, or
         filename_glob when the OCR scanner fell back internally).
@@ -279,6 +285,45 @@ class SessionManager:
         cell.setdefault("override_note", None)
         cell.setdefault("excluded", False)
         # Preserve a manual "marcar listo" across re-scans (never clear it here).
+        cell.setdefault("confirmed", False)
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    @_synchronized
+    def finalize_cell_ocr(
+        self, session_id: str, hospital: str, sigla: str, result: ScanResult
+    ) -> None:
+        """Finaliza la metadata de celda tras un OCR de celda *incremental* (Incr. 1A).
+
+        NO toca ``per_file``/``per_file_method``: esos se fusionaron por archivo vía
+        :meth:`apply_per_file_ocr_result` a medida que cada PDF terminó. Aquí solo se
+        escribe metadata de la corrida (método/confianza/flags/errores/duración) y un
+        ``ocr_count`` belt-and-suspenders = suma del ``per_file`` actual (fallback de
+        ``compute_cell_count``; el total real sale de ``per_file``). Preserva
+        user_override, per_file_overrides, manual_entry, confirmed, worker_marks,
+        filename_count.
+
+        Args:
+            session_id: sesión objetivo.
+            hospital: sigla del hospital.
+            sigla: sigla de la categoría.
+            result: ScanResult de metadata de la corrida (su ``per_file`` se ignora).
+        """
+        state, _ = self._load_and_migrate(session_id)
+        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+        cell["method"] = result.method
+        cell["confidence"] = result.confidence.value
+        cell["breakdown"] = result.breakdown
+        cell["flags"] = list(result.flags)
+        cell["errors"] = list(result.errors)
+        cell["duration_ms_ocr"] = result.duration_ms
+        # Fallback only — compute_cell_count prioriza per_file. Suma del per_file
+        # YA fusionado por archivo, no el del result (que se ignora).
+        cell["ocr_count"] = sum((cell.get("per_file") or {}).values())
+        cell.setdefault("per_file_overrides", {})
+        cell.setdefault("manual_entry", False)
+        cell.setdefault("user_override", None)
+        cell.setdefault("override_note", None)
+        cell.setdefault("excluded", False)
         cell.setdefault("confirmed", False)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 

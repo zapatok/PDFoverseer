@@ -128,6 +128,45 @@ def test_apply_ocr_result_with_filename_glob_fallback_method(manager):
     assert cell["method"] == "filename_glob"
 
 
+def test_finalize_cell_ocr_does_not_touch_per_file(manager):
+    """Incr. 1A: el OCR de celda incremental fusiona per_file por archivo
+    (apply_per_file_ocr_result) y al cerrar la celda finaliza SOLO metadata.
+    finalize_cell_ocr no debe pisar per_file/per_file_method."""
+    from core.scanners.base import ConfidenceLevel, ScanResult
+
+    manager.apply_per_file_ocr_result(
+        "2026-04",
+        "HRB",
+        "art",
+        "doc1.pdf",
+        count=3,
+        method="header_band_anchors",
+        near_matches=[],
+    )
+    meta = ScanResult(
+        count=999,
+        confidence=ConfidenceLevel.LOW,
+        method="header_band_anchors",
+        breakdown=None,
+        flags=["a7_one_page_locked"],
+        errors=[],
+        duration_ms=120,
+        files_scanned=1,
+        per_file={"IGNORAR.pdf": 999},
+    )
+    manager.finalize_cell_ocr("2026-04", "HRB", "art", meta)
+    cell = manager.get_session_state("2026-04")["cells"]["HRB"]["art"]
+    # per_file / per_file_method intactos (se fusionaron por archivo).
+    assert cell["per_file"] == {"doc1.pdf": 3}
+    assert cell["per_file_method"] == {"doc1.pdf": "header_band_anchors"}
+    # metadata finalizada desde el ScanResult.
+    assert cell["method"] == "header_band_anchors"
+    assert cell["confidence"] == "low"
+    assert cell["flags"] == ["a7_one_page_locked"]
+    # ocr_count belt-and-suspenders = suma del per_file existente, NO el 999 del meta.
+    assert cell["ocr_count"] == 3
+
+
 def test_filename_rescan_preserves_near_matches_for_ocr_cell(manager):
     """Supersedes the old Bug-B "clear on pase-1" behavior: the 2026-06-05 fix
     stops a bulk filename re-scan from touching an OCR-counted cell's per_file,
