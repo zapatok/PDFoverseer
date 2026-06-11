@@ -156,3 +156,141 @@ def test_other_events_pass_through_untouched(mgr, sid):
     assert _apply_scan_event(mgr, sid, ev) is ev
     # No crea ninguna celda.
     assert mgr.get_session_state(sid)["cells"] == {}
+
+
+# ---------- seam orquestador ↔ ruta (eventos reales, sin async/WS) ----------
+
+
+class _FakeOcrScanner:
+    """Scanner OCR de prueba: cuenta i+2 docs por PDF multipágina, salta los de
+    ``skip`` y emite el callback enriquecido como los scanners reales."""
+
+    sigla = "odi"
+
+    def __init__(self, counts: dict[str, int]):
+        self.counts = counts
+
+    def count(self, folder, **_):
+        from core.scanners.base import ConfidenceLevel, ScanResult
+
+        return ScanResult(
+            count=0,
+            confidence=ConfidenceLevel.HIGH,
+            method="filename_glob",
+            breakdown=None,
+            flags=[],
+            errors=[],
+            duration_ms=0,
+            files_scanned=0,
+            per_file={},
+        )
+
+    def count_ocr(self, folder, *, cancel, on_pdf=None, only=None, skip=None, on_page=None):
+        from core.scanners.base import ConfidenceLevel, ScanResult
+
+        skip = skip or set()
+        pf: dict[str, int] = {}
+        for name, n in self.counts.items():
+            if name in skip:
+                continue
+            if on_pdf is not None:
+                on_pdf(name, n, "header_band_anchors", [])
+            pf[name] = n
+        return ScanResult(
+            count=sum(pf.values()),
+            confidence=ConfidenceLevel.HIGH,
+            method="header_band_anchors",
+            breakdown=None,
+            flags=[],
+            errors=[],
+            duration_ms=1,
+            files_scanned=len(pf),
+            per_file=pf,
+        )
+
+
+def test_real_orchestrator_events_merge_through_apply_scan_event(mgr, sid, tmp_path):
+    """Seam: los eventos REALES de ``scan_cells_ocr`` (file_result + cell_done),
+    pasados por ``_apply_scan_event``, producen el estado fusionado correcto —
+    el punto de integración orquestador ↔ ruta, sin la maquinaria async/WS."""
+    import core.scanners as scanner_registry
+    from core.orchestrator import scan_cells_ocr
+    from core.scanners.cancellation import CancellationToken
+
+    folder = tmp_path / "3.-ODI Visitas"
+    folder.mkdir()
+    for name in ("m1.pdf", "m2.pdf"):
+        (folder / name).write_bytes(b"%PDF-1.4\n%%EOF\n")
+
+    scanner_registry.clear()
+    scanner_registry.register(_FakeOcrScanner({"m1.pdf": 2, "m2.pdf": 3}))
+    try:
+        events: list[dict] = []
+        scan_cells_ocr(
+            [("HPV", "odi", folder)],
+            on_progress=events.append,
+            cancel=CancellationToken(),
+            max_workers=1,
+        )
+        for ev in events:
+            _apply_scan_event(mgr, sid, ev)
+    finally:
+        scanner_registry.clear()
+        scanner_registry.register_defaults()
+
+    cell = mgr.get_session_state(sid)["cells"]["HPV"]["odi"]
+    assert cell["per_file"] == {"m1.pdf": 2, "m2.pdf": 3}
+    assert cell["ocr_count"] == 5  # finalize = suma del per_file fusionado
+    assert cell["per_file_method"]["m1.pdf"] == "header_band_anchors"
+
+
+def test_real_run_skips_already_ocrd_files(mgr, sid, tmp_path):
+    """H2 end-to-end en el seam: tras un primer OCR, ``_skip_files`` da el skip de
+    los ya confiables; un segundo run con ese skip NO los re-escanea ni cambia su
+    conteo (el scanner ni emite file_result para ellos)."""
+    import core.scanners as scanner_registry
+    from core.orchestrator import scan_cells_ocr
+    from core.scanners.cancellation import CancellationToken
+
+    folder = tmp_path / "3.-ODI Visitas"
+    folder.mkdir()
+    for name in ("m1.pdf", "m2.pdf"):
+        (folder / name).write_bytes(b"%PDF-1.4\n%%EOF\n")
+
+    scanner_registry.clear()
+    scanner_registry.register(_FakeOcrScanner({"m1.pdf": 2, "m2.pdf": 3}))
+    try:
+        first: list[dict] = []
+        scan_cells_ocr(
+            [("HPV", "odi", folder)],
+            on_progress=first.append,
+            cancel=CancellationToken(),
+            max_workers=1,
+        )
+        for ev in first:
+            _apply_scan_event(mgr, sid, ev)
+
+        cell = mgr.get_session_state(sid)["cells"]["HPV"]["odi"]
+        skip = _skip_files(cell)
+        assert skip == {"m1.pdf", "m2.pdf"}  # ambos quedaron con método OCR
+
+        second: list[dict] = []
+        scan_cells_ocr(
+            [("HPV", "odi", folder)],
+            on_progress=second.append,
+            cancel=CancellationToken(),
+            max_workers=1,
+            skip_by_cell={("HPV", "odi"): skip},
+        )
+        # El scanner no emite file_result para los saltados.
+        merged = [e for e in second if e["type"] == "file_result"]
+        assert merged == []
+        for ev in second:
+            _apply_scan_event(mgr, sid, ev)
+    finally:
+        scanner_registry.clear()
+        scanner_registry.register_defaults()
+
+    cell = mgr.get_session_state(sid)["cells"]["HPV"]["odi"]
+    assert cell["per_file"] == {"m1.pdf": 2, "m2.pdf": 3}  # sin cambios
+    assert cell["ocr_count"] == 5
