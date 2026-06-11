@@ -159,3 +159,15 @@ def test_scan_cells_ocr_multiworker_pdf_progress(tmp_path):
     )
     assert any(e["type"] == "pdf_progress" for e in events)
     assert events[-1]["type"] in ("scan_complete", "scan_cancelled")
+
+    # Incr. 1A FIFO ordering invariant: in the multi-worker path the worker
+    # enqueues cell_meta AFTER all its pdf_done on the same IPC queue, so the
+    # single drain thread emits every file_result for a cell BEFORE its cell_done.
+    # This is exactly what lets the route's finalize_cell_ocr see a complete
+    # per_file. Assert it here (the multi-worker path is otherwise unasserted).
+    types = [e["type"] for e in events]
+    if "cell_done" in types:
+        done_idx = types.index("cell_done")
+        file_result_idx = [i for i, t in enumerate(types) if t == "file_result"]
+        assert file_result_idx, "expected file_result events before cell_done"
+        assert max(file_result_idx) < done_idx

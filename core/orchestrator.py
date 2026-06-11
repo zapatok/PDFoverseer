@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from core.domain import CATEGORY_FOLDERS, HOSPITALS, SIGLAS
 if TYPE_CHECKING:
     from core.scanners.base import ScanResult
     from core.scanners.cancellation import CancellationToken
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -705,6 +708,15 @@ def scan_cells_ocr(
     # racy across processes, so we don't rely on it).
     progress_q.put({"type": _DRAIN_STOP})
     drain_thread.join(timeout=5.0)
+    if drain_thread.is_alive():
+        # No debería pasar: tras cerrar el pool y encolar el sentinel, el drain
+        # vacía unos pocos eventos y sale. Si sigue vivo, un on_progress se trabó
+        # (p. ej. contención de DB) — lo dejamos como daemon, pero avisamos: en ese
+        # caso un cell_done tardío podría escribir tras el cierre de la DB (review #4).
+        logger.warning(
+            "drain thread no terminó en 5 s; un cell_done tardío podría perderse "
+            "o escribir tras el cierre de la DB"
+        )
 
     if cancelled > 0:
         on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})
