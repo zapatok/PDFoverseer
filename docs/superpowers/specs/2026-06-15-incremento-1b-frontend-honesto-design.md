@@ -110,11 +110,18 @@ anyUnreliableOcrFile(cell) =
 OCR_METHODS = { "header_detect", "corner_count", "header_band_anchors", "v4" }
 ```
 
+> **`page_count_pure` NO va en `OCR_METHODS` — a propósito.** Las siglas de página fija llevan
+> `per_file_method == "page_count_pure"`, que `_origin_for` mapea a **R1** (confiable), no a
+> OCR. Meterlo en `OCR_METHODS` mandaría esas celdas a ámbar incorrectamente. `OCR_METHODS` es
+> exactamente el conjunto que `_origin_for` (`api/routes/sessions.py:622`) trata como "OCR/Revisar";
+> mantenerlos en sync es el contrato.
+
 ### 4.2 Por qué `confidence === "high"` sigue en juego (no se elimina, se subordina)
 El scanner ya computa `confidence`:
 - `simple_factory` (filename_glob): `HIGH` ⟺ todos los archivos son **1 página**
-  (`no_multipage`) o la sigla es de página fija (`page_count_pure`). Es decir, `HIGH` **ya
-  significa "todos R1"** para el camino sin OCR (`simple_factory.py:97`).
+  (`no_multipage`, `simple_factory.py:97`) o la sigla es de página fija (`page_count_pure`,
+  `simple_factory.py:84` — camino separado). Es decir, `HIGH` **ya significa "todos R1"** para
+  el camino sin OCR.
 - `pagination_scanner` (V4) y el de anclas: `HIGH` cuando no hubo errores ni archivos de baja
   confianza.
 
@@ -135,7 +142,7 @@ override). Toda otra celda mantiene su color actual.
 |-------|--------------|-------------------|-----------|-------------|:-----:|
 | Todos R1 (1-pág) | high | `filename_glob`×N | — | false | ✅ |
 | Sigla página fija | high | `page_count_pure`×N | — | false | ✅ |
-| Multipágina sin OCR | low | `filename_glob`×N | — | false | ⛔ ámbar |
+| Multipágina sin OCR (chip Pendiente) | low | `filename_glob`×N | — | false | ⛔ ámbar |
 | OCR limpio | high | `v4` / `header_band_anchors` | — | false | ⛔ ámbar (cambio) |
 | OCR + confirmado | high | `v4` | — | **true** | ✅ |
 | OCR + override de celda | high | `v4` | `user_override=N` | false | ✅ |
@@ -195,11 +202,18 @@ AJUSTE MANUAL
   sin override muestra la suma por archivos. **Sin cambio** en `cellCount.js`.
 
 ### 5.3 Comportamiento del campo "Ajuste manual" (`OverridePanel`)
-- **Modo Por archivos:** input deshabilitado/atenuado (`disabled`, opacidad reducida). El
-  placeholder sigue mostrando el conteo automático. La nota **permanece editable** (una nota no
-  requiere override — es metadato de la celda).
-- **Modo Manual:** input habilitado y enfocado al entrar al modo. Igual que hoy (debounce 400 ms,
-  `SaveIndicator`).
+- **Modo Por archivos:** input **y nota** deshabilitados/atenuados (`disabled`, opacidad
+  reducida). El placeholder del input sigue mostrando el conteo automático.
+  - **Por qué la nota se deshabilita junto al input** (corrección de revisión 2026-06-15): en el
+    backend la nota está **acoplada** al override — `apply_user_override` hace
+    `cell["override_note"] = note if value is not None else None`, así que cambiar a modo Por
+    archivos (`saveOverride(..., value=null)`) **borra la nota**. En 1B la nota sigue siendo "la
+    nota del ajuste manual" (acoplada, como hoy): vive solo mientras hay override. Deshabilitar el
+    textarea en modo Por archivos hace honesto ese acoplamiento (no invita a escribir una nota que
+    se perdería). **Desacoplar la nota** (nota-por-celda independiente, con estado por-resolver/
+    resuelto) es **Grupo N → Incr 3**, fuera de 1B; ahí sí tocaría backend.
+- **Modo Manual:** input y nota habilitados; el input se enfoca al entrar al modo. Igual que hoy
+  (debounce 400 ms, `SaveIndicator`).
 - El toggle y el input comparten el mismo `saveOverride`; sin doble fuente de verdad.
 
 ### 5.4 `archivos: N` — el conteo por archivos sin el override
@@ -241,14 +255,16 @@ la lista** (o como primera fila no-archivo) un aviso ámbar persistente:
 
 ## 6. Quitar el badge "Confianza alta/baja"
 
-En `DetailPanel.jsx` (líneas 232–234) eliminar el `<Badge variant={confidenceVariant(cell)}>`
-y la función `confidenceVariant`. Razón (decidida con Daniel 2026-06-15): con el punto verde por
+En `DetailPanel.jsx` (líneas 232–234) eliminar el `<Badge variant={confidenceVariant(cell)}>` y
+**los dos símbolos locales que quedan huérfanos**: la función `confidenceVariant` (línea 20) y el
+import `CONFIDENCE_LABEL` (línea 11). Razón (decidida con Daniel 2026-06-15): con el punto verde por
 procedencia, el badge mostraría "alta" en celdas ámbar por OCR → señal contradictoria. El estado
 real ya lo comunican el punto verde + los chips por archivo (`OriginChip`). El badge "Manual"
 (`state-override`) y "Compilación" (`state-suspect`) **se mantienen**.
 
-`CONFIDENCE_LABEL` queda sin uso en `DetailPanel`; verificar si otros consumidores lo usan antes
-de borrarlo del módulo (`grep`); si no, retirarlo (regla de dead-code del proyecto).
+`CONFIDENCE_LABEL` tiene a `DetailPanel` como **único consumidor** (verificado por grep en la
+revisión 2026-06-15); al quitar el badge, retirar el import (regla de dead-code del proyecto).
+`confidenceVariant` también es local y solo se usa en la línea 233 → se borra junto con el badge.
 
 ---
 
