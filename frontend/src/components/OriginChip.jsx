@@ -5,6 +5,7 @@ import Badge from "../ui/Badge";
 // a fixed-page sigla now reads as R1, a multipage filename_glob file as Pendiente.
 export const ORIGIN_VARIANT = {
   R1:        "jade",
+  RN:        "jade",  // ratio_n — reliable like R1; "RN" text distinguishes it visually
   OCR:       "iris",
   Manual:    "blue",
   Pendiente: "amber",

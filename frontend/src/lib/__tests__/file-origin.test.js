@@ -15,4 +15,7 @@ describe("fileCountDisplay", () => {
   it("missing count → defaults to 1 (non-Pendiente)", () => {
     expect(fileCountDisplay("R1", undefined)).toEqual({ value: 1, placeholder: undefined });
   });
+  it("RN → shows effective count (default branch, no special case)", () => {
+    expect(fileCountDisplay("RN", 4)).toEqual({ value: 4, placeholder: undefined });
+  });
 });

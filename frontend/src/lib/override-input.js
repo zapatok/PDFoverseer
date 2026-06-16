@@ -2,7 +2,7 @@
 // Negatives are rejected; 0 is a valid override; empty clears it. The ≤páginas
 // cap is intentionally NOT here (deferred to Incr 2 with persisted per_file_pages).
 
-export function parseOverrideInput(raw) {
+export function parseOverrideInput(raw, { maxPages = null } = {}) {
   if (raw === "" || raw === null || raw === undefined) {
     return { value: null, valid: true };
   }
@@ -10,6 +10,9 @@ export function parseOverrideInput(raw) {
   // Require a non-negative integer — a document count is never fractional.
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 0) {
+    return { value: null, valid: false };
+  }
+  if (maxPages != null && n > maxPages) {
     return { value: null, valid: false };
   }
   return { value: n, valid: true };
