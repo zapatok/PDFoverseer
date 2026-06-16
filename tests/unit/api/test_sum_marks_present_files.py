@@ -48,3 +48,21 @@ def test_none_present_files_no_per_file_sums_all():
         marks={"f_a.pdf": [{"page": 1, "count": 10}], "f_b.pdf": [{"page": 1, "count": 5}]}
     )
     assert _sum_marks(cell, None) == 15  # per_file vacío → no filtra
+
+
+# ---------------------------------------------------------------------------
+# Task 1.2 — compute_worker_count delegates to _sum_marks
+# ---------------------------------------------------------------------------
+from api.state import compute_worker_count  # noqa: E402
+
+
+def test_compute_worker_count_present_files_param():
+    cell = {
+        "worker_marks": {
+            "f_a.pdf": [{"page": 1, "count": 10}],
+            "f_b.pdf": [{"page": 1, "count": 36}],
+        },
+        "per_file": {"f_a.pdf": 1},
+    }
+    assert compute_worker_count(cell, {"f_a.pdf", "f_b.pdf"}) == 46
+    assert compute_worker_count(cell) == 10  # legacy default unchanged

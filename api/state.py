@@ -8,7 +8,10 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from core.cell_count import compute_cell_count  # noqa: F401  re-exported for api consumers
+from core.cell_count import (  # noqa: F401  re-exported for api consumers
+    _sum_marks,
+    compute_cell_count,
+)
 from core.db.sessions_repo import (
     SessionRecord,
     create_session,
@@ -50,29 +53,21 @@ def _cell_has_work(cell: dict) -> bool:
     return any(m and m != "filename_glob" for m in per_file_method.values())
 
 
-def compute_worker_count(cell: dict) -> int:
-    """Total de trabajadores firmantes de una celda charla/chintegral.
-
-    Suma los ``count`` de todas las marcas. Solo cuenta archivos presentes en
-    ``per_file``: las marcas huérfanas de un PDF renombrado o eliminado se
-    ignoran. Si ``per_file`` está vacío (celda sin escanear), no se filtra.
+def compute_worker_count(cell: dict, present_files: set[str] | None = None) -> int:
+    """Total de marcas de una celda (trabajadores en charla/chintegral, o
+    chequeos en maquinaria — mismo mecanismo). Filtra por archivos presentes;
+    ver core.cell_count._sum_marks para la semántica de ``present_files``.
 
     Args:
         cell: el dict de estado de una celda.
+        present_files: conjunto de nombres de archivo presentes en la carpeta
+            de la celda. ``None`` usa el comportamiento legacy (filtra por
+            per_file cuando no está vacío).
 
     Returns:
-        La suma de trabajadores firmantes; 0 si no hay marcas.
+        La suma de marcas; 0 si no hay marcas.
     """
-    marks: dict = cell.get("worker_marks") or {}
-    per_file: dict = cell.get("per_file") or {}
-    total = 0
-    for filename, page_marks in marks.items():
-        if per_file and filename not in per_file:
-            continue
-        for mark in page_marks or []:
-            if isinstance(mark, dict):
-                total += mark.get("count") or 0
-    return total
+    return _sum_marks(cell, present_files)
 
 
 def _synchronized(method):
