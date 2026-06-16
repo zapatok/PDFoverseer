@@ -116,6 +116,24 @@ describe("hasOverride", () => {
   });
 });
 
+describe("isCellReady (Incr 2 — all_reliable signal)", () => {
+  it("all_reliable true -> ready", () => {
+    expect(isCellReady({ all_reliable: true })).toBe(true);
+  });
+  it("all_reliable false -> not ready (even if confidence high)", () => {
+    expect(isCellReady({ all_reliable: false, confidence: "high" })).toBe(false);
+  });
+  it("all_reliable absent -> falls back to 1B legacy rule", () => {
+    // legacy: confidence high + no unreliable OCR file
+    expect(isCellReady({ confidence: "high", per_file_method: { "a.pdf": "filename_glob" } })).toBe(true);
+    expect(isCellReady({ confidence: "high", per_file_method: { "a.pdf": "v4" } })).toBe(false);
+  });
+  it("confirmed / cell override still win regardless of all_reliable", () => {
+    expect(isCellReady({ all_reliable: false, confirmed: true })).toBe(true);
+    expect(isCellReady({ all_reliable: false, user_override: 5 })).toBe(true);
+  });
+});
+
 describe("dotVariantFor", () => {
   it("scanning takes precedence over everything", () => {
     expect(dotVariantFor({ confidence: "high" }, { isScanning: true })).toBe("state-scanning");

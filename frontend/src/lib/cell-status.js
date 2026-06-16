@@ -43,7 +43,10 @@ export function allFilesReliable(cell) {
 }
 
 export function isCellReady(cell) {
-  return !!cell?.confirmed || hasOverride(cell) || allFilesReliable(cell);
+  if (!!cell?.confirmed || hasOverride(cell)) return true;
+  // Backend all_reliable (Incr 2) is authoritative; fall back to the 1B proxy
+  // (allFilesReliable) for cells not yet migrated (e.g. MAYO scanned pre-Incr-2).
+  return cell?.all_reliable ?? allFilesReliable(cell);
 }
 
 // Dot tone. Scanning/error take precedence; a cell with no data yet stays
