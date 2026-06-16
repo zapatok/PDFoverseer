@@ -32,11 +32,14 @@ function MicChip({ status }) {
 
 /**
  * @param {object} props - ver el visor (Task 16) para el origen de cada prop.
+ * @param {string} [props.unit] - "trabajadores" | "chequeos" (derivado del count_type).
+ * @param {boolean} [props.showMic] - si false, oculta el chip de micrófono (checks).
  */
 export function WorkerHud({
   files, fileIndex, pageInFile, pageCount,
   subtotal, total, marks, currentFilename,
   status, saveStatus, micStatus, onFinish,
+  unit = "trabajadores", showMic = true,
 }) {
   const pageMarks = [...(marks[currentFilename] || [])].sort((a, b) => a.page - b.page);
 
@@ -49,7 +52,7 @@ export function WorkerHud({
       </div>
 
       <div>
-        <p className="text-xs uppercase tracking-wider text-po-text-muted">Total de trabajadores</p>
+        <p className="text-xs uppercase tracking-wider text-po-text-muted">Total de {unit}</p>
         <p className="text-4xl font-semibold tabular-nums text-po-text">{total}</p>
       </div>
 
@@ -72,7 +75,7 @@ export function WorkerHud({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <MicChip status={micStatus} />
+        {showMic && <MicChip status={micStatus} />}
         <SaveIndicator status={saveStatus} />
         {status === "terminado" && <Badge variant="jade">Terminado</Badge>}
       </div>
@@ -86,7 +89,7 @@ export function WorkerHud({
       <div className="shrink-0 border-t border-po-border pt-3">
         <p className="mb-1.5 text-xs uppercase tracking-wider text-po-text-muted">Atajos</p>
         <ul className="flex flex-col gap-1">
-          {WORKER_SHORTCUTS.map((s) => (
+          {WORKER_SHORTCUTS.filter((s) => showMic || s.action !== "Voz on / off").map((s) => (
             <li key={s.action} className="flex items-center justify-between gap-2 text-xs">
               <span className="flex shrink-0 gap-1">
                 {s.keys.map((k) => (

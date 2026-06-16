@@ -9,6 +9,7 @@ import { useFitScale } from "../hooks/useFitScale";
 import { useSpeechNumber } from "../hooks/useSpeechNumber";
 import { useSessionStore } from "../store/session";
 import { computeWorkerCount, fileSubtotal } from "../lib/worker-count";
+import { countTypeFor } from "../lib/sigla-info";
 import Button from "../ui/Button";
 import { PdfPage } from "./PdfPage";
 import { WorkerBubble } from "./WorkerBubble";
@@ -109,9 +110,16 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
     return () => window.removeEventListener("keydown", h);
   }, []);
 
+  // count_type determina si este visor opera en modo "trabajadores" (voice on,
+  // label "trabajadores") o modo "chequeos" (sin voz, label "chequeos").
+  const countType = countTypeFor(sigla);
+  const isWorkersMode = countType === "documents_workers";
+  const unit = isWorkersMode ? "trabajadores" : "chequeos";
+
   // --- voz: un número reconocido entra como pendiente, igual que tecleado ---
+  // El hook se llama siempre (Rules-of-Hooks); se desactiva vía `enabled`.
   const { status: micStatus } = useSpeechNumber({
-    enabled: !micPaused,
+    enabled: !micPaused && isWorkersMode,
     onNumber: (n) => setPending(String(n)),
   });
 
@@ -210,7 +218,7 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
     else if (e.key === "PageUp") { e.preventDefault(); retreat(); }
     else if (e.key === "Delete") { e.preventDefault(); deleteMark(); }
     else if (e.key === "e" || e.key === "E") { e.preventDefault(); editMark(); }
-    else if (e.key === "m" || e.key === "M") { e.preventDefault(); setMicPaused((p) => !p); }
+    else if ((e.key === "m" || e.key === "M") && isWorkersMode) { e.preventDefault(); setMicPaused((p) => !p); }
     else if (e.key === "+" || e.key === "=") { e.preventDefault(); zoomIn(); }
     else if (e.key === "-" || e.key === "_") { e.preventDefault(); zoomOut(); }
     else if (e.key === "Backspace") {
@@ -271,6 +279,8 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
         saveStatus={saveStatus}
         micStatus={micStatus}
         onFinish={toggleFinish}
+        unit={unit}
+        showMic={isWorkersMode}
       />
     </div>
   );
