@@ -54,9 +54,11 @@ def test_output_history_method_reflects_override(client) -> None:
     r = test_client.post("/api/sessions", json={"year": 2026, "month": 4})
     sid = r.json()["session_id"]
     test_client.post(f"/api/sessions/{sid}/scan")
+    # value 1 (within the ≤páginas cap for a 1-page odi; was 17 which the cap
+    # rejects). The test's point is that an override's method reaches history.
     test_client.patch(
         f"/api/sessions/{sid}/cells/HPV/odi/override",
-        json={"value": 17, "note": "compilation"},
+        json={"value": 1, "note": "revisado"},
     )
     test_client.post(f"/api/sessions/{sid}/output")
 
@@ -66,7 +68,7 @@ def test_output_history_method_reflects_override(client) -> None:
         for r in get_counts_for_month(conn, year=2026, month=4)
         if r.hospital == "HPV" and r.sigla == "odi"
     )
-    assert odi_row.count == 17
+    assert odi_row.count == 1
     assert odi_row.method == "override"
 
 

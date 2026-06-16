@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.batch import make_handle
 from api.routes.ws import broadcast
@@ -58,6 +58,8 @@ _MONTH_NAMES = {
 
 import fitz  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
+
+from core.scanners.patterns import count_type_for  # noqa: E402
 
 _MAX_REASONABLE_COUNT = 10_000
 
@@ -152,6 +154,117 @@ def _resolve_month_dir(year: int, month: int) -> Path:
 def get_manager() -> SessionManager:
     """Dependency placeholder — overridden in tests + main.py."""
     raise RuntimeError("get_manager not configured")
+
+
+def refresh_all_reliable(
+    mgr: SessionManager,
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    folder: Path,
+) -> None:
+    """Recompute and persist all_reliable after an interactive per-file mutation."""
+    state = mgr.get_session_state(session_id)
+    cell = state["cells"][hospital][sigla]
+    mgr.set_all_reliable(session_id, hospital, sigla, compute_settled(cell, folder))
+
+
+def _is_capped_sigla(sigla: str) -> bool:
+    return count_type_for(sigla) in ("documents", "documents_workers")
+
+
+def _cell_total_pages(state: dict, hospital: str, sigla: str) -> int:
+    month_root = Path(state.get("month_root", ""))
+    folder = _find_category_folder(month_root / hospital, sigla)
+    return sum(cell_page_counts(folder).values()) if folder.exists() else 0
+
+
+class ApplyRatioRequest(BaseModel):
+    n: int = Field(ge=1)
+
+
+@router.post("/sessions/{session_id}/cells/{hospital}/{sigla}/apply-ratio")
+def apply_ratio(
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    body: ApplyRatioRequest,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Treat every Pendiente file as round(pages/N) documents (RN treatment)."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    try:
+        state = mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    cell = state["cells"].get(hospital, {}).get(sigla)
+    if cell is None:
+        raise HTTPException(404, f"Cell not found: {hospital}/{sigla}")
+    month_root = Path(state.get("month_root", ""))
+    folder = _find_category_folder(month_root / hospital, sigla)
+    if not folder.exists():
+        raise HTTPException(404, "Cell folder not found")
+    pages = cell_page_counts(folder)
+    per_file = cell.get("per_file") or {}
+    per_file_method = cell.get("per_file_method") or {}
+    per_file_overrides = cell.get("per_file_overrides") or {}
+    cell_method = cell.get("method") or "filename_glob"
+    n = body.n
+    for pdf in sorted(folder.rglob("*.pdf")):
+        effective_method = per_file_method.get(pdf.name) or cell_method
+        origin = file_origin(
+            method=effective_method,
+            override=per_file_overrides.get(pdf.name),
+            page_count=pages.get(pdf.name, 0),
+            per_file_count=per_file.get(pdf.name),
+        )
+        if origin != "Pendiente":
+            # Stamp per_file_method so the file keeps its chip after cell["method"]
+            # is overwritten to "ratio_n" by finalize_cell_ocr (clobber-guard).
+            if pdf.name not in per_file_method:
+                mgr.apply_per_file_ocr_result(
+                    session_id,
+                    hospital,
+                    sigla,
+                    pdf.name,
+                    count=per_file.get(pdf.name)
+                    if per_file.get(pdf.name) is not None
+                    else pages.get(pdf.name, 1),
+                    method=effective_method,
+                    near_matches=[],
+                )
+            continue
+        count = max(1, round(pages.get(pdf.name, 0) / n))
+        mgr.apply_per_file_ocr_result(
+            session_id,
+            hospital,
+            sigla,
+            pdf.name,
+            count=count,
+            method="ratio_n",
+            near_matches=[],
+        )
+    # finalize metadata (ocr_count = sum per_file) with a metadata-only ScanResult
+    mgr.finalize_cell_ocr(
+        session_id,
+        hospital,
+        sigla,
+        ScanResult(
+            count=0,
+            confidence=ConfidenceLevel.LOW,
+            method="ratio_n",
+            breakdown=None,
+            flags=[],
+            errors=[],
+            duration_ms=0,
+            files_scanned=0,
+            per_file=None,
+        ),
+    )
+    refresh_all_reliable(mgr, session_id, hospital, sigla, folder)
+    state = mgr.get_session_state(session_id)
+    return state["cells"][hospital][sigla]
 
 
 @router.post("/sessions")
@@ -250,12 +363,21 @@ def _apply_scan_event(mgr: SessionManager, session_id: str, event: dict) -> dict
             )
         return event
     if etype == "cell_done":
-        cell = mgr.finalize_cell_ocr(
-            session_id, event["hospital"], event["sigla"], _meta_result(event["result"])
-        )
+        hosp = event["hospital"]
+        sigla = event["sigla"]
+        cell = mgr.finalize_cell_ocr(session_id, hosp, sigla, _meta_result(event["result"]))
         event["result"]["per_file"] = cell.get("per_file")
         event["result"]["ocr_count"] = cell.get("ocr_count")
         event["result"]["near_matches"] = cell.get("near_matches") or []
+        # Recompute all_reliable now that every file has been OCR-merged (RLock is
+        # reentrant so calling get_session_state + set_all_reliable here is safe).
+        # Best-effort: skip when the folder isn't on disk (synthetic-event tests) —
+        # the reliability signal is metadata; it must never break the count merge.
+        month_root = Path(mgr.get_session_state(session_id).get("month_root", ""))
+        hosp_dir = month_root / hosp
+        if hosp_dir.exists():
+            folder = _find_category_folder(hosp_dir, sigla)
+            refresh_all_reliable(mgr, session_id, hosp, sigla, folder)
         return event
     return event
 
@@ -497,6 +619,17 @@ def patch_override(
             raise HTTPException(400, "value must be int or null")
         if value < 0 or value > _MAX_REASONABLE_COUNT:
             raise HTTPException(400, f"value must be in [0, {_MAX_REASONABLE_COUNT}]")
+        if _is_capped_sigla(sigla):
+            try:
+                state = mgr.get_session_state(session_id)
+            except KeyError as exc:
+                raise HTTPException(404, str(exc)) from exc
+            total_pages = _cell_total_pages(state, hospital, sigla)
+            if total_pages > 0 and value > total_pages:
+                raise HTTPException(
+                    422,
+                    {"error": "count_exceeds_pages", "max": total_pages},
+                )
     try:
         mgr.apply_user_override(session_id, hospital, sigla, value=value, note=note, manual=manual)
         state = mgr.get_session_state(session_id)
@@ -524,10 +657,23 @@ def patch_per_file_override(
 ) -> dict:
     """Persist per-file count override. Spec §5.2 + §7.2."""
     try:
+        state = mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    month_root = Path(state.get("month_root", ""))
+    folder = _find_category_folder(month_root / hospital, sigla)
+    if _is_capped_sigla(sigla) and folder.exists():
+        file_pages = cell_page_counts(folder).get(filename, 0)
+        if file_pages > 0 and body.count > file_pages:
+            raise HTTPException(
+                422,
+                {"error": "count_exceeds_pages", "max": file_pages},
+            )
+    try:
         mgr.apply_per_file_override(session_id, hospital, sigla, filename, body.count)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-
+    refresh_all_reliable(mgr, session_id, hospital, sigla, folder)
     state, _ = mgr._load_and_migrate(session_id)
     cell = state["cells"][hospital][sigla]
     return {
