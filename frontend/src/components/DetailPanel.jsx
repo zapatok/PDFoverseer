@@ -14,7 +14,7 @@ import { useSessionStore } from "../store/session";
 import { computeWorkerCount } from "../lib/worker-count";
 import { computeCellCount, computeFilesCount } from "../lib/cellCount";
 import SegmentedToggle from "../ui/SegmentedToggle";
-import { hasOverride } from "../lib/cell-status";
+import { hasOverride, isCappedCountType } from "../lib/cell-status";
 import { copyFlavorStub } from "../lib/flavorStub";
 import { api } from "../lib/api";
 import { toast } from "sonner";
@@ -210,9 +210,12 @@ export default function DetailPanel({ hospital, sigla, cell }) {
     return () => { alive = false; };
   }, [sessionId, hospital, sigla, filesTick]);
 
-  // Re-sync mode from provenance when the selected cell changes.
+  // Re-sync mode from provenance when the selected cell changes; also collapse the
+  // ratio-N input so it doesn't leak its open state / value across cells.
   useEffect(() => {
     setMode(hasOverride(cell) ? "manual" : "files");
+    setRatioNOpen(false);
+    setRatioNValue(2);
   }, [hospital, sigla, cell?.user_override]);
 
   if (!cell || !sigla) {
@@ -232,7 +235,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const showLabel = label && label.toLowerCase() !== sigla.toLowerCase();
 
   // Incr 2 — cap predicate: document-counting siglas cap overrides at ≤ totalPages.
-  const isCapped = ["documents", "documents_workers"].includes(scanInfo?.count_type);
+  const isCapped = isCappedCountType(scanInfo?.count_type);
   const maxPages = isCapped ? totalPages : null;
 
   function handleModeChange(next) {
@@ -284,8 +287,12 @@ export default function DetailPanel({ hospital, sigla, cell }) {
             variant="secondary"
             icon={Ratio}
             onClick={async () => {
-              await applyRatioCell(sessionId, hospital, sigla, 1);
-              toast.success("R1 aplicado — cada página cuenta como 1 documento");
+              try {
+                await applyRatioCell(sessionId, hospital, sigla, 1);
+                toast.success("R1 aplicado — cada página cuenta como 1 documento");
+              } catch {
+                toast.error("No se pudo aplicar R1");
+              }
             }}
           >
             Aplicar R1
@@ -304,15 +311,22 @@ export default function DetailPanel({ hospital, sigla, cell }) {
                 type="number"
                 min={1}
                 value={ratioNValue}
-                onChange={(e) => setRatioNValue(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                onChange={(e) => {
+                  const parsed = parseInt(e.target.value, 10);
+                  setRatioNValue(Number.isNaN(parsed) ? 1 : Math.max(1, parsed));
+                }}
                 className="w-16 rounded border border-po-border bg-po-bg px-2 py-1 text-sm tabular-nums focus:border-po-accent focus:outline-none"
               />
               <Button
                 variant="primary"
                 onClick={async () => {
-                  await applyRatioCell(sessionId, hospital, sigla, ratioNValue);
-                  setRatioNOpen(false);
-                  toast.success(`Ratio ${ratioNValue} aplicado a archivos Pendiente`);
+                  try {
+                    await applyRatioCell(sessionId, hospital, sigla, ratioNValue);
+                    setRatioNOpen(false); // collapse only on success (keep N on failure)
+                    toast.success(`Ratio ${ratioNValue} aplicado a archivos Pendiente`);
+                  } catch {
+                    toast.error("No se pudo aplicar el ratio");
+                  }
                 }}
               >
                 Aplicar

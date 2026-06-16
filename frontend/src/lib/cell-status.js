@@ -17,6 +17,14 @@ export const OCR_METHODS = new Set([
   "v4",
 ]);
 
+// Incr 2 — count_types whose document override caps at ≤ pages (Decisión 4).
+// `checks` (maquinaria) is exempt. Shared by DetailPanel + FileList (no drift).
+export const CAPPED_COUNT_TYPES = ["documents", "documents_workers"];
+
+export function isCappedCountType(countType) {
+  return CAPPED_COUNT_TYPES.includes(countType);
+}
+
 export function hasOverride(cell) {
   // 0 is a valid override (discard a file's contribution) — guard on presence.
   return cell?.user_override !== null && cell?.user_override !== undefined;

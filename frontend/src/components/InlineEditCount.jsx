@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from "react";
 export default function InlineEditCount({ value, onCommit, placeholder = null, autoFocus = false, max = null }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+  const [invalid, setInvalid] = useState(false);
   const buttonRef = useRef(null);
 
   // Value-reset effect (Task 15): keep draft in sync when value changes externally.
@@ -32,6 +33,7 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
         onClick={(e) => {
           e.stopPropagation();
           setDraft(value ?? "");
+          setInvalid(false);
           setEditing(true);
         }}
         className="font-mono tabular-nums text-sm w-14 text-right text-po-text hover:text-po-accent focus-visible:outline-none focus-visible:text-po-accent"
@@ -46,20 +48,29 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
       type="number"
       autoFocus
       value={draft}
-      onChange={(e) => setDraft(e.target.value)}
+      onChange={(e) => { setDraft(e.target.value); setInvalid(false); }}
       onClick={(e) => e.stopPropagation()}
       max={max ?? undefined}
+      title={invalid && max != null ? `máx. ${max} (páginas)` : undefined}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           const v = parseInt(draft, 10);
-          if (!Number.isNaN(v) && (max === null || v <= max)) onCommit(v);
-          setEditing(false);
+          if (!Number.isNaN(v) && (max === null || v <= max)) {
+            onCommit(v);
+            setEditing(false);
+          } else {
+            // over cap / not a number → keep editing so the rejected value stays
+            // visible with an error cue, instead of silently snapping back.
+            setInvalid(true);
+          }
         } else if (e.key === "Escape") {
           setEditing(false);
         }
       }}
       onBlur={() => setEditing(false)}
-      className="font-mono tabular-nums text-sm w-14 text-right text-po-text bg-po-bg border border-po-accent rounded px-1 focus-visible:outline-none"
+      className={`font-mono tabular-nums text-sm w-14 text-right text-po-text bg-po-bg border rounded px-1 focus-visible:outline-none ${
+        invalid ? "border-po-error" : "border-po-accent"
+      }`}
     />
   );
 }

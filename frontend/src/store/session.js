@@ -184,6 +184,7 @@ export const useSessionStore = create((set, get) => ({
       });
     } catch (error) {
       set({ error: String(error) });
+      throw error; // re-throw so the caller can show a failure toast (don't claim success)
     }
   },
 

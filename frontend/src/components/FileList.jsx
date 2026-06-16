@@ -8,7 +8,7 @@ import Tooltip from "../ui/Tooltip";
 import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
 import { fileCountDisplay } from "../lib/file-origin";
-import { hasOverride } from "../lib/cell-status";
+import { hasOverride, isCappedCountType } from "../lib/cell-status";
 
 export default function FileList({ hospital, sigla }) {
   const session = useSessionStore((s) => s.session);
@@ -42,7 +42,7 @@ export default function FileList({ hospital, sigla }) {
   }, [sigla]);
 
   // Per-file count is capped at page_count when the sigla counts documents or documents+workers.
-  const isCapped = ["documents", "documents_workers"].includes(scanInfo?.count_type);
+  const isCapped = isCappedCountType(scanInfo?.count_type);
 
   if (!sigla) {
     return (
