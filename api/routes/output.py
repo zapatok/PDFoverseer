@@ -10,11 +10,12 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import FileResponse
 
-from api.routes.sessions import get_manager
+from api.routes.sessions import cell_page_counts, get_manager
 from api.state import SessionManager, compute_cell_count, compute_worker_count
 from core.db.historical_repo import upsert_count
 from core.domain import HOSPITALS, SIGLAS
 from core.excel.writer import generate_resumen
+from core.orchestrator import _find_category_folder
 
 router = APIRouter()
 
@@ -116,6 +117,7 @@ def _build_worker_values(state: dict) -> dict[str, int]:
     """Emite ``{HOSP}_workers_{purpose}`` para las celdas charla/chintegral
     que tengan datos de conteo de trabajadores."""
     out: dict[str, int] = {}
+    month_root = Path(state.get("month_root", ""))
     for hosp, sigla_map in state.get("cells", {}).items():
         for sigla, purpose in WORKER_PURPOSE.items():
             cell = sigla_map.get(sigla)
@@ -123,7 +125,9 @@ def _build_worker_values(state: dict) -> dict[str, int]:
                 continue
             if "worker_marks" not in cell and "worker_status" not in cell:
                 continue  # nunca se contó — no emitir; el template queda en blanco
-            out[f"{hosp}_workers_{purpose}"] = compute_worker_count(cell)
+            folder = _find_category_folder(month_root / hosp, sigla)
+            present = set(cell_page_counts(folder)) if folder.exists() else None
+            out[f"{hosp}_workers_{purpose}"] = compute_worker_count(cell, present)
     return out
 
 

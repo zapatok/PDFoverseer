@@ -742,11 +742,14 @@ def patch_worker_count(
         raise HTTPException(status_code=404, detail=f"Sesión {session_id} no encontrada") from exc
     state = mgr.get_session_state(session_id)
     cell = state["cells"].get(hospital, {}).get(sigla, {})
+    month_root = Path(state.get("month_root", ""))
+    folder = _find_category_folder(month_root / hospital, sigla)
+    present = set(cell_page_counts(folder)) if folder.exists() else None
     return {
         "worker_marks": cell.get("worker_marks"),
         "worker_status": cell.get("worker_status"),
         "worker_cursor": cell.get("worker_cursor"),
-        "worker_count": compute_worker_count(cell),
+        "worker_count": compute_worker_count(cell, present),
     }
 
 
