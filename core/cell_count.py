@@ -14,6 +14,37 @@ sync by ``tests/test_cell_count_cross_language.py`` against
 from __future__ import annotations
 
 
+def _sum_marks(cell: dict, present_files: set[str] | None = None) -> int:
+    """Suma de los ``count`` de todas las marcas (``worker_marks``), filtrando a
+    los archivos presentes.
+
+    Filtro canónico (F1): si ``present_files`` se entrega (incluido un set vacío),
+    solo cuentan las marcas de esos archivos — las huérfanas (PDF renombrado/borrado)
+    se descartan. Si ``present_files is None`` (llamador sin carpeta resuelta),
+    cae al comportamiento legacy: filtra por las claves de ``per_file`` cuando no
+    está vacío, o no filtra si ``per_file`` está vacío.
+
+    Sirve tanto a trabajadores (charla/chintegral) como a chequeos (maquinaria);
+    es el mismo mecanismo de marcas por página.
+    """
+    marks: dict = cell.get("worker_marks") or {}
+    if present_files is not None:
+        allowed = present_files
+        filter_on = True
+    else:
+        per_file = cell.get("per_file") or {}
+        allowed = set(per_file)
+        filter_on = bool(per_file)
+    total = 0
+    for filename, page_marks in marks.items():
+        if filter_on and filename not in allowed:
+            continue
+        for mark in page_marks or []:
+            if isinstance(mark, dict):
+                total += mark.get("count") or 0
+    return total
+
+
 def compute_cell_count(cell: dict) -> int:
     """Cell count derivation per FASE 4 §6.2 precedence.
 
