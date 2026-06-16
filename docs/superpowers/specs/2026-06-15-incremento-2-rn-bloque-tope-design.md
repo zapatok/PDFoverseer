@@ -92,8 +92,10 @@ Lógica:
 3. Para cada PDF cuyo **origin actual es `"Pendiente"`** (= `filename_glob` multipágina sin
    override, sin método confiable previo — reusar la misma lógica de `_origin_for`):
    - `count = max(1, round(pages[f] / n))`
-   - `mgr.apply_per_file_ocr_result(f, count, method="ratio_n")` (reusa el merge por-archivo
-     de 1A; escribe `per_file[f]` + `per_file_method[f]`).
+   - `mgr.apply_per_file_ocr_result(..., filename=f, count=count, method="ratio_n",
+     near_matches=[])` (reusa el merge por-archivo de 1A; escribe `per_file[f]` +
+     `per_file_method[f]`). **`near_matches` es obligatorio** (sin default en la firma): RN
+     no produce casi-matches → `[]`.
    - Si el PDF no abre (`pages[f] == 0`): saltar, registrar en `errors` (queda Error/Pendiente).
 4. `mgr.finalize_cell_ocr(...)` (metadata + `ocr_count = sum(per_file)`), como el OCR.
 5. Recalcular `all_reliable` (§6) y persistirlo: `mgr.set_all_reliable(hospital, sigla,
@@ -120,13 +122,19 @@ aparte; el frontend manda `n=1`.
 Para componer y testear, **extraer** la decisión por-archivo a un helper puro
 `file_origin(method, override, page_count, per_file_count) -> str` (módulo-nivel), que tanto
 `_origin_for` como `compute_settled` (§6) reusan — fuente única de la semántica de chips.
+> **Nota para el plan:** `_origin_for` hoy es una **closure** anidada en `get_cell_files` que
+> captura `per_file_method` y `cell_method` del scope. La extracción debe **convertir esas
+> capturas en parámetros explícitos** de `file_origin(method, override, page_count,
+> per_file_count)`; `_origin_for` pasa a ser un wrapper delgado que resuelve el método por
+> archivo y delega.
 
 Frontend:
 - `frontend/src/components/OriginChip.jsx` — variante `"RN"` (tono propio; reusar la familia
   de tokens existente, p.ej. un verde/teal distinto del R1 para que se lea "tratado", o el
   mismo tono confiable — definir en plan, sin color crudo).
-- `frontend/src/lib/file-origin.js` — `fileCountDisplay` trata `"RN"` como conteo real
-  (muestra el número, no "—"), igual que OCR/R1.
+- `frontend/src/lib/file-origin.js` — `fileCountDisplay`: la rama por defecto **ya** muestra
+  `effective_count` para cualquier origin ≠ "Pendiente", así que `"RN"` **ya funciona sin
+  cambios funcionales**. Solo añadir el caso a los tests para fijarlo; opcionalmente un comentario.
 
 ---
 
@@ -149,18 +157,26 @@ compute_settled(cell, folder):
     files = sorted(folder.rglob("*.pdf"))
     if not files: return False                       # celda vacía no es "lista"
     for f in files:
-        origin = file_origin(method=per_file_method[f.name] or cell_method,
+        origin = file_origin(method=per_file_method.get(f.name) or cell_method,
                              override=per_file_overrides.get(f.name),
-                             page_count=pages[f.name],
-                             per_file_count=per_file[f.name])
+                             page_count=pages.get(f.name, 0),
+                             per_file_count=per_file.get(f.name))  # .get → None = Pendiente
         if origin not in {"R1", "RN", "Manual"}: return False
     return True
 ```
+> **Nota:** usar `.get()` en todos los accesos — un archivo en la carpeta puede no tener aún
+> entrada en `per_file`/`per_file_method` (no escaneado) → `file_origin` lo trata como Pendiente
+> (page_count==1 → R1; multipágina → Pendiente). Nunca indexar con `[]`.
 
 ### 6.3 Dónde se setea (cobertura de caminos, sin frenar pase-1)
 - **`apply_filename_result`** (pase-1, bulk): **NO** abre PDFs (sería lento). El scanner ya
-  determinó la confiabilidad: `all_reliable = (result.confidence == HIGH)`. Para filename_glob
-  / page_count_pure, `HIGH ⟺ todos R1` → equivalente a `compute_settled`. Cheap, consistente.
+  determinó la confiabilidad: **`all_reliable = (result.confidence == HIGH and bool(result.per_file))`**.
+  Para filename_glob / page_count_pure con archivos, `HIGH ⟺ todos R1` → equivalente a
+  `compute_settled`. **El `and bool(result.per_file)` es necesario:** `simple_factory` devuelve
+  `confidence=HIGH, per_file={}` para una **carpeta vacía/ausente** — sin él, una celda sin
+  archivos quedaría `all_reliable=True` (verde), contradiciendo `compute_settled` que devuelve
+  `False` para celda vacía (§6.2 `if not files: return False`). Una celda sin PDFs **no** está
+  lista. Cheap, consistente con el camino lazy.
 - **`finalize_cell_ocr`** (cierre de OCR **y** de RN): el route, que tiene la carpeta, calcula
   `compute_settled(cell, folder)` (lazy; bajo volumen, una vez por celda) y lo persiste vía
   `mgr.set_all_reliable(...)`. Para una celda OCR queda `False` (OCR no confiable); para RN
@@ -191,21 +207,36 @@ idéntico al actual). Re-escanear una celda la migra a la señal nueva. Sin back
 
 ## 7. Tope `≤ páginas` (Decisión 4)
 
-Aplica **solo a celdas `count_type == "documents"`** (worker/check sin tope). `count_type` es
-sigla-level, vía `scan_info_for` (el `DetailPanel` ya lo trae en `scanInfo`).
+**Qué celdas:** el tope aplica al **conteo de DOCUMENTOS** de las celdas
+`count_type in {"documents", "documents_workers"}`. **`documents_workers`** (charla, chintegral,
+dif_pts) **sí cuentan documentos** (esa cifra va a la columna principal del Excel); Decisión 4
+exime el conteo de **trabajadores** (campo aparte, contador por teclado), NO el de documentos de
+esas celdas. **`checks`** (maquinaria) sí queda sin tope (su número son chequeos = columnas de
+fecha, supera las páginas por diseño). `count_type` es sigla-level, vía `scan_info_for` (el
+`DetailPanel` ya lo trae en `scanInfo`). Helper de predicado: `count_type_for(sigla) in
+{"documents", "documents_workers"}`.
 
-**Backend (autoritativo)** — ruta `PATCH …/override` (hoy solo valida `0 ≤ value ≤ 10000`):
-añadir, cuando `count_type_for(sigla) == "documents"` y `value` no es None:
+**Backend (autoritativo) — override de CELDA** — ruta `PATCH …/override` (hoy solo valida
+`0 ≤ value ≤ 10000`): cuando la sigla es capeable y `value` no es None:
 `total = sum(cell_page_counts(cell, folder).values())`; si `value > total` → `HTTP 422`
 con `{ "error": "count_exceeds_pages", "max": total }`. Lazy, una vez por guardado.
 
-**Frontend (prevención en vivo)** — `parseOverrideInput(raw, { maxPages })` gana un parámetro
-opcional: si `maxPages != null` y `value > maxPages` → `{ value: null, valid: false }`.
-`OverridePanel` recibe `maxPages` (= total de páginas) y `countType` por props desde
-`DetailPanel`; solo pasa `maxPages` cuando `countType === "documents"`. Mensaje de error inline:
-"máx. {N} (páginas del archivo)". El total de páginas lo obtiene `DetailPanel` de los datos del
-file-list (mismo endpoint `get_cell_files` que `FileList` ya consume; wiring exacto en el plan —
-levantar el total o un fetch ligero, sin persistir).
+**Backend (autoritativo) — override POR-ARCHIVO** — ruta `PATCH …/files/{filename}/override`:
+mismo principio a granularidad de archivo. Si la sigla es capeable y `value > page_count(filename)`
+→ `HTTP 422 { "error": "count_exceeds_pages", "max": page_count }`. Las páginas del archivo se
+leen lazy (`cell_page_counts` o abrir ese PDF). Se capea **ambos** niveles porque la inconsistencia
+"capear el agregado pero no las partes" sería rara, y el dato ya está disponible.
+
+**Frontend (prevención en vivo):**
+- `parseOverrideInput(raw, { maxPages })` gana un parámetro opcional: si `maxPages != null` y
+  `value > maxPages` → `{ value: null, valid: false }`.
+- **Override de celda:** `OverridePanel` recibe `maxPages` (= total de páginas) y `countType` por
+  props desde `DetailPanel`; solo pasa `maxPages` cuando la sigla es capeable. Error inline:
+  "máx. {N} (páginas)". El total lo obtiene `DetailPanel` de los datos del file-list (mismo
+  `get_cell_files` que `FileList` ya consume; wiring exacto en el plan — levantar el total o un
+  fetch ligero, **sin persistir**).
+- **Override por-archivo:** la fila del `FileList` (`InlineEditCount`) **ya tiene `f.page_count`** →
+  pasar `maxPages = f.page_count` cuando la sigla es capeable. Trivial (el dato está en la fila).
 
 **Por qué backend + frontend:** el backend es la verdad (no se puede colar por la API); el
 frontend evita la mala UX de teclear y que rebote. Si el frontend no tiene el total a mano
@@ -266,7 +297,9 @@ B-b: `OCR la celda · Aplicar R1 · Aplicar ratio N…`):
   - `file_origin` (helper puro): tabla R1/RN/Manual/OCR/Revisar/Pendiente/Error.
   - `compute_settled`: todo-R1 → True; con un Pendiente → False; con un OCR → False; todo-RN →
     True; mezcla R1+RN+Manual → True; vacía → False.
-  - cap: `documents` + value>total → 422; worker/check sin tope; `all_reliable` se setea.
+  - cap celda: `documents`/`documents_workers` + value>total → 422; `checks` sin tope.
+  - cap por-archivo: value > páginas del archivo → 422 (siglas capeables); `checks` sin tope.
+  - `all_reliable` se setea en finalize/override/filename paths; celda sin archivos → False.
 - **Frontend (vitest):**
   - `parseOverrideInput` con `maxPages` (sobre el tope → inválido; igual al tope → válido; sin
     maxPages → comportamiento 1B).
@@ -304,8 +337,9 @@ B-b: `OCR la celda · Aplicar R1 · Aplicar ratio N…`):
    OCR/Pendiente/Error → ámbar.
 4. Override-por-archivo de **todos** los pendientes ahora **enciende verde** (hueco 1B cerrado).
 5. Celdas MAYO (sin `all_reliable`) conservan su color actual (fallback 1B) hasta re-escanear.
-6. En celdas `documents`, el ajuste manual rechaza `valor > total de páginas` (frontend en vivo
-   + backend 422); worker/check sin tope; negativos/0/vacío como 1B.
+6. En celdas `documents` y `documents_workers`, el ajuste manual de **celda** rechaza `valor >
+   total de páginas` y el de **archivo** rechaza `valor > páginas de ese archivo` (frontend en
+   vivo + backend 422); `checks` (maquinaria) sin tope; negativos/0/vacío como 1B.
 7. `ruff` 0, `vitest` + `build` verdes, smoke conducido OK, suite backend verde.
 
 ---
