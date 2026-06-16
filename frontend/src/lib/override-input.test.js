@@ -24,4 +24,12 @@ describe("parseOverrideInput", () => {
   it("non-numeric is invalid", () => {
     expect(parseOverrideInput("abc")).toEqual({ value: null, valid: false });
   });
+
+  it("alphanumeric prefix is invalid (no silent parseInt truncation)", () => {
+    expect(parseOverrideInput("5abc")).toEqual({ value: null, valid: false });
+  });
+
+  it("non-integers are invalid (a document count is whole)", () => {
+    expect(parseOverrideInput("5.5")).toEqual({ value: null, valid: false });
+  });
 });

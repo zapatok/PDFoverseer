@@ -22,6 +22,14 @@ describe("computeFilesCount (ignores user_override)", () => {
     expect(computeFilesCount({})).toBe(0);
     expect(computeFilesCount(null)).toBe(0);
   });
+
+  it("unions keys: an override for a file absent from per_file still counts", () => {
+    const cell = {
+      per_file: { "a.pdf": 1 },
+      per_file_overrides: { "b.pdf": 4 }, // b.pdf not in per_file
+    };
+    expect(computeFilesCount(cell)).toBe(5); // 1 + 4
+  });
 });
 
 describe("computeCellCount (override wins, else files)", () => {

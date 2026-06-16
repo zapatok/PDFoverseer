@@ -6,8 +6,10 @@ export function parseOverrideInput(raw) {
   if (raw === "" || raw === null || raw === undefined) {
     return { value: null, valid: true };
   }
-  const n = parseInt(raw, 10);
-  if (Number.isNaN(n) || n < 0) {
+  // Number (not parseInt): parseInt("5abc") → 5 silently; Number("5abc") → NaN.
+  // Require a non-negative integer — a document count is never fractional.
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) {
     return { value: null, valid: false };
   }
   return { value: n, valid: true };
