@@ -434,10 +434,11 @@ export default function DetailPanel({ hospital, sigla, cell }) {
         </>
       )}
 
-      {/* Worker/checks counting module: shown for documents_workers (charla/chintegral)
-          and for checks (maquinaria). Keep above near-match suspects so a long list
-          never buries the primary action. */}
-      {(countType === "documents_workers" || countType === "checks") && (
+      {/* Worker/checks counting module: shown for charla/chintegral (workers) and
+          checks (maquinaria). NOT dif_pts — it's documents_workers too but its HH/N15
+          Excel wiring is deferred to Incr 3B; showing the counter without a destination
+          would be a half-feature. Keep above near-match suspects. */}
+      {(countType === "checks" || sigla === "charla" || sigla === "chintegral") && (
         <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} countType={countType} />
       )}
 
