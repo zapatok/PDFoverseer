@@ -25,7 +25,37 @@ export function computeFilesCount(cell) {
   return cell?.ocr_count ?? cell?.filename_count ?? 0;
 }
 
-export function computeCellCount(cell) {
+// Mirror fiel de core/cell_count.py::_sum_marks. Suma los `count` de worker_marks
+// filtrando a los archivos presentes. presentFiles: Array|Set|null.
+//   - no-null (incluido [] vacío) → filtra por ese conjunto (huérfanos descartados;
+//     vacío explícito ⇒ 0). NO reusar computeWorkerCount: su [] significa "no filtrar".
+//   - null → legacy: filtra por las claves de per_file si no está vacío; si no, suma todo.
+export function _sumMarks(cell, presentFiles = null) {
+  const marks = cell?.worker_marks ?? {};
+  let allowed;
+  let filterOn;
+  if (presentFiles != null) {
+    allowed = new Set(presentFiles);
+    filterOn = true;
+  } else {
+    const perFile = cell?.per_file ?? {};
+    allowed = new Set(Object.keys(perFile));
+    filterOn = allowed.size > 0;
+  }
+  let total = 0;
+  for (const [filename, pageMarks] of Object.entries(marks)) {
+    if (filterOn && !allowed.has(filename)) continue;
+    for (const m of pageMarks ?? []) {
+      if (m && typeof m.count === "number") total += m.count;
+    }
+  }
+  return total;
+}
+
+// count_type === "checks" (maquinaria) → la cuenta es el tally de chequeos
+// (_sumMarks), no la cascada de documentos. user_override sigue ganando.
+export function computeCellCount(cell, countType = "documents", presentFiles = null) {
   if (cell?.user_override != null) return cell.user_override;
+  if (countType === "checks") return _sumMarks(cell, presentFiles);
   return computeFilesCount(cell);
 }

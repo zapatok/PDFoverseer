@@ -17,4 +17,8 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "cell_count_cases.json"
     ids=lambda c: c["name"],
 )
 def test_compute_cell_count_against_shared_fixture(case):
-    assert compute_cell_count(case["cell"]) == case["expected"], f"case={case['name']}"
+    count_type = case.get("count_type", "documents")
+    present = set(case["present_files"]) if "present_files" in case else None
+    assert compute_cell_count(case["cell"], count_type, present) == case["expected"], (
+        f"case={case['name']}"
+    )

@@ -45,22 +45,37 @@ def _sum_marks(cell: dict, present_files: set[str] | None = None) -> int:
     return total
 
 
-def compute_cell_count(cell: dict) -> int:
+def compute_cell_count(
+    cell: dict,
+    count_type: str = "documents",
+    present_files: set[str] | None = None,
+) -> int:
     """Cell count derivation per FASE 4 §6.2 precedence.
 
     1. ``user_override`` (FASE 2 escape hatch) wins absolutely.
-    2. ``per_file_overrides`` ∪ ``per_file`` → derived sum (a per-file override
+    2. ``count_type == "checks"`` → sum of ``worker_marks`` filtered by
+       ``present_files`` (maquinaria check-tally regime).
+    3. ``per_file_overrides`` ∪ ``per_file`` → derived sum (a per-file override
        wins over that file's scanned ``per_file`` value).
-    3. Fallback: ``ocr_count`` or ``filename_count`` or 0.
+    4. Fallback: ``ocr_count`` or ``filename_count`` or 0.
 
     Args:
         cell: the persisted state dict of a single cell.
+        count_type: ``"documents"`` (default), ``"documents_workers"``, or
+            ``"checks"``.  Only ``"checks"`` changes the derivation path; the
+            other two follow the same document-count cascade.
+        present_files: set of PDF filenames currently present in the cell
+            folder (used by the ``"checks"`` path to discard orphan marks).
+            Pass ``None`` to use legacy per_file-based filtering.
 
     Returns:
-        The effective document count for the cell.
+        The effective document (or check-tally) count for the cell.
     """
     if cell.get("user_override") is not None:
         return cell["user_override"]
+
+    if count_type == "checks":
+        return _sum_marks(cell, present_files)
 
     per_file = cell.get("per_file") or {}
     per_file_overrides = cell.get("per_file_overrides") or {}

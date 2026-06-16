@@ -69,5 +69,27 @@
       "filename_count": null
     },
     "expected": 0
+  },
+  {
+    "name": "checks_tally_filtered",
+    "cell": {
+      "worker_marks": {
+        "m.pdf": [{"page": 1, "count": 5}],
+        "orphan.pdf": [{"page": 1, "count": 9}]
+      }
+    },
+    "count_type": "checks",
+    "present_files": ["m.pdf"],
+    "expected": 5
+  },
+  {
+    "name": "checks_user_override_wins",
+    "cell": {
+      "worker_marks": {"m.pdf": [{"page": 1, "count": 5}]},
+      "user_override": 2
+    },
+    "count_type": "checks",
+    "present_files": ["m.pdf"],
+    "expected": 2
   }
 ]
