@@ -91,6 +91,21 @@ def file_origin(
     return "R1"
 
 
+def cell_page_counts(folder: Path) -> dict[str, int]:
+    """Lazy per-file page counts for a cell's folder: {pdf.name: page_count}.
+    0 when a PDF can't be opened. Today reads from disk; the Incr-J persistence
+    (per_file_pages) would slot in here without touching callers.
+    """
+    out: dict[str, int] = {}
+    for pdf in sorted(folder.rglob("*.pdf")):
+        try:
+            with fitz.open(pdf) as doc:
+                out[pdf.name] = doc.page_count
+        except Exception:  # noqa: BLE001 — any fitz/IO failure → unreadable (0)
+            out[pdf.name] = 0
+    return out
+
+
 def _informe_root() -> Path:
     return Path(os.environ.get("INFORME_MENSUAL_ROOT", "A:/informe mensual"))
 
@@ -639,13 +654,10 @@ def get_cell_files(
             per_file_count=per_file_count,
         )
 
+    pages = cell_page_counts(folder)
     out: list[dict] = []
     for pdf in sorted(folder.rglob("*.pdf")):
-        try:
-            with fitz.open(pdf) as doc:
-                page_count = doc.page_count
-        except Exception:  # noqa: BLE001
-            page_count = 0
+        page_count = pages.get(pdf.name, 0)
         subfolder = pdf.parent.name if pdf.parent != folder else None
         override = per_file_overrides.get(pdf.name)
         inferred = per_file.get(pdf.name)
