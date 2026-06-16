@@ -14,7 +14,7 @@ function cacheFor(doc) {
   return m;
 }
 
-function Thumb({ doc, pageNumber, active, count, onSelect }) {
+function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores" }) {
   const ref = useRef(null);
   const [url, setUrl] = useState(() => cacheFor(doc).get(pageNumber) || null);
 
@@ -59,7 +59,7 @@ function Thumb({ doc, pageNumber, active, count, onSelect }) {
       ref={ref}
       onClick={() => onSelect(pageNumber)}
       aria-current={active ? "true" : undefined}
-      aria-label={`Página ${pageNumber}${count != null ? `, ${count} trabajadores` : ""}`}
+      aria-label={`Página ${pageNumber}${count != null ? `, ${count} ${unit}` : ""}`}
       className={[
         "relative block w-full rounded border p-0.5 transition",
         active
@@ -95,8 +95,9 @@ function Thumb({ doc, pageNumber, active, count, onSelect }) {
  * @param {number} props.currentPage
  * @param {{page:number,count:number}[]} props.marks - marcas del archivo actual.
  * @param {(page:number)=>void} props.onSelect
+ * @param {string} [props.unit] - "trabajadores" | "chequeos" (label del aria-label por página).
  */
-export function WorkerThumbnails({ doc, pageCount, currentPage, marks, onSelect }) {
+export function WorkerThumbnails({ doc, pageCount, currentPage, marks, onSelect, unit = "trabajadores" }) {
   const countByPage = new Map((marks || []).map((m) => [m.page, m.count]));
   const currentRef = useRef(null);
 

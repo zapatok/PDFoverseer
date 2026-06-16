@@ -238,6 +238,7 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
         currentPage={page}
         marks={marks[currentFile.name] || []}
         onSelect={setPageInFile}
+        unit={unit}
       />
       <div ref={panelRef} className="relative flex-1 overflow-auto bg-black">
         {/* Un PDF roto no es un dead-end: el HUD y los atajos siguen vivos
