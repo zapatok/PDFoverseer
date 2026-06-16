@@ -8,11 +8,14 @@ import Tooltip from "../ui/Tooltip";
 import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
 import { fileCountDisplay } from "../lib/file-origin";
+import { hasOverride } from "../lib/cell-status";
 
 export default function FileList({ hospital, sigla }) {
   const session = useSessionStore((s) => s.session);
   const openLightbox = useSessionStore((s) => s.openLightbox);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
+  const cell = useSessionStore((s) => s.session?.cells?.[hospital]?.[sigla]);
+  const saveOverride = useSessionStore((s) => s.saveOverride);
   // Re-fetch after an OCR scan finishes for this cell (G3, review #5/#6).
   const tick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
   const [files, setFiles] = useState(null);
@@ -75,6 +78,23 @@ export default function FileList({ hospital, sigla }) {
 
   return (
     <div className="rounded-xl bg-po-panel border border-po-border overflow-hidden">
+      {hasOverride(cell) && (
+        <div className="flex items-start gap-2 border-b border-po-suspect-border bg-po-suspect-bg px-3 py-2 text-xs text-po-suspect">
+          <span aria-hidden>⚠</span>
+          <span>
+            La celda usa un total manual ({cell.user_override}) que anula los archivos.{" "}
+            <button
+              type="button"
+              onClick={() =>
+                saveOverride(session.session_id, hospital, sigla, null, cell?.override_note ?? null)
+              }
+              className="underline underline-offset-2 hover:text-po-text"
+            >
+              usar conteo por archivos
+            </button>
+          </span>
+        </div>
+      )}
       <div className="p-2 border-b border-po-border">
         <input
           placeholder="Buscar archivo…"
