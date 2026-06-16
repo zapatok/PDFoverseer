@@ -93,6 +93,8 @@ frontend/dist/
 
 # Local DB recovery backups (point-in-time snapshots, not source)
 data/_recovery-*/
+data/_smoke-backup-*/
 
-# Smoke-test screenshots (transient evidence, regenerable)
+# Smoke-test screenshots + scratch (transient evidence, regenerable)
 docs/research/*smoke*.png
+data/_smoke/
