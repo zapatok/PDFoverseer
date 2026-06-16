@@ -197,6 +197,7 @@ class SessionManager:
             cell.setdefault("override_note", None)
             cell.setdefault("excluded", False)
             cell.setdefault("confirmed", False)
+            cell.setdefault("all_reliable", False)
             update_session_state(self._conn, session_id, state_json=json.dumps(state))
             return
 
@@ -216,6 +217,11 @@ class SessionManager:
         # run so the DetailPanel never points "Ver portada" at a PDF that the
         # fresh per_file no longer contains (Bug B).
         cell["near_matches"] = []
+        # all_reliable shortcut (Incr 2 §6.3): HIGH ⟺ every filename_glob file is
+        # single-page (= all R1) for the non-OCR scanners. bool(per_file) guards the
+        # empty/missing-folder case (simple_factory returns HIGH + per_file={}) so a
+        # cell with no PDFs is NOT 'listo', matching compute_settled.
+        cell["all_reliable"] = result.confidence.value == "high" and bool(result.per_file)
         cell.setdefault("per_file_overrides", {})
         cell.setdefault("manual_entry", False)
         cell.setdefault("ocr_count", None)
@@ -331,6 +337,7 @@ class SessionManager:
         cell.setdefault("override_note", None)
         cell.setdefault("excluded", False)
         cell.setdefault("confirmed", False)
+        cell.setdefault("all_reliable", False)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
         return cell
 
@@ -546,6 +553,14 @@ class SessionManager:
         if hospital not in cells or sigla not in cells.get(hospital, {}):
             raise KeyError(f"Cell ({hospital}, {sigla}) not in session {session_id}")
         cells[hospital][sigla]["confirmed"] = confirmed
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    @_synchronized
+    def set_all_reliable(self, session_id: str, hospital: str, sigla: str, value: bool) -> None:
+        """Persist the honest 'all files reliable' flag for the green dot (Incr 2 §6)."""
+        state, _ = self._load_and_migrate(session_id)
+        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+        cell["all_reliable"] = bool(value)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     @_synchronized

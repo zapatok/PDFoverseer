@@ -106,6 +106,30 @@ def cell_page_counts(folder: Path) -> dict[str, int]:
     return out
 
 
+def compute_settled(cell: dict, folder: Path) -> bool:
+    """True iff every PDF in *folder* is reliable (origin ∈ {R1, RN, Manual}).
+    Empty/missing folder → False (a cell with no files is not 'listo'). Lazy pages.
+    """
+    pages = cell_page_counts(folder)
+    files = sorted(folder.rglob("*.pdf"))
+    if not files:
+        return False
+    per_file = cell.get("per_file") or {}
+    per_file_method = cell.get("per_file_method") or {}
+    per_file_overrides = cell.get("per_file_overrides") or {}
+    cell_method = cell.get("method") or "filename_glob"
+    for f in files:
+        origin = file_origin(
+            method=per_file_method.get(f.name) or cell_method,
+            override=per_file_overrides.get(f.name),
+            page_count=pages.get(f.name, 0),
+            per_file_count=per_file.get(f.name),
+        )
+        if origin not in ("R1", "RN", "Manual"):
+            return False
+    return True
+
+
 def _informe_root() -> Path:
     return Path(os.environ.get("INFORME_MENSUAL_ROOT", "A:/informe mensual"))
 
