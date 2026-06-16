@@ -46,6 +46,33 @@ export const SIGLA_PAGE_RANGE = {
   chps: { p25: 3, p75: 3 },
 };
 
+// Mirror of core/scanners/patterns.py::COUNT_TYPE_BY_SIGLA. Must stay verbatim
+// in sync — 18 entries, same values. Verified by sigla-info.test.js (completeness gate).
+// countTypeFor fallback = "documents" so future siglas added to the backend before
+// the JS mirror is updated degrade gracefully rather than break.
+export const SIGLA_COUNT_TYPE = {
+  reunion: "documents",
+  art: "documents",
+  irl: "documents",
+  odi: "documents",
+  charla: "documents_workers",
+  insgral: "documents",
+  bodega: "documents",
+  caliente: "documents",
+  exc: "documents",
+  senal: "documents",
+  ext: "documents",
+  maquinaria: "checks",
+  altura: "documents",
+  chps: "documents",
+  chintegral: "documents_workers",
+  dif_pts: "documents_workers",
+  herramientas_elec: "documents",
+  andamios: "documents",
+};
+
+export const countTypeFor = (sigla) => SIGLA_COUNT_TYPE[sigla] ?? "documents";
+
 export function formatPageRange(range) {
   if (!range) return "";
   const { p25, p75 } = range;
