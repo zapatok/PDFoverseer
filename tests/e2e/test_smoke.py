@@ -12,6 +12,7 @@ from api.routes.sessions import get_manager
 from api.state import SessionManager
 from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
+from core.scanners.patterns import count_type_for
 
 
 @pytest.fixture
@@ -63,6 +64,12 @@ def test_end_to_end_abril_flow(client, tmp_path):
             continue
         prefix = name[: -len("_count")]
         if prefix not in summary:
+            continue
+        # checks cells (maquinaria, Incr 3A) hold a manual check tally that is
+        # decoupled from the pase-1 filename scan count, so the "Excel == scan
+        # count" invariant no longer applies to them (the tally is 0 until a
+        # human counts it). prefix = "{hosp}_{sigla}"; split on the first "_".
+        if count_type_for(prefix.split("_", 1)[1]) == "checks":
             continue
         destinations = list(wb.defined_names[name].destinations)
         sheet, coord = destinations[0]

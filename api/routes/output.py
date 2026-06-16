@@ -195,11 +195,20 @@ def generate(
     # same month overwrites with the same values. Excluded cells (FASE 1
     # carryover) are NOT written.
     year, month = int(session_id[:4]), int(session_id[5:7])
+    history_root = Path(state.get("month_root", ""))
     for hospital, hosp_cells in state.get("cells", {}).items():
         for sigla, cell in hosp_cells.items():
             if cell.get("excluded"):
                 continue
-            effective_count = compute_cell_count(cell)
+            # Single source of truth (2026-06-06): history must match the Excel.
+            # checks cells (maquinaria) → the manual tally, filtered by present
+            # files; document cells are unchanged (ct="documents", present=None).
+            ct = count_type_for(sigla)
+            present = None
+            if ct == "checks":
+                folder = _find_category_folder(history_root / hospital, sigla)
+                present = set(cell_page_counts(folder)) if folder.exists() else None
+            effective_count = compute_cell_count(cell, ct, present)
             upsert_count(
                 mgr._conn,
                 year=year,

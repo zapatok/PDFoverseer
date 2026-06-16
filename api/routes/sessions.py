@@ -705,7 +705,7 @@ def patch_per_file_override(
     return {
         "filename": filename,
         "count": body.count,
-        "new_cell_count": compute_cell_count(cell),
+        "new_cell_count": compute_cell_count(cell, count_type_for(sigla)),
     }
 
 
