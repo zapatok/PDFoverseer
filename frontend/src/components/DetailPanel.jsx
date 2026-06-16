@@ -180,6 +180,10 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const sessionId = useSessionStore((s) => s.session?.session_id);
   const saveOverride = useSessionStore((s) => s.saveOverride);
   const [scanInfo, setScanInfo] = useState(null);
+  // hasOverride(null) is falsy, so a null cell defaults to "files". These hooks
+  // MUST stay above the early return below (Rules of Hooks).
+  const [mode, setMode] = useState(hasOverride(cell) ? "manual" : "files");
+  const [focusNonce, setFocusNonce] = useState(0);
 
   // rev-2 #5 — what the sigla's OCR looks for, for the method (i) tooltip.
   useEffect(() => {
@@ -188,6 +192,11 @@ export default function DetailPanel({ hospital, sigla, cell }) {
     api.getScanInfo(sigla).then((s) => { if (alive) setScanInfo(s); }).catch(() => {});
     return () => { alive = false; };
   }, [sigla]);
+
+  // Re-sync mode from provenance when the selected cell changes.
+  useEffect(() => {
+    setMode(hasOverride(cell) ? "manual" : "files");
+  }, [hospital, sigla, cell?.user_override]);
 
   if (!cell || !sigla) {
     return (
@@ -204,14 +213,6 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const total = computeCellCount(cell);
   const label = SIGLA_LABELS[sigla];
   const showLabel = label && label.toLowerCase() !== sigla.toLowerCase();
-
-  const [mode, setMode] = useState(hasOverride(cell) ? "manual" : "files");
-  const [focusNonce, setFocusNonce] = useState(0);
-
-  // Re-sync mode from provenance when the selected cell changes.
-  useEffect(() => {
-    setMode(hasOverride(cell) ? "manual" : "files");
-  }, [hospital, sigla, cell?.user_override]);
 
   function handleModeChange(next) {
     setMode(next);

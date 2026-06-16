@@ -51,7 +51,9 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   };
   const onChangeNote = (e) => {
     setNote(e.target.value);
-    flushSave(value, e.target.value);
+    // Don't persist while the number field holds an invalid value (e.g. "-5"):
+    // saving here would smuggle the rejected number past onChangeValue's guard.
+    if (!invalid) flushSave(value, e.target.value);
   };
 
   return (
