@@ -16,6 +16,7 @@ from core.db.historical_repo import upsert_count
 from core.domain import HOSPITALS, SIGLAS
 from core.excel.writer import generate_resumen
 from core.orchestrator import _find_category_folder
+from core.scanners.patterns import count_type_for
 
 router = APIRouter()
 
@@ -97,11 +98,22 @@ def _build_cell_values(state: dict) -> dict[str, int]:
     from core.excel.writer import resolve_cell_value
 
     cells = state.get("cells", {})
+    month_root = Path(state.get("month_root", ""))
     out: dict[str, int] = {}
     for hosp in HOSPITALS:
         hosp_cells = cells.get(hosp, {})
         for sigla in SIGLAS:
-            value = resolve_cell_value(hosp_cells.get(sigla, {}))
+            ct = count_type_for(sigla)
+            present = None
+            if ct == "checks":
+                # checks (maquinaria): the cell value is the tally → filter marks
+                # by present files. Resolved only here (1 sigla/hosp) to avoid
+                # walking folders for the 16 document siglas.
+                folder = _find_category_folder(month_root / hosp, sigla)
+                present = set(cell_page_counts(folder)) if folder.exists() else None
+            value = resolve_cell_value(
+                hosp_cells.get(sigla, {}), count_type=ct, present_files=present
+            )
             if value is None:
                 continue
             out[f"{hosp}_{sigla}_count"] = value

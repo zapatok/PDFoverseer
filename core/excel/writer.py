@@ -12,20 +12,24 @@ from core.cell_count import compute_cell_count
 from core.excel.template import DEFAULT_TEMPLATE, get_range_cell
 
 
-def resolve_cell_value(cell: dict) -> int | None:
+def resolve_cell_value(
+    cell: dict, count_type: str = "documents", present_files: set[str] | None = None
+) -> int | None:
     """Compute the effective count for an Excel cell.
 
     Delegates to the canonical :func:`core.cell_count.compute_cell_count` so the
     Excel always matches the UI (user_override > per_file_overrides ∪ per_file >
-    ocr_count > filename_count). Adds the Excel-only concerns: an excluded cell
-    returns None (caller skips writing), and a legacy un-migrated cell that only
-    carries a flat ``count`` falls back to it.
+    ocr_count > filename_count). For ``count_type == "checks"`` (maquinaria) the
+    value is the manual check tally (``present_files`` discards orphan marks).
+    Adds the Excel-only concerns: an excluded cell returns None (caller skips
+    writing), and a legacy un-migrated cell that only carries a flat ``count``
+    falls back to it.
 
     Returns None if the cell is excluded — caller skips writing.
     """
     if cell.get("excluded"):
         return None
-    value = compute_cell_count(cell)
+    value = compute_cell_count(cell, count_type, present_files)
     if value == 0 and cell.get("count") is not None:
         return cell["count"]
     return value
