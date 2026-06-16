@@ -110,20 +110,19 @@ def compute_settled(cell: dict, folder: Path) -> bool:
     """True iff every PDF in *folder* is reliable (origin ∈ {R1, RN, Manual}).
     Empty/missing folder → False (a cell with no files is not 'listo'). Lazy pages.
     """
-    pages = cell_page_counts(folder)
-    files = sorted(folder.rglob("*.pdf"))
-    if not files:
-        return False
+    pages = cell_page_counts(folder)  # one walk; keys are every PDF.name in folder
+    if not pages:
+        return False  # empty/missing folder → a cell with no files is not 'listo'
     per_file = cell.get("per_file") or {}
     per_file_method = cell.get("per_file_method") or {}
     per_file_overrides = cell.get("per_file_overrides") or {}
     cell_method = cell.get("method") or "filename_glob"
-    for f in files:
+    for name, page_count in pages.items():
         origin = file_origin(
-            method=per_file_method.get(f.name) or cell_method,
-            override=per_file_overrides.get(f.name),
-            page_count=pages.get(f.name, 0),
-            per_file_count=per_file.get(f.name),
+            method=per_file_method.get(name) or cell_method,
+            override=per_file_overrides.get(name),
+            page_count=page_count,
+            per_file_count=per_file.get(name),
         )
         if origin not in ("R1", "RN", "Manual"):
             return False

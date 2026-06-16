@@ -1,4 +1,5 @@
 import fitz
+
 from api.routes.sessions import compute_settled
 
 
