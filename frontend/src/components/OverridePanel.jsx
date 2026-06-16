@@ -4,7 +4,7 @@ import { useDebouncedCallback } from "../lib/hooks/useDebouncedCallback";
 import SaveIndicator from "../ui/SaveIndicator";
 import { parseOverrideInput } from "../lib/override-input";
 
-export default function OverridePanel({ hospital, sigla, cell, disabled = false, focusNonce = 0 }) {
+export default function OverridePanel({ hospital, sigla, cell, disabled = false, focusNonce = 0, maxPages = null, countType = null }) {
   const session = useSessionStore((s) => s.session);
   const saveOverride = useSessionStore((s) => s.saveOverride);
   const pendingSaves = useSessionStore((s) => s.pendingSaves);
@@ -48,7 +48,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   const onChangeValue = (e) => {
     const raw = e.target.value;
     setValue(raw);
-    const { value: parsed, valid } = parseOverrideInput(raw);
+    const { value: parsed, valid } = parseOverrideInput(raw, { maxPages });
     setInvalid(!valid);
     if (valid) flushSave(parsed === null ? "" : String(parsed), note);
   };
@@ -66,6 +66,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
           ref={inputRef}
           type="number"
           min={0}
+          max={maxPages ?? undefined}
           value={value}
           placeholder={String(cell?.ocr_count ?? cell?.filename_count ?? 0)}
           onChange={onChangeValue}
@@ -82,6 +83,9 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
         />
         <SaveIndicator status={saveStatus} />
       </div>
+      {invalid && maxPages != null && (
+        <p className="text-xs text-po-error mt-1">máx. {maxPages} (páginas)</p>
+      )}
       <textarea
         value={note}
         placeholder="Nota (opcional)"

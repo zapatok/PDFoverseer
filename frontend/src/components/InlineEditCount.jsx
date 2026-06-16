@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef } from "react";
 
-export default function InlineEditCount({ value, onCommit, placeholder = null, autoFocus = false }) {
+export default function InlineEditCount({ value, onCommit, placeholder = null, autoFocus = false, max = null }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const buttonRef = useRef(null);
@@ -48,10 +48,11 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onClick={(e) => e.stopPropagation()}
+      max={max ?? undefined}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           const v = parseInt(draft, 10);
-          if (!Number.isNaN(v)) onCommit(v);
+          if (!Number.isNaN(v) && (max === null || v <= max)) onCommit(v);
           setEditing(false);
         } else if (e.key === "Escape") {
           setEditing(false);

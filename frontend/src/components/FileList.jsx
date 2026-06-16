@@ -20,6 +20,7 @@ export default function FileList({ hospital, sigla }) {
   const tick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
   const [files, setFiles] = useState(null);
   const [search, setSearch] = useState("");
+  const [scanInfo, setScanInfo] = useState(null);
 
   useEffect(() => {
     if (!session?.session_id || !hospital || !sigla) {
@@ -31,6 +32,17 @@ export default function FileList({ hospital, sigla }) {
       .then(setFiles)
       .catch((err) => setFiles({ error: String(err) }));
   }, [session?.session_id, hospital, sigla, tick]);
+
+  // Fetch sigla scan-info to determine if page-cap applies (Incr 2).
+  useEffect(() => {
+    if (!sigla) { setScanInfo(null); return; }
+    let alive = true;
+    api.getScanInfo(sigla).then((s) => { if (alive) setScanInfo(s); }).catch(() => {});
+    return () => { alive = false; };
+  }, [sigla]);
+
+  // Per-file count is capped at page_count when the sigla counts documents or documents+workers.
+  const isCapped = ["documents", "documents_workers"].includes(scanInfo?.count_type);
 
   if (!sigla) {
     return (
@@ -140,6 +152,7 @@ export default function FileList({ hospital, sigla }) {
                   <InlineEditCount
                     value={value}
                     placeholder={placeholder}
+                    max={isCapped ? (f.page_count ?? null) : null}
                     onCommit={(newCount) => {
                       setFiles((prev) =>
                         prev.map((row) =>

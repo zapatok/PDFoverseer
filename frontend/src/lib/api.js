@@ -122,6 +122,15 @@ export const api = {
       { method: "POST" },
     ).then(jsonOrThrow),
 
+  // Incr 2 — apply ratio N treatment to all Pendiente files in a cell.
+  // n=1 implements "Apply R1" (each page = one document).
+  applyRatio: (sessionId, hospital, sigla, n) =>
+    fetch(`${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/apply-ratio`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ n }),
+    }).then(jsonOrThrow),
+
   // E5 — clear near-match suspects for a cell. Omit `entry` = clear all;
   // pass { pdf_name, page_index } to drop a single candidate.
   clearNearMatches: (sessionId, hospital, sigla, entry) =>

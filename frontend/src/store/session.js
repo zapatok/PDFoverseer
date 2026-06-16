@@ -166,6 +166,27 @@ export const useSessionStore = create((set, get) => ({
     catch (error) { set({ error: String(error) }); }
   },
 
+  // Incr 2 — apply ratio N to all Pendiente files in a cell, then refresh.
+  applyRatioCell: async (sessionId, hospital, sigla, n) => {
+    try {
+      const updatedCell = await api.applyRatio(sessionId, hospital, sigla, n);
+      const tickKey = `${hospital}|${sigla}`;
+      set((prev) => {
+        if (!prev.session) return {};
+        const cells = { ...prev.session.cells };
+        const hosp = { ...cells[hospital] };
+        hosp[sigla] = { ...hosp[sigla], ...updatedCell };
+        cells[hospital] = hosp;
+        return {
+          session: { ...prev.session, cells },
+          filesTick: { ...prev.filesTick, [tickKey]: (prev.filesTick[tickKey] ?? 0) + 1 },
+        };
+      });
+    } catch (error) {
+      set({ error: String(error) });
+    }
+  },
+
   saveOverride: async (sessionId, hospital, sigla, value, note, opts = {}) => {
     const key = `${hospital}|${sigla}`;
     const controller = new AbortController();

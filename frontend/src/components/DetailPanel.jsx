@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2 } from "lucide-react";
+import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2, Ratio } from "lucide-react";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
 import Badge from "../ui/Badge";
@@ -179,7 +179,12 @@ function WorkerCountModule({ hospital, sigla, cell }) {
 export default function DetailPanel({ hospital, sigla, cell }) {
   const sessionId = useSessionStore((s) => s.session?.session_id);
   const saveOverride = useSessionStore((s) => s.saveOverride);
+  const applyRatioCell = useSessionStore((s) => s.applyRatioCell);
+  const filesTick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
   const [scanInfo, setScanInfo] = useState(null);
+  const [totalPages, setTotalPages] = useState(null);
+  const [ratioNOpen, setRatioNOpen] = useState(false);
+  const [ratioNValue, setRatioNValue] = useState(2);
   // hasOverride(null) is falsy, so a null cell defaults to "files". These hooks
   // MUST stay above the early return below (Rules of Hooks).
   const [mode, setMode] = useState(hasOverride(cell) ? "manual" : "files");
@@ -192,6 +197,18 @@ export default function DetailPanel({ hospital, sigla, cell }) {
     api.getScanInfo(sigla).then((s) => { if (alive) setScanInfo(s); }).catch(() => {});
     return () => { alive = false; };
   }, [sigla]);
+
+  // Incr 2 — compute totalPages for the ≤pages cap (lazy, re-fetches on tick).
+  useEffect(() => {
+    if (!sessionId || !hospital || !sigla) { setTotalPages(null); return; }
+    let alive = true;
+    api.getCellFiles(sessionId, hospital, sigla)
+      .then((files) => {
+        if (alive) setTotalPages(files.reduce((sum, f) => sum + (f.page_count ?? 0), 0));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [sessionId, hospital, sigla, filesTick]);
 
   // Re-sync mode from provenance when the selected cell changes.
   useEffect(() => {
@@ -213,6 +230,10 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const total = computeCellCount(cell);
   const label = SIGLA_LABELS[sigla];
   const showLabel = label && label.toLowerCase() !== sigla.toLowerCase();
+
+  // Incr 2 — cap predicate: document-counting siglas cap overrides at ≤ totalPages.
+  const isCapped = ["documents", "documents_workers"].includes(scanInfo?.count_type);
+  const maxPages = isCapped ? totalPages : null;
 
   function handleModeChange(next) {
     setMode(next);
@@ -255,6 +276,58 @@ export default function DetailPanel({ hospital, sigla, cell }) {
           archivos: {filesCount.toLocaleString()}
         </span>
       </div>
+
+      {/* Incr 2 — block-action cluster: ratio treatments, visible only in "Por archivos" mode */}
+      {mode === "files" && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            icon={Ratio}
+            onClick={async () => {
+              await applyRatioCell(sessionId, hospital, sigla, 1);
+              toast.success("R1 aplicado — cada página cuenta como 1 documento");
+            }}
+          >
+            Aplicar R1
+          </Button>
+          {!ratioNOpen ? (
+            <Button
+              variant="secondary"
+              icon={Ratio}
+              onClick={() => setRatioNOpen(true)}
+            >
+              Aplicar ratio N…
+            </Button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={1}
+                value={ratioNValue}
+                onChange={(e) => setRatioNValue(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                className="w-16 rounded border border-po-border bg-po-bg px-2 py-1 text-sm tabular-nums focus:border-po-accent focus:outline-none"
+              />
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  await applyRatioCell(sessionId, hospital, sigla, ratioNValue);
+                  setRatioNOpen(false);
+                  toast.success(`Ratio ${ratioNValue} aplicado a archivos Pendiente`);
+                }}
+              >
+                Aplicar
+              </Button>
+              <Button
+                variant="ghost"
+                icon={X}
+                onClick={() => setRatioNOpen(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 mt-3">
         {isCompilationSuspect && (
@@ -320,6 +393,8 @@ export default function DetailPanel({ hospital, sigla, cell }) {
         cell={cell}
         disabled={mode === "files"}
         focusNonce={focusNonce}
+        maxPages={maxPages}
+        countType={scanInfo?.count_type}
       />
 
       {/* Worker counting is a primary action for charla/chintegral — keep it
