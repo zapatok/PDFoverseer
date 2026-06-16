@@ -7,7 +7,7 @@ import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
 import PdfCoverViewer from "./PdfCoverViewer";
 import { SIGLA_LABELS, siglaDisplay } from "../lib/sigla-labels";
-import { SIGLA_DESCRIPTION, SIGLA_PAGE_RANGE, formatPageRange } from "../lib/sigla-info";
+import { SIGLA_DESCRIPTION, SIGLA_PAGE_RANGE, formatPageRange, countTypeFor } from "../lib/sigla-info";
 import { METHOD_LABEL } from "../lib/method-labels";
 import { composeMethodInfo } from "../lib/method-info";
 import { useSessionStore } from "../store/session";
@@ -143,7 +143,7 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId }) {
   );
 }
 
-function WorkerCountModule({ hospital, sigla, cell }) {
+function WorkerCountModule({ hospital, sigla, cell, countType = "documents_workers" }) {
   const openWorkerCount = useSessionStore((s) => s.openWorkerCount);
   const status = cell.worker_status;
   // F1 fix: prefer the backend-authoritative worker_count (filtered by present
@@ -155,16 +155,19 @@ function WorkerCountModule({ hospital, sigla, cell }) {
       ? cell.worker_count
       : computeWorkerCount(cell.worker_marks, null);
   const started = status === "en_progreso" || status === "terminado";
+  const unit = countType === "checks" ? "chequeos" : "trabajadores";
+  const sectionLabel = countType === "checks" ? "Conteo de chequeos" : "Conteo de trabajadores";
+  const startLabel = countType === "checks" ? "Contar chequeos" : "Contar trabajadores";
 
   return (
     <div className="mt-6">
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mb-2">
-        Conteo de trabajadores
+        {sectionLabel}
       </h4>
       {started && (
         <div className="flex items-center gap-2 mb-2">
           <span className="text-3xl font-semibold tabular-nums">{total.toLocaleString()}</span>
-          <span className="text-xs text-po-text-muted">trabajadores</span>
+          <span className="text-xs text-po-text-muted">{unit}</span>
           <Badge variant={status === "terminado" ? "jade" : "amber"}>
             {status === "terminado" ? "Terminado" : "En progreso"}
           </Badge>
@@ -175,7 +178,7 @@ function WorkerCountModule({ hospital, sigla, cell }) {
         icon={Users}
         onClick={() => openWorkerCount(hospital, sigla)}
       >
-        {!started && "Contar trabajadores"}
+        {!started && startLabel}
         {status === "en_progreso" && "Continuar conteo"}
         {status === "terminado" && "Revisar"}
       </Button>
@@ -235,9 +238,12 @@ export default function DetailPanel({ hospital, sigla, cell }) {
     );
   }
 
+  const countType = countTypeFor(sigla);
+  const isChecks = countType === "checks";
+
   const isCompilationSuspect = cell.flags?.includes("compilation_suspect");
   const filesCount = computeFilesCount(cell);
-  const total = computeCellCount(cell);
+  const total = computeCellCount(cell, countType);
   const label = SIGLA_LABELS[sigla];
   const showLabel = label && label.toLowerCase() !== sigla.toLowerCase();
 
@@ -269,26 +275,32 @@ export default function DetailPanel({ hospital, sigla, cell }) {
         )}
       </div>
 
-      <p className="text-5xl font-semibold tabular-nums mt-4">{total.toLocaleString()}</p>
-      <p className="text-xs text-po-text-muted mt-0.5">documentos</p>
+      {!isChecks && (
+        <>
+          <p className="text-5xl font-semibold tabular-nums mt-4">{total.toLocaleString()}</p>
+          <p className="text-xs text-po-text-muted mt-0.5">documentos</p>
+        </>
+      )}
 
-      <div className="mt-3 flex items-center gap-3">
-        <SegmentedToggle
-          ariaLabel="Origen del conteo"
-          value={mode}
-          onChange={handleModeChange}
-          options={[
-            { value: "files", label: "Por archivos" },
-            { value: "manual", label: "Manual" },
-          ]}
-        />
-        <span className="text-xs text-po-text-muted tabular-nums">
-          archivos: {filesCount.toLocaleString()}
-        </span>
-      </div>
+      {!isChecks && (
+        <div className="mt-3 flex items-center gap-3">
+          <SegmentedToggle
+            ariaLabel="Origen del conteo"
+            value={mode}
+            onChange={handleModeChange}
+            options={[
+              { value: "files", label: "Por archivos" },
+              { value: "manual", label: "Manual" },
+            ]}
+          />
+          <span className="text-xs text-po-text-muted tabular-nums">
+            archivos: {filesCount.toLocaleString()}
+          </span>
+        </div>
+      )}
 
-      {/* Incr 2 — block-action cluster: ratio treatments, visible only in "Por archivos" mode */}
-      {mode === "files" && (
+      {/* Incr 2 — block-action cluster: ratio treatments, visible only in "Por archivos" mode and for non-checks siglas */}
+      {!isChecks && mode === "files" && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
@@ -370,58 +382,63 @@ export default function DetailPanel({ hospital, sigla, cell }) {
         </div>
       )}
 
-      <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Conteo automático</h4>
-      <table className="w-full text-sm">
-        <tbody>
-          {/* Solo el método automático vigente de la cascada (review #4):
-              OCR si ya se escaneó, si no el conteo por nombre. El override
-              manual vive aparte, en "Ajuste manual". */}
-          {cell.ocr_count != null ? (
-            <tr>
-              <td className="text-po-text-muted py-1">Por OCR</td>
-              <td className="text-right font-mono tabular-nums">{cell.ocr_count}</td>
-            </tr>
-          ) : (
-            <tr>
-              <td className="text-po-text-muted py-1">Por nombre de archivo</td>
-              <td className="text-right font-mono tabular-nums">{cell.filename_count ?? "—"}</td>
-            </tr>
-          )}
-          <tr>
-            <td className="text-po-text-muted py-1">Método</td>
-            <td className="text-right">
-              <span className="inline-flex items-center justify-end gap-1">
-                <Tooltip content={`Token interno: ${cell.method ?? "—"}`}>
-                  <span>{METHOD_LABEL[cell.method] ?? cell.method ?? "—"}</span>
-                </Tooltip>
-                {cell.method && (
-                  <Tooltip content={composeMethodInfo(cell.method, scanInfo)}>
-                    <span className="inline-flex">
-                      <Info size={13} strokeWidth={1.75} className="text-po-text-muted cursor-help" />
-                    </span>
-                  </Tooltip>
-                )}
-              </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      {!isChecks && (
+        <>
+          <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Conteo automático</h4>
+          <table className="w-full text-sm">
+            <tbody>
+              {/* Solo el método automático vigente de la cascada (review #4):
+                  OCR si ya se escaneó, si no el conteo por nombre. El override
+                  manual vive aparte, en "Ajuste manual". */}
+              {cell.ocr_count != null ? (
+                <tr>
+                  <td className="text-po-text-muted py-1">Por OCR</td>
+                  <td className="text-right font-mono tabular-nums">{cell.ocr_count}</td>
+                </tr>
+              ) : (
+                <tr>
+                  <td className="text-po-text-muted py-1">Por nombre de archivo</td>
+                  <td className="text-right font-mono tabular-nums">{cell.filename_count ?? "—"}</td>
+                </tr>
+              )}
+              <tr>
+                <td className="text-po-text-muted py-1">Método</td>
+                <td className="text-right">
+                  <span className="inline-flex items-center justify-end gap-1">
+                    <Tooltip content={`Token interno: ${cell.method ?? "—"}`}>
+                      <span>{METHOD_LABEL[cell.method] ?? cell.method ?? "—"}</span>
+                    </Tooltip>
+                    {cell.method && (
+                      <Tooltip content={composeMethodInfo(cell.method, scanInfo)}>
+                        <span className="inline-flex">
+                          <Info size={13} strokeWidth={1.75} className="text-po-text-muted cursor-help" />
+                        </span>
+                      </Tooltip>
+                    )}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
 
-      <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual</h4>
-      <OverridePanel
-        hospital={hospital}
-        sigla={sigla}
-        cell={cell}
-        disabled={mode === "files"}
-        focusNonce={focusNonce}
-        maxPages={maxPages}
-        countType={scanInfo?.count_type}
-      />
+          <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual</h4>
+          <OverridePanel
+            hospital={hospital}
+            sigla={sigla}
+            cell={cell}
+            disabled={mode === "files"}
+            focusNonce={focusNonce}
+            maxPages={maxPages}
+            countType={scanInfo?.count_type}
+          />
+        </>
+      )}
 
-      {/* Worker counting is a primary action for charla/chintegral — keep it
-          above the near-match suspects so a long suspects list never buries it. */}
-      {(sigla === "charla" || sigla === "chintegral") && (
-        <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} />
+      {/* Worker/checks counting module: shown for documents_workers (charla/chintegral)
+          and for checks (maquinaria). Keep above near-match suspects so a long list
+          never buries the primary action. */}
+      {(countType === "documents_workers" || countType === "checks") && (
+        <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} countType={countType} />
       )}
 
       <NearMatchesSection
