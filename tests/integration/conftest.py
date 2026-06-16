@@ -35,8 +35,10 @@ def _build_pending_cell(tmp_path: Path, month_name: str, hosp: str, sigla: str) 
     """
     folder = tmp_path / month_name / hosp / "3.-ODI Visitas"
     folder.mkdir(parents=True)
-    _make_pdf(folder / "a.pdf", 1)
-    _make_pdf(folder / "big.pdf", 8)
+    # Glob-matching names so pase-1 (filename scan) actually counts them, the way
+    # real corpus files are named — otherwise per_file stays empty (unrealistic).
+    _make_pdf(folder / "2026-04-10_odi_a.pdf", 1)
+    _make_pdf(folder / "2026-04-15_odi_big.pdf", 8)
 
 
 def _open_and_scan(client: TestClient, year: int = 2026, month: int = 4) -> str:

@@ -98,6 +98,8 @@ def cell_page_counts(folder: Path) -> dict[str, int]:
     0 when a PDF can't be opened. Today reads from disk; the Incr-J persistence
     (per_file_pages) would slot in here without touching callers.
     """
+    if not folder.exists():
+        return {}  # missing folder → no pages (callers treat as unknowable, never throw)
     out: dict[str, int] = {}
     for pdf in sorted(folder.rglob("*.pdf")):
         try:
@@ -108,11 +110,13 @@ def cell_page_counts(folder: Path) -> dict[str, int]:
     return out
 
 
-def compute_settled(cell: dict, folder: Path) -> bool:
+def compute_settled(cell: dict, folder: Path, pages: dict[str, int] | None = None) -> bool:
     """True iff every PDF in *folder* is reliable (origin ∈ {R1, RN, Manual}).
-    Empty/missing folder → False (a cell with no files is not 'listo'). Lazy pages.
+    Empty/missing folder → False (a cell with no files is not 'listo'). Lazy pages —
+    pass a precomputed ``pages`` dict to avoid reopening PDFs the caller already read.
     """
-    pages = cell_page_counts(folder)  # one walk; keys are every PDF.name in folder
+    if pages is None:
+        pages = cell_page_counts(folder)  # one walk; keys are every PDF.name in folder
     if not pages:
         return False  # empty/missing folder → a cell with no files is not 'listo'
     per_file = cell.get("per_file") or {}
@@ -162,11 +166,14 @@ def refresh_all_reliable(
     hospital: str,
     sigla: str,
     folder: Path,
+    pages: dict[str, int] | None = None,
 ) -> None:
-    """Recompute and persist all_reliable after an interactive per-file mutation."""
+    """Recompute and persist all_reliable after an interactive per-file mutation.
+    Pass ``pages`` when the caller already computed them (avoids reopening PDFs).
+    """
     state = mgr.get_session_state(session_id)
     cell = state["cells"][hospital][sigla]
-    mgr.set_all_reliable(session_id, hospital, sigla, compute_settled(cell, folder))
+    mgr.set_all_reliable(session_id, hospital, sigla, compute_settled(cell, folder, pages=pages))
 
 
 def _is_capped_sigla(sigla: str) -> bool:
@@ -212,29 +219,14 @@ def apply_ratio(
     cell_method = cell.get("method") or "filename_glob"
     n = body.n
     for pdf in sorted(folder.rglob("*.pdf")):
-        effective_method = per_file_method.get(pdf.name) or cell_method
         origin = file_origin(
-            method=effective_method,
+            method=per_file_method.get(pdf.name) or cell_method,
             override=per_file_overrides.get(pdf.name),
             page_count=pages.get(pdf.name, 0),
             per_file_count=per_file.get(pdf.name),
         )
         if origin != "Pendiente":
-            # Stamp per_file_method so the file keeps its chip after cell["method"]
-            # is overwritten to "ratio_n" by finalize_cell_ocr (clobber-guard).
-            if pdf.name not in per_file_method:
-                mgr.apply_per_file_ocr_result(
-                    session_id,
-                    hospital,
-                    sigla,
-                    pdf.name,
-                    count=per_file.get(pdf.name)
-                    if per_file.get(pdf.name) is not None
-                    else pages.get(pdf.name, 1),
-                    method=effective_method,
-                    near_matches=[],
-                )
-            continue
+            continue  # clobber-guard: only untouched multipage files (R1/Manual/OCR/RN intact)
         count = max(1, round(pages.get(pdf.name, 0) / n))
         mgr.apply_per_file_ocr_result(
             session_id,
@@ -245,7 +237,11 @@ def apply_ratio(
             method="ratio_n",
             near_matches=[],
         )
-    # finalize metadata (ocr_count = sum per_file) with a metadata-only ScanResult
+    # finalize metadata (ocr_count = sum per_file) with a metadata-only ScanResult.
+    # PRESERVE the cell-level method (don't set it to "ratio_n"): RN is a PER-FILE
+    # treatment (per_file_method["f"]="ratio_n"), not a cell method. Files without a
+    # per_file_method entry fall back to cell["method"] in file_origin — clobbering it
+    # to "ratio_n" would wrongly flip those (e.g. an R1 file) to an RN chip.
     mgr.finalize_cell_ocr(
         session_id,
         hospital,
@@ -253,7 +249,7 @@ def apply_ratio(
         ScanResult(
             count=0,
             confidence=ConfidenceLevel.LOW,
-            method="ratio_n",
+            method=cell_method,
             breakdown=None,
             flags=[],
             errors=[],
@@ -262,7 +258,7 @@ def apply_ratio(
             per_file=None,
         ),
     )
-    refresh_all_reliable(mgr, session_id, hospital, sigla, folder)
+    refresh_all_reliable(mgr, session_id, hospital, sigla, folder, pages=pages)
     state = mgr.get_session_state(session_id)
     return state["cells"][hospital][sigla]
 
@@ -625,6 +621,8 @@ def patch_override(
             except KeyError as exc:
                 raise HTTPException(404, str(exc)) from exc
             total_pages = _cell_total_pages(state, hospital, sigla)
+            # total_pages == 0 means pages are unknowable (missing folder / all PDFs
+            # unreadable) → don't block; 0 is "unknown", not "max is 0".
             if total_pages > 0 and value > total_pages:
                 raise HTTPException(
                     422,
@@ -673,7 +671,8 @@ def patch_per_file_override(
         mgr.apply_per_file_override(session_id, hospital, sigla, filename, body.count)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    refresh_all_reliable(mgr, session_id, hospital, sigla, folder)
+    if folder.exists():  # best-effort metadata; skip (don't 500) if folder is gone
+        refresh_all_reliable(mgr, session_id, hospital, sigla, folder)
     state, _ = mgr._load_and_migrate(session_id)
     cell = state["cells"][hospital][sigla]
     return {

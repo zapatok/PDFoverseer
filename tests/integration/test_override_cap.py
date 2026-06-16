@@ -30,7 +30,7 @@ def test_per_file_override_capped(client, session_with_pending_cell):
     """Per-file override > file's page count is rejected 422."""
     sid, hosp, sigla = session_with_pending_cell  # big.pdf = 8 pages
     r = client.patch(
-        f"/api/sessions/{sid}/cells/{hosp}/{sigla}/files/big.pdf/override",
+        f"/api/sessions/{sid}/cells/{hosp}/{sigla}/files/2026-04-15_odi_big.pdf/override",
         json={"count": 9},
     )
     assert r.status_code == 422, r.text
@@ -43,7 +43,7 @@ def test_per_file_override_at_limit_allowed(client, session_with_pending_cell):
     """Per-file override == file's page count (8) is accepted."""
     sid, hosp, sigla = session_with_pending_cell
     r = client.patch(
-        f"/api/sessions/{sid}/cells/{hosp}/{sigla}/files/big.pdf/override",
+        f"/api/sessions/{sid}/cells/{hosp}/{sigla}/files/2026-04-15_odi_big.pdf/override",
         json={"count": 8},
     )
     assert r.status_code == 200, r.text
