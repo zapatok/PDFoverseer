@@ -50,6 +50,8 @@ def _find_category_folder(hosp_dir: Path, sigla: str) -> Path:
     direct = hosp_dir / canonical
     if direct.exists():
         return direct
+    if not hosp_dir.exists():
+        return direct  # nominal path when hospital dir is absent
     # search for a directory matching canonical name with a numeric/text suffix
     for sub in hosp_dir.iterdir():
         if not sub.is_dir():

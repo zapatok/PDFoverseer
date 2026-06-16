@@ -45,8 +45,11 @@ def test_scan_session_populates_cells(client, monkeypatch):
     assert "HPV" in state["cells"]
 
 
-def test_patch_worker_count_persists(client, monkeypatch):
-    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+def test_patch_worker_count_persists(client, monkeypatch, tmp_path):
+    # Use tmp_path as root so the charla folder doesn't contain real PDFs →
+    # present_files=None (legacy: sum-all), worker_count == sum of synthetic marks.
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     r = client.patch(
         "/api/sessions/2026-04/cells/HLL/charla/worker-count",

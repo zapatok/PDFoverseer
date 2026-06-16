@@ -71,9 +71,13 @@ def test_output_uses_v2_priority(client, tmp_path):
     assert wb[sheet][coord].value == 17
 
 
-def test_output_emits_worker_totals(client, tmp_path):
+def test_output_emits_worker_totals(client, tmp_path, monkeypatch):
     import openpyxl
 
+    # Use tmp_path root so the charla folder doesn't contain real PDFs →
+    # present_files=None (legacy: sum-all), worker_count == sum of synthetic marks.
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     mgr = client.app.dependency_overrides[get_manager]()
     mgr.apply_worker_count(
