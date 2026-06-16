@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2 } from "lucide-react";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
@@ -8,20 +8,16 @@ import Tooltip from "../ui/Tooltip";
 import PdfCoverViewer from "./PdfCoverViewer";
 import { SIGLA_LABELS, siglaDisplay } from "../lib/sigla-labels";
 import { SIGLA_DESCRIPTION, SIGLA_PAGE_RANGE, formatPageRange } from "../lib/sigla-info";
-import { METHOD_LABEL, CONFIDENCE_LABEL } from "../lib/method-labels";
+import { METHOD_LABEL } from "../lib/method-labels";
 import { composeMethodInfo } from "../lib/method-info";
 import { useSessionStore } from "../store/session";
 import { computeWorkerCount } from "../lib/worker-count";
-import { computeCellCount } from "../lib/cellCount";
+import { computeCellCount, computeFilesCount } from "../lib/cellCount";
+import SegmentedToggle from "../ui/SegmentedToggle";
+import { hasOverride } from "../lib/cell-status";
 import { copyFlavorStub } from "../lib/flavorStub";
 import { api } from "../lib/api";
 import { toast } from "sonner";
-
-function confidenceVariant(cell) {
-  if (cell?.confidence === "high") return "confidence-high";
-  if (cell?.confidence === "low") return "confidence-low";
-  return "neutral";
-}
 
 function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -182,6 +178,7 @@ function WorkerCountModule({ hospital, sigla, cell }) {
 
 export default function DetailPanel({ hospital, sigla, cell }) {
   const sessionId = useSessionStore((s) => s.session?.session_id);
+  const saveOverride = useSessionStore((s) => s.saveOverride);
   const [scanInfo, setScanInfo] = useState(null);
 
   // rev-2 #5 — what the sigla's OCR looks for, for the method (i) tooltip.
@@ -203,10 +200,29 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   }
 
   const isCompilationSuspect = cell.flags?.includes("compilation_suspect");
-  const hasOverride = cell.user_override !== null && cell.user_override !== undefined;
+  const filesCount = computeFilesCount(cell);
   const total = computeCellCount(cell);
   const label = SIGLA_LABELS[sigla];
   const showLabel = label && label.toLowerCase() !== sigla.toLowerCase();
+
+  const [mode, setMode] = useState(hasOverride(cell) ? "manual" : "files");
+  const [focusNonce, setFocusNonce] = useState(0);
+
+  // Re-sync mode from provenance when the selected cell changes.
+  useEffect(() => {
+    setMode(hasOverride(cell) ? "manual" : "files");
+  }, [hospital, sigla, cell?.user_override]);
+
+  function handleModeChange(next) {
+    setMode(next);
+    if (next === "files") {
+      // Clear the cell override → total = files sum.
+      saveOverride(sessionId, hospital, sigla, null, cell?.override_note ?? null);
+    } else {
+      // Manual: focus the field; no write until the operator types.
+      setFocusNonce((n) => n + 1);
+    }
+  }
 
   return (
     <div className="rounded-xl bg-po-panel border border-po-border p-5">
@@ -223,16 +239,28 @@ export default function DetailPanel({ hospital, sigla, cell }) {
       <p className="text-5xl font-semibold tabular-nums mt-4">{total.toLocaleString()}</p>
       <p className="text-xs text-po-text-muted mt-0.5">documentos</p>
 
+      <div className="mt-3 flex items-center gap-3">
+        <SegmentedToggle
+          ariaLabel="Origen del conteo"
+          value={mode}
+          onChange={handleModeChange}
+          options={[
+            { value: "files", label: "Por archivos" },
+            { value: "manual", label: "Manual" },
+          ]}
+        />
+        <span className="text-xs text-po-text-muted tabular-nums">
+          archivos: {filesCount.toLocaleString()}
+        </span>
+      </div>
+
       <div className="flex flex-wrap gap-2 mt-3">
         {isCompilationSuspect && (
           <Tooltip content="Probable compilación (PDF con >5× páginas esperadas)">
             <span><Badge variant="state-suspect" icon={FileStack}>Compilación</Badge></span>
           </Tooltip>
         )}
-        {cell.confidence && (
-          <Badge variant={confidenceVariant(cell)}>{CONFIDENCE_LABEL[cell.confidence] ?? cell.confidence}</Badge>
-        )}
-        {hasOverride && <Badge variant="state-override" icon={PenLine}>Manual</Badge>}
+        {hasOverride(cell) && <Badge variant="state-override" icon={PenLine}>Manual</Badge>}
       </div>
 
       {SIGLA_DESCRIPTION[sigla] && (
@@ -284,7 +312,13 @@ export default function DetailPanel({ hospital, sigla, cell }) {
       </table>
 
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual</h4>
-      <OverridePanel hospital={hospital} sigla={sigla} cell={cell} />
+      <OverridePanel
+        hospital={hospital}
+        sigla={sigla}
+        cell={cell}
+        disabled={mode === "files"}
+        focusNonce={focusNonce}
+      />
 
       {/* Worker counting is a primary action for charla/chintegral — keep it
           above the near-match suspects so a long suspects list never buries it. */}
