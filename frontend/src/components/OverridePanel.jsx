@@ -22,7 +22,10 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   // Resync from store when cell changes (e.g., InlineEditCount committed externally),
   // but ONLY if not currently editing that field.
   useEffect(() => {
-    if (!focused.value) setValue(cell?.user_override ?? "");
+    if (!focused.value) {
+      setValue(cell?.user_override ?? "");
+      setInvalid(false); // a fresh cell must not inherit the previous error border
+    }
   }, [cell?.user_override, focused.value]);
 
   useEffect(() => {
@@ -71,7 +74,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
           disabled={disabled}
           className={`w-24 rounded border px-2 py-1.5 text-sm tabular-nums outline-none ${
             disabled
-              ? "cursor-not-allowed border-po-border bg-po-bg/40 text-po-text-muted opacity-50"
+              ? "cursor-not-allowed border-po-border bg-po-bg text-po-text-muted opacity-50"
               : invalid
                 ? "border-po-error bg-po-bg focus:border-po-error"
                 : "border-po-border bg-po-bg focus:border-po-accent"
@@ -89,7 +92,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
         rows={3}
         className={`w-full rounded border px-2 py-1.5 text-sm placeholder-po-text-subtle outline-none resize-none ${
           disabled
-            ? "cursor-not-allowed border-po-border bg-po-bg/40 text-po-text-muted opacity-50"
+            ? "cursor-not-allowed border-po-border bg-po-bg text-po-text-muted opacity-50"
             : "border-po-border bg-po-bg focus:border-po-accent"
         }`}
       />

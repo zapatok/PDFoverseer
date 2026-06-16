@@ -217,8 +217,9 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   function handleModeChange(next) {
     setMode(next);
     if (next === "files") {
-      // Clear the cell override → total = files sum.
-      saveOverride(sessionId, hospital, sigla, null, cell?.override_note ?? null);
+      // Clear the cell override → total = files sum. The backend drops the note
+      // when value=null, so pass null explicitly (don't imply note preservation).
+      saveOverride(sessionId, hospital, sigla, null, null);
     } else {
       // Manual: focus the field; no write until the operator types.
       setFocusNonce((n) => n + 1);
