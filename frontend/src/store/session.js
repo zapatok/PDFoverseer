@@ -451,6 +451,7 @@ export const useSessionStore = create((set, get) => ({
           worker_marks: result.worker_marks,
           worker_status: result.worker_status,
           worker_cursor: result.worker_cursor,
+          worker_count: result.worker_count,
         };
         cells[hospital] = hosp;
         const cleanedPending = new Map(prev._pendingSave);

@@ -146,7 +146,14 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId }) {
 function WorkerCountModule({ hospital, sigla, cell }) {
   const openWorkerCount = useSessionStore((s) => s.openWorkerCount);
   const status = cell.worker_status;
-  const total = computeWorkerCount(cell.worker_marks, Object.keys(cell.per_file || {}));
+  // F1 fix: prefer the backend-authoritative worker_count (filtered by present
+  // files on disk, set on every PATCH response). Fall back to a local sum over
+  // all marks only when worker_count is not yet in the store (initial render
+  // before the first PATCH in this session).
+  const total =
+    cell.worker_count != null
+      ? cell.worker_count
+      : computeWorkerCount(cell.worker_marks, null);
   const started = status === "en_progreso" || status === "terminado";
 
   return (

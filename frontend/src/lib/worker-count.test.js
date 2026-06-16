@@ -30,4 +30,16 @@ describe("computeWorkerCount", () => {
     expect(computeWorkerCount({}, [])).toBe(0);
     expect(computeWorkerCount(null, null)).toBe(0);
   });
+
+  it("F1: cuenta marca en archivo presente aunque no esté en per_file (presente != per_file)", () => {
+    // Simula el escenario F1: b.pdf existe en disco pero pase-1 no lo registró
+    // en per_file. La lista de archivos presentes incluye ambos → ambos deben
+    // contar; el per_file-keyed filter hubiera excluido b.pdf.
+    const marksF1 = {
+      "a.pdf": [{ page: 1, count: 10 }],
+      "b.pdf": [{ page: 1, count: 36 }],
+    };
+    // Llamada con lista de archivos en disco (presentes), no per_file keys.
+    expect(computeWorkerCount(marksF1, ["a.pdf", "b.pdf"])).toBe(46);
+  });
 });
