@@ -110,11 +110,19 @@ def cell_page_counts(folder: Path) -> dict[str, int]:
     return out
 
 
-def compute_settled(cell: dict, folder: Path, pages: dict[str, int] | None = None) -> bool:
-    """True iff every PDF in *folder* is reliable (origin ∈ {R1, RN, Manual}).
-    Empty/missing folder → False (a cell with no files is not 'listo'). Lazy pages —
-    pass a precomputed ``pages`` dict to avoid reopening PDFs the caller already read.
+def compute_settled(
+    cell: dict, folder: Path, pages: dict[str, int] | None = None, count_type: str | None = None
+) -> bool:
+    """True iff the cell is 'listo' (green) by provenance.
+
+    checks (maquinaria): settled iff ``worker_status == 'terminado'`` (human
+    verification of the manual tally) — short-circuits before touching the folder.
+    Otherwise: every PDF in *folder* is reliable (origin ∈ {R1, RN, Manual});
+    empty/missing folder → False. Lazy pages — pass a precomputed ``pages`` dict
+    to avoid reopening PDFs the caller already read.
     """
+    if count_type == "checks":
+        return cell.get("worker_status") == "terminado"
     if pages is None:
         pages = cell_page_counts(folder)  # one walk; keys are every PDF.name in folder
     if not pages:
@@ -167,13 +175,20 @@ def refresh_all_reliable(
     sigla: str,
     folder: Path,
     pages: dict[str, int] | None = None,
+    count_type: str | None = None,
 ) -> None:
     """Recompute and persist all_reliable after an interactive per-file mutation.
     Pass ``pages`` when the caller already computed them (avoids reopening PDFs).
+    Pass ``count_type`` so checks cells (maquinaria) settle on worker_status.
     """
     state = mgr.get_session_state(session_id)
     cell = state["cells"][hospital][sigla]
-    mgr.set_all_reliable(session_id, hospital, sigla, compute_settled(cell, folder, pages=pages))
+    mgr.set_all_reliable(
+        session_id,
+        hospital,
+        sigla,
+        compute_settled(cell, folder, pages=pages, count_type=count_type),
+    )
 
 
 def _is_capped_sigla(sigla: str) -> bool:
@@ -258,7 +273,9 @@ def apply_ratio(
             per_file=None,
         ),
     )
-    refresh_all_reliable(mgr, session_id, hospital, sigla, folder, pages=pages)
+    refresh_all_reliable(
+        mgr, session_id, hospital, sigla, folder, pages=pages, count_type=count_type_for(sigla)
+    )
     state = mgr.get_session_state(session_id)
     return state["cells"][hospital][sigla]
 
@@ -373,7 +390,9 @@ def _apply_scan_event(mgr: SessionManager, session_id: str, event: dict) -> dict
         hosp_dir = month_root / hosp
         if hosp_dir.exists():
             folder = _find_category_folder(hosp_dir, sigla)
-            refresh_all_reliable(mgr, session_id, hosp, sigla, folder)
+            refresh_all_reliable(
+                mgr, session_id, hosp, sigla, folder, count_type=count_type_for(sigla)
+            )
         return event
     return event
 
@@ -672,7 +691,9 @@ def patch_per_file_override(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if folder.exists():  # best-effort metadata; skip (don't 500) if folder is gone
-        refresh_all_reliable(mgr, session_id, hospital, sigla, folder)
+        refresh_all_reliable(
+            mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla)
+        )
     state, _ = mgr._load_and_migrate(session_id)
     cell = state["cells"][hospital][sigla]
     return {
@@ -745,6 +766,10 @@ def patch_worker_count(
     month_root = Path(state.get("month_root", ""))
     folder = _find_category_folder(month_root / hospital, sigla)
     present = set(cell_page_counts(folder)) if folder.exists() else None
+    # checks cells (maquinaria) light green on worker_status=='terminado'; for
+    # documents_workers this recomputes document settledness (no-op-ish). Closes
+    # the gap that the worker PATCH didn't refresh all_reliable.
+    refresh_all_reliable(mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla))
     return {
         "worker_marks": cell.get("worker_marks"),
         "worker_status": cell.get("worker_status"),
