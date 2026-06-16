@@ -34,7 +34,7 @@
 - `tests/fixtures/cell_count_cases.json` — casos `checks` (con `count_type` + `present_files`).
 - `tests/test_cell_count_cross_language.py` — leer `count_type`/`present_files` opcionales.
 - `tests/unit/api/test_sum_marks_present_files.py` (F1 repro), `tests/unit/api/test_compute_settled_checks.py`, `tests/unit/core/test_compute_cell_count_checks.py`.
-- `tests/integration/test_maquinaria_checks.py` (PATCH worker → cuenta/verde/Excel), `tests/integration/conftest.py` (fixtures maquinaria + charla-con-marca-no-per_file).
+- `tests/integration/test_maquinaria_checks.py` (PATCH worker → cuenta/verde/Excel) — **reusa** el fixture existente `session_with_checks_cell` (conftest.py:73, HPV/maquinaria, `maq.pdf`=2pg) + `_make_pdf` (conftest.py:14). El único fixture NUEVO es el de F1 (charla con marca en un PDF no-en-per_file, Task 1.3).
 - `frontend/src/lib/cellCount.test.js`, `cell-status.test.js`, `sigla-info.test.js` (completitud count_type).
 
 ---
@@ -257,7 +257,7 @@ def _build_worker_values(state: dict) -> dict[str, int]:
     return out
 ```
 
-> Importar `_find_category_folder`, `cell_page_counts`, `Path` en output.py si no están. (`cell_page_counts` está en `api/routes/sessions.py`; mover a un módulo compartido o importarla — el implementer decide la ruta de import más limpia; `_find_category_folder` viene de `core.orchestrator`.)
+> **Imports en output.py (verificado):** `Path` YA está importado (línea 8). Faltan: `count_type_for` (de `core.scanners.patterns`), `_find_category_folder` (de `core.orchestrator`), y `cell_page_counts` (de `api.routes.sessions`). Importar `cell_page_counts` desde `api.routes.sessions` es **cycle-safe** — output.py ya importa `get_manager` de sessions, no se crea ciclo nuevo.
 
 - [ ] **Step 4: Run** → PASS. Correr también la suite de output + sessions: `python -m pytest tests/integration/ -k "f1 or output or worker" -v`.
 
@@ -357,6 +357,8 @@ def test_compute_cell_count_against_shared_fixture(case):
     present = set(case["present_files"]) if "present_files" in case else None
     assert compute_cell_count(case["cell"], count_type, present) == case["expected"], f"case={case['name']}"
 ```
+
+> **Ojo (paridad JS):** este harness es **solo Python** (corre el JSON contra `compute_cell_count`; el header del archivo dice que el lado JS se valida "during smoke"). Por tanto, agregar casos checks al JSON **no** testea `cellCount.js` automáticamente. Agregar casos `checks` **explícitos** a `frontend/src/lib/cellCount.test.js` (tally filtrado, override gana, set vacío→0) — esa es la red de paridad real del lado JS, y Step 4 la corre.
 
 - [ ] **Step 2: Run** → FAIL (`compute_cell_count() takes 1 positional argument`; harness rojo en casos checks).
 
@@ -571,9 +573,9 @@ git commit -m "feat(3a): Excel routes maquinaria check tally via resolve_cell_va
 ### Task 2.4: integración end-to-end de maquinaria
 
 **Files:**
-- Test: `tests/integration/test_maquinaria_checks.py` (create), `tests/integration/conftest.py` (extend con fixture maquinaria)
+- Test: `tests/integration/test_maquinaria_checks.py` (create). **Reusar** `session_with_checks_cell` (conftest.py:73) — NO recrear el fixture maquinaria.
 
-- [ ] **Step 1: Failing integration test** (fixtures reales, sin mock): abrir sesión, crear celda HPV/maquinaria con 1-2 PDFs reales; PATCH worker-count con marcas (status terminado); asserts:
+- [ ] **Step 1: Failing integration test** (fixtures reales, sin mock): usar `session_with_checks_cell` (HPV/maquinaria, `maq.pdf`=2pg); PATCH worker-count con marcas (status terminado); asserts:
   - la cuenta de la celda (vía el snapshot/`compute_cell_count` con count_type=checks) == tally;
   - `all_reliable` True tras terminado;
   - `POST .../output` escribe el tally en la celda de maquinaria de la grilla.
@@ -665,9 +667,13 @@ export function dotVariantFor(cell, { isScanning = false, countType = "documents
 }
 ```
 
-  CategoryRow + HospitalCard: pasar `countType={countTypeFor(sigla)}` a `dotVariantFor`/`computeCellCount`. (CategoryRow muestra el número: `computeCellCount(cell, countTypeFor(sigla))` — sin presentFiles en la grilla; el backend es autoritativo y los huérfanos son raros.)
+  **Barrer TODOS los consumidores** (decisión consciente: pasar `countTypeFor(sigla)` en cada uno, para que las celdas checks no contribuyan un número de documentos equivocado a agregados/pendientes). La firma con default no rompe la compilación, así que el riesgo es **wrongness silenciosa**, no un crash:
+  - `computeCellCount(cell)` → pasar `countTypeFor(sigla)`: `CategoryRow.jsx:69` (número de fila; sin presentFiles en la grilla — backend autoritativo, huérfanos raros), `MonthOverview.jsx:47`, `HospitalDetail.jsx:20` (totales agregados), `scanCost.js:40`.
+  - `dotVariantFor(cell, {...})` → agregar `countType: countTypeFor(sigla)`: `CategoryRow.jsx:58`, `HospitalCard.jsx:54`.
+  - `isCellReady(cell)` → pasar `countTypeFor(sigla)`: `CategoryBulkActions.jsx:14`, `session.js:158` (conteo/filtro de pendientes — sin esto, una maquinaria `terminado` se lee como pendiente).
+  (Todos tienen la sigla en scope, verificado.)
 
-- [ ] **Step 4: Run** → PASS (`cell-status.test.js` + build). Verificar que ningún call-site viejo de `isCellReady`/`dotVariantFor` quede sin countType donde importe (grep).
+- [ ] **Step 4: Run** → PASS (`cell-status.test.js` + build). Confirmar por grep que NINGÚN call-site de `computeCellCount`/`isCellReady`/`dotVariantFor` quedó sin `countType` (los 8 de arriba + los 2 de DetailPanel que se enrutan en 3.4).
 
 - [ ] **Step 5: Commit**
 
@@ -685,7 +691,7 @@ git commit -m "feat(3a): green dot + grid count honor count_type (checks ready o
 
 - [ ] **Step 2:** Vitest si hay test del visor; si no, smoke manual en Task de smoke. Como mínimo, un test de que el label de unidad deriva de countType (extraer la lógica de label a una función pura testeable si ayuda).
 
-- [ ] **Step 3:** Implementar. Mantener la voz **idéntica** para charla/chintegral (no regresar Feature 1). El gate de voz: envolver el hook/uso `useSpeechNumber` y los handlers de mic en `countType === "documents_workers"`. (Si el hook no puede ser condicional por Rules-of-Hooks, llamarlo siempre pero ignorar/ocultar sus efectos cuando no aplica — replicar el patrón de hoisting de hooks de 1B.)
+- [ ] **Step 3:** Implementar. Mantener la voz **idéntica** para charla/chintegral (no regresar Feature 1). **Gate de voz limpio (verificado):** `useSpeechNumber` ya recibe un param `enabled` (hoy `enabled: !micPaused`) y para el reconocedor cuando es false (`useSpeechNumber.js:21,27`). Por tanto el hook se sigue llamando SIEMPRE (sin Rules-of-Hooks) — gatear con `enabled: !micPaused && countType === "documents_workers"`. Ocultar además la tecla "M" (handler ~213) y el indicador de mic cuando `countType !== "documents_workers"`.
 
 - [ ] **Step 4:** `cd frontend && npx vitest run` + `npm run build` limpio.
 
@@ -705,7 +711,12 @@ git commit -m "feat(3a): counter viewer parametrized by unit (chequeos) + voice 
 - [ ] **Step 1:** Render del módulo de conteo: gate de `sigla === "charla" || sigla === "chintegral"` →
   `count_type === "checks" || sigla === "charla" || sigla === "chintegral"` (sin dif_pts). El `count_type` ya está disponible vía `scanInfo?.count_type` (DetailPanel:411) o `countTypeFor(sigla)`. Pasar `countType` al `WorkerCountModule` para sus textos.
 
-- [ ] **Step 2:** Para celdas `checks`: ocultar los controles de **conteo de documentos** (toggle `Archivo·Manual`, cluster de acciones en bloque `Aplicar R1 / ratio N`, `OverridePanel`) — no aplican (la cuenta viene del tally). La lista de archivos (FileList) queda visible (informativa). Envolver esos bloques en `count_type !== "checks"`.
+- [ ] **Step 2:** Para celdas `checks`, ocultar/enrutar **todos** los bloques de conteo de documentos (la cuenta viene del tally; el `WorkerCountModule` de 3.3 es el número primario). Envolver cada uno en `count_type !== "checks"`:
+  - **El número grande de documentos** (`DetailPanel.jsx:265-266`, `{total.toLocaleString()}` + "documentos", alimentado por `computeCellCount(cell)` en ~233) — **crítico**: sin esto, una celda checks muestra un número de documentos equivocado arriba. Ocultarlo (el `WorkerCountModule` muestra el tally) **o** pasar `countTypeFor(sigla)` a `computeCellCount` en la línea 233.
+  - **La tabla "Conteo automático"** (`DetailPanel.jsx:366-401`).
+  - El toggle `Archivo·Manual` (`~268-281`), el cluster `Aplicar R1 / ratio N` (`~283-344`), y `OverridePanel` (`~404-412`).
+  - La lista de archivos (`FileList`) **queda visible** (informativa).
+  > No hay un wrapper único — gatear cada bloque. Los hooks (`useState` ~190-191) están sobre el early-return (~221), así que leer `count_type` para el gate es Rules-of-Hooks-safe.
 
 - [ ] **Step 3:** Implementar los condicionales de render. `WorkerCountModule` ya parametrizado en 3.3 (textos por countType); el botón "Contar chequeos" / "Continuar conteo" / "Revisar".
 
