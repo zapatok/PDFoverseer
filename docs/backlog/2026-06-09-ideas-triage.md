@@ -157,11 +157,11 @@ Tres ideas-fuerza de las que cuelgan muchas notas. Conviene decidirlas como mode
 
 ---
 
-## J · Reorganización de archivos / páginas 🟢/⚪ (grande)
+## J · Reorganización de archivos / páginas 🔴 PROMOVIDA (antes de multiplayer, para el próximo mes — ver addendum 2026-06-15)
 
 | ID | Idea pulida | Prio | Compl | Capa |
 |----|-------------|:----:|:-----:|:----:|
-| J1 | Mover o separar una **hoja individual** (como nuevo PDF) o el **archivo completo** a otra celda — o dividir dentro de la misma celda — llevando su conteo (y su conteo de trabajadores si tiene, restándolo del total de origen). UI propuesta: sección "Reorganizar" en el panel derecho, con selector archivo-completo / páginas X-Y y un desplegable de celda destino (incluye la actual para solo dividir). Al dividir, **auto-renombrar** conservando fecha y nombres, cambiando solo sigla y empresa. | 🟢 | L | ambas |
+| J1 | Mover o separar una **hoja individual**, un **rango de páginas X–Y**, o el **archivo completo** a otra celda — o dividir dentro de la misma celda — llevando su conteo (y su conteo de trabajadores si tiene, restándolo del total de origen). El **rango de páginas es clave**: hay **documentos de más de una página colados en medio de un compilado** que hay que poder extraer. UI propuesta: sección "Reorganizar" en el panel derecho, con selector archivo-completo / páginas X-Y y un desplegable de celda destino (incluye la actual para solo dividir). Al dividir, **auto-renombrar** conservando fecha y nombres, cambiando solo sigla y empresa. | 🔴 | L | ambas |
 
 **Relación:** corrige misclasificación de origen (PDF en sigla equivocada / compilación), grupo C (conteos), F (trabajadores).
 
@@ -489,6 +489,22 @@ La **nota-con-estado** (grupo N) es el primer anticipo del gate de celda.
     Claude que ejecuta la 2ª tanda → encargo legible para humano *y* para agente. Cruza con "Claude
     como usuario" (grupo L).
 
+- **Actualización 2026-06-15 (Daniel) — PROMOCIÓN + alcance afinado:**
+  - **Prioridad: PROMOVIDA a near-term, ANTES de multiplayer, objetivo el próximo mes.** Razón:
+    **ordenar adecuadamente los documentos y contar los que corresponden a cada celda es uno de los
+    problemas que MÁS afectan las observaciones de la inspección fiscal.** Deja de ser "parqueado /
+    algún día"; es de los próximos focos tras los increments de conteo. (Multiplayer queda después.)
+  - **Mover debe incluir RANGO de páginas X–Y, no solo hoja individual o archivo completo:** hay
+    **documentos de más de una página colados en medio de un compilado** que hay que poder extraer a
+    su celda correcta. El selector de la UI "Reorganizar" ya contempla páginas X-Y; lo clave es que
+    la operación MOVER (no solo dividir) lo soporte.
+  - **El manifiesto DEBE llevar las rotaciones** (reafirmado): rotación por página/archivo viaja como
+    operación declarativa al paso 1 (ya estaba en "rotar / separar págs X-Y / mover / reclasificar",
+    se explicita aquí para que no se pierda).
+  - Implicación de secuencia: re-evaluar el orden de increments — J podría adelantarse para estar
+    lista en el ciclo del próximo mes. Sigue siendo trabajo **L** y **cross-proyecto** (contrato +
+    coordinación con el paso 1), así que su tamaño no cambia, solo su prioridad.
+
 ### Grupo K — badges / contador de inicios de documento (Feature 2) — ✅ RESUELTA 2026-06-09
 
 - **Parte manual: absorbida por el contador por teclado generalizado** (unidad = "inicios de
@@ -564,8 +580,16 @@ visor (pre-render + caché + placeholder), miniaturas +20%, Shift+AvPág, ir-a-p
 next en casi-matches, calculadora, rotación-vista, filtro por chip, color docs≠págs, click-seleccionar,
 flechas.
 
-**Parqueado (después / coordinado):** reorganización vía manifiesto al paso 1 (coordinar con el paso
-1), multiplayer/colaboración (grupo L), badges sembrados por OCR (dependen del Track A + cablear los
-límites de documento).
+**Incremento J — Reorganización vía manifiesto al paso 1** (PROMOVIDO 2026-06-15, ver Grupo J): mover
+hoja / **rango de páginas X–Y** / archivo completo entre celdas llevando el conteo, + rotaciones, todo
+exportado como **manifiesto declarativo** que ejecuta el paso 1 en su 2ª tanda. **Objetivo: el próximo
+mes; antes de multiplayer.** Razón: el ordenamiento correcto de documentos por celda es de los mayores
+drivers de observaciones de la inspección fiscal. Trabajo **L** + cross-proyecto (contrato versionado
+coordinado con el paso 1). Ubicación exacta en la secuencia: a re-evaluar (puede ir tras Incr 2/3 o
+adelantarse según el calendario del próximo mes).
 
-**Empezamos por:** Incremento **1A** (spec ← mapear primero la orquestación del OCR).
+**Parqueado (después / coordinado):** multiplayer/colaboración (grupo L), badges sembrados por OCR
+(dependen del Track A + cablear los límites de documento).
+
+**Empezamos por:** Incremento **1A** (spec ← mapear primero la orquestación del OCR). [1A ✅ 2026-06-11,
+1B ✅ 2026-06-15. En curso: Incremento 2 — RN + tope ≤páginas.]
