@@ -1,6 +1,7 @@
 import { CheckCircle2, Scan } from "lucide-react";
 import { useSessionStore } from "../store/session";
 import { isCellReady } from "../lib/cell-status";
+import { countTypeFor } from "../lib/sigla-info";
 import Button from "../ui/Button";
 
 // Two bulk actions above the category list (conteo-confiable Tema A):
@@ -11,7 +12,7 @@ export default function CategoryBulkActions({ hospital, cells, selectedSiglas, o
   const scanPending = useSessionStore((s) => s.scanPending);
   const confirmCell = useSessionStore((s) => s.confirmCell);
 
-  const pendingCount = Object.values(cells).filter((c) => !isCellReady(c)).length;
+  const pendingCount = Object.entries(cells).filter(([sigla, c]) => !isCellReady(c, countTypeFor(sigla))).length;
   const selectedCount = selectedSiglas.length;
 
   const onScanPending = () => {

@@ -8,6 +8,7 @@ import DetailPanel from "../components/DetailPanel";
 import ScanControls from "../components/ScanControls";
 import { SIGLAS } from "../lib/sigla-labels";
 import { computeCellCount } from "../lib/cellCount";
+import { countTypeFor } from "../lib/sigla-info";
 
 export default function HospitalDetail({ hospital, onBack }) {
   const { session } = useSessionStore();
@@ -17,7 +18,7 @@ export default function HospitalDetail({ hospital, onBack }) {
   const [selectedSet, setSelectedSet] = useState(new Set());
 
   const cells = session?.cells?.[hospital] || {};
-  const total = Object.values(cells).reduce((s, c) => s + computeCellCount(c), 0);
+  const total = Object.entries(cells).reduce((s, [sig, c]) => s + computeCellCount(c, countTypeFor(sig)), 0);
 
   // One list, folder order (1-18). No Normalizadas/Compilaciones split — the
   // dot already says listo/pendiente and compilation_suspect is just a chip.

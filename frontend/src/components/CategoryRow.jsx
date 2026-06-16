@@ -6,6 +6,7 @@ import Tooltip from "../ui/Tooltip";
 import { SIGLA_LABELS, siglaDisplay } from "../lib/sigla-labels";
 import { dotVariantFor } from "../lib/cell-status";
 import { computeCellCount } from "../lib/cellCount";
+import { countTypeFor } from "../lib/sigla-info";
 import InlineEditCount from "./InlineEditCount";
 
 
@@ -55,7 +56,7 @@ export default function CategoryRow({
       <Tooltip content={SIGLA_LABELS[sigla] ?? null}>
         <span className="font-mono text-xs text-po-text">{siglaDisplay(sigla)}</span>
       </Tooltip>
-      <Dot variant={dotVariantFor(cell, { isScanning })} className={isPendingSave ? "animate-pulse" : ""} />
+      <Dot variant={dotVariantFor(cell, { isScanning, countType: countTypeFor(sigla) })} className={isPendingSave ? "animate-pulse" : ""} />
 
       {/* Trailing slot: only the count now. Status (error/manual/compilación)
           lives in the Detalle column; error reads as the red dot beside the
@@ -66,7 +67,7 @@ export default function CategoryRow({
           <Badge variant="state-scanning" icon={Loader2}>Escaneando…</Badge>
         ) : (
           <InlineEditCount
-            value={computeCellCount(cell)}
+            value={computeCellCount(cell, countTypeFor(sigla))}
             onCommit={onCommitCount}
             placeholder={placeholder}
             autoFocus={autoFocus}

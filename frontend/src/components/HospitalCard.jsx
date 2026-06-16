@@ -6,6 +6,7 @@ import { CTA_LLENAR_MANUAL } from "../lib/constants";
 import { SIGLAS } from "../lib/sigla-labels";
 import { dotVariantFor } from "../lib/cell-status";
 import { useSessionStore } from "../store/session";
+import { countTypeFor } from "../lib/sigla-info";
 
 export default function HospitalCard({ hospital, total, cells, status, onClick }) {
   const selectHospital = useSessionStore((s) => s.selectHospital);
@@ -51,7 +52,7 @@ export default function HospitalCard({ hospital, total, cells, status, onClick }
       <div className="flex gap-0.5 mt-4" aria-label={`${SIGLAS.length} categorías`}>
         {SIGLAS.map((s) => (
           <Tooltip key={s} content={`${s}: ${cells?.[s]?.user_override ?? cells?.[s]?.ocr_count ?? cells?.[s]?.filename_count ?? 0}`}>
-            <span><Dot variant={dotVariantFor(cells?.[s])} /></span>
+            <span><Dot variant={dotVariantFor(cells?.[s], { countType: countTypeFor(s) })} /></span>
           </Tooltip>
         ))}
       </div>

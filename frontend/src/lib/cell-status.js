@@ -50,8 +50,12 @@ export function allFilesReliable(cell) {
   return cell?.confidence === "high" && !anyUnreliableOcrFile(cell);
 }
 
-export function isCellReady(cell) {
+// countType = "checks" (maquinaria): ready iff the operator marked it terminado
+// via the counter viewer (human verification, no OCR/filename involved).
+// For all other count types, the standard provenance cascade applies.
+export function isCellReady(cell, countType = "documents") {
   if (!!cell?.confirmed || hasOverride(cell)) return true;
+  if (countType === "checks") return cell?.worker_status === "terminado";
   // Backend all_reliable (Incr 2) is authoritative; fall back to the 1B proxy
   // (allFilesReliable) for cells not yet migrated (e.g. MAYO scanned pre-Incr-2).
   return cell?.all_reliable ?? allFilesReliable(cell);
@@ -59,9 +63,9 @@ export function isCellReady(cell) {
 
 // Dot tone. Scanning/error take precedence; a cell with no data yet stays
 // neutral (gray) so a fresh, unscanned month doesn't read as all-pendiente.
-export function dotVariantFor(cell, { isScanning = false } = {}) {
+export function dotVariantFor(cell, { isScanning = false, countType = "documents" } = {}) {
   if (isScanning) return "state-scanning";
   if (cell?.errors?.length > 0) return "state-error";
   if (!cell) return "neutral";
-  return isCellReady(cell) ? "confidence-high" : "confidence-low";
+  return isCellReady(cell, countType) ? "confidence-high" : "confidence-low";
 }

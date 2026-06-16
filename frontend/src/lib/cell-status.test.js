@@ -134,6 +134,26 @@ describe("isCellReady (Incr 2 — all_reliable signal)", () => {
   });
 });
 
+describe("isCellReady (checks branch — Incr 3A)", () => {
+  it("checks cell ready only when worker_status is terminado", () => {
+    expect(isCellReady({ worker_status: "terminado" }, "checks")).toBe(true);
+    expect(isCellReady({ worker_status: "en_progreso" }, "checks")).toBe(false);
+    expect(isCellReady({}, "checks")).toBe(false);
+  });
+  it("checks: confirmed/override still win", () => {
+    expect(isCellReady({ worker_status: "en_progreso", confirmed: true }, "checks")).toBe(true);
+    expect(isCellReady({ worker_status: "en_progreso", user_override: 3 }, "checks")).toBe(true);
+  });
+  it("checks dot shows green only on terminado", () => {
+    expect(dotVariantFor({ worker_status: "terminado" }, { countType: "checks" })).toBe("confidence-high");
+    expect(dotVariantFor({ worker_status: "en_progreso" }, { countType: "checks" })).toBe("confidence-low");
+  });
+  it("documents countType unaffected — backward compat", () => {
+    expect(isCellReady({ confidence: "high", per_file_method: { "a.pdf": "filename_glob" } }, "documents")).toBe(true);
+    expect(isCellReady({ all_reliable: true }, "documents")).toBe(true);
+  });
+});
+
 describe("dotVariantFor", () => {
   it("scanning takes precedence over everything", () => {
     expect(dotVariantFor({ confidence: "high" }, { isScanning: true })).toBe("state-scanning");

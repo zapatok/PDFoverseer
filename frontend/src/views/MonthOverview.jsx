@@ -8,6 +8,7 @@ import HistoryDrawer from "../components/HistoryDrawer";
 import Button from "../ui/Button";
 import { api } from "../lib/api";
 import { computeCellCount } from "../lib/cellCount";
+import { countTypeFor } from "../lib/sigla-info";
 import { useHistory } from "../lib/useHistoryStore";
 
 const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
@@ -43,8 +44,8 @@ export default function MonthOverview() {
   const totalsByHospital = Object.fromEntries(
     HOSPITALS.map((h) => {
       const hospCells = cells[h] || {};
-      const total = Object.values(hospCells).reduce(
-        (s, cell) => s + computeCellCount(cell),
+      const total = Object.entries(hospCells).reduce(
+        (s, [sigla, cell]) => s + computeCellCount(cell, countTypeFor(sigla)),
         0,
       );
       return [h, total];

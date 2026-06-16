@@ -4,6 +4,7 @@
 // from what the client already holds.
 
 import { computeCellCount } from "./cellCount";
+import { countTypeFor } from "./sigla-info";
 import { OCR_EST_SECONDS_PER_PDF } from "./constants";
 
 export function estimateScanSeconds(totalPdfs) {
@@ -37,7 +38,7 @@ export function totalPdfsForPairs(sessionState, pairs) {
   for (const [hosp, sigla] of pairs ?? []) {
     const cell = cells?.[hosp]?.[sigla];
     if (!cell) continue;
-    total += cell.filename_count ?? computeCellCount(cell) ?? 0;
+    total += cell.filename_count ?? computeCellCount(cell, countTypeFor(sigla)) ?? 0;
   }
   return total;
 }
