@@ -61,6 +61,35 @@ from fastapi.responses import FileResponse  # noqa: E402
 
 _MAX_REASONABLE_COUNT = 10_000
 
+_OCR_METHODS = ("header_detect", "corner_count", "header_band_anchors", "v4")
+
+
+def file_origin(
+    *,
+    method: str | None,
+    override: int | None,
+    page_count: int,
+    per_file_count: int | None,
+) -> str:
+    """Per-file chip vocabulary (single source — reused by _origin_for and
+    compute_settled). Priority: Manual override > unreadable Error > OCR/Revisar >
+    RN (ratio_n) > R1 (page_count_pure) > R1/Pendiente (filename_glob by page count)
+    > R1 default.
+    """
+    if override is not None:
+        return "Manual"
+    if page_count == 0:  # unreadable PDF
+        return "Error"
+    if method in _OCR_METHODS:
+        return "Revisar" if per_file_count == 0 else "OCR"
+    if method == "ratio_n":
+        return "RN"
+    if method == "page_count_pure":
+        return "R1"
+    if method == "filename_glob":
+        return "R1" if page_count == 1 else "Pendiente"
+    return "R1"
+
 
 def _informe_root() -> Path:
     return Path(os.environ.get("INFORME_MENSUAL_ROOT", "A:/informe mensual"))
@@ -599,39 +628,16 @@ def get_cell_files(
         page_count: int,
         per_file_count: int | None,
     ) -> str:
-        """Per-file chip: Manual/Error/Revisar/OCR/R1/Pendiente. Canonical casing.
-
-        The method is resolved **per file** (rev-2 §3): `per_file_method[filename]`
-        if present, else the cell-level method. This lets a single file OCR-ed on
-        its own read "OCR"/"Revisar" while the rest of a filename_glob cell stays
-        "R1"/"Pendiente".
-
-        Priority cascade: a manual override always wins (human judgement over a
-        read failure), then an unreadable PDF (page_count == 0) → Error. For an
-        OCR-counted file the chip turns to "Revisar" when OCR found 0 documents
-        (poor scan or a template with no registered flavor — manual is the way
-        out); otherwise "OCR". Then the auto-reliable methods. A plain
-        filename_glob file is only trustworthy when it is a single page (one
-        file = one document); a multipage filename_glob file → Pendiente.
+        """Thin wrapper: resolves the per-file method then delegates to the
+        module-level ``file_origin`` pure function (single source of chip vocab).
         """
         method = per_file_method.get(filename) or cell_method
-        if override is not None:
-            return "Manual"
-        if page_count == 0:  # unreadable PDF
-            return "Error"
-        if method in (
-            "header_detect",
-            "corner_count",
-            "header_band_anchors",
-            "v4",
-        ):
-            # OCR ran but read nothing for this file → needs manual review.
-            return "Revisar" if per_file_count == 0 else "OCR"
-        if method == "page_count_pure":
-            return "R1"  # fixed-page sigla, auto-reliable (was "Estructura")
-        if method == "filename_glob":
-            return "R1" if page_count == 1 else "Pendiente"
-        return "R1"
+        return file_origin(
+            method=method,
+            override=override,
+            page_count=page_count,
+            per_file_count=per_file_count,
+        )
 
     out: list[dict] = []
     for pdf in sorted(folder.rglob("*.pdf")):
