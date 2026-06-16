@@ -52,7 +52,7 @@ si no se arregla el filtro de F1, maquinaria hereda el mismo bug.
   `core.orchestrator`) + `cell_page_counts(folder)` (lazy, `api/routes/sessions.py:96`); listar nombres
   de PDF es barato (glob), abrir cada PDF para páginas es caro — F1 solo necesita los **nombres**.
 - **PATCH del conteo:** `PATCH /api/sessions/{id}/cells/{h}/{s}/worker-count` (`sessions.py:721`) persiste
-  `worker_marks/status/cursor` (`apply_worker_count`, `state.py:492`, sobrescribe `worker_marks` entero
+  `worker_marks/status/cursor` (`apply_worker_count`, `state.py:493`, sobrescribe `worker_marks` entero
   cuando `marks` no es None) y **devuelve** `{worker_marks, worker_status, worker_cursor, worker_count}`.
 - **Sin cambios de pipeline/scanner:** `maquinaria` ya es `count_type=checks`. NO se toca
   `core/{pipeline,ocr,inference,image}.py` ni `vlm/*` ni los anchor sets → **no aplica** el hook
@@ -97,27 +97,35 @@ def compute_cell_count(cell: dict, count_type: str = "documents",
 - **Espejo JS obligatorio:** `frontend/src/lib/cellCount.js` recibe el mismo `count_type` y replica la
   rama `checks` (sumando `worker_marks` filtrado por archivos presentes). Se agregan casos `checks` a
   `tests/fixtures/cell_count_cases.json` y el test cross-language los cubre en ambos lenguajes.
-- **Dependencia circular:** `compute_cell_count` (core) no puede importar `compute_worker_count` (api).
-  Resolución: mover la suma pura de marcas a una helper en `core/` (p. ej. `core/cell_count.py` o un
-  `core/manual_count.py`) y que `api/state.py::compute_worker_count` la reuse — o pasar el tally ya
-  computado. El plan decide; el contrato es: **la rama `checks` devuelve el tally filtrado por presentes.**
+- **Dependencia circular:** `compute_cell_count` (core) no puede importar `compute_worker_count` (api)
+  — `core/` no depende de `api/` (verificado: cero imports). **Resolución recomendada** (el cuerpo de
+  `compute_worker_count` ya es una función pura sobre el dict): levantar esa suma a un helper en `core/`
+  (p. ej. `core/cell_count.py::_sum_marks(cell, present_files)`) y que `api/state.py::compute_worker_count`
+  **delegue** en él. La rama `checks` de `compute_cell_count` llama a `_sum_marks`. El contrato:
+  **la rama `checks` devuelve el tally filtrado por presentes.**
 
 ### 3.4 Punto verde honesto (cell-status + all_reliable)
 
 - **Frontend** (`frontend/src/lib/cell-status.js`): para `count_type === "checks"`,
   `isCellReady = confirmed || hasOverride || worker_status === "terminado"`. (Un tally "en_progreso" o sin
   empezar → ámbar.) Para los demás count_types, la lógica de Incr 1B/2 queda intacta.
-- **Backend** (`compute_settled`/`all_reliable`, Incr 2): una celda `checks` se considera "settled"
-  cuando `worker_status === "terminado"` (verificación humana). `refresh_all_reliable` se invoca tras el
-  PATCH de worker-count para celdas checks (hoy el PATCH no recalcula `all_reliable`).
+- **Backend** (`compute_settled`/`all_reliable`, Incr 2): `compute_settled` **gana un parámetro
+  `count_type`**. Hoy su firma es `(cell, folder, pages=None)` y exige incondicionalmente que cada archivo
+  tenga `file_origin ∈ {R1, RN, Manual}` — para una celda `checks` con archivos OCR/pendientes eso daría
+  False sin importar el tally. La rama nueva: `count_type == "checks"` → settled si
+  `worker_status == "terminado"` (verificación humana). Los llamadores pasan `count_type_for(sigla)`.
+  `refresh_all_reliable` se invoca **además tras el PATCH de worker-count** para celdas checks (hoy el
+  PATCH no recalcula `all_reliable`).
 
 ### 3.5 Excel
 
-La cuenta de maquinaria fluye por el **path normal de la celda** (`output.py::resolve_cell_value` →
-`compute_cell_count(cell, count_type="checks", present_files=...)`) hacia su celda de la grilla. **No** se
-agrega named range nuevo ni entra en `WORKER_PURPOSE` (eso es para las columnas HH de charla/chintegral).
-`resolve_cell_value` (y el writer del Excel, `core/excel/writer.py`) pasan a recibir/derivar el `count_type`
-de la sigla vía `count_type_for`.
+La cuenta de maquinaria fluye por el **path normal de la celda** hacia su celda de la grilla. La cadena es
+`api/routes/output.py::_build_cell_values` (línea 96) → `core/excel/writer.py::resolve_cell_value` (línea 15)
+→ `compute_cell_count(cell, count_type="checks", present_files=...)`. **No** se agrega named range nuevo ni
+entra en `WORKER_PURPOSE` (eso es para las columnas HH de charla/chintegral). Cambios: `resolve_cell_value`
+en **`core/excel/writer.py`** gana `count_type`/`present_files`, y `_build_cell_values` en `output.py`
+**los enhebra** derivando `count_type` de la sigla vía `count_type_for` y resolviendo la carpeta para
+`present_files`. (Atención: `resolve_cell_value` NO vive en `output.py`.)
 
 ### 3.6 UI del visor + entrada
 
@@ -188,10 +196,10 @@ usa `present_files` desde el día uno (su `compute_cell_count` rama checks lo pa
 | `frontend/src/lib/cellCount.js` (mirror) | mirror de lo anterior | + `count_type` + rama checks |
 | `api/state.py::compute_worker_count(cell)` | filtra por `per_file` | `(cell, present_files=None)`; present_files manda |
 | `PATCH .../worker-count` respuesta | `worker_count` filtrado por per_file | filtrado por archivos presentes |
-| `output.py::resolve_cell_value` / `_build_worker_values` | sin count_type / per_file | reciben count_type + present_files |
+| `core/excel/writer.py::resolve_cell_value` (+ `output.py::_build_cell_values` enhebra) / `_build_worker_values` | sin count_type / per_file | reciben count_type + present_files |
 | `DetailPanel.jsx` render del módulo | `sigla in {charla,chintegral}` | `+ count_type==="checks"`; unidad parametrizada; sin voz en checks |
 | `cell-status.js::isCellReady` | sin rama checks | `checks` → ready si `worker_status==="terminado"` |
-| `compute_settled` / `refresh_all_reliable` | no consideran checks ni PATCH worker | checks settled en "terminado"; refresh tras PATCH worker |
+| `compute_settled(cell, folder, pages=None)` / `refresh_all_reliable` | no consideran checks ni PATCH worker | `compute_settled` gana param `count_type`; checks settled en "terminado"; refresh tras PATCH worker |
 
 Todos los demás contratos (eventos WS `cell_done`, snapshot de sesión, RN/tope de Incr 2) quedan intactos.
 
@@ -205,7 +213,9 @@ Todos los demás contratos (eventos WS `cell_done`, snapshot de sesión, RN/tope
   - Integración: PATCH worker-count sobre maquinaria → cuenta de celda = tally; verde tras terminado;
     el Excel escribe el tally en la celda de maquinaria.
 - **Cross-language:** casos `checks` nuevos en `tests/fixtures/cell_count_cases.json`; el test cross-language
-  los corre en Python y JS (no pueden divergir).
+  los corre en Python y JS (no pueden divergir). El harness (`tests/test_cell_count_cross_language.py:20`,
+  hoy llama `compute_cell_count(case["cell"])`) y el schema de fixtures ganan un campo `count_type`
+  **opcional con default `"documents"`** → los 7 casos existentes siguen verdes sin tocarlos.
 - **Frontend (vitest):** `cellCount.js` rama checks; `cell-status.js` verde de checks; el enrutado del
   render por count_type + textos de unidad; el filtro de `WorkerCountModule` por archivos presentes.
 - **Smoke conducido (chrome-devtools, data-safe):** respaldar `data/overseer.db` a `data/_smoke-backup-<ts>/`;
