@@ -41,16 +41,18 @@ def session_f1(tmp_path, client):
     return sid
 
 
+_MARKS = {
+    "charla_a.pdf": [{"page": 1, "count": 10}],
+    "charla_b.pdf": [{"page": 1, "count": 36}],
+}
+
+
 def test_patch_worker_count_uses_present_files(session_f1, client):
     """PATCH devuelve worker_count = marcas de a + b, no solo de a."""
     sid = session_f1
-    marks = {
-        "charla_a.pdf": [{"page": 1, "count": 10}],
-        "charla_b.pdf": [{"page": 1, "count": 36}],
-    }
     r = client.patch(
         f"/api/sessions/{sid}/cells/HPV/charla/worker-count",
-        json={"marks": marks, "status": "terminado"},
+        json={"marks": _MARKS, "status": "terminado"},
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -58,4 +60,25 @@ def test_patch_worker_count_uses_present_files(session_f1, client):
     assert body["worker_count"] == 46, (
         f"Expected 46 (10+36), got {body['worker_count']}. "
         "F1 bug: only per_file files are being counted."
+    )
+
+
+def test_output_excel_uses_present_files(session_f1, client):
+    """La OTRA mitad de F1: el Excel escribe el total de AMBOS archivos
+    (present_files), no solo el de per_file. Es el síntoma reportado en vivo
+    ('el visor guarda 6070 pero el Excel quedó en 6034')."""
+    import openpyxl
+
+    sid = session_f1
+    r = client.patch(
+        f"/api/sessions/{sid}/cells/HPV/charla/worker-count",
+        json={"marks": _MARKS, "status": "terminado"},
+    )
+    assert r.status_code == 200, r.text
+
+    out = client.post(f"/api/sessions/{sid}/output", json={}).json()
+    wb = openpyxl.load_workbook(out["output_path"])
+    sheet, coord = list(wb.defined_names["HPV_workers_chgen"].destinations)[0]
+    assert wb[sheet][coord].value == 46, (
+        f"Excel HPV_workers_chgen should be 46 (present-files), got {wb[sheet][coord].value}"
     )
