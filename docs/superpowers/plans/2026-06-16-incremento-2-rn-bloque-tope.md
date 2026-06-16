@@ -23,7 +23,7 @@
 | `tests/unit/api/test_file_origin.py` | truth table for `file_origin` | Create |
 | `tests/unit/api/test_compute_settled.py` | `compute_settled` cases | Create |
 | `tests/integration/test_apply_ratio.py` | RN endpoint against real fixture PDFs | Create |
-| `tests/unit/api/test_override_cap.py` | ≤pages cap (cell + per-file) | Create |
+| `tests/integration/test_override_cap.py` | ≤pages cap (cell + per-file) | Create |
 | `frontend/src/lib/cell-status.js` | `isCellReady` = `confirmed \|\| hasOverride \|\| (all_reliable ?? legacy)` | Modify |
 | `frontend/src/lib/cell-status.test.js` | new `all_reliable` cases + legacy fallback intact | Modify |
 | `frontend/src/lib/override-input.js` | `parseOverrideInput(raw, { maxPages })` | Modify |
@@ -393,7 +393,9 @@ Run: `pytest tests/integration/test_apply_ratio.py -v` → FAIL (404, endpoint m
 
 - [ ] **Step 3: Implement the endpoint + `refresh_all_reliable`**
 
-In `api/routes/sessions.py`:
+In `api/routes/sessions.py`. **First add `Field` to the pydantic import** (currently
+`from pydantic import BaseModel` — change to `from pydantic import BaseModel, Field`; verify the
+exact line and extend it):
 
 ```python
 def refresh_all_reliable(mgr, session_id: str, hospital: str, sigla: str, folder: Path) -> None:
@@ -443,14 +445,18 @@ def apply_ratio(session_id, hospital, sigla, body: ApplyRatioRequest,
             session_id, hospital, sigla, pdf.name,
             count=count, method="ratio_n", near_matches=[],
         )
-    # finalize metadata (ocr_count = sum per_file) using a lightweight ScanResult
-    mgr.finalize_cell_ocr(session_id, hospital, sigla, _ratio_finalize_result(cell_method))
+    # finalize metadata (ocr_count = sum per_file) with a metadata-only ScanResult
+    mgr.finalize_cell_ocr(session_id, hospital, sigla, ScanResult(
+        count=0, confidence=ConfidenceLevel.LOW, method="ratio_n",
+        breakdown=None, flags=[], errors=[], duration_ms=0,
+        files_scanned=0, per_file=None,
+    ))
     refresh_all_reliable(mgr, session_id, hospital, sigla, folder)
     state = mgr.get_session_state(session_id)
     return state["cells"][hospital][sigla]
 ```
 
-For `_ratio_finalize_result`: `finalize_cell_ocr` only reads `result.method/confidence/breakdown/flags/errors/duration_ms`. Build a minimal `ScanResult` (import from `core.scanners.base`) with `method=cell_method` (or `"ratio_n"`), `confidence=ConfidenceLevel.LOW` (the dot is driven by `all_reliable`, not this), empty flags/errors, `duration_ms=0`, `per_file={}` (ignored). Verify the exact required fields against `core/scanners/base.py:ScanResult` and the `finalize_cell_ocr` body before constructing.
+The `ScanResult` above **mirrors the existing `_meta_result` helper** (`sessions.py:196–214`) — `finalize_cell_ocr` ignores `count`/`per_file` (the real total comes from the already-merged `per_file`) and only reads `method/confidence/breakdown/flags/errors/duration_ms`. `confidence=LOW` is harmless: the dot is driven by `all_reliable` (recomputed right after), not this field. `ScanResult` and `ConfidenceLevel` are **already imported** in `sessions.py` (line 29). Don't create a separate `_ratio_finalize_result` — inline as above.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -493,7 +499,14 @@ Expected: FAIL (all_reliable still False — not recomputed after per-file overr
 
 In `patch_per_file_override` (after `apply_per_file_override`, before building the response): resolve the folder (`month_root/hospital` → `_find_category_folder`) and call `refresh_all_reliable(mgr, session_id, hospital, sigla, folder)`.
 
-In `_apply_scan_event`, the `cell_done` branch (after `finalize_cell_ocr`): resolve the folder from the session's `month_root` + event hospital/sigla and call `refresh_all_reliable(...)`. (If `_apply_scan_event` lacks `month_root`, read it from `mgr.get_session_state(session_id)["month_root"]`.)
+In `_apply_scan_event`, the `cell_done` branch (after `finalize_cell_ocr`): `_apply_scan_event(mgr, session_id, event)` does **not** receive `month_root`/folder — read it via
+`month_root = Path(mgr.get_session_state(session_id)["month_root"])`, then
+`folder = _find_category_folder(month_root / event["hospital"], event["sigla"])`, then
+`refresh_all_reliable(mgr, session_id, event["hospital"], event["sigla"], folder)`.
+> **Concurrency note (safe):** `_apply_scan_event` runs in the drain thread, which already holds
+> the `SessionManager` RLock via `finalize_cell_ocr`. `get_session_state` is `@_synchronized` (same
+> RLock) — re-entering from the **same thread** is safe because it's a **reentrant** lock (1A used
+> RLock precisely so `apply_cell_result`→`apply_filename_result` could reenter). No deadlock.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -513,13 +526,13 @@ git commit -m "feat(2): recompute all_reliable on OCR finalize + per-file overri
 
 **Files:**
 - Modify: `api/routes/sessions.py` (`patch_override`, `patch_per_file_override`)
-- Test: `tests/unit/api/test_override_cap.py` (create)
+- Test: `tests/integration/test_override_cap.py` (create — integration-level: needs a TestClient + real session + real PDFs, so it lives in `tests/integration/`, sharing the `session_with_pending_cell` fixture with `test_apply_ratio.py` via `conftest.py`)
 
 Context: cap applies to the **document count** of `count_type in {"documents","documents_workers"}` siglas. `checks` (maquinaria) is exempt. `count_type_for` is importable from `core.scanners.patterns`.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/unit/api/test_override_cap.py` (integration-style with a real cell folder; reuse the apply-ratio fixture pattern). A documents sigla with total pages = 9 (a.pdf 1 + big.pdf 8):
+Create `tests/integration/test_override_cap.py`. A documents sigla with total pages = 9 (a.pdf 1 + big.pdf 8):
 
 ```python
 def test_cell_override_capped_for_documents(client, session_with_pending_cell):
@@ -595,7 +608,7 @@ Run: `pytest tests/ -q -k "override"` → existing override tests still PASS (no
 - [ ] **Step 5: Commit**
 
 ```bash
-git add api/routes/sessions.py tests/unit/api/test_override_cap.py
+git add api/routes/sessions.py tests/integration/test_override_cap.py
 git commit -m "feat(2): count<=pages cap on cell + per-file overrides (documents/_workers only)"
 ```
 
@@ -604,8 +617,8 @@ git commit -m "feat(2): count<=pages cap on cell + per-file overrides (documents
 ### Task 7: Backend chunk verification
 
 - [ ] **Step 1:** `ruff check .` → 0 violations.
-- [ ] **Step 2:** `pytest tests/unit/api tests/integration/test_apply_ratio.py -q` → all green.
-- [ ] **Step 3:** Confirm no `core/{pipeline,ocr,inference,image}.py` / `vlm/*.py` were touched (no version bump needed): `git diff --name-only incremento-1b..HEAD | grep -E 'core/(pipeline|ocr|inference|image)\.py|vlm/' || echo "clean"`.
+- [ ] **Step 2:** `pytest tests/unit/api tests/integration/test_apply_ratio.py tests/integration/test_override_cap.py -q` → all green.
+- [ ] **Step 3:** Confirm no `core/{pipeline,ocr,inference,image}.py` / `vlm/*.py` were touched (no version bump needed): `git diff --name-only incremento-1b..HEAD | grep -E 'core/(pipeline|ocr|inference|image)\.py|vlm/' || echo "clean"`. (`incremento-1b` tag exists — it's the prior shipped milestone.)
 
 ---
 
@@ -645,22 +658,21 @@ Run: `cd frontend && npx vitest run src/lib/cell-status.test.js` → FAIL (all_r
 
 - [ ] **Step 3: Implement**
 
-In `frontend/src/lib/cell-status.js`, rename the current reliability check to `legacyAllReliable` and have `isCellReady` prefer `all_reliable`:
+In `frontend/src/lib/cell-status.js`, **do NOT rename** the existing `allFilesReliable` (the 1B
+test file and possibly components import it — renaming risks a silent `undefined` import). Keep it
+as the legacy fallback and make `isCellReady` prefer the backend `all_reliable`:
 
 ```js
-// 1B fallback for cells not yet migrated to the backend all_reliable signal
-// (e.g. MAYO scanned before Incr 2). Identical to 1B's behavior.
-export function legacyAllReliable(cell) {
-  return cell?.confidence === "high" && !anyUnreliableOcrFile(cell);
-}
-
 export function isCellReady(cell) {
   if (!!cell?.confirmed || hasOverride(cell)) return true;
-  return cell?.all_reliable ?? legacyAllReliable(cell);
+  // Backend all_reliable (Incr 2) is authoritative; fall back to the 1B proxy
+  // (allFilesReliable) for cells not yet migrated (e.g. MAYO scanned pre-Incr-2).
+  return cell?.all_reliable ?? allFilesReliable(cell);
 }
 ```
 
-Keep `OCR_METHODS`, `anyUnreliableOcrFile`, `hasOverride`, `dotVariantFor` unchanged. (Rename `allFilesReliable`→`legacyAllReliable`; update its one internal caller / export.)
+Keep `OCR_METHODS`, `anyUnreliableOcrFile`, `allFilesReliable`, `hasOverride`, `dotVariantFor`
+unchanged (only `isCellReady`'s body changes). No rename → no caller breakage.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -742,21 +754,38 @@ git commit -m "feat(2): override maxPages cap + RN origin chip"
 
 Verified by build + smoke (Task 11), not unit tests.
 
-- [ ] **Step 1: `api.js`** — add `applyRatio`:
+- [ ] **Step 1: `api.js`** — add `applyRatio` using the **inline `fetch` pattern** the file
+  already uses (there is **no `postJson` helper**; mirror `scanOcr` at lines 35–40 which does
+  `fetch(url, { method: "POST", headers, body: JSON.stringify(...) }).then(jsonOrThrow)`):
 
 ```js
 applyRatio: (sessionId, hospital, sigla, n) =>
-  postJson(`/api/sessions/${sessionId}/cells/${hospital}/${sigla}/apply-ratio`, { n }),
+  fetch(`${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/apply-ratio`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ n }),
+  }).then(jsonOrThrow),
 ```
 
-(Match the existing `api.js` request-helper style — find how other POSTs are written, e.g. `scanOcr`, and mirror it. Trigger the same `filesTick` refresh the per-file OCR uses so the FileList + dot update.)
+(Copy the exact `headers` shape from `scanOcr`/`patchOverride` in the same file.)
 
 - [ ] **Step 2: `DetailPanel.jsx`** — block-action cluster (Por archivos mode only):
   - Below the toggle / above "Conteo automático", render a row visible only when `mode === "files"`:
-    - Button **"Aplicar R1"** → `api.applyRatio(sessionId, hospital, sigla, 1)` then refresh.
-    - Button **"Aplicar ratio N…"** → reveals an inline number input (default 2, min 1) + a confirm button → `api.applyRatio(..., n)`.
-  - Derive `totalPages` for the cap: fetch `api.getCellFiles(sessionId, hospital, sigla)` (same call FileList uses) and sum `page_count`, OR read it from a shared store value if one exists — keep it simple, a parallel fetch is acceptable. Pass `maxPages={countType-capped ? totalPages : null}` and `countType={scanInfo?.count_type}` to `OverridePanel`.
-  - Capped predicate (frontend): `["documents","documents_workers"].includes(scanInfo?.count_type)`.
+    - Button **"Aplicar R1"** → `await api.applyRatio(sessionId, hospital, sigla, 1)`, then refresh.
+    - Button **"Aplicar ratio N…"** → reveals an inline number input (default 2, min 1) + a confirm
+      button → `await api.applyRatio(..., n)`, then refresh.
+  - **Refresh after applyRatio:** the endpoint returns the updated cell snapshot. Bump the store's
+    `filesTick` for `${hospital}|${sigla}` so `FileList` re-fetches, AND update the cell in the store
+    so the dot/total refresh — find the exact store action the **per-file OCR-from-viewer** path uses
+    after it resolves (it already bumps `filesTick` + merges the cell; reuse that action, don't invent
+    a new refresh path). Grep the store for `filesTick` to locate the setter.
+  - **`totalPages` for the cap:** `FileList` already fetches `api.getCellFiles(...)` (api.js:105) and
+    holds the per-file rows. Lift that data so `DetailPanel` can sum `page_count` — simplest: have the
+    parent of `DetailPanel`+`FileList` fetch `getCellFiles` once and pass `files` (or `totalPages`)
+    down to both, OR (acceptable) `DetailPanel` does its own `getCellFiles` fetch in a `useEffect`
+    keyed on `[sessionId, hospital, sigla, filesTick]` and sums `page_count`. Don't persist anything.
+  - Pass `maxPages={capped ? totalPages : null}` and `countType={scanInfo?.count_type}` to
+    `OverridePanel`. Capped predicate: `["documents","documents_workers"].includes(scanInfo?.count_type)`.
 
 - [ ] **Step 3: `OverridePanel.jsx`** — accept `maxPages` + `countType`; pass `{ maxPages }` to `parseOverrideInput` in `onChangeValue` (only when capped). On cap rejection, reuse the existing `invalid` error-border path; show inline "máx. {maxPages} (páginas)".
 
