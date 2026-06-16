@@ -678,7 +678,13 @@ def patch_per_file_override(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     month_root = Path(state.get("month_root", ""))
-    folder = _find_category_folder(month_root / hospital, sigla)
+    try:
+        folder = _find_category_folder(month_root / hospital, sigla)
+    except KeyError as exc:
+        # Unknown sigla → CATEGORY_FOLDERS miss. The cell can't exist → 404
+        # (not a 500). Pre-existing gap: folder was resolved before the cell was
+        # validated by apply_per_file_override below.
+        raise HTTPException(status_code=404, detail=f"Unknown sigla: {sigla}") from exc
     if _is_capped_sigla(sigla) and folder.exists():
         file_pages = cell_page_counts(folder).get(filename, 0)
         if file_pages > 0 and body.count > file_pages:
