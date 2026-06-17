@@ -162,4 +162,18 @@ export const api = {
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
+
+  // Incr J — reorg ops + manifest export.
+  createReorgOp: (sessionId, op) =>
+    fetch(`${BASE}/sessions/${sessionId}/reorg/ops`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(op),
+    }).then(jsonOrThrow),
+
+  deleteReorgOp: (sessionId, opId) =>
+    fetch(`${BASE}/sessions/${sessionId}/reorg/ops/${opId}`, { method: "DELETE" }).then(jsonOrThrow),
+
+  exportManifest: (sessionId) =>
+    fetch(`${BASE}/sessions/${sessionId}/reorg/export`, { method: "POST" }).then(jsonOrThrow),
 };
