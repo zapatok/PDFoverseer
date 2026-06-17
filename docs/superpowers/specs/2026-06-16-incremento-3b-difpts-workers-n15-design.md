@@ -95,9 +95,13 @@ marca incompleto cuando la celda tiene `per_file` y `worker_status != "terminado
 {(countType === "checks" || sigla === "charla" || sigla === "chintegral") && (
   <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} countType={countType} />
 ```
-`WorkerCountModule` ya acepta `countType`; con `documents_workers` deriva unidad "trabajadores" y
-activa voz. Los endpoints de conteo de trabajadores (`patch_worker_count`, `scan_one_file`) son
-**genéricos por sigla** (ya funcionaron para maquinaria) → dif_pts pasa por el mismo camino sin allowlist.
+`WorkerCountModule` (inline en `DetailPanel.jsx:146`) ya acepta `countType` y deriva solo la **etiqueta
+de unidad** ("trabajadores"). La **voz** se decide más abajo, en `WorkerCountViewer.jsx` (~líneas 115-122:
+`isWorkersMode = countTypeFor(sigla) === "documents_workers"`, `enabled: !micPaused && isWorkersMode`) →
+como dif_pts ya es `documents_workers`, el visor lo trata como modo-trabajadores con voz activa y el toggle
+de micrófono visible, **sin cambio en `WorkerCountViewer`**. Los endpoints de conteo de trabajadores
+(`patch_worker_count`, `scan_one_file`) son **genéricos por sigla** (ya funcionaron para maquinaria) →
+dif_pts pasa por el mismo camino sin allowlist.
 
 ---
 
@@ -128,6 +132,11 @@ for hosp in DIFPTS_WORKER_HOSPITALS:
     out[f"{hosp}_workers_difpts"] = compute_worker_count(cell, present)
 ```
 - **Siempre emite** (0 si no hay marcas) — D2: sin fallback, sin condicional "solo si hay marcas".
+- ⚠️ **Divergencia deliberada vs charla/chintegral:** el bucle existente de `_build_worker_values`
+  *salta* una celda cuando no tiene `worker_marks` ni `worker_status` ("nunca se contó → no emitir;
+  el template queda en blanco", líneas 138-139). El bucle de dif_pts **omite ese guard a propósito**
+  (D2 exige escribir un 0 explícito). NO armonizar los dos bucles — el de charla/chintegral se deja
+  intacto con su skip; el de dif_pts siempre emite.
 - `present` = archivos presentes en la carpeta (mismo filtro canónico del fix F1; `None` si la
   carpeta no existe → `compute_worker_count` cae a su filtro legacy por `per_file`).
 
