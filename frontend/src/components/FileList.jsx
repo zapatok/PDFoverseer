@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { FileText, FileStack, FileX, MousePointer2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { FileText, FileStack, FileX, MousePointer2, MoreHorizontal } from "lucide-react";
 import { useSessionStore } from "../store/session";
 import { api } from "../lib/api";
+import { toast } from "sonner";
 import EmptyState from "../ui/EmptyState";
 import Skeleton from "../ui/Skeleton";
 import Tooltip from "../ui/Tooltip";
@@ -9,6 +10,168 @@ import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
 import { fileCountDisplay } from "../lib/file-origin";
 import { hasOverride, isCappedCountType } from "../lib/cell-status";
+import { SIGLAS } from "../lib/sigla-labels";
+
+// Known hospitals in canonical order.
+const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
+
+/**
+ * Compact popover menu for creating a whole-file reorg op.
+ * Uses <details>/<summary> to avoid needing a portal.
+ */
+function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated }) {
+  const addReorgOp = useSessionStore((s) => s.addReorgOp);
+  const detailsRef = useRef(null);
+
+  const [opType, setOpType] = useState("move_file");
+  const [destHospital, setDestHospital] = useState(
+    HOSPITALS.find((h) => h !== srcHospital) ?? HOSPITALS[0],
+  );
+  const [destSigla, setDestSigla] = useState(srcSigla);
+  const [empresa, setEmpresa] = useState("");
+  const [rotDeg, setRotDeg] = useState(90);
+  const [busy, setBusy] = useState(false);
+
+  // Close the popover after a successful submit
+  function close() {
+    if (detailsRef.current) detailsRef.current.open = false;
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!sessionId) return;
+    setBusy(true);
+    try {
+      await addReorgOp(sessionId, srcHospital, srcSigla, {
+        op_type: opType,
+        source: { file: file.name },
+        dest: { hospital: destHospital, sigla: destSigla },
+        empresa: empresa || null,
+        preserve_date: true,
+        rotation_deg: opType === "rotate" ? rotDeg : null,
+        doc_count: file.effective_count ?? 0,
+        worker_count: 0,
+        note: null,
+      });
+      toast.success(`Operación creada — ${file.name}`);
+      setEmpresa("");
+      close();
+      onCreated?.();
+    } catch {
+      // addReorgOp already toasts the error
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <details ref={detailsRef} className="relative">
+      <summary
+        className="list-none flex items-center justify-center w-7 h-7 rounded text-po-text-muted hover:text-po-text hover:bg-po-panel-hover cursor-pointer"
+        title="Reorganizar archivo"
+        aria-label="Reorganizar archivo"
+      >
+        <MoreHorizontal size={14} strokeWidth={1.75} />
+      </summary>
+      {/* Popover card — positioned absolutely; z-10 clears the file list rows */}
+      <form
+        onSubmit={handleSubmit}
+        className="absolute right-0 z-10 mt-1 w-56 rounded-lg border border-po-border bg-po-panel shadow-lg p-3 space-y-2 text-xs"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="font-medium text-po-text truncate">{file.name}</p>
+
+        {/* op_type */}
+        <div className="space-y-0.5">
+          <label className="text-po-text-muted">Tipo</label>
+          <select
+            value={opType}
+            onChange={(e) => setOpType(e.target.value)}
+            className="w-full rounded border border-po-border bg-po-bg px-2 py-1 text-xs focus:border-po-accent focus:outline-none"
+          >
+            <option value="move_file">Mover a otra celda</option>
+            <option value="rotate">Rotar</option>
+          </select>
+        </div>
+
+        {/* destination hospital — always shown */}
+        <div className="space-y-0.5">
+          <label className="text-po-text-muted">Hospital destino</label>
+          <select
+            value={destHospital}
+            onChange={(e) => setDestHospital(e.target.value)}
+            className="w-full rounded border border-po-border bg-po-bg px-2 py-1 text-xs focus:border-po-accent focus:outline-none"
+          >
+            {HOSPITALS.map((h) => (
+              <option key={h} value={h}>{h}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* destination sigla — shown for move_file */}
+        {opType !== "rotate" && (
+          <div className="space-y-0.5">
+            <label className="text-po-text-muted">Categoría destino</label>
+            <select
+              value={destSigla}
+              onChange={(e) => setDestSigla(e.target.value)}
+              className="w-full rounded border border-po-border bg-po-bg px-2 py-1 text-xs focus:border-po-accent focus:outline-none"
+            >
+              {SIGLAS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* rotation degrees — shown for rotate */}
+        {opType === "rotate" && (
+          <div className="space-y-0.5">
+            <label className="text-po-text-muted">Grados</label>
+            <select
+              value={rotDeg}
+              onChange={(e) => setRotDeg(Number(e.target.value))}
+              className="w-full rounded border border-po-border bg-po-bg px-2 py-1 text-xs focus:border-po-accent focus:outline-none"
+            >
+              <option value={90}>90°</option>
+              <option value={180}>180°</option>
+              <option value={270}>270°</option>
+            </select>
+          </div>
+        )}
+
+        {/* optional empresa */}
+        <div className="space-y-0.5">
+          <label className="text-po-text-muted">Empresa (opcional)</label>
+          <input
+            type="text"
+            value={empresa}
+            onChange={(e) => setEmpresa(e.target.value)}
+            placeholder="Razón social"
+            className="w-full rounded border border-po-border bg-po-bg px-2 py-1 text-xs placeholder-po-text-subtle focus:border-po-accent focus:outline-none"
+          />
+        </div>
+
+        <div className="flex gap-1.5 pt-1">
+          <button
+            type="submit"
+            disabled={busy}
+            className="flex-1 rounded-md bg-po-accent text-white text-xs px-2 py-1 font-medium hover:bg-po-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            {busy ? "Guardando…" : "Crear op."}
+          </button>
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-md border border-po-border text-po-text-muted text-xs px-2 py-1 hover:text-po-text hover:border-po-border-strong transition"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+    </details>
+  );
+}
 
 export default function FileList({ hospital, sigla }) {
   const session = useSessionStore((s) => s.session);
@@ -119,7 +282,7 @@ export default function FileList({ hospital, sigla }) {
         {filtered.map((f, i) => (
           <li
             key={`${f.name}-${i}`}
-            className="grid grid-cols-[minmax(0,1fr)_3rem_1.25rem_3.5rem_5.5rem] items-center gap-2 px-3 py-2 hover:bg-po-panel-hover transition"
+            className="grid grid-cols-[minmax(0,1fr)_3rem_1.25rem_3.5rem_5.5rem_2rem] items-center gap-2 px-3 py-2 hover:bg-po-panel-hover transition"
           >
             {/* icon + name — the lightbox trigger; name scrolls horizontally */}
             <button
@@ -169,6 +332,16 @@ export default function FileList({ hospital, sigla }) {
             </div>
             {/* origin chip — honest per-file vocabulary (R1/OCR/Manual/Pendiente/Error/Revisar) */}
             <div className="flex justify-start"><OriginChip origin={f.origin ?? "R1"} /></div>
+            {/* ⋯ reorganize trigger — whole-file reorg op creator */}
+            <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+              <ReorgMenu
+                file={f}
+                srcHospital={hospital}
+                srcSigla={sigla}
+                sessionId={session?.session_id}
+                onCreated={() => {}}
+              />
+            </div>
           </li>
         ))}
       </ul>

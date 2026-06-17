@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2, Ratio } from "lucide-react";
 import NotePanel from "./NotePanel";
+import ReorganizacionPanel from "./ReorganizacionPanel";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
 import Badge from "../ui/Badge";
@@ -189,6 +190,9 @@ function WorkerCountModule({ hospital, sigla, cell, countType = "documents_worke
 
 export default function DetailPanel({ hospital, sigla, cell }) {
   const sessionId = useSessionStore((s) => s.session?.session_id);
+  const reorgOps = useSessionStore((s) => s.session?.reorg_ops ?? []);
+  const deleteReorgOp = useSessionStore((s) => s.deleteReorgOp);
+  const exportManifest = useSessionStore((s) => s.exportManifest);
   const saveOverride = useSessionStore((s) => s.saveOverride);
   const applyRatioCell = useSessionStore((s) => s.applyRatioCell);
   const filesTick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
@@ -437,6 +441,15 @@ export default function DetailPanel({ hospital, sigla, cell }) {
 
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Nota</h4>
       <NotePanel hospital={hospital} sigla={sigla} cell={cell} />
+
+      <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Reorganización</h4>
+      <ReorganizacionPanel
+        hospital={hospital}
+        sigla={sigla}
+        ops={reorgOps}
+        onDelete={(opId) => deleteReorgOp(sessionId, opId)}
+        onExport={() => exportManifest(sessionId)}
+      />
 
       {/* Worker/checks counting module: documents_workers (charla/chintegral/dif_pts)
           and checks (maquinaria). dif_pts wired to N15 in Incr 3B. Keep above
