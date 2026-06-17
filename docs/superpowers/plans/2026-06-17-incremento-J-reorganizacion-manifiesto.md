@@ -1066,6 +1066,38 @@ git add frontend/src/components/DetailPanel.jsx frontend/src/components/FileList
 git commit -m "feat(reorg): wire ReorganizacionPanel into DetailPanel + FileList move menu (Incr J T15)"
 ```
 
+### Task 15b: worker total reflects `reorg_worker_delta` (JS UI)
+
+**Why:** T4 made the Python `compute_worker_count` delta-aware (feeds Excel N15) — but the frontend has a **separate** mirror `frontend/src/lib/worker-count.js::computeWorkerCount(marks, fileNames)` that the viewer/HUD and cell rows use to show the cell's worker total. It takes `worker_marks` (not the cell), so it is delta-blind. Left unfixed, a worker reorg would change Excel/N15 but **not** the UI worker total → a UI/Excel divergence (the exact class of bug this project fights). Keep the delta addition in **one** place (don't scatter `+ delta` across call sites).
+
+**Files:**
+- Modify: `frontend/src/lib/worker-count.js` (add a thin cell-level wrapper)
+- Test: `frontend/src/lib/worker-count.test.js` (create or append)
+- Modify: the call sites that render the **cell** worker total (not per-file subtotals).
+
+- [ ] **Step 1:** Read `worker-count.js`. Add a wrapper that mirrors the `cellCount.js` pattern (base + delta in one spot):
+
+```js
+// Cell worker total including the Incr-J reorg delta. Per-file subtotals
+// (fileSubtotal) stay raw — the delta is a cell-level quantity, not per-file.
+export function cellWorkerCount(cell, fileNames) {
+  return computeWorkerCount(cell?.worker_marks ?? {}, fileNames) + (cell?.reorg_worker_delta ?? 0);
+}
+```
+
+- [ ] **Step 2: Write the failing test** — `cellWorkerCount` returns the marks sum plus `reorg_worker_delta` (absent key → no-op; positive and negative deltas); `computeWorkerCount`/`fileSubtotal` unchanged.
+
+- [ ] **Step 3:** `grep`-find call sites of `computeWorkerCount(` in `frontend/src/`. For each that computes a **cell's total** (e.g. in `WorkerCountViewer`/HUD, `DetailPanel`, or cell rows), switch to `cellWorkerCount(cell, fileNames)` so the displayed total includes the delta. Leave any per-file subtotal usage (`fileSubtotal`) alone. Confirm none is missed with a second grep.
+
+- [ ] **Step 4: Run** `cd frontend && npx vitest run src/lib/worker-count.test.js`; then `npx vitest run` (full) + `npm run build`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/src/lib/worker-count.js frontend/src/lib/worker-count.test.js frontend/src/components/*.jsx
+git commit -m "feat(reorg): cell worker total includes reorg_worker_delta in UI (Incr J T15b)"
+```
+
 ---
 
 ## Chunk 5: Frontend — viewer reorg mode + handoff doc
