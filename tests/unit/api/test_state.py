@@ -6,6 +6,7 @@ import pytest
 from api.state import SessionManager, compute_worker_count
 from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
+from core.db.sessions_repo import update_session_state
 
 
 @pytest.fixture
@@ -560,3 +561,33 @@ def test_apply_worker_count_empty_marks_clears(manager):
     manager.apply_worker_count("2026-04", "HLL", "charla", marks={})
     cell = manager.get_session_state("2026-04")["cells"]["HLL"]["charla"]
     assert cell["worker_marks"] == {}
+
+
+def test_load_and_migrate_chains_v2_to_v3(manager, tmp_path):
+    """_load_and_migrate runs v2->v3 on top of v1->v2: a cell with override_note
+    in the DB gets note/note_status on first read and no churn on subsequent reads."""
+    v2_state = {
+        "month_root": str(tmp_path),
+        "hospitals_present": ["HPV"],
+        "hospitals_missing": [],
+        "cells": {
+            "HPV": {
+                "odi": {
+                    "filename_count": 3,
+                    "ocr_count": None,
+                    "override_note": "legacy note from v2",
+                }
+            }
+        },
+    }
+    update_session_state(manager._conn, "2026-04", state_json=json.dumps(v2_state))
+
+    # First read: migration runs, note/note_status appear, override_note gone
+    cell = manager.get_session_state("2026-04")["cells"]["HPV"]["odi"]
+    assert cell["note"] == "legacy note from v2"
+    assert cell["note_status"] == "resuelto"
+    assert "override_note" not in cell
+
+    # Second read: idempotent (no DB churn — state already at v3)
+    cell2 = manager.get_session_state("2026-04")["cells"]["HPV"]["odi"]
+    assert cell2 == cell
