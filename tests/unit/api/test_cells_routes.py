@@ -55,11 +55,11 @@ def test_patch_override_null_clears(client) -> None:
     sess = _open_and_scan(client)
     client.patch(
         f"/api/sessions/{sess}/cells/HPV/odi/override",
-        json={"value": 1, "note": "x"},  # within cap (1-page odi); set then clear
+        json={"value": 1},  # within cap (1-page odi); set then clear
     )
     r = client.patch(
         f"/api/sessions/{sess}/cells/HPV/odi/override",
-        json={"value": None, "note": None},
+        json={"value": None},
     )
     assert r.status_code == 200
     assert r.json()["user_override"] is None
