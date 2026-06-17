@@ -185,8 +185,8 @@ def verify() -> None:
     # Incr 3B: N15 is HPV dif_pts worker total (cleared formula); others keep docs×0.5.
     if wb.defined_names["HPV_workers_difpts"].attr_text != f"'{ws.title}'!$N$15":
         raise AssertionError("HPV_workers_difpts must point at $N$15")
-    if ws["N15"].value == "=M15*0.5":
-        raise AssertionError("N15 must NOT keep the =M15*0.5 fallback")
+    if ws["N15"].value != 0:
+        raise AssertionError(f"N15 must be an explicit 0, got {ws['N15'].value!r}")
     for col, base in (("H", "G"), ("J", "I"), ("L", "K")):
         if ws[f"{col}15"].value != f"={base}15*0.5":
             raise AssertionError(f"{col}15 must keep ={base}15*0.5 (non-HPV unchanged)")

@@ -21,8 +21,8 @@ def test_hpv_workers_difpts_named_range_points_at_n15():
 def test_n15_formula_cleared_to_zero():
     wb = _load()
     n15 = wb.active["N15"].value
-    assert n15 != "=M15*0.5"
-    assert n15 in (0, None) or isinstance(n15, (int, float))
+    assert n15 != "=M15*0.5"  # formula removed
+    assert n15 == 0  # cleared to an explicit 0 (Incr 3B, decision D2)
 
 
 def test_other_hospitals_row15_hh_formula_intact():
