@@ -62,7 +62,7 @@ def test_output_uses_v2_priority(client, tmp_path):
 
     # Override HRB/odi to 17 via SessionManager
     mgr = client.app.dependency_overrides[get_manager]()
-    mgr.apply_user_override("2026-04", "HRB", "odi", value=17, note="manual")
+    mgr.apply_user_override("2026-04", "HRB", "odi", value=17)
 
     out = client.post("/api/sessions/2026-04/output", json={}).json()
     wb = openpyxl.load_workbook(out["output_path"])

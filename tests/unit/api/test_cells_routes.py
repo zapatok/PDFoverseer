@@ -43,12 +43,12 @@ def test_patch_override_sets_value(client) -> None:
     # which the cap correctly rejects (a documents cell can't exceed its page count).
     r = client.patch(
         f"/api/sessions/{sess}/cells/HPV/odi/override",
-        json={"value": 1, "note": "revisado"},
+        json={"value": 1},
     )
     assert r.status_code == 200
     body = r.json()
     assert body["user_override"] == 1
-    assert body["override_note"] == "revisado"
+    assert "override_note" not in body
 
 
 def test_patch_override_null_clears(client) -> None:

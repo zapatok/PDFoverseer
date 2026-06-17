@@ -22,7 +22,7 @@ def mgr_session(tmp_path):
 
 def test_manual_flag_sets_manual_entry_true(mgr_session):
     mgr, sid = mgr_session
-    mgr.apply_user_override(sid, "HLL", "reunion", value=12, note=None, manual=True)
+    mgr.apply_user_override(sid, "HLL", "reunion", value=12, manual=True)
     state, _ = mgr._load_and_migrate(sid)
     cell = state["cells"]["HLL"]["reunion"]
     assert cell["user_override"] == 12
@@ -31,7 +31,7 @@ def test_manual_flag_sets_manual_entry_true(mgr_session):
 
 def test_default_manual_flag_false_preserves_legacy_behavior(mgr_session):
     mgr, sid = mgr_session
-    mgr.apply_user_override(sid, "HRB", "art", value=5, note="ajuste")
+    mgr.apply_user_override(sid, "HRB", "art", value=5)
     state, _ = mgr._load_and_migrate(sid)
     cell = state["cells"]["HRB"]["art"]
     assert cell["user_override"] == 5

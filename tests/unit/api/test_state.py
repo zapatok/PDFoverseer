@@ -102,7 +102,6 @@ def test_apply_filename_result_sets_filename_count_only(manager):
     assert cell["filename_count"] == 767
     assert cell["ocr_count"] is None
     assert cell["user_override"] is None
-    assert cell["override_note"] is None
     assert cell["method"] == "filename_glob"
     assert cell["duration_ms_filename"] == 10
     # Lock the isolation contract from both sides — filename pass never sets OCR duration
@@ -446,26 +445,26 @@ def test_apply_per_file_ocr_result_merges_one_file(manager):
     assert [nm["pdf_name"] for nm in cell["near_matches"]] == ["a.pdf"]
 
 
-def test_apply_user_override_sets_value_and_note(manager):
+def test_apply_user_override_sets_value(manager):
     manager.apply_filename_result("2026-04", "HRB", "odi", _filename_result(1))
-    manager.apply_user_override("2026-04", "HRB", "odi", value=17, note="17 ODIs in 1 PDF")
+    manager.apply_user_override("2026-04", "HRB", "odi", value=17)
     cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
     assert cell["user_override"] == 17
-    assert cell["override_note"] == "17 ODIs in 1 PDF"
+    assert "override_note" not in cell  # churn-free: no legacy field
     assert cell["filename_count"] == 1  # untouched
 
 
 def test_apply_user_override_with_null_value_clears_override(manager):
     manager.apply_filename_result("2026-04", "HRB", "odi", _filename_result(1))
-    manager.apply_user_override("2026-04", "HRB", "odi", value=17, note="initial")
-    manager.apply_user_override("2026-04", "HRB", "odi", value=None, note=None)
+    manager.apply_user_override("2026-04", "HRB", "odi", value=17)
+    manager.apply_user_override("2026-04", "HRB", "odi", value=None)
     cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
     assert cell["user_override"] is None
-    assert cell["override_note"] is None
+    assert "override_note" not in cell
 
 
 def test_apply_user_override_can_be_used_before_any_scan(manager):
-    manager.apply_user_override("2026-04", "HPV", "chps", value=2, note="manual count")
+    manager.apply_user_override("2026-04", "HPV", "chps", value=2)
     cell = manager.get_session_state("2026-04")["cells"]["HPV"]["chps"]
     assert cell["filename_count"] is None
     assert cell["ocr_count"] is None
@@ -487,7 +486,9 @@ def test_get_session_state_migrates_legacy_count_on_first_read(manager, tmp_path
     assert cell["filename_count"] == 767
     assert "count" not in cell
     assert cell["ocr_count"] is None
-    assert cell["override_note"] is None
+    assert "override_note" not in cell  # v2→v3 migration removed it
+    assert cell["note"] is None
+    assert cell["note_status"] is None
     # Idempotent: second read returns the same
     cell2 = manager.get_session_state("2026-04")["cells"]["HPV"]["art"]
     assert cell2 == cell
@@ -561,6 +562,38 @@ def test_apply_worker_count_empty_marks_clears(manager):
     manager.apply_worker_count("2026-04", "HLL", "charla", marks={})
     cell = manager.get_session_state("2026-04")["cells"]["HLL"]["charla"]
     assert cell["worker_marks"] == {}
+
+
+def test_set_note_writes_text_and_status(manager):
+    """set_note persists note + note_status; does not touch other cell fields."""
+    manager.apply_filename_result("2026-04", "HPV", "odi", _filename_result(3))
+    manager.set_note("2026-04", "HPV", "odi", text="revisar documentos", status="por_resolver")
+    cell = manager.get_session_state("2026-04")["cells"]["HPV"]["odi"]
+    assert cell["note"] == "revisar documentos"
+    assert cell["note_status"] == "por_resolver"
+    assert cell["filename_count"] == 3  # untouched
+
+
+def test_set_note_blank_clears_to_none(manager):
+    """set_note with blank/empty text sets note=None and note_status=None."""
+    manager.apply_filename_result("2026-04", "HPV", "odi", _filename_result(3))
+    manager.set_note("2026-04", "HPV", "odi", text="algo", status="por_resolver")
+    manager.set_note("2026-04", "HPV", "odi", text="  ", status="resuelto")
+    cell = manager.get_session_state("2026-04")["cells"]["HPV"]["odi"]
+    assert cell["note"] is None
+    assert cell["note_status"] is None
+
+
+def test_clear_override_does_not_touch_note(manager):
+    """apply_user_override(value=None) clears user_override but leaves note intact."""
+    manager.apply_filename_result("2026-04", "HPV", "odi", _filename_result(3))
+    manager.set_note("2026-04", "HPV", "odi", text="open question", status="por_resolver")
+    manager.apply_user_override("2026-04", "HPV", "odi", value=5)
+    manager.apply_user_override("2026-04", "HPV", "odi", value=None)
+    cell = manager.get_session_state("2026-04")["cells"]["HPV"]["odi"]
+    assert cell["user_override"] is None
+    assert cell["note"] == "open question"
+    assert cell["note_status"] == "por_resolver"
 
 
 def test_load_and_migrate_chains_v2_to_v3(manager, tmp_path):

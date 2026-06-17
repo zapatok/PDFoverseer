@@ -627,7 +627,6 @@ def patch_override(
     if not _SESSION_ID_RE.match(session_id):
         raise HTTPException(400, f"Invalid session_id: {session_id}")
     value = body.get("value")
-    note = body.get("note")
     manual = bool(body.get("manual", False))
     if value is not None:
         if not isinstance(value, int) or isinstance(value, bool):
@@ -648,14 +647,13 @@ def patch_override(
                     {"error": "count_exceeds_pages", "max": total_pages},
                 )
     try:
-        mgr.apply_user_override(session_id, hospital, sigla, value=value, note=note, manual=manual)
+        mgr.apply_user_override(session_id, hospital, sigla, value=value, manual=manual)
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
     cell = state["cells"].get(hospital, {}).get(sigla, {})
     return {
         "user_override": cell.get("user_override"),
-        "override_note": cell.get("override_note"),
     }
 
 

@@ -171,7 +171,7 @@ class SessionManager:
     ) -> None:
         """Persist a filename_glob scanner result. Touches the filename pass
         fields and shared metadata (method, confidence, flags, errors,
-        breakdown). Never touches ocr_count, user_override, or override_note.
+        breakdown). Never touches ocr_count, user_override, note, or note_status.
 
         A bulk re-scan runs over every cell, including ones already counted by
         OCR or edited by the user (e.g. "Escanear todos los hospitales" to add a
@@ -191,7 +191,6 @@ class SessionManager:
             cell.setdefault("manual_entry", False)
             cell.setdefault("ocr_count", None)
             cell.setdefault("user_override", None)
-            cell.setdefault("override_note", None)
             cell.setdefault("excluded", False)
             cell.setdefault("confirmed", False)
             cell.setdefault("all_reliable", False)
@@ -223,7 +222,6 @@ class SessionManager:
         cell.setdefault("manual_entry", False)
         cell.setdefault("ocr_count", None)
         cell.setdefault("user_override", None)
-        cell.setdefault("override_note", None)
         cell.setdefault("excluded", False)
         # Preserve a manual "marcar listo" across re-scans (never clear it here).
         cell.setdefault("confirmed", False)
@@ -285,7 +283,6 @@ class SessionManager:
         cell.setdefault("manual_entry", False)
         cell.setdefault("filename_count", None)
         cell.setdefault("user_override", None)
-        cell.setdefault("override_note", None)
         cell.setdefault("excluded", False)
         # Preserve a manual "marcar listo" across re-scans (never clear it here).
         cell.setdefault("confirmed", False)
@@ -331,7 +328,6 @@ class SessionManager:
         cell.setdefault("per_file_overrides", {})
         cell.setdefault("manual_entry", False)
         cell.setdefault("user_override", None)
-        cell.setdefault("override_note", None)
         cell.setdefault("excluded", False)
         cell.setdefault("confirmed", False)
         cell.setdefault("all_reliable", False)
@@ -346,22 +342,18 @@ class SessionManager:
         sigla: str,
         *,
         value: int | None,
-        note: str | None,
         manual: bool = False,
     ) -> None:
-        """Set or clear the user override + note.
+        """Set or clear the user override count.
 
-        When ``value=None``, both ``user_override`` AND ``override_note`` are
-        forced to None regardless of the ``note`` parameter (a note without
-        an override is meaningless). When ``value`` is an int, ``note`` is
-        persisted verbatim (may be None or a string).
+        Never touches ``note`` or ``note_status`` — use :meth:`set_note` for
+        that. When ``value=None``, ``user_override`` is cleared.
 
         Args:
             session_id: Target session identifier.
             hospital: Hospital code (e.g. ``"HLL"``).
             sigla: Category code (e.g. ``"reunion"``).
             value: Override count (int) or None to clear.
-            note: Optional override note string.
             manual: When True, marks ``cell.manual_entry = True`` to indicate
                 the value was entered via the HLL manual-entry flow (no scan
                 data available). Defaults to False, preserving FASE 2 behavior.
@@ -369,13 +361,41 @@ class SessionManager:
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
         cell["user_override"] = value
-        cell["override_note"] = note if value is not None else None
         cell.setdefault("filename_count", None)
         cell.setdefault("ocr_count", None)
         cell.setdefault("excluded", False)
         cell.setdefault("manual_entry", False)
         if manual:
             cell["manual_entry"] = True
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    @_synchronized
+    def set_note(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        *,
+        text: str | None,
+        status: str | None,
+    ) -> None:
+        """Set or clear the cell note independently of the override count.
+
+        Replaces both ``note`` and ``note_status`` atomically. Passing
+        ``text=None`` and ``status=None`` clears the note entirely.
+
+        Args:
+            session_id: Target session identifier.
+            hospital: Hospital code (e.g. ``"HPV"``).
+            sigla: Category code (e.g. ``"odi"``).
+            text: Note text or None to clear.
+            status: ``"por_resolver"`` | ``"resuelto"`` | None.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+        stripped = text.strip() if text else None
+        cell["note"] = stripped or None
+        cell["note_status"] = status if stripped else None
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     @_synchronized
