@@ -350,3 +350,62 @@ def test_delete_reorg_op_unknown_session(endpoint_client):
     client = endpoint_client
     r = client.delete("/api/sessions/2099-01/reorg/ops/op_001")
     assert r.status_code == 404
+
+
+# ── Task 11: POST /reorg/export ───────────────────────────────────────────
+
+
+@pytest.fixture
+def export_client(tmp_path, monkeypatch):
+    """TestClient with HPV/odi + a dedicated tmp output dir."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("OVERSEER_OUTPUT_DIR", str(tmp_path / "outputs"))
+    odi_dir = tmp_path / "ABRIL" / "HPV" / "3.-ODI Visitas"
+    odi_dir.mkdir(parents=True)
+    (odi_dir / "2026-04-10_odi_TITAN.pdf").write_bytes(_one_page_pdf())
+
+    from fastapi.testclient import TestClient
+
+    from api.main import create_app
+
+    app = create_app()
+    with TestClient(app) as c:
+        yield c, tmp_path / "outputs"
+
+
+def test_export_writes_manifest_json(export_client):
+    """POST /reorg/export with one pending op → 200; JSON file exists; correct content."""
+    client, out_dir = export_client
+    sid = _open_and_scan(client)
+
+    client.post(
+        f"/api/sessions/{sid}/reorg/ops",
+        json={
+            "op_type": "move_file",
+            "source": {"hospital": "HPV", "sigla": "odi", "file": "2026-04-10_odi_TITAN.pdf"},
+            "dest": {"hospital": "HPV", "sigla": "reunion"},
+        },
+    )
+
+    r = client.post(f"/api/sessions/{sid}/reorg/export")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["operation_count"] == 1
+
+    dest = Path(body["path"])
+    assert dest.exists()
+    import json
+
+    manifest = json.loads(dest.read_text(encoding="utf-8"))
+    assert manifest["manifest_version"] == 1
+    assert manifest["month"] == "2026-04"
+    assert len(manifest["operations"]) == 1
+
+
+def test_export_no_pending_ops_returns_400(export_client):
+    """POST /reorg/export with no pending ops → 400."""
+    client, _ = export_client
+    sid = _open_and_scan(client)
+    r = client.post(f"/api/sessions/{sid}/reorg/export")
+    assert r.status_code == 400
