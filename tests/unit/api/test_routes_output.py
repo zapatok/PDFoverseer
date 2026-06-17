@@ -247,3 +247,42 @@ def test_build_worker_values_difpts_not_emitted_for_non_hpv(tmp_path):
     vals = _build_worker_values(state)
     assert "HRB_workers_difpts" not in vals
     assert "HPV_workers_difpts" not in vals  # HPV has no dif_pts cell here
+
+
+# ---------------------------------------------------------------------------
+# Task 4: warn when HPV dif_pts worker count is pending
+# ---------------------------------------------------------------------------
+
+
+def test_build_worker_warnings_flags_difpts_hpv():
+    from api.routes.output import _build_worker_warnings
+
+    state = {"cells": {"HPV": {"dif_pts": {"per_file": {"d1.pdf": 3}}}}}
+    warned = {(w["hospital"], w["sigla"]) for w in _build_worker_warnings(state)}
+    assert ("HPV", "dif_pts") in warned
+
+
+def test_build_worker_warnings_difpts_silent_when_terminado():
+    from api.routes.output import _build_worker_warnings
+
+    state = {
+        "cells": {"HPV": {"dif_pts": {"per_file": {"d1.pdf": 3}, "worker_status": "terminado"}}}
+    }
+    warned = {(w["hospital"], w["sigla"]) for w in _build_worker_warnings(state)}
+    assert ("HPV", "dif_pts") not in warned
+
+
+def test_build_worker_warnings_difpts_silent_for_non_hpv():
+    from api.routes.output import _build_worker_warnings
+
+    state = {"cells": {"HRB": {"dif_pts": {"per_file": {"d1.pdf": 3}}}}}
+    warned = {(w["hospital"], w["sigla"]) for w in _build_worker_warnings(state)}
+    assert ("HRB", "dif_pts") not in warned
+
+
+def test_build_worker_warnings_difpts_silent_when_no_pdfs():
+    from api.routes.output import _build_worker_warnings
+
+    state = {"cells": {"HPV": {"dif_pts": {"worker_status": "en_progreso"}}}}
+    warned = {(w["hospital"], w["sigla"]) for w in _build_worker_warnings(state)}
+    assert ("HPV", "dif_pts") not in warned

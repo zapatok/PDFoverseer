@@ -185,6 +185,14 @@ def _build_worker_warnings(state: dict) -> list[dict]:
                 continue
             if cell.get("worker_status") != "terminado":
                 out.append({"hospital": hosp, "sigla": sigla})
+
+    # dif_pts (Incr 3B): warn HPV when worker count is pending. Same predicate as
+    # charla/chintegral (has PDFs + not terminado), scoped to DIFPTS_WORKER_HOSPITALS.
+    # The N15 = 0 / formula-cleared decision (D2) makes this warning load-bearing.
+    for hosp in DIFPTS_WORKER_HOSPITALS:
+        cell = state.get("cells", {}).get(hosp, {}).get("dif_pts")
+        if cell and cell.get("per_file") and cell.get("worker_status") != "terminado":
+            out.append({"hospital": hosp, "sigla": "dif_pts"})
     return out
 
 
