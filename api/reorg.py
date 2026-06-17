@@ -34,7 +34,9 @@ def validate_op(op: dict, *, src_pages: dict[str, int], existing_ops: list[dict]
     src = op.get("source") or {}
     dst = op.get("dest") or {}
     file = src.get("file")
-    pr = op.get("page_range")
+    # page_range is nested under source (canonical op shape, spec §4/§7) — that is
+    # how it arrives from ReorgSource.model_dump() and how it is stored/exported.
+    pr = src.get("page_range")
 
     same_cell = (src.get("hospital"), src.get("sigla")) == (dst.get("hospital"), dst.get("sigla"))
     if same_cell and ot in ("move_file", "extract_pages"):
@@ -54,16 +56,16 @@ def validate_op(op: dict, *, src_pages: dict[str, int], existing_ops: list[dict]
             if not (1 <= x <= y <= pages):
                 errors.append(f"page_range fuera de límites: {pr} (páginas={pages})")
             for other in existing_ops:
+                other_src = other.get("source") or {}
+                other_pr = other_src.get("page_range")
                 if (
                     other.get("op_type") == "extract_pages"
                     and other.get("status", "pending") == "pending"
-                    and (other.get("source") or {}).get("file") == file
-                    and other.get("page_range")
-                    and _ranges_overlap(pr, other["page_range"])
+                    and other_src.get("file") == file
+                    and other_pr
+                    and _ranges_overlap(pr, other_pr)
                 ):
-                    errors.append(
-                        f"page_range solapa otra op del mismo archivo: {other['page_range']}"
-                    )
+                    errors.append(f"page_range solapa otra op del mismo archivo: {other_pr}")
 
     rot = op.get("rotation_deg", 0)
     if rot not in ROTATIONS:
@@ -91,8 +93,9 @@ def resolve_op_defaults(op: dict, *, src_cell: dict) -> dict:
     """
     out = dict(op)
     ot = op["op_type"]
-    file = (op.get("source") or {}).get("file")
-    pr = op.get("page_range")
+    src = op.get("source") or {}
+    file = src.get("file")
+    pr = src.get("page_range")  # nested under source (canonical shape)
 
     def _marks_total(pred) -> int:
         marks = (src_cell.get("worker_marks") or {}).get(file) or []

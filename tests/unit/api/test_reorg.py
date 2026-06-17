@@ -25,48 +25,45 @@ def test_validate_rejects_dest_equals_source_for_move():
     assert validate_op(op, src_pages=_src_pages(), existing_ops=[])
 
 
-def test_validate_extract_requires_range():
+def _extract(page_range, *, dest_sigla="odi", **extra):
+    """An extract_pages op in the CANONICAL shape: page_range nested under source."""
+    src = {"hospital": "HRB", "sigla": "art", "file": "art_crs.pdf"}
+    if page_range is not None:
+        src["page_range"] = page_range
     op = {
         "op_type": "extract_pages",
-        "source": {"hospital": "HRB", "sigla": "art", "file": "art_crs.pdf"},
-        "dest": {"hospital": "HRB", "sigla": "odi"},
+        "source": src,
+        "dest": {"hospital": "HRB", "sigla": dest_sigla},
     }
-    assert validate_op(op, src_pages=_src_pages(), existing_ops=[])
+    op.update(extra)
+    return op
+
+
+def test_validate_extract_requires_range():
+    assert validate_op(_extract(None), src_pages=_src_pages(), existing_ops=[])
 
 
 def test_validate_range_bounds_and_doc_cap():
-    base = {
-        "op_type": "extract_pages",
-        "source": {"hospital": "HRB", "sigla": "art", "file": "art_crs.pdf"},
-        "dest": {"hospital": "HRB", "sigla": "odi"},
-    }
-    assert validate_op({**base, "page_range": [0, 3]}, src_pages=_src_pages(), existing_ops=[])
-    assert validate_op({**base, "page_range": [3, 60]}, src_pages=_src_pages(), existing_ops=[])
-    assert validate_op({**base, "page_range": [5, 3]}, src_pages=_src_pages(), existing_ops=[])
-    assert validate_op(
-        {**base, "page_range": [1, 2], "doc_count": 5}, src_pages=_src_pages(), existing_ops=[]
-    )
+    assert validate_op(_extract([0, 3]), src_pages=_src_pages(), existing_ops=[])
+    assert validate_op(_extract([3, 60]), src_pages=_src_pages(), existing_ops=[])
+    assert validate_op(_extract([5, 3]), src_pages=_src_pages(), existing_ops=[])
+    assert validate_op(_extract([1, 2], doc_count=5), src_pages=_src_pages(), existing_ops=[])
+    # a valid in-bounds extract (page_range nested under source) passes — guards
+    # against the regression where page_range was read at the top level.
+    assert validate_op(_extract([3, 7]), src_pages=_src_pages(), existing_ops=[]) == []
 
 
 def test_validate_rejects_overlapping_extract_same_file():
-    existing = [
-        {
-            "op_type": "extract_pages",
-            "status": "pending",
-            "source": {"hospital": "HRB", "sigla": "art", "file": "art_crs.pdf"},
-            "dest": {"hospital": "HRB", "sigla": "odi"},
-            "page_range": [3, 7],
-        }
-    ]
-    op = {
-        "op_type": "extract_pages",
-        "source": {"hospital": "HRB", "sigla": "art", "file": "art_crs.pdf"},
-        "dest": {"hospital": "HRB", "sigla": "reunion"},
-        "page_range": [5, 9],
-    }
-    assert validate_op(op, src_pages=_src_pages(), existing_ops=existing)
-    op_disjoint = {**op, "page_range": [8, 9]}
-    assert validate_op(op_disjoint, src_pages=_src_pages(), existing_ops=existing) == []
+    existing = [{**_extract([3, 7]), "status": "pending"}]
+    assert validate_op(
+        _extract([5, 9], dest_sigla="reunion"), src_pages=_src_pages(), existing_ops=existing
+    )
+    assert (
+        validate_op(
+            _extract([8, 9], dest_sigla="reunion"), src_pages=_src_pages(), existing_ops=existing
+        )
+        == []
+    )
 
 
 def test_resolve_defaults_move_file_uses_per_file():

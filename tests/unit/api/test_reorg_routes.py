@@ -259,6 +259,34 @@ def test_post_reorg_op_move_file_resolves_defaults(endpoint_client):
     assert cells["HPV"]["reunion"]["reorg_doc_delta"] == 1
 
 
+def test_post_reorg_op_extract_pages_through_endpoint(endpoint_client):
+    """Regression: page_range is nested under source, so it must survive model_dump()
+    and reach validate_op/resolve_op_defaults. A valid in-bounds extract_pages → 200."""
+    client = endpoint_client
+    sid = _open_and_scan(client)
+
+    r = client.post(
+        f"/api/sessions/{sid}/reorg/ops",
+        json={
+            "op_type": "extract_pages",
+            "source": {
+                "hospital": "HPV",
+                "sigla": "odi",
+                "file": "2026-04-10_odi_TITAN.pdf",
+                "page_range": [1, 1],  # the odi PDF is 1 page
+            },
+            "dest": {"hospital": "HPV", "sigla": "reunion"},
+        },
+    )
+    assert r.status_code == 200, r.text
+    op = r.json()["op"]
+    assert op["op_type"] == "extract_pages"
+    assert op["doc_count"] == 1  # default for extract_pages
+    cells = r.json()["cells"]
+    assert cells["HPV"]["odi"]["reorg_doc_delta"] == -1
+    assert cells["HPV"]["reunion"]["reorg_doc_delta"] == 1
+
+
 def test_post_reorg_op_invalid_dest_equals_source(endpoint_client):
     """dest == source → 400."""
     client = endpoint_client
