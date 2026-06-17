@@ -518,6 +518,9 @@ export const useSessionStore = create((set, get) => ({
           ...hosp[sigla],
           note: result.note,
           note_status: result.note_status,
+          // Backend recomputes all_reliable after the note gate (por_resolver →
+          // not settled); merge it so the stored field doesn't drift on resolve.
+          all_reliable: result.all_reliable,
         };
         cells[hospital] = hosp;
         const cleanedPending = new Map(prev._pendingSave);
