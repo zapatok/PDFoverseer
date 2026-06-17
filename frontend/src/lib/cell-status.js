@@ -1,3 +1,5 @@
+import { countTypeFor } from "./sigla-info";
+
 // Cell readiness for the honest "listo / pendiente" model (Incr 1B, Decisión 1).
 //
 // A cell is *listo* (green) when its count is trustworthy by PROVENANCE, not by
@@ -75,4 +77,35 @@ export function dotVariantFor(cell, { isScanning = false, countType = "documents
   if (cell?.errors?.length > 0) return "state-error";
   if (!cell) return "neutral";
   return isCellReady(cell, countType) ? "confidence-high" : "confidence-low";
+}
+
+// A worker/checks cell is "relevant" to the aggregate iff it has files.
+function cellHasFiles(cell) {
+  const pf = cell?.per_file;
+  if (pf && Object.keys(pf).length > 0) return true;
+  return (cell?.user_override ?? cell?.ocr_count ?? cell?.filename_count ?? 0) > 0;
+}
+
+// M2 (Incr 3C): aggregate worker-counting status across a hospital's worker cells
+// (count_type ∈ {documents_workers, checks} = charla/chintegral/dif_pts/maquinaria).
+// "relevant" = cell has files. Returns null if no relevant worker cells (→ no chip).
+// listo = all relevant terminado; pendiente = none started; en_proceso = the rest.
+export function hospitalWorkerStatus(cells) {
+  if (!cells) return null;
+  let total = 0;
+  let done = 0;
+  let started = 0;
+  for (const [sigla, cell] of Object.entries(cells)) {
+    if (!showsWorkerCounter(countTypeFor(sigla))) continue;
+    if (!cellHasFiles(cell)) continue;
+    total += 1;
+    const status = cell?.worker_status;
+    const hasMarks = cell?.worker_marks && Object.keys(cell.worker_marks).length > 0;
+    if (status === "terminado") done += 1;
+    if (status || hasMarks) started += 1;
+  }
+  if (total === 0) return null;
+  if (done === total) return "listo";
+  if (started === 0) return "pendiente";
+  return "en_proceso";
 }

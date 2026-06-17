@@ -5,6 +5,7 @@ import {
   anyUnreliableOcrFile,
   dotVariantFor,
   hasOverride,
+  hospitalWorkerStatus,
   isCellReady,
   showsWorkerCounter,
 } from "./cell-status";
@@ -209,5 +210,45 @@ describe("isCellReady — por_resolver note gate", () => {
   });
   it("dotVariantFor → confidence-low when por_resolver", () => {
     expect(dotVariantFor({ confirmed: true, note_status: "por_resolver" })).toBe("confidence-low");
+  });
+});
+
+describe("hospitalWorkerStatus", () => {
+  const filesCell = (extra) => ({ per_file: { "a.pdf": 1 }, ...extra });
+
+  it("null when no worker cells have files", () => {
+    expect(hospitalWorkerStatus({ reunion: filesCell() })).toBe(null); // reunion = documents
+    expect(hospitalWorkerStatus({ charla: { per_file: {} } })).toBe(null);
+    expect(hospitalWorkerStatus({})).toBe(null);
+    expect(hospitalWorkerStatus(null)).toBe(null);
+  });
+
+  it("listo when all relevant worker cells terminado", () => {
+    const cells = {
+      charla: filesCell({ worker_status: "terminado" }),
+      maquinaria: filesCell({ worker_status: "terminado" }),
+    };
+    expect(hospitalWorkerStatus(cells)).toBe("listo");
+  });
+
+  it("pendiente when none started", () => {
+    const cells = { charla: filesCell(), dif_pts: filesCell() };
+    expect(hospitalWorkerStatus(cells)).toBe("pendiente");
+  });
+
+  it("en_proceso when some started but not all done", () => {
+    const cells = {
+      charla: filesCell({ worker_status: "terminado" }),
+      chintegral: filesCell({ worker_marks: { "a.pdf": [{ page: 1, count: 2 }] } }),
+    };
+    expect(hospitalWorkerStatus(cells)).toBe("en_proceso");
+  });
+
+  it("worker cell without files is ignored", () => {
+    const cells = {
+      charla: filesCell({ worker_status: "terminado" }),
+      dif_pts: { per_file: {}, worker_status: "en_progreso" }, // no files → excluded
+    };
+    expect(hospitalWorkerStatus(cells)).toBe("listo");
   });
 });
