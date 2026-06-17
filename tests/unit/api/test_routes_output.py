@@ -204,3 +204,46 @@ def test_worker_warnings_silent_when_no_pdfs(client, tmp_path):
     out = client.post("/api/sessions/2026-04/output", json={}).json()
     warned = {(w["hospital"], w["sigla"]) for w in out["worker_warnings"]}
     assert ("HLL", "charla") not in warned
+
+
+# ---------------------------------------------------------------------------
+# Task 3: DIFPTS_WORKER_HOSPITALS + emit HPV_workers_difpts
+# ---------------------------------------------------------------------------
+
+
+def test_build_worker_values_emits_difpts_for_hpv(tmp_path):
+    from api.routes.output import _build_worker_values
+
+    state = {
+        "month_root": str(tmp_path / "nope"),  # non-existent → present=None → sum-all marks
+        "cells": {
+            "HPV": {
+                "dif_pts": {
+                    "worker_marks": {"d1.pdf": [{"page": 1, "count": 12}, {"page": 2, "count": 8}]}
+                }
+            },
+        },
+    }
+    assert _build_worker_values(state)["HPV_workers_difpts"] == 20
+
+
+def test_build_worker_values_difpts_zero_when_uncounted(tmp_path):
+    from api.routes.output import _build_worker_values
+
+    state = {
+        "month_root": str(tmp_path / "nope"),
+        "cells": {"HPV": {"dif_pts": {"per_file": {"d1.pdf": 1}}}},  # no worker_marks
+    }
+    assert _build_worker_values(state)["HPV_workers_difpts"] == 0
+
+
+def test_build_worker_values_difpts_not_emitted_for_non_hpv(tmp_path):
+    from api.routes.output import _build_worker_values
+
+    state = {
+        "month_root": str(tmp_path / "nope"),
+        "cells": {"HRB": {"dif_pts": {"worker_marks": {"d1.pdf": [{"page": 1, "count": 99}]}}}},
+    }
+    vals = _build_worker_values(state)
+    assert "HRB_workers_difpts" not in vals
+    assert "HPV_workers_difpts" not in vals  # HPV has no dif_pts cell here

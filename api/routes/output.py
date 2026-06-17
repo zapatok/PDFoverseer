@@ -124,6 +124,14 @@ def _build_cell_values(state: dict) -> dict[str, int]:
 # El template usa "chgen" para charlas generales, no "charla".
 WORKER_PURPOSE: dict[str, str] = {"charla": "chgen", "chintegral": "chintegral"}
 
+# dif_pts: el total de trabajadores va a la celda HH de su propia fila (fila 15),
+# por hospital. HOY solo HPV (→ N15). Para HABILITAR otra obra "sin más":
+#   1. añadirla a este set,
+#   2. crear el rango {HOSP}_workers_difpts → {col_HH}15 en el template,
+#   3. limpiar la fórmula =col*0.5 de esa celda (ver build_template_v1.py docstring).
+# Las obras NO incluidas conservan su estimación docs×0.5 intacta.
+DIFPTS_WORKER_HOSPITALS: frozenset[str] = frozenset({"HPV"})
+
 
 def _build_worker_values(state: dict) -> dict[str, int]:
     """Emite ``{HOSP}_workers_{purpose}`` para las celdas charla/chintegral
@@ -140,6 +148,18 @@ def _build_worker_values(state: dict) -> dict[str, int]:
             folder = _find_category_folder(month_root / hosp, sigla)
             present = set(cell_page_counts(folder)) if folder.exists() else None
             out[f"{hosp}_workers_{purpose}"] = compute_worker_count(cell, present)
+
+    # dif_pts (Incr 3B): worker total → HH cell of its own row, scoped to HPV.
+    # Always emits (0 if uncounted) — NO "never counted → skip" guard (D2: explicit
+    # 0, never the =M15*0.5 fallback). Do NOT harmonize with the charla/chintegral
+    # loop above, which deliberately skips uncounted cells.
+    for hosp in DIFPTS_WORKER_HOSPITALS:
+        cell = state.get("cells", {}).get(hosp, {}).get("dif_pts")
+        if cell is None:
+            continue  # no dif_pts cell → N15 stays at the template's 0
+        folder = _find_category_folder(month_root / hosp, "dif_pts")
+        present = set(cell_page_counts(folder)) if folder.exists() else None
+        out[f"{hosp}_workers_difpts"] = compute_worker_count(cell, present)
     return out
 
 
