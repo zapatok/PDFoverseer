@@ -301,3 +301,52 @@ def test_post_reorg_op_unknown_sigla(endpoint_client):
         },
     )
     assert r.status_code == 404
+
+
+# ── Task 10: DELETE /reorg/ops/{op_id} ────────────────────────────────────
+
+
+def test_delete_reorg_op_removes_op_and_resets_deltas(endpoint_client):
+    """Create an op, DELETE it → 200; reorg_ops empty; deltas back to 0."""
+    client = endpoint_client
+    sid = _open_and_scan(client)
+
+    # Create op first
+    r = client.post(
+        f"/api/sessions/{sid}/reorg/ops",
+        json={
+            "op_type": "move_file",
+            "source": {"hospital": "HPV", "sigla": "odi", "file": "2026-04-10_odi_TITAN.pdf"},
+            "dest": {"hospital": "HPV", "sigla": "reunion"},
+        },
+    )
+    assert r.status_code == 200
+    op_id = r.json()["op"]["id"]
+
+    # Delete it
+    r = client.delete(f"/api/sessions/{sid}/reorg/ops/{op_id}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["deleted"] == op_id
+
+    # Session state: no ops, deltas reset
+    r2 = client.get(f"/api/sessions/{sid}")
+    state = r2.json()
+    assert state["reorg_ops"] == []
+    assert state["cells"]["HPV"]["odi"].get("reorg_doc_delta", 0) == 0
+    assert state["cells"]["HPV"]["reunion"].get("reorg_doc_delta", 0) == 0
+
+
+def test_delete_reorg_op_unknown_id(endpoint_client):
+    """DELETE unknown op_id → 404."""
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    r = client.delete(f"/api/sessions/{sid}/reorg/ops/op_999")
+    assert r.status_code == 404
+
+
+def test_delete_reorg_op_unknown_session(endpoint_client):
+    """DELETE on unknown session → 404."""
+    client = endpoint_client
+    r = client.delete("/api/sessions/2099-01/reorg/ops/op_001")
+    assert r.status_code == 404
