@@ -65,9 +65,10 @@ def compute_worker_count(cell: dict, present_files: set[str] | None = None) -> i
             per_file cuando no está vacío).
 
     Returns:
-        La suma de marcas; 0 si no hay marcas.
+        La suma de marcas más el delta de reorganización ``reorg_worker_delta``
+        (Incr J, aditivo sobre el total de marcas); 0 si no hay marcas ni delta.
     """
-    return _sum_marks(cell, present_files)
+    return _sum_marks(cell, present_files) + (cell.get("reorg_worker_delta") or 0)
 
 
 def _synchronized(method):

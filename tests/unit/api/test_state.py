@@ -596,6 +596,15 @@ def test_clear_override_does_not_touch_note(manager):
     assert cell["note_status"] == "por_resolver"
 
 
+def test_compute_worker_count_adds_reorg_worker_delta():
+    cell = {"worker_marks": {"a.pdf": [{"page": 1, "count": 5}]}}
+    assert compute_worker_count(cell, {"a.pdf"}) == 5
+    cell["reorg_worker_delta"] = 3
+    assert compute_worker_count(cell, {"a.pdf"}) == 8
+    cell["reorg_worker_delta"] = -2
+    assert compute_worker_count(cell, {"a.pdf"}) == 3
+
+
 def test_load_and_migrate_chains_v2_to_v3(manager, tmp_path):
     """_load_and_migrate runs v2->v3 on top of v1->v2: a cell with override_note
     in the DB gets note/note_status on first read and no churn on subsequent reads."""
