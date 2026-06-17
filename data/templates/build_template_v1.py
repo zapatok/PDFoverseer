@@ -8,9 +8,16 @@ Takes the production RESUMEN_ABRIL_2026.xlsx as a layout base, then:
   5. Adds a CHPS row (sigla #18) at row 31 — the sample doesn't include it
   6. Clears the stale #VALUE! in B2 and drops in the constructora logo
   7. Fills the orphan rows (22, 26) with 0 in every hospital column
+  8. Wires HPV dif_pts worker total to N15 (clears =M15*0.5 formula; Incr 3B)
 
 Run from project root:
     python data/templates/build_template_v1.py --force
+
+To enable another hospital's dif_pts worker total -> Excel (today only HPV):
+  1. add the hospital to DIFPTS_WORKER_HOSPITALS in api/routes/output.py,
+  2. add a named range {HOSP}_workers_difpts -> {HH_COL[hosp]}15 here,
+  3. clear that cell's =col*0.5 formula (ws[f"{HH_COL[hosp]}15"] = 0).
+Hospitals NOT enabled keep their docs×0.5 estimate.
 
 ⚠️ AUTHORITATIVE ARTIFACT IS THE SHIPPED .xlsx, NOT THIS SCRIPT. The committed
 RESUMEN_template_v1.xlsx carries hand-patches this bootstrap does NOT reproduce
@@ -146,6 +153,10 @@ def build() -> tuple[int, int]:
     # (the sample hardcodes "MARZO 2026"); without this range the title stays static.
     _set_or_replace_name(wb, "report_title", f"'{sheet_name}'!$E$2")
 
+    # Incr 3B: HPV dif_pts worker total goes to N15 directly (no =M15*0.5 fallback).
+    ws["N15"] = 0
+    _set_or_replace_name(wb, "HPV_workers_difpts", f"'{sheet_name}'!$N$15")
+
     # Fix HH formula + blank stale workforce values (spec §8.2).
     # The sample's H14 points to row 29 (chgen); chintegral lives in row 30.
     ws["H14"] = "=H30*0.5"
@@ -168,8 +179,17 @@ def verify() -> None:
 
     if len(count_names) != 72:
         raise AssertionError(f"Expected 72 cantidad named ranges, got {len(count_names)}")
-    if len(worker_names) != 8:
-        raise AssertionError(f"Expected 8 worker named ranges, got {len(worker_names)}")
+    if len(worker_names) != 9:
+        raise AssertionError(f"Expected 9 worker named ranges, got {len(worker_names)}")
+
+    # Incr 3B: N15 is HPV dif_pts worker total (cleared formula); others keep docs×0.5.
+    if wb.defined_names["HPV_workers_difpts"].attr_text != f"'{ws.title}'!$N$15":
+        raise AssertionError("HPV_workers_difpts must point at $N$15")
+    if ws["N15"].value == "=M15*0.5":
+        raise AssertionError("N15 must NOT keep the =M15*0.5 fallback")
+    for col, base in (("H", "G"), ("J", "I"), ("L", "K")):
+        if ws[f"{col}15"].value != f"={base}15*0.5":
+            raise AssertionError(f"{col}15 must keep ={base}15*0.5 (non-HPV unchanged)")
 
     # Spot-check: a few specific named ranges resolve to correct cells
     for name, expected_coord in [
