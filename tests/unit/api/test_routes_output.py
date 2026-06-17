@@ -286,3 +286,29 @@ def test_build_worker_warnings_difpts_silent_when_no_pdfs():
     state = {"cells": {"HPV": {"dif_pts": {"worker_status": "en_progreso"}}}}
     warned = {(w["hospital"], w["sigla"]) for w in _build_worker_warnings(state)}
     assert ("HPV", "dif_pts") not in warned
+
+
+# ---------------------------------------------------------------------------
+# Task 5: end-to-end — generated Excel N15 == worker total
+# ---------------------------------------------------------------------------
+
+
+def test_output_writes_difpts_total_to_n15(client, tmp_path, monkeypatch):
+    """End-to-end: HPV dif_pts worker total lands in N15 via HPV_workers_difpts."""
+    import openpyxl
+
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))  # folder absent → sum-all
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    mgr = client.app.dependency_overrides[get_manager]()
+    mgr.apply_worker_count(
+        "2026-04",
+        "HPV",
+        "dif_pts",
+        marks={"d1.pdf": [{"page": 1, "count": 7}, {"page": 2, "count": 5}]},
+        status="terminado",
+    )
+    out = client.post("/api/sessions/2026-04/output", json={}).json()
+    wb = openpyxl.load_workbook(out["output_path"])
+    sheet, coord = list(wb.defined_names["HPV_workers_difpts"].destinations)[0]
+    assert wb[sheet][coord].value == 12
