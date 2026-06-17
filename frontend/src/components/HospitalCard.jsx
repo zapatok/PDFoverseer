@@ -1,10 +1,11 @@
 import { Building2, FolderX } from "lucide-react";
+import Badge from "../ui/Badge";
 import Dot from "../ui/Dot";
 import EmptyState from "../ui/EmptyState";
 import Tooltip from "../ui/Tooltip";
 import { CTA_LLENAR_MANUAL } from "../lib/constants";
 import { SIGLAS } from "../lib/sigla-labels";
-import { dotVariantFor } from "../lib/cell-status";
+import { dotVariantFor, hospitalWorkerStatus } from "../lib/cell-status";
 import { useSessionStore } from "../store/session";
 import { countTypeFor } from "../lib/sigla-info";
 
@@ -36,6 +37,14 @@ export default function HospitalCard({ hospital, total, cells, status, onClick }
     );
   }
 
+  const workerStatus = hospitalWorkerStatus(cells);
+  const WORKER_CHIP = {
+    listo: { variant: "jade", label: "Trabajadores: listos" },
+    en_proceso: { variant: "amber", label: "Trabajadores: en proceso" },
+    pendiente: { variant: "neutral", label: "Trabajadores: pendientes" },
+  };
+  const workerChip = workerStatus ? WORKER_CHIP[workerStatus] : null;
+
   return (
     <button
       onClick={onClick}
@@ -46,6 +55,7 @@ export default function HospitalCard({ hospital, total, cells, status, onClick }
           <Building2 size={14} strokeWidth={1.75} className="text-po-text-muted" />
           <span className="text-sm font-medium text-po-text">{hospital}</span>
         </div>
+        {workerChip && <Badge variant={workerChip.variant}>{workerChip.label}</Badge>}
       </div>
       <p className="text-4xl font-semibold tabular-nums">{(total ?? 0).toLocaleString()}</p>
       <p className="text-xs text-po-text-muted mt-0.5">documentos detectados</p>
