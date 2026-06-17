@@ -385,6 +385,7 @@ def scan(
     results = scan_month(inv)
     for (hosp, sigla), r in results.items():
         mgr.apply_cell_result(session_id, hosp, sigla, r)
+    refresh_reorg_deltas(mgr, session_id, check_applied=True)
     return {
         "scanned": len(results),
         "summary": {f"{hosp}_{sigla}": r.count for (hosp, sigla), r in results.items()},
