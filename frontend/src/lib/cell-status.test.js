@@ -188,3 +188,26 @@ describe("showsWorkerCounter", () => {
     expect(showsWorkerCounter(undefined)).toBe(false);
   });
 });
+
+describe("isCellReady — por_resolver note gate", () => {
+  it("forces not-ready even when confirmed", () => {
+    expect(isCellReady({ confirmed: true, note_status: "por_resolver" })).toBe(false);
+  });
+  it("forces not-ready even with an override", () => {
+    expect(isCellReady({ user_override: 5, note_status: "por_resolver" })).toBe(false);
+  });
+  it("forces not-ready even when checks terminado", () => {
+    expect(
+      isCellReady({ worker_status: "terminado", note_status: "por_resolver" }, "checks"),
+    ).toBe(false);
+  });
+  it("resuelto does not block (confirmed stays ready)", () => {
+    expect(isCellReady({ confirmed: true, note_status: "resuelto" })).toBe(true);
+  });
+  it("no note behaves as before", () => {
+    expect(isCellReady({ confirmed: true })).toBe(true);
+  });
+  it("dotVariantFor → confidence-low when por_resolver", () => {
+    expect(dotVariantFor({ confirmed: true, note_status: "por_resolver" })).toBe("confidence-low");
+  });
+});

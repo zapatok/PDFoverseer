@@ -54,6 +54,7 @@ export function allFilesReliable(cell) {
 // via the counter viewer (human verification, no OCR/filename involved).
 // For all other count types, the standard provenance cascade applies.
 export function isCellReady(cell, countType = "documents") {
+  if (cell?.note_status === "por_resolver") return false;
   if (!!cell?.confirmed || hasOverride(cell)) return true;
   if (countType === "checks") return cell?.worker_status === "terminado";
   // Backend all_reliable (Incr 2) is authoritative; fall back to the 1B proxy
