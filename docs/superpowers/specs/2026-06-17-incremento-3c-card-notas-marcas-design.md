@@ -137,10 +137,14 @@ de MAYO se migran solas en el próximo load, como `resuelto` (no vuelven ámbar 
 - `PATCH /api/sessions/{id}/cells/{hospital}/{sigla}/note` body `{text: str|null, status: "por_resolver"|"resuelto"}`
   → `set_note` + `refresh_all_reliable(...)` → devuelve la celda. Valida `status` ∈ los dos valores.
 
-**Desacople del override:**
-- `OverridePanel.jsx` pierde la textarea de nota y todo su estado `note` (queda solo el input numérico + nota
-  de validación). `saveOverride` deja de recibir/enviar `note`; `apply_user_override` deja de tocar la nota;
-  el endpoint de override deja de aceptar `note`.
+**Desacople del override (barrido COMPLETO de consumidores):** la nota deja de viajar por el path del override.
+- **`saveOverride` pierde el parámetro `note`** (store `session.js`); el endpoint de override + `apply_user_override`
+  dejan de aceptar/escribir cualquier nota. La nota vive **solo** por `saveNote`/`NotePanel`.
+- **Todos los callers de `saveOverride` se actualizan a NO pasar nota** (hoy varios pasan `cell?.override_note ?? null`):
+  `OverridePanel.jsx` (pierde la textarea y su estado `note`; queda el input numérico + nota de validación),
+  **`CategoryRow.jsx`** (~línea 36, commit de inline-edit), **`FileList.jsx`** (~línea 101), `DetailPanel.jsx`
+  (~línea 259, ya pasa `null`). **Verificación de plan:** `git grep saveOverride` para no dejar ningún caller con nota.
+- **Limpiar/editar el override NO toca la nota** (son independientes): borrar el override deja la nota tal cual.
 - Nuevo `frontend/src/components/NotePanel.jsx`: textarea (autosave debounced vía `saveNote`) + control de estado:
   - `por_resolver`: editable; chip/indicador "Por resolver" (ámbar); botón **"Marcar resuelta"**.
   - `resuelto`: textarea **read-only**; chip "Resuelta" (jade); botón **"Reabrir"** (→ `por_resolver`, reabre
@@ -162,8 +166,9 @@ export function hospitalWorkerStatus(cells) { /* "listo" | "en_proceso" | "pendi
 Reglas (D1): **listo** = todas las relevantes en `worker_status==="terminado"`; **pendiente** = ninguna
 empezada (sin `worker_status` ni marcas); **en_proceso** = el resto; **null** = ninguna relevante.
 - "relevante" = la celda tiene archivos. Señal de presencia en la card: `per_file` no vacío (fallback: conteo
-  de documentos > 0). **Verificación de plan:** confirmar que las celdas que recibe la card incluyen
-  `worker_status` + `per_file`; si no, enhebrarlos desde el store.
+  de documentos > 0). La card recibe `cells` del `session` (GET de estado completo → incluye `worker_status`/
+  `worker_marks`/`per_file`; los handlers WS hacen spread del cell existente, así que esos campos sobreviven).
+  **Verificación de plan:** confirmar que ningún handler del store reemplaza el cell entero perdiendo esos campos.
 - "empezada" = `worker_status` presente (en_progreso/terminado) **o** `worker_marks` no vacío.
 
 **UI — `HospitalCard.jsx`:** un `Badge` (primitive) junto al nombre del hospital, tono por estado
@@ -211,8 +216,10 @@ dotVariantFor(cell) → isCellReady (1ª línea: note_status por_resolver → fa
 ## 7. Plan de pruebas
 
 ### Backend (pytest, fixtures reales — sin mock de DB)
-- `migrate_cell_v2_to_v3` / `migrate_state_v2_to_v3`: `override_note` → `note` + `note_status="resuelto"`,
-  `override_note` eliminado; idempotente (2ª pasada `changed=False`); cell sin override_note → `note=None`.
+- `migrate_cell_v2_to_v3` / `migrate_state_v2_to_v3`: `override_note` con texto → `note` + `note_status="resuelto"`,
+  `override_note` eliminado; **cell con `override_note=None` (o sin él) → `note=None` y `note_status=None`** (NO
+  "resuelto"); idempotente (2ª pasada `changed=False`). Encadenado en `_load_and_migrate` (correr v1→v2 y v2→v3;
+  persistir si cualquiera cambió).
 - `compute_settled`: `note_status="por_resolver"` → `False` aunque procedencia/terminado serían `True`;
   `resuelto`/`None` → no afecta.
 - Endpoint `PATCH …/note`: persiste texto+estado, normaliza vacío, valida `status`, refresca `all_reliable`,
