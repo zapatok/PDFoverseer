@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import { api } from "../lib/api";
 import { createWSClient } from "../lib/ws";
 import { invalidateHistory } from "../lib/useHistoryStore";
@@ -555,6 +556,52 @@ export const useSessionStore = create((set, get) => ({
           error: String(error),
         };
       });
+    }
+  },
+
+  // Incr J — reorg ops. All three re-fetch the full session on success so that
+  // the backend-recomputed reorg_doc_delta/reorg_worker_delta across all cells
+  // is reflected consistently (client merge would be error-prone here).
+  addReorgOp: async (sessionId, hospital, sigla, opDraft) => {
+    try {
+      await api.createReorgOp(sessionId, {
+        source: { hospital, sigla, ...opDraft.source },
+        dest: opDraft.dest,
+        op_type: opDraft.op_type,
+        empresa: opDraft.empresa,
+        preserve_date: opDraft.preserve_date,
+        rotation_deg: opDraft.rotation_deg,
+        doc_count: opDraft.doc_count,
+        worker_count: opDraft.worker_count,
+        note: opDraft.note,
+      });
+      const session = await api.getSession(sessionId);
+      set({ session });
+    } catch (error) {
+      toast.error(`No se pudo crear la operación: ${String(error)}`);
+      throw error;
+    }
+  },
+
+  deleteReorgOp: async (sessionId, opId) => {
+    try {
+      await api.deleteReorgOp(sessionId, opId);
+      const session = await api.getSession(sessionId);
+      set({ session });
+    } catch (error) {
+      toast.error(`No se pudo eliminar la operación: ${String(error)}`);
+      throw error;
+    }
+  },
+
+  exportManifest: async (sessionId) => {
+    try {
+      const result = await api.exportManifest(sessionId);
+      toast.success(`Manifiesto exportado — ${result.operation_count} operación(es)`);
+      return result;
+    } catch (error) {
+      toast.error(`No se pudo exportar el manifiesto: ${String(error)}`);
+      throw error;
     }
   },
 
