@@ -14,7 +14,7 @@ import { useSessionStore } from "../store/session";
 import { computeWorkerCount } from "../lib/worker-count";
 import { computeCellCount, computeFilesCount } from "../lib/cellCount";
 import SegmentedToggle from "../ui/SegmentedToggle";
-import { hasOverride, isCappedCountType } from "../lib/cell-status";
+import { hasOverride, isCappedCountType, showsWorkerCounter } from "../lib/cell-status";
 import { copyFlavorStub } from "../lib/flavorStub";
 import { api } from "../lib/api";
 import { toast } from "sonner";
@@ -434,11 +434,10 @@ export default function DetailPanel({ hospital, sigla, cell }) {
         </>
       )}
 
-      {/* Worker/checks counting module: shown for charla/chintegral (workers) and
-          checks (maquinaria). NOT dif_pts — it's documents_workers too but its HH/N15
-          Excel wiring is deferred to Incr 3B; showing the counter without a destination
-          would be a half-feature. Keep above near-match suspects. */}
-      {(countType === "checks" || sigla === "charla" || sigla === "chintegral") && (
+      {/* Worker/checks counting module: documents_workers (charla/chintegral/dif_pts)
+          and checks (maquinaria). dif_pts wired to N15 in Incr 3B. Keep above
+          near-match suspects. */}
+      {showsWorkerCounter(countType) && (
         <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} countType={countType} />
       )}
 
