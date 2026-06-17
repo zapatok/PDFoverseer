@@ -194,6 +194,59 @@ def refresh_all_reliable(
     )
 
 
+def refresh_reorg_deltas(
+    mgr: SessionManager,
+    session_id: str,
+    *,
+    check_applied: bool = False,
+) -> None:
+    """Recompute every cell's reorg delta from ``state["reorg_ops"]`` (session-wide).
+
+    Pattern of ``refresh_all_reliable`` (cache derived from the source, refreshed
+    after mutations), but session-scoped: it sweeps all cells. Call with
+    ``check_applied=True`` only on a pase-1 re-scan — the one moment a source file
+    could have moved physically: a ``pending`` op whose ``source.file`` is no longer
+    present in its origin folder is marked ``applied`` and stops contributing a delta
+    (the move is now physical reality; counting both would double-count).
+
+    Args:
+        mgr: The active SessionManager.
+        session_id: Target session identifier.
+        check_applied: When True, inspect each pending op's source folder on disk
+            and mark it ``applied`` if the file is gone.
+    """
+    state = mgr.get_session_state(session_id)
+    ops = state.get("reorg_ops", [])
+    month_root = Path(state.get("month_root", ""))
+
+    if check_applied:
+        for op in ops:
+            if op.get("status") != "pending":
+                continue
+            src = op["source"]
+            folder = _find_category_folder(month_root / src["hospital"], src["sigla"])
+            present = set(cell_page_counts(folder)) if folder.exists() else set()
+            if src.get("file") not in present:
+                op["status"] = "applied"
+
+    deltas: dict[tuple[str, str], dict] = {}
+    for op in ops:
+        if op.get("status") != "pending":
+            continue
+        src_key = (op["source"]["hospital"], op["source"]["sigla"])
+        dst_key = (op["dest"]["hospital"], op["dest"]["sigla"])
+        doc = op.get("doc_count") or 0
+        wrk = op.get("worker_count") or 0
+        for key in (src_key, dst_key):
+            deltas.setdefault(key, {"doc": 0, "worker": 0})
+        deltas[src_key]["doc"] -= doc
+        deltas[src_key]["worker"] -= wrk
+        deltas[dst_key]["doc"] += doc
+        deltas[dst_key]["worker"] += wrk
+
+    mgr.set_reorg_state(session_id, ops=ops, deltas=deltas)
+
+
 def _is_capped_sigla(sigla: str) -> bool:
     return count_type_for(sigla) in ("documents", "documents_workers")
 
