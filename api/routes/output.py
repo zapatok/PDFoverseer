@@ -135,7 +135,9 @@ DIFPTS_WORKER_HOSPITALS: frozenset[str] = frozenset({"HPV"})
 
 def _build_worker_values(state: dict) -> dict[str, int]:
     """Emite ``{HOSP}_workers_{purpose}`` para las celdas charla/chintegral
-    que tengan datos de conteo de trabajadores."""
+    que tengan datos de conteo de trabajadores. Además emite
+    ``{HOSP}_workers_difpts`` para los hospitales en ``DIFPTS_WORKER_HOSPITALS``
+    (hoy solo HPV) — siempre, con 0 si no se contó (Incr 3B, decisión D2)."""
     out: dict[str, int] = {}
     month_root = Path(state.get("month_root", ""))
     for hosp, sigla_map in state.get("cells", {}).items():

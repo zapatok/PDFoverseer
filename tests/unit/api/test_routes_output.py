@@ -272,11 +272,20 @@ def test_build_worker_warnings_difpts_silent_when_terminado():
     assert ("HPV", "dif_pts") not in warned
 
 
-def test_build_worker_warnings_difpts_silent_for_non_hpv():
+def test_build_worker_warnings_difpts_scoping_hpv_vs_non_hpv():
+    """dif_pts warnings are HPV-scoped: HPV with a pending count warns; the same
+    pending state on a non-HPV obra (HRB) stays silent. Guards against a future
+    regression that broadens the scope to all hospitals."""
     from api.routes.output import _build_worker_warnings
 
-    state = {"cells": {"HRB": {"dif_pts": {"per_file": {"d1.pdf": 3}}}}}
+    state = {
+        "cells": {
+            "HPV": {"dif_pts": {"per_file": {"d1.pdf": 3}}},
+            "HRB": {"dif_pts": {"per_file": {"d1.pdf": 3}}},
+        }
+    }
     warned = {(w["hospital"], w["sigla"]) for w in _build_worker_warnings(state)}
+    assert ("HPV", "dif_pts") in warned
     assert ("HRB", "dif_pts") not in warned
 
 
