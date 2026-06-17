@@ -26,7 +26,7 @@
 - `api/state.py` — `compute_worker_count += reorg_worker_delta`; new `SessionManager.add_reorg_op` / `delete_reorg_op` / `set_reorg_state`.
 - `api/routes/sessions.py` — `refresh_reorg_deltas`; wire it into `POST /scan`; `POST /reorg/ops`, `DELETE /reorg/ops/{op_id}`, `POST /reorg/export` endpoints + Pydantic models.
 - `tests/fixtures/cell_count_cases.json` — add `reorg_doc_delta` cases (cross-language parity).
-- `tests/test_state.py` (or the existing worker-count test) — `compute_worker_count` delta cases.
+- `tests/unit/api/test_state.py` — `compute_worker_count` delta cases + reorg-op mutator tests (the `manager` fixture lives here).
 
 **Frontend — create:**
 - `frontend/src/components/ReorganizacionPanel.jsx` — the per-cell reorg op list + net delta + export button.
@@ -228,7 +228,7 @@ git commit -m "test(count): cross-language reorg_doc_delta parity cases (Incr J 
 
 **Files:**
 - Modify: `api/state.py` (`compute_worker_count`, lines ~56-70)
-- Test: `tests/test_state.py` (append; if the worker-count test lives elsewhere, add there)
+- Test: `tests/unit/api/test_state.py` (append)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -245,7 +245,7 @@ def test_compute_worker_count_adds_reorg_worker_delta():
     assert compute_worker_count(cell, {"a.pdf"}) == 3
 ```
 
-- [ ] **Step 2: Run** `pytest tests/test_state.py -k worker_count -v` → FAIL (delta ignored).
+- [ ] **Step 2: Run** `pytest tests/unit/api/test_state.py -k worker_count -v` → FAIL (delta ignored).
 
 - [ ] **Step 3: Implement** — change the return line:
 
@@ -260,8 +260,8 @@ Update the docstring `Returns:` to note the additive reorg delta.
 - [ ] **Step 5: Commit**
 
 ```bash
-ruff check api/state.py tests/test_state.py
-git add api/state.py tests/test_state.py
+ruff check api/state.py tests/unit/api/test_state.py
+git add api/state.py tests/unit/api/test_state.py
 git commit -m "feat(count): additive reorg_worker_delta in compute_worker_count (Incr J T4)"
 ```
 
@@ -273,9 +273,9 @@ git commit -m "feat(count): additive reorg_worker_delta in compute_worker_count 
 
 **Files:**
 - Modify: `api/state.py` (new methods on `SessionManager`)
-- Test: `tests/test_state.py`
+- Test: `tests/unit/api/test_state.py`
 
-Fixture note: `tests/test_state.py` uses a `manager` fixture with session `"2026-04"`. Match it.
+Fixture note: `tests/unit/api/test_state.py` uses a `manager` fixture with session `"2026-04"`. Match it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -314,7 +314,7 @@ def test_set_reorg_state_writes_deltas(manager):
     assert state["cells"]["HRB"]["odi"]["reorg_doc_delta"] == 1
 ```
 
-- [ ] **Step 2: Run** `pytest tests/test_state.py -k reorg -v` → FAIL (methods missing).
+- [ ] **Step 2: Run** `pytest tests/unit/api/test_state.py -k reorg -v` → FAIL (methods missing).
 
 - [ ] **Step 3: Implement** — add three `@_synchronized` methods on `SessionManager` (mirror the existing read-modify-write pattern):
 
@@ -377,8 +377,8 @@ def test_set_reorg_state_writes_deltas(manager):
 - [ ] **Step 5: Commit**
 
 ```bash
-ruff check api/state.py tests/test_state.py
-git add api/state.py tests/test_state.py
+ruff check api/state.py tests/unit/api/test_state.py
+git add api/state.py tests/unit/api/test_state.py
 git commit -m "feat(reorg): SessionManager add/delete/set reorg ops + delta cache (Incr J T5)"
 ```
 
@@ -388,32 +388,65 @@ git commit -m "feat(reorg): SessionManager add/delete/set reorg ops + delta cach
 - Modify: `api/routes/sessions.py` (new free function near `refresh_all_reliable`, ~line 174)
 - Test: `tests/unit/api/test_reorg_routes.py` (create)
 
-- [ ] **Step 1: Write the failing test** (uses the `client` fixture pattern from `tests/unit/api/test_cells_routes.py` — `_open_and_scan(client)`, cell `HPV/odi`; create at least one extra PDF so there are two source files to move between). Drive `refresh_reorg_deltas` indirectly through the op endpoints in Task 9; here, unit-test the function against a `manager` with a hand-built state:
+**No new imports needed:** `_find_category_folder` (late-imported at `sessions.py:558`, `# noqa: E402`) and `cell_page_counts` (`sessions.py:96`) are already module-scope and resolve at call time — `refresh_reorg_deltas`'s body runs at call time, so it sees them. Do **not** add a duplicate import.
+
+- [ ] **Step 1: Write the failing test with a concrete fixture.** Build a real temp `month_root` (no DB mocking, per convention) mirroring the `client` fixture in `tests/unit/api/test_cells_routes.py` (reuse its `_one_page_pdf()` helper and `CATEGORY_FOLDERS` to name folders). The fixture must: create two HRB category folders (for `art` and `odi`) under the temp root, put one 1-page PDF in the `art` folder, build a `SessionManager` on a temp DB (mirror the `manager` fixture in `test_state.py`), `open_session(year=2026, month=4, month_root=<temp>)`, populate the two cells via `mgr.apply_per_file_ocr_result(...)` (gives `art` a `per_file` entry for the source PDF), and `mgr.add_reorg_op(...)` a pending `move_file` op `HRB/art → HRB/odi` with `doc_count=1`, `worker_count=0`, `status="pending"`.
 
 ```python
-def test_refresh_recomputes_deltas_from_pending_ops(manager_with_cells):
-    # state has cells HRB/art and HRB/odi; one pending move op art->odi, doc_count 1
+import pytest
+from core.scanners.patterns import CATEGORY_FOLDERS  # confirm exact module via `grep "CATEGORY_FOLDERS ="`
+
+# reuse _one_page_pdf() from test_cells_routes (import or duplicate the 6-line helper)
+
+@pytest.fixture
+def reorg_mgr(tmp_path):
+    """SessionManager on a temp DB + a temp month_root with HRB art/odi folders.
+    The art folder holds one source PDF; the odi folder is empty (move target)."""
+    art_dir = tmp_path / "HRB" / CATEGORY_FOLDERS["art"]
+    odi_dir = tmp_path / "HRB" / CATEGORY_FOLDERS["odi"]
+    art_dir.mkdir(parents=True)
+    odi_dir.mkdir(parents=True)
+    (art_dir / "art_crs.pdf").write_bytes(_one_page_pdf())
+    import sqlite3
+    from api.state import SessionManager
+    mgr = SessionManager(sqlite3.connect(":memory:"))
+    mgr.open_session(year=2026, month=4, month_root=tmp_path)
+    mgr.apply_per_file_ocr_result("2026-04", "HRB", "art", "art_crs.pdf",
+                                  count=1, method="header_band_anchors", near_matches=[])
+    mgr.apply_per_file_ocr_result("2026-04", "HRB", "odi", "placeholder.pdf",
+                                  count=0, method="header_band_anchors", near_matches=[])
+    mgr.add_reorg_op("2026-04", {
+        "op_type": "move_file",
+        "source": {"hospital": "HRB", "sigla": "art", "file": "art_crs.pdf"},
+        "dest": {"hospital": "HRB", "sigla": "odi"},
+        "doc_count": 1, "worker_count": 0, "status": "pending",
+    })
+    return mgr, art_dir
+
+
+def test_refresh_recomputes_deltas_from_pending_ops(reorg_mgr):
     from api.routes.sessions import refresh_reorg_deltas
-    refresh_reorg_deltas(manager_with_cells, "2026-04", check_applied=False)
-    state = manager_with_cells.get_session_state("2026-04")
+    mgr, _ = reorg_mgr
+    refresh_reorg_deltas(mgr, "2026-04", check_applied=False)
+    state = mgr.get_session_state("2026-04")
     assert state["cells"]["HRB"]["art"]["reorg_doc_delta"] == -1
     assert state["cells"]["HRB"]["odi"]["reorg_doc_delta"] == 1
 
 
-def test_check_applied_marks_gone_source_as_applied(manager_with_cells_and_missing_file):
+def test_check_applied_marks_gone_source_as_applied(reorg_mgr):
     from api.routes.sessions import refresh_reorg_deltas
-    refresh_reorg_deltas(manager_with_cells_and_missing_file, "2026-04", check_applied=True)
-    state = manager_with_cells_and_missing_file.get_session_state("2026-04")
-    op = state["reorg_ops"][0]
-    assert op["status"] == "applied"
-    # delta dropped → cells back to 0
+    mgr, art_dir = reorg_mgr
+    (art_dir / "art_crs.pdf").unlink()  # simulate paso-1 having moved it physically
+    refresh_reorg_deltas(mgr, "2026-04", check_applied=True)
+    state = mgr.get_session_state("2026-04")
+    assert state["reorg_ops"][0]["status"] == "applied"
     assert state["cells"]["HRB"]["art"]["reorg_doc_delta"] == 0
     assert state["cells"]["HRB"]["odi"]["reorg_doc_delta"] == 0
 ```
 
-(Build the `manager_with_cells*` fixtures with a real temp `month_root` containing/omitting the source PDF so the file-presence branch is exercised against the filesystem, per the no-DB-mocking rule. Use `_find_category_folder` to learn the expected folder layout, or set `op["source"]["file"]` to a name that does/doesn't exist under `month_root/HRB/<art folder>`.)
+(If `CATEGORY_FOLDERS` lives in a different module, find it with `grep -rn "CATEGORY_FOLDERS =" core/`. `_find_category_folder` matches a folder under the hospital dir by sigla; the `client` fixture in `test_cells_routes.py` proves `odi → "3.-ODI Visitas"` resolves, so naming folders via `CATEGORY_FOLDERS[sigla]` is the correct precedent.)
 
-- [ ] **Step 2: Run** → FAIL (function missing).
+- [ ] **Step 2: Run** `pytest tests/unit/api/test_reorg_routes.py -k refresh -v` → FAIL (function missing).
 
 - [ ] **Step 3: Implement** — add near `refresh_all_reliable`:
 
@@ -899,7 +932,7 @@ def export_reorg_manifest(
     return {"path": str(dest), "operation_count": len(manifest["operations"])}
 ```
 
-(Confirm `os` and `json` are imported in `sessions.py`; add if missing. Reuse `output.py`'s exact pattern if it differs — that file is the precedent.)
+(`os` is imported at `sessions.py:7`. **`json` is NOT imported at module level — add `import json` to the top imports.** Reuse `output.py`'s exact atomic-write pattern if it differs from the above — that file is the precedent; read it in Step 1.)
 
 - [ ] **Step 4: Run** → PASS.
 
@@ -952,10 +985,10 @@ git commit -m "feat(reorg): api.js createReorgOp/deleteReorgOp/exportManifest (I
 **Files:**
 - Modify: `frontend/src/store/session.js`
 
-- [ ] **Step 1:** Read `session.js` for the store shape (how `session` / `session.cells` / `session.reorg_ops` are held and how `saveNote` updates state). Add three actions:
-  - `addReorgOp(hospital, sigla, opDraft)` → `api.createReorgOp(sessionId, {op_type, source:{hospital,sigla,file,page_range?}, dest:{...}, ...})`; on success, **re-fetch full session** (`api.getSession`) and replace `session` in the store. Re-fetch (not client-side merge) because the backend recomputed deltas across possibly many cells — the server is the source of truth (avoids a fragile, divergent client merge).
-  - `deleteReorgOp(opId)` → `api.deleteReorgOp`; re-fetch session.
-  - `exportManifest()` → `api.exportManifest`; return `{path, operation_count}` for a toast; no state change.
+- [ ] **Step 1:** Read `session.js` for the store shape (how `session` / `session.cells` / `session.reorg_ops` are held and how `saveNote` updates state). **Match the existing action convention: every `api.*`-calling action takes `sessionId` as its explicit first param** (e.g. `saveNote(sessionId, hospital, sigla, patch)`, `saveOverride(sessionId, hospital, sigla, value)`). Add three actions with these **exact signatures**:
+  - `addReorgOp(sessionId, hospital, sigla, opDraft)` → `api.createReorgOp(sessionId, {op_type, source:{hospital, sigla, file, page_range?}, dest:{...}, ...})`; on success, **re-fetch full session** (`api.getSession(sessionId)`) and replace `session` in the store. Re-fetch (not client-side merge) because the backend recomputed deltas across possibly many cells — the server is the source of truth (avoids a fragile, divergent client merge). Confirm against `session.js` that the store holds `session` as a single replaceable object (it does — `setSession`/equivalent is used elsewhere); if the setter has a different name, use it.
+  - `deleteReorgOp(sessionId, opId)` → `api.deleteReorgOp`; re-fetch session.
+  - `exportManifest(sessionId)` → `api.exportManifest`; on success **call `toast.success(\`Manifiesto exportado — ${operation_count} operación(es)\`)`** (the store owns the success toast, mirroring how other actions toast; the component only invokes the action), then return `{path, operation_count}`.
   - Surface errors via the existing toast/error pattern (sonner) used by `saveOverride`/`saveNote`.
 
 - [ ] **Step 2: Commit**
@@ -971,7 +1004,12 @@ git commit -m "feat(reorg): store actions addReorgOp/deleteReorgOp/exportManifes
 - Create: `frontend/src/components/ReorganizacionPanel.jsx`
 - Test: `frontend/src/components/ReorganizacionPanel.test.jsx`
 
-- [ ] **Step 1: Write the failing test** — render with props `{ hospital, sigla, ops }` where `ops` includes one outgoing (`source` = this cell) and one incoming (`dest` = this cell) and one `applied`; assert: the net delta line shows the correct `+/−`; outgoing rows show `−doc_count → DEST`; incoming rows show `+doc_count ← SOURCE`; an `applied` op renders with the muted class; the export button is disabled when there are no `pending` ops. Use the project's existing component-test setup (vitest + @testing-library/react — match `WorkerHud`/cell-status test style).
+- [ ] **Step 1: Write the failing test** — use the project's existing component-test setup (vitest + @testing-library/react — match the `WorkerHud`/cell-status test style). Cover these cases explicitly:
+  - (a) `ops=[]` → renders an empty-state line ("Sin operaciones") and the export button is **disabled**.
+  - (b) `ops` with one outgoing (`source` = this cell) + one incoming (`dest` = this cell) → the net delta line shows the correct `+/−`; the outgoing row shows `−doc_count → DEST`; the incoming row shows `+doc_count ← SOURCE`.
+  - (c) an `applied` op renders with the muted class and **no** eliminar button.
+  - (d) export button enabled when ≥1 `pending` op; clicking it fires `onExport`.
+  - (e) clicking a row's eliminar button fires `onDelete` with that op's `id`.
 
 - [ ] **Step 2: Run** `cd frontend && npx vitest run src/components/ReorganizacionPanel.test.jsx` → FAIL.
 
@@ -999,9 +1037,25 @@ git commit -m "feat(reorg): ReorganizacionPanel — op list + net delta + export
 **Files:**
 - Modify: `frontend/src/components/DetailPanel.jsx`, `frontend/src/components/FileList.jsx`
 
-- [ ] **Step 1 (DetailPanel):** Read `DetailPanel.jsx` to find where the NOTA section (`<NotePanel>`) renders. Add a **REORGANIZACIÓN** section (same always-visible pattern) **after** NOTA, rendering `<ReorganizacionPanel hospital sigla ops={session.reorg_ops ?? []} onDelete={deleteReorgOp} onExport={exportManifest} />`.
+- [ ] **Step 1 (DetailPanel):** Read `DetailPanel.jsx` to find where the NOTA section (`<NotePanel>`) renders and how it pulls from the store (it currently reads only `session?.session_id`). Add the needed Zustand selectors near that read:
+  ```jsx
+  const sessionId = useSessionStore((s) => s.session?.session_id);
+  const reorgOps = useSessionStore((s) => s.session?.reorg_ops ?? []);
+  const deleteReorgOp = useSessionStore((s) => s.deleteReorgOp);
+  const exportManifest = useSessionStore((s) => s.exportManifest);
+  ```
+  (`reorg_ops` needs its **own selector** so the panel re-renders when ops change — reading it off a non-subscribed `session` object would not trigger a re-render.) Then add a **REORGANIZACIÓN** section (same always-visible pattern as NOTA) **after** NOTA, rendering:
+  ```jsx
+  <ReorganizacionPanel
+    hospital={hospital}
+    sigla={sigla}
+    ops={reorgOps}
+    onDelete={(opId) => deleteReorgOp(sessionId, opId)}
+    onExport={() => exportManifest(sessionId)}
+  />
+  ```
 
-- [ ] **Step 2 (FileList):** Read `FileList.jsx`. For each file row, add a "Reorganizar →" affordance opening a small menu/popover to create whole-file ops: choose `op_type` (`move_file` / `rotate` / reclasificar=`move_file`), destination `(hospital, sigla)` via selectors, optional empresa, optional rotation. On confirm, call `addReorgOp(srcHospital, srcSigla, draft)` (the store action) with `source.file = file.name`, no `page_range`. Use `po-*` tokens + shared primitives; keep it consistent with existing FileList affordances.
+- [ ] **Step 2 (FileList):** Read `FileList.jsx`. Its rows use a fixed CSS grid (currently `grid-cols-[minmax(0,1fr)_3rem_1.25rem_3.5rem_5.5rem]`). **Append a `2rem` column** for a `⋯` "Reorganizar" trigger (matches the existing chip-column widths; do not widen existing columns). The trigger opens a small menu/popover to create whole-file ops: choose `op_type` (`move_file` / `rotate` / reclasificar=`move_file`), destination `(hospital, sigla)` via selectors, optional empresa, optional rotation. On confirm, call the store action `addReorgOp(sessionId, srcHospital, srcSigla, draft)` with `source.file = file.name`, no `page_range`. Use `po-*` tokens + shared primitives; keep alignment consistent with existing FileList rows.
 
 - [ ] **Step 3: Verify** `cd frontend && npm run build` succeeds; run the full vitest suite `npx vitest run`.
 
@@ -1077,13 +1131,16 @@ git commit -m "feat(reorg): pure range-validation helper for viewer reorg mode (
 **Files:**
 - Modify: `frontend/src/components/WorkerCountViewer.jsx`
 
-- [ ] **Step 1:** Read `WorkerCountViewer.jsx` to learn its current props, page-nav state, and thumbnail/page rendering. Add:
+- [ ] **Step 1:** Read `WorkerCountViewer.jsx` to learn its current props, page-nav state, the keyboard handler (~lines 216-230: digits → pending buffer, PageDown → advance), and the autosave (`useDebouncedCallback` ~line 79 + the unmount `flushSave` ~lines 87-93). Add:
   - A new prop `mode` (`"worker"` default = current behavior; `"reorg"` = range selection). In `"reorg"`, do **not** render the worker-count HUD.
+  - **Gate the worker machinery in reorg mode (load-bearing — prevents silent data corruption):**
+    - **Keyboard handler:** wrap its body with `if (mode !== "reorg") { ... }` so digit/PageDown keys do **not** write worker marks while the operator is selecting a range.
+    - **Autosave/unmount flush:** skip the worker-count POST in reorg mode — `if (mode === "reorg") return;` before the debounced save and before the unmount `flushSave`. Otherwise stale worker marks would be POSTed to the worker-count endpoint on unmount.
   - Local state `reorgStartPage` / `reorgEndPage` (1-based, `null` until marked).
   - UI in reorg mode: "marcar inicio" / "marcar fin" buttons on the active page (and/or click two thumbnails); highlight the selected range on the thumbnail strip (a `po-*` highlight, not `/opacity`); a "Crear operación" control that picks `op_type` (`extract_pages` / `split_in_place` / `rotate`) + destination, validates with `isValidRange(start, end, totalPages)` (from `reorg-range.js`), and calls a new prop `onCreateOp(opDraft)` where `opDraft` carries `source.page_range = normalizeRange(start, end)`.
   - `onCreateOp` is wired by the container to the store's `addReorgOp`.
 
-- [ ] **Step 2: Verify** `cd frontend && npm run build` succeeds; `npx vitest run` (full suite green). Range logic is covered by T16; the viewer wiring is verified by build + the live smoke.
+- [ ] **Step 2: Verify** `cd frontend && npm run build` succeeds; `npx vitest run` (full suite green). Range logic is covered by T16; the viewer wiring + the mode gating are verified by build + the live smoke (confirm that opening the viewer in reorg mode and navigating pages does **not** mutate the cell's worker marks).
 
 - [ ] **Step 3: Commit**
 
