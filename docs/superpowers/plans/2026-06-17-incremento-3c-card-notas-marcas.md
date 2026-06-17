@@ -235,29 +235,29 @@ git commit -m "feat(state): v2->v3 cell migration — override_note to note/note
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `tests/unit/api/test_state.py` (reuse the module's existing manager/temp-db fixture — find how other tests obtain a `SessionManager` with a real session and copy that setup; do **not** mock the DB). The test seeds a session whose `state_json` contains a legacy `override_note`, then asserts a load migrates it and a second load does not rewrite:
+Add to `tests/unit/api/test_state.py`. Use the **existing `manager` fixture** (it yields a `SessionManager` with an already-open session `"2026-04"`; do **not** mock the DB; `json` is already imported at the top of the file). The test seeds a session whose `state_json` carries a legacy `override_note`, then asserts a load migrates it:
 
 ```python
-def test_load_and_migrate_chains_v2_to_v3(mgr_with_session):
-    mgr, session_id = mgr_with_session  # adapt to the file's actual fixture
-    # Seed a legacy override_note directly in the stored state.
-    state = mgr.get_session_state(session_id)
-    state.setdefault("cells", {}).setdefault("HLL", {})["dif_pts"] = {
+def test_load_and_migrate_chains_v2_to_v3(manager):
+    mgr = manager
+    from core.db.sessions_repo import update_session_state  # same import api/state.py uses
+
+    # Seed a legacy override_note directly in the stored state (bypass setters).
+    state = mgr.get_session_state("2026-04")
+    state.setdefault("cells", {}).setdefault("HPV", {})["odi"] = {
         "user_override": 2,
         "override_note": "compilado",
     }
-    from api.db import update_session_state  # adapt import to the real location
-    import json
-    update_session_state(mgr._conn, session_id, state_json=json.dumps(state))
+    update_session_state(mgr._conn, "2026-04", state_json=json.dumps(state))
 
-    migrated = mgr.get_session_state(session_id)  # triggers _load_and_migrate
-    cell = migrated["cells"]["HLL"]["dif_pts"]
+    migrated = mgr.get_session_state("2026-04")  # triggers _load_and_migrate
+    cell = migrated["cells"]["HPV"]["odi"]
     assert cell["note"] == "compilado"
     assert cell["note_status"] == "resuelto"
     assert "override_note" not in cell
 ```
 
-> If the file has no reusable "manager + session" fixture, model the setup on the nearest existing test in `test_state.py` that calls `mgr.apply_*` and `mgr.get_session_state`. The point is a REAL round-trip through sqlite.
+> The `manager` fixture lives at `tests/unit/api/test_state.py` (~line 56: opens session `2026-04` on a temp sqlite, yields `mgr`). `update_session_state` is imported in `api/state.py` from `core.db.sessions_repo` — match that import. This is a REAL round-trip through sqlite.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -299,38 +299,42 @@ git commit -m "feat(state): chain v2->v3 migration in _load_and_migrate"
 
 - [ ] **Step 1: Write the failing tests**
 
+Use the existing `manager` fixture (session `"2026-04"`); target the `HPV/odi` cell (`set_note` creates the cell via `setdefault`, so the folder need not exist):
+
 ```python
-def test_set_note_writes_text_and_status(mgr_with_session):
-    mgr, session_id = mgr_with_session
-    mgr.set_note(session_id, "HLL", "reunion", text="revisar firma", status="por_resolver")
-    cell = mgr.get_session_state(session_id)["cells"]["HLL"]["reunion"]
+def test_set_note_writes_text_and_status(manager):
+    mgr = manager
+    mgr.set_note("2026-04", "HPV", "odi", text="revisar firma", status="por_resolver")
+    cell = mgr.get_session_state("2026-04")["cells"]["HPV"]["odi"]
     assert cell["note"] == "revisar firma"
     assert cell["note_status"] == "por_resolver"
 
 
-def test_set_note_blank_clears_to_none(mgr_with_session):
-    mgr, session_id = mgr_with_session
-    mgr.set_note(session_id, "HLL", "reunion", text="algo", status="por_resolver")
-    mgr.set_note(session_id, "HLL", "reunion", text="   ", status="resuelto")
-    cell = mgr.get_session_state(session_id)["cells"]["HLL"]["reunion"]
+def test_set_note_blank_clears_to_none(manager):
+    mgr = manager
+    mgr.set_note("2026-04", "HPV", "odi", text="algo", status="por_resolver")
+    mgr.set_note("2026-04", "HPV", "odi", text="   ", status="resuelto")
+    cell = mgr.get_session_state("2026-04")["cells"]["HPV"]["odi"]
     assert cell["note"] is None
     assert cell["note_status"] is None
 
 
-def test_clear_override_does_not_touch_note(mgr_with_session):
-    mgr, session_id = mgr_with_session
-    mgr.set_note(session_id, "HLL", "reunion", text="ojo", status="por_resolver")
-    mgr.apply_user_override(session_id, "HLL", "reunion", value=7)
-    mgr.apply_user_override(session_id, "HLL", "reunion", value=None)  # clear
-    cell = mgr.get_session_state(session_id)["cells"]["HLL"]["reunion"]
+def test_clear_override_does_not_touch_note(manager):
+    mgr = manager
+    mgr.set_note("2026-04", "HPV", "odi", text="ojo", status="por_resolver")
+    mgr.apply_user_override("2026-04", "HPV", "odi", value=7)
+    mgr.apply_user_override("2026-04", "HPV", "odi", value=None)  # clear override
+    cell = mgr.get_session_state("2026-04")["cells"]["HPV"]["odi"]
     assert cell["user_override"] is None
     assert cell["note"] == "ojo"
     assert cell["note_status"] == "por_resolver"
 ```
 
-Then update the **existing** override tests in `test_state.py` that reference the dropped `note` param / `override_note` field (grep `override_note` in this file — lines ~104, ~453, ~463, ~489):
-- Tests calling `apply_user_override(..., note="...")` → remove the `note=` kwarg.
-- Asserts `cell["override_note"] == "..."` / `is None` → replace with the note path (`cell.get("note")`), or delete if they were only checking the legacy coupling. Use judgment per test intent; the new behavior is "override carries no note".
+> Note: after this task `apply_user_override`'s signature is `(session_id, hospital, sigla, *, value, manual=False)` — `value` is keyword-only and there is no `note` param.
+
+Then update the **existing** override tests in `test_state.py` that reference the dropped `note` param / `override_note` field. Run `git grep -n "note=\|override_note" tests/unit/api/test_state.py` to find them (the reviewer located them near lines ~104, ~448-471, ~489):
+- For each `apply_user_override(..., note="...")` call → remove the `note=` kwarg.
+- For each `assert cell["override_note"] == "..."` / `is None` → replace with the note path (`assert cell.get("note") == ...` / `is None`), or delete if it was only asserting the legacy coupling. The new behavior is "override carries no note".
 
 - [ ] **Step 2: Run to verify the new tests fail**
 
@@ -380,7 +384,9 @@ Expected: FAIL — `AttributeError: 'SessionManager' object has no attribute 'se
 
 (b) In `apply_user_override`: remove the `note: str | None,` parameter; remove the line `cell["override_note"] = note if value is not None else None`; rewrite the docstring to drop all note language (it now sets only `user_override` + `manual_entry`).
 
-(c) Delete the line `cell.setdefault("override_note", None)` from `apply_filename_result`, `apply_ocr_result`, and both occurrences in `finalize_cell_ocr`. In the `apply_filename_result` docstring, change "Never touches ocr_count, user_override, or override_note." to "Never touches ocr_count, user_override, note, or note_status."
+(c) Delete the line `cell.setdefault("override_note", None)` from `apply_filename_result` (~192), `apply_ocr_result` (~224), and both occurrences in `finalize_cell_ocr` (~286, ~332) — four lines total. In the `apply_filename_result` docstring, change "Never touches ocr_count, user_override, or override_note." to "Never touches ocr_count, user_override, note, or note_status." (`apply_per_file_ocr_result` was audited: it has **no** `override_note` setdefault — only `per_file`/`per_file_method`/`near_matches` — so no change there.)
+
+> **Why all four:** these setters run **after** `_load_and_migrate` (which popped `override_note` and added `note`/`note_status`). If any of them re-`setdefault`s `override_note`, the next load's v2→v3 pops it again → `changed=True` on every load → DB rewritten every load (the churn Task 1 prevents). Removing all four re-adders is what keeps the chained migration idempotent.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -450,12 +456,13 @@ git commit -m "feat(sessions): compute_settled gates amber on por_resolver note"
 
 - [ ] **Step 1: Write the failing tests**
 
-Use the module's existing TestClient + real session fixture (copy from the `patch_override` / `patch_worker_count` tests in this file — no DB mock):
+Use the module's existing `client` fixture + the `_open_and_scan(client)` helper (returns the session-id **string**); target the `HPV/odi` cell the fixture scans into existence (no DB mock):
 
 ```python
-def test_patch_note_persists_text_and_status(client, session_id):
+def test_patch_note_persists_text_and_status(client):
+    sess = _open_and_scan(client)
     r = client.patch(
-        f"/api/sessions/{session_id}/cells/HLL/reunion/note",
+        f"/api/sessions/{sess}/cells/HPV/odi/note",
         json={"text": "revisar firma", "status": "por_resolver"},
     )
     assert r.status_code == 200
@@ -464,22 +471,24 @@ def test_patch_note_persists_text_and_status(client, session_id):
     assert body["note_status"] == "por_resolver"
 
 
-def test_patch_note_blank_clears(client, session_id):
+def test_patch_note_blank_clears(client):
+    sess = _open_and_scan(client)
     client.patch(
-        f"/api/sessions/{session_id}/cells/HLL/reunion/note",
+        f"/api/sessions/{sess}/cells/HPV/odi/note",
         json={"text": "algo", "status": "por_resolver"},
     )
     r = client.patch(
-        f"/api/sessions/{session_id}/cells/HLL/reunion/note",
+        f"/api/sessions/{sess}/cells/HPV/odi/note",
         json={"text": "", "status": "resuelto"},
     )
     assert r.json()["note"] is None
     assert r.json()["note_status"] is None
 
 
-def test_patch_note_rejects_bad_status(client, session_id):
+def test_patch_note_rejects_bad_status(client):
+    sess = _open_and_scan(client)
     r = client.patch(
-        f"/api/sessions/{session_id}/cells/HLL/reunion/note",
+        f"/api/sessions/{sess}/cells/HPV/odi/note",
         json={"text": "x", "status": "no_existe"},
     )
     assert r.status_code == 422  # Literal validation
@@ -487,22 +496,24 @@ def test_patch_note_rejects_bad_status(client, session_id):
 
 def test_patch_note_unknown_session_404(client):
     r = client.patch(
-        "/api/sessions/2099-01/cells/HLL/reunion/note",
+        "/api/sessions/2099-01/cells/HPV/odi/note",
         json={"text": "x", "status": "por_resolver"},
     )
     assert r.status_code == 404
 
 
-def test_patch_override_response_has_no_note(client, session_id):
+def test_patch_override_response_has_no_note(client):
+    sess = _open_and_scan(client)
+    # value=1 stays within the ≤páginas cap (odi PDF is 1 page).
     r = client.patch(
-        f"/api/sessions/{session_id}/cells/HLL/reunion/override",
-        json={"value": 5},
+        f"/api/sessions/{sess}/cells/HPV/odi/override",
+        json={"value": 1},
     )
     assert r.status_code == 200
     assert "override_note" not in r.json()
 ```
 
-Also update the **existing** override test that asserts `body["override_note"] == "revisado"` (`test_cells_routes.py` ~line 51): drop the note from its request body and remove/replace that assertion (override no longer carries a note).
+Also update the **existing** `test_patch_override_sets_value` (`test_cells_routes.py` ~lines 40-51): it currently sends `json={"value": 1, "note": "revisado"}` and asserts `body["override_note"] == "revisado"`. Drop `"note": "revisado"` from the body and delete the `assert body["override_note"] == "revisado"` line (keep `assert body["user_override"] == 1`). Override no longer carries a note.
 
 - [ ] **Step 2: Run to verify failures**
 
@@ -671,7 +682,16 @@ In `session.js` `saveOverride`: change the signature to `(sessionId, hospital, s
 
 - [ ] **Step 4: strip the note textarea from OverridePanel**
 
-In `OverridePanel.jsx`: remove the `note`/`setNote` state, the `cell?.override_note` resync `useEffect` (lines ~31-33), the `focused.note` handling, `onChangeNote`, and the entire `<textarea>` block (lines ~89-102). Keep the numeric input, the `invalid` máx-páginas hint, and `SaveIndicator`. `flushSave` now takes only the value.
+In `OverridePanel.jsx`: remove the `note`/`setNote` state (line ~16), the `cell?.override_note` resync `useEffect` (lines ~31-33), the `focused.note` handling, `onChangeNote` (lines ~55-60), and the entire `<textarea>` block (lines ~89-102). Keep the numeric input, the `invalid` máx-páginas hint, and `SaveIndicator`.
+
+**Critical — collapse `flushSave` + its call to drop the `note` arg** (otherwise deleting `note` leaves a dangling reference → build error):
+```js
+  const flushSave = useDebouncedCallback((v) => {
+    const numericValue = v === "" || v === null ? null : parseInt(v, 10);
+    saveOverride(session.session_id, hospital, sigla, numericValue);
+  }, 400);
+```
+and update `onChangeValue`'s call from `flushSave(parsed === null ? "" : String(parsed), note)` to `flushSave(parsed === null ? "" : String(parsed))` (line ~53). `setFocused`/`focused` can drop the `note` key (only `value` remains).
 
 - [ ] **Step 5: verify — no caller passes a note; build + lint**
 
@@ -870,7 +890,7 @@ export default function NotePanel({ hospital, sigla, cell }) {
 }
 ```
 
-> If `Badge` has no `amber`/`jade` tone, use the tones it does expose for warn/ok (per `feedback_chip_consistency`, Badge tones iris/jade/amber map to `po-*` tokens — confirm in `frontend/src/ui/Badge.jsx` and adjust the tone names if needed). Never use `/opacity`.
+> `Badge` (`frontend/src/ui/Badge.jsx`) exposes the `amber` and `jade` tones used here (they map to `po-*` tokens — `feedback_chip_consistency`). Use them directly. Never use `/opacity`.
 
 - [ ] **Step 2: verify build**
 
@@ -1062,7 +1082,7 @@ In the header row `<div className="flex items-center justify-between mb-3">` (wh
         {workerChip && <Badge variant={workerChip.variant}>{workerChip.label}</Badge>}
 ```
 
-> Confirm `Badge` exposes `jade`/`amber`/`neutral` tones (it's the shared primitive used by `WorkerHud`/`DetailPanel`); if a tone name differs, match the primitive. Never use `/opacity`.
+> `Badge` exposes `jade`/`amber`/`neutral` (the shared primitive used by `WorkerHud`/`DetailPanel`/`HospitalCard`'s Dots). Use them directly. Never use `/opacity`.
 
 - [ ] **Step 3: verify build + that worker fields survive store updates**
 
@@ -1084,7 +1104,7 @@ git commit -m "feat(ui): aggregate worker status chip on hospital card (M2)"
 
 - [ ] **Step 1: add imports + ref + effect**
 
-Change the top import to `import { useEffect, useRef } from "react";` (add to the existing imports). Inside `WorkerHud`, after `const pageMarks = …`:
+`WorkerHud.jsx` has no React import yet (only the `lucide-react` line). **Add a new line** at the top, before the lucide import: `import { useEffect, useRef } from "react";`. Inside `WorkerHud`, after `const pageMarks = …`:
 ```jsx
   const currentRowRef = useRef(null);
   useEffect(() => {
