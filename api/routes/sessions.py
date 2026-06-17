@@ -209,6 +209,11 @@ def refresh_reorg_deltas(
     present in its origin folder is marked ``applied`` and stops contributing a delta
     (the move is now physical reality; counting both would double-count).
 
+    Two-call pattern (get-then-set, like ``refresh_all_reliable``): safe here because
+    the only writer to ``reorg_ops`` is the same synchronous HTTP tier (scan + the
+    op-CRUD endpoints). The background OCR drain thread never touches ``reorg_ops``
+    (it only writes per-file/cell OCR fields), so no concurrent edit is lost.
+
     Args:
         mgr: The active SessionManager.
         session_id: Target session identifier.
@@ -224,9 +229,12 @@ def refresh_reorg_deltas(
             if op.get("status") != "pending":
                 continue
             src = op["source"]
+            file = src.get("file")
+            if file is None:
+                continue  # malformed op (validation requires a file); never auto-apply
             folder = _find_category_folder(month_root / src["hospital"], src["sigla"])
             present = set(cell_page_counts(folder)) if folder.exists() else set()
-            if src.get("file") not in present:
+            if file not in present:
                 op["status"] = "applied"
 
     deltas: dict[tuple[str, str], dict] = {}

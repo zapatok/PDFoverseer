@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -92,6 +91,30 @@ def test_check_applied_marks_gone_source_as_applied(reorg_mgr):
     assert state["reorg_ops"][0]["status"] == "applied"
     assert state["cells"]["HRB"]["art"]["reorg_doc_delta"] == 0
     assert state["cells"]["HRB"]["odi"]["reorg_doc_delta"] == 0
+
+
+def test_check_applied_skips_op_without_source_file(reorg_mgr):
+    """A malformed op missing source.file must never auto-apply (guard: file is None →
+    `None not in present` would otherwise be True for any non-empty folder)."""
+    from api.routes.sessions import refresh_reorg_deltas
+
+    mgr, _ = reorg_mgr
+    mgr.add_reorg_op(
+        "2026-04",
+        {
+            "op_type": "rotate",
+            "source": {"hospital": "HRB", "sigla": "art"},  # no "file"
+            "dest": {"hospital": "HRB", "sigla": "art"},
+            "doc_count": 0,
+            "worker_count": 0,
+            "status": "pending",
+        },
+    )
+    refresh_reorg_deltas(mgr, "2026-04", check_applied=True)
+    fileless = next(
+        o for o in mgr.get_session_state("2026-04")["reorg_ops"] if "file" not in o["source"]
+    )
+    assert fileless["status"] == "pending"  # guard kept it pending
 
 
 # ── Task 7: POST /scan wires refresh_reorg_deltas(check_applied=True) ─────
