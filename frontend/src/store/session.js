@@ -489,6 +489,72 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
+  saveNote: async (sessionId, hospital, sigla, patch) => {
+    const key = `${hospital}|${sigla}|note`;
+    const controller = new AbortController();
+
+    set((prev) => {
+      const existing = prev._pendingSave.get(key);
+      if (existing?.controller) existing.controller.abort();
+      const nextPending = new Map(prev._pendingSave);
+      nextPending.set(key, { controller });
+      return {
+        _pendingSave: nextPending,
+        pendingSaves: { ...prev.pendingSaves, [key]: "saving" },
+      };
+    });
+
+    try {
+      const result = await api.patchNote(
+        sessionId, hospital, sigla, patch, { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
+
+      set((prev) => {
+        if (!prev.session) return {};
+        const cells = { ...prev.session.cells };
+        const hosp = { ...cells[hospital] };
+        hosp[sigla] = {
+          ...hosp[sigla],
+          note: result.note,
+          note_status: result.note_status,
+        };
+        cells[hospital] = hosp;
+        const cleanedPending = new Map(prev._pendingSave);
+        if (cleanedPending.get(key)?.controller === controller) {
+          cleanedPending.delete(key);
+        }
+        return {
+          session: { ...prev.session, cells },
+          _pendingSave: cleanedPending,
+          pendingSaves: { ...prev.pendingSaves, [key]: "saved" },
+        };
+      });
+
+      setTimeout(() => {
+        set((prev) => {
+          if (prev.pendingSaves[key] !== "saved") return {};
+          const np = { ...prev.pendingSaves };
+          delete np[key];
+          return { pendingSaves: np };
+        });
+      }, 2000);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      set((prev) => {
+        const cleanedPending = new Map(prev._pendingSave);
+        if (cleanedPending.get(key)?.controller === controller) {
+          cleanedPending.delete(key);
+        }
+        return {
+          _pendingSave: cleanedPending,
+          pendingSaves: { ...prev.pendingSaves, [key]: "error" },
+          error: String(error),
+        };
+      });
+    }
+  },
+
   openLightbox: (hospital, sigla, fileIndex = 0, mode = "inspect") =>
     set({ lightbox: { hospital, sigla, fileIndex, mode } }),
   closeLightbox: () => set({ lightbox: null }),

@@ -88,6 +88,20 @@ export const api = {
     return r.json();
   },
 
+  patchNote: async (sessionId, hospital, sigla, patch, opts = {}) => {
+    const r = await fetch(
+      `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/note`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+        signal: opts.signal,
+      }
+    );
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+
   patchConfirm: async (sessionId, hospital, sigla, confirmed, opts = {}) => {
     const r = await fetch(
       `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/confirm`,
