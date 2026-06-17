@@ -45,31 +45,17 @@ def _sum_marks(cell: dict, present_files: set[str] | None = None) -> int:
     return total
 
 
-def compute_cell_count(
+def _base_count(
     cell: dict,
     count_type: str = "documents",
     present_files: set[str] | None = None,
 ) -> int:
-    """Cell count derivation per FASE 4 §6.2 precedence.
+    """Base cell count per FASE 4 §6.2 precedence (the pre-Incr-J cascade).
 
-    1. ``user_override`` (FASE 2 escape hatch) wins absolutely.
-    2. ``count_type == "checks"`` → sum of ``worker_marks`` filtered by
-       ``present_files`` (maquinaria check-tally regime).
-    3. ``per_file_overrides`` ∪ ``per_file`` → derived sum (a per-file override
-       wins over that file's scanned ``per_file`` value).
+    1. ``user_override`` wins absolutely.
+    2. ``count_type == "checks"`` → ``_sum_marks`` filtered by ``present_files``.
+    3. ``per_file_overrides`` ∪ ``per_file`` → derived sum.
     4. Fallback: ``ocr_count`` or ``filename_count`` or 0.
-
-    Args:
-        cell: the persisted state dict of a single cell.
-        count_type: ``"documents"`` (default), ``"documents_workers"``, or
-            ``"checks"``.  Only ``"checks"`` changes the derivation path; the
-            other two follow the same document-count cascade.
-        present_files: set of PDF filenames currently present in the cell
-            folder (used by the ``"checks"`` path to discard orphan marks).
-            Pass ``None`` to use legacy per_file-based filtering.
-
-    Returns:
-        The effective document (or check-tally) count for the cell.
     """
     if cell.get("user_override") is not None:
         return cell["user_override"]
@@ -84,3 +70,39 @@ def compute_cell_count(
         return sum(per_file_overrides.get(f, per_file.get(f, 0)) for f in all_files)
 
     return cell.get("ocr_count") or cell.get("filename_count") or 0
+
+
+def compute_cell_count(
+    cell: dict,
+    count_type: str = "documents",
+    present_files: set[str] | None = None,
+) -> int:
+    """Effective cell count = base cascade + the Incr-J reorg delta (additive
+    on top of every base path, including ``user_override`` and ``checks``).
+
+    The base cascade (FASE 4 §6.2 precedence) is delegated to ``_base_count``:
+
+    1. ``user_override`` (FASE 2 escape hatch) wins absolutely.
+    2. ``count_type == "checks"`` → sum of ``worker_marks`` filtered by
+       ``present_files`` (maquinaria check-tally regime).
+    3. ``per_file_overrides`` ∪ ``per_file`` → derived sum (a per-file override
+       wins over that file's scanned ``per_file`` value).
+    4. Fallback: ``ocr_count`` or ``filename_count`` or 0.
+
+    ``reorg_doc_delta`` (Incr J) is then added unconditionally on top of the
+    base result, for all ``count_type`` values.
+
+    Args:
+        cell: the persisted state dict of a single cell.
+        count_type: ``"documents"`` (default), ``"documents_workers"``, or
+            ``"checks"``.  Only ``"checks"`` changes the derivation path; the
+            other two follow the same document-count cascade.
+        present_files: set of PDF filenames currently present in the cell
+            folder (used by the ``"checks"`` path to discard orphan marks).
+            Pass ``None`` to use legacy per_file-based filtering.
+
+    Returns:
+        The effective document (or check-tally) count for the cell.
+    """
+    base = _base_count(cell, count_type, present_files)
+    return base + (cell.get("reorg_doc_delta") or 0)
