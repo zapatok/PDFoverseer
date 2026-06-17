@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2, Ratio } from "lucide-react";
+import NotePanel from "./NotePanel";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
 import Badge from "../ui/Badge";
@@ -433,6 +434,9 @@ export default function DetailPanel({ hospital, sigla, cell }) {
           />
         </>
       )}
+
+      <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Nota</h4>
+      <NotePanel hospital={hospital} sigla={sigla} cell={cell} />
 
       {/* Worker/checks counting module: documents_workers (charla/chintegral/dif_pts)
           and checks (maquinaria). dif_pts wired to N15 in Incr 3B. Keep above
