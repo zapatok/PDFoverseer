@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Mic, MicOff } from "lucide-react";
 
 import Badge from "../ui/Badge";
@@ -43,6 +44,11 @@ export function WorkerHud({
 }) {
   const pageMarks = [...(marks[currentFilename] || [])].sort((a, b) => a.page - b.page);
 
+  const currentRowRef = useRef(null);
+  useEffect(() => {
+    currentRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [pageInFile]);
+
   return (
     <aside className="flex w-72 flex-col gap-4 border-l border-po-border bg-po-panel p-4">
       <div className="grid grid-cols-3 gap-2">
@@ -64,12 +70,23 @@ export function WorkerHud({
           <p className="text-sm text-po-text-subtle">Sin marcas en este archivo.</p>
         ) : (
           <ul className="text-sm">
-            {pageMarks.map((m) => (
-              <li key={m.page} className="flex justify-between py-0.5">
-                <span className="text-po-text-muted">Página {m.page}</span>
-                <span className="font-mono tabular-nums text-po-text">{m.count}</span>
-              </li>
-            ))}
+            {pageMarks.map((m) => {
+              const isCurrent = m.page === pageInFile;
+              return (
+                <li
+                  key={m.page}
+                  ref={isCurrent ? currentRowRef : null}
+                  className={`flex justify-between py-0.5 px-1 rounded ${
+                    isCurrent ? "bg-po-panel-hover border-l-2 border-po-accent" : ""
+                  }`}
+                >
+                  <span className={isCurrent ? "font-medium text-po-text" : "text-po-text-muted"}>
+                    Página {m.page}
+                  </span>
+                  <span className="font-mono tabular-nums text-po-text">{m.count}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
