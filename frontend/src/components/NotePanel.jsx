@@ -5,6 +5,9 @@ import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import SaveIndicator from "../ui/SaveIndicator";
 
+// N1 (Incr 3C): per-cell note with state, decoupled from the override. A
+// por_resolver note forces the cell dot amber (see isCellReady) without
+// blocking actions; resuelto is read-only until reopened. Blank clears it.
 export default function NotePanel({ hospital, sigla, cell }) {
   const session = useSessionStore((s) => s.session);
   const saveNote = useSessionStore((s) => s.saveNote);
@@ -33,11 +36,17 @@ export default function NotePanel({ hospital, sigla, cell }) {
     flush(v, "por_resolver");
   };
 
-  const markResolved = () =>
+  // Explicit status changes are authoritative: cancel any pending debounced
+  // text-save first, or it would fire ~400 ms later and revert the status.
+  const markResolved = () => {
+    flush.cancel();
     saveNote(session.session_id, hospital, sigla, { text, status: "resuelto" });
+  };
 
-  const reopen = () =>
+  const reopen = () => {
+    flush.cancel();
     saveNote(session.session_id, hospital, sigla, { text, status: "por_resolver" });
+  };
 
   return (
     <div className="space-y-2">
@@ -61,7 +70,7 @@ export default function NotePanel({ hospital, sigla, cell }) {
         }`}
       />
       {status === "por_resolver" && (
-        <Button variant="secondary" onClick={markResolved}>
+        <Button variant="secondary" onClick={markResolved} disabled={text.trim() === ""}>
           Marcar resuelta
         </Button>
       )}
