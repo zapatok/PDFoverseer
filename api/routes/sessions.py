@@ -115,12 +115,15 @@ def compute_settled(
 ) -> bool:
     """True iff the cell is 'listo' (green) by provenance.
 
+    A ``por_resolver`` note blocks settlement unconditionally (checked first).
     checks (maquinaria): settled iff ``worker_status == 'terminado'`` (human
     verification of the manual tally) — short-circuits before touching the folder.
     Otherwise: every PDF in *folder* is reliable (origin ∈ {R1, RN, Manual});
     empty/missing folder → False. Lazy pages — pass a precomputed ``pages`` dict
     to avoid reopening PDFs the caller already read.
     """
+    if cell.get("note_status") == "por_resolver":
+        return False
     if count_type == "checks":
         return cell.get("worker_status") == "terminado"
     if pages is None:

@@ -109,3 +109,18 @@ def test_get_pdf_negative_index_returns_400(client) -> None:
     sess = _open_and_scan(client)
     r = client.get(f"/api/sessions/{sess}/cells/HPV/odi/pdf?index=-1")
     assert r.status_code == 400
+
+
+def test_compute_settled_por_resolver_forces_false(tmp_path) -> None:
+    from api.routes.sessions import compute_settled
+
+    # empty folder is fine; the note gate short-circuits before the folder walk
+    cell = {"worker_status": "terminado", "note_status": "por_resolver"}
+    assert compute_settled(cell, tmp_path, count_type="checks") is False
+
+
+def test_compute_settled_resuelto_does_not_block(tmp_path) -> None:
+    from api.routes.sessions import compute_settled
+
+    cell = {"worker_status": "terminado", "note_status": "resuelto"}
+    assert compute_settled(cell, tmp_path, count_type="checks") is True
