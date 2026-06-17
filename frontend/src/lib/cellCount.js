@@ -54,8 +54,13 @@ export function _sumMarks(cell, presentFiles = null) {
 
 // count_type === "checks" (maquinaria) → la cuenta es el tally de chequeos
 // (_sumMarks), no la cascada de documentos. user_override sigue ganando.
-export function computeCellCount(cell, countType = "documents", presentFiles = null) {
+// Incr J: + reorg_doc_delta additive on top of every base path.
+function _baseCount(cell, countType = "documents", presentFiles = null) {
   if (cell?.user_override != null) return cell.user_override;
   if (countType === "checks") return _sumMarks(cell, presentFiles);
   return computeFilesCount(cell);
+}
+
+export function computeCellCount(cell, countType = "documents", presentFiles = null) {
+  return _baseCount(cell, countType, presentFiles) + (cell?.reorg_doc_delta ?? 0);
 }

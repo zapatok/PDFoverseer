@@ -129,3 +129,18 @@ describe("computeCellCount with count_type='checks'", () => {
     expect(computeCellCount(cell, "documents")).toBe(3);
   });
 });
+
+describe("reorg_doc_delta (Incr J)", () => {
+  it("is additive on the per_file base", () => {
+    expect(computeCellCount({ per_file: { "a.pdf": 3 } })).toBe(3);
+    expect(computeCellCount({ per_file: { "a.pdf": 3 }, reorg_doc_delta: 2 })).toBe(5);
+    expect(computeCellCount({ per_file: { "a.pdf": 3 }, reorg_doc_delta: -1 })).toBe(2);
+  });
+  it("respects user_override as base", () => {
+    expect(computeCellCount({ user_override: 10, reorg_doc_delta: 2 })).toBe(12);
+  });
+  it("applies to checks", () => {
+    const cell = { worker_marks: { "a.pdf": [{ page: 1, count: 4 }] }, reorg_doc_delta: 1 };
+    expect(computeCellCount(cell, "checks", ["a.pdf"])).toBe(5);
+  });
+});
