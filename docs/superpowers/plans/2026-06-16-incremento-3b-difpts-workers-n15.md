@@ -33,14 +33,14 @@
 
 **Files:**
 - Modify (binary): `data/templates/RESUMEN_template_v1.xlsx` (authoritative artifact — hand-patched; openpyxl round-trip risk, see protocol)
-- Create: `tests/unit/test_template_difpts_n15.py`
+- Create: `tests/unit/excel/test_template_difpts_n15.py`
 
 > ⚠️ **Data-safety + round-trip risk.** The `.xlsx` carries hand-patches openpyxl may not round-trip (logo image, merges, number formats). The PreToolUse deliverable-guard hook does NOT fire on a subprocess/openpyxl write, so **back up manually**. After editing, **render-compare** against the backup and **assert the logo image survived** before trusting it. If anything regressed, revert to the backup and fall back to a surgical XML edit (see fallback note).
 
 - [ ] **Step 1: Write the regression test (fails first)**
 
 ```python
-# tests/unit/test_template_difpts_n15.py
+# tests/unit/excel/test_template_difpts_n15.py
 """Incr 3B: the template wires HPV dif_pts worker total to N15 (no =M15*0.5 fallback)."""
 from pathlib import Path
 
@@ -93,7 +93,7 @@ def test_logo_image_survived_round_trip():
 
 - [ ] **Step 2: Run → verify it fails**
 
-Run: `pytest tests/unit/test_template_difpts_n15.py -v`
+Run: `pytest tests/unit/excel/test_template_difpts_n15.py -v`
 Expected: FAIL (`HPV_workers_difpts` not in defined_names; N15 == "=M15*0.5"; 8 worker ranges).
 
 - [ ] **Step 3: Back up the template (dated)**
@@ -143,13 +143,13 @@ Then Read both PDFs. Confirm: logo present, header merges, number formats, the t
 
 - [ ] **Step 6: Run the test → passes**
 
-Run: `pytest tests/unit/test_template_difpts_n15.py -v`
+Run: `pytest tests/unit/excel/test_template_difpts_n15.py -v`
 Expected: PASS (all 5).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add data/templates/RESUMEN_template_v1.xlsx tests/unit/test_template_difpts_n15.py
+git add data/templates/RESUMEN_template_v1.xlsx tests/unit/excel/test_template_difpts_n15.py
 git commit -m "feat(excel): wire HPV dif_pts worker total to N15 (template)
 
 Add named range HPV_workers_difpts -> N15 and clear the =M15*0.5
@@ -510,9 +510,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Add the import**
 
-At the top imports, add (next to the existing `../lib/...` imports):
+DetailPanel.jsx **already imports** from `../lib/cell-status` (line 17:
+`import { hasOverride, isCappedCountType } from "../lib/cell-status";`). Add
+`showsWorkerCounter` to that **existing** import (avoid a duplicate-source import line):
 ```jsx
-import { showsWorkerCounter } from "../lib/cell-status";
+import { hasOverride, isCappedCountType, showsWorkerCounter } from "../lib/cell-status";
 ```
 
 - [ ] **Step 2: Replace the gate + comment**
@@ -544,7 +546,7 @@ Expected: build OK; all vitest pass.
 
 - [ ] **Step 4: Manual reasoning check (no render infra)**
 
-Confirm by reading: `countType` is derived at DetailPanel.jsx line 241 via `countTypeFor(sigla)`. For `dif_pts` that is `"documents_workers"` → `showsWorkerCounter` → true → `WorkerCountModule` renders. Document controls remain gated on `!isChecks` (line 385), so dif_pts (not checks) keeps them → both modules show, like charla/chintegral. Voice is handled in `WorkerCountViewer.jsx` (`isWorkersMode = countTypeFor(sigla) === "documents_workers"`) → dif_pts gets voice with no change.
+Confirm by reading: `countType` is derived at DetailPanel.jsx line 241 via `countTypeFor(sigla)`. For `dif_pts` that is `"documents_workers"` → `showsWorkerCounter` → true → `WorkerCountModule` renders. Document controls remain gated on `!isChecks` (line 385), so dif_pts (not checks) keeps them → both modules show, like charla/chintegral. Voice is handled in `WorkerCountViewer.jsx` (line ~116: `const isWorkersMode = countType === "documents_workers";`, off the `countType` prop DetailPanel already passes) → dif_pts gets voice with no change to that file.
 
 - [ ] **Step 5: Commit**
 
