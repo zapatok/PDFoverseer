@@ -786,7 +786,12 @@ def patch_worker_count(
 
 
 class NotePatch(BaseModel):
-    """Body del PATCH note. text vacío/None borra la nota."""
+    """Body del PATCH note. text vacío/None borra la nota.
+
+    ``status`` no es nullable y nace en ``"por_resolver"`` (D4): una nota creada
+    sin estado explícito queda pendiente (fuerza el punto ámbar), preservando el
+    invariante nota⟺estado.
+    """
 
     text: str | None = None
     status: Literal["por_resolver", "resuelto"] = "por_resolver"
@@ -809,7 +814,12 @@ def patch_note(
         raise HTTPException(status_code=404, detail=f"Sesión {session_id} no encontrada") from exc
     state = mgr.get_session_state(session_id)
     month_root = Path(state.get("month_root", ""))
-    folder = _find_category_folder(month_root / hospital, sigla)
+    # _find_category_folder raises KeyError for an unknown sigla → 404 (distinct
+    # from the unknown-session 404 above), not an unhandled 500.
+    try:
+        folder = _find_category_folder(month_root / hospital, sigla)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Categoría {sigla} desconocida") from exc
     refresh_all_reliable(mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla))
     cell = mgr.get_session_state(session_id)["cells"].get(hospital, {}).get(sigla, {})
     return {

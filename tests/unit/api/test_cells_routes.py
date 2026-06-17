@@ -188,6 +188,16 @@ def test_patch_note_unknown_session_404(client) -> None:
     assert r.status_code == 404
 
 
+def test_patch_note_unknown_sigla_404(client) -> None:
+    # An unknown sigla must be a clean 404 (category folder lookup), not a 500.
+    sess = _open_and_scan(client)
+    r = client.patch(
+        f"/api/sessions/{sess}/cells/HPV/no_existe/note",
+        json={"text": "x", "status": "por_resolver"},
+    )
+    assert r.status_code == 404
+
+
 def test_patch_override_response_has_no_note(client) -> None:
     sess = _open_and_scan(client)
     # value=1 stays within the ≤páginas cap (odi PDF is 1 page)
