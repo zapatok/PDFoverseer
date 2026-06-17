@@ -251,4 +251,13 @@ describe("hospitalWorkerStatus", () => {
     };
     expect(hospitalWorkerStatus(cells)).toBe("listo");
   });
+
+  it("counts a worker cell relevant via the doc-count fallback (no per_file)", () => {
+    // cellHasFiles fallback: per_file absent but documents > 0 → still relevant.
+    expect(
+      hospitalWorkerStatus({ charla: { filename_count: 3, worker_status: "terminado" } }),
+    ).toBe("listo");
+    // Relevant via fallback but not started → pendiente.
+    expect(hospitalWorkerStatus({ charla: { ocr_count: 5 } })).toBe("pendiente");
+  });
 });
