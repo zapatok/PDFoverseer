@@ -6,6 +6,7 @@ import {
   dotVariantFor,
   hasOverride,
   isCellReady,
+  showsWorkerCounter,
 } from "./cell-status";
 
 describe("isCellReady (honest provenance)", () => {
@@ -170,5 +171,20 @@ describe("dotVariantFor", () => {
   it("a cell with no data yet stays neutral", () => {
     expect(dotVariantFor(undefined)).toBe("neutral");
     expect(dotVariantFor(null)).toBe("neutral");
+  });
+});
+
+describe("showsWorkerCounter", () => {
+  it("shows for documents_workers (charla/chintegral/dif_pts)", () => {
+    expect(showsWorkerCounter("documents_workers")).toBe(true);
+  });
+  it("shows for checks (maquinaria)", () => {
+    expect(showsWorkerCounter("checks")).toBe(true);
+  });
+  it("hides for plain documents", () => {
+    expect(showsWorkerCounter("documents")).toBe(false);
+  });
+  it("hides for unknown/undefined count_type", () => {
+    expect(showsWorkerCounter(undefined)).toBe(false);
   });
 });

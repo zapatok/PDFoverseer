@@ -61,6 +61,12 @@ export function isCellReady(cell, countType = "documents") {
   return cell?.all_reliable ?? allFilesReliable(cell);
 }
 
+// Incr 3B: which DetailPanel counting module a cell's count_type implies.
+// The worker/checks counter shows for documents_workers (charla/chintegral/dif_pts)
+// and checks (maquinaria); plain documents siglas show only the document controls.
+export const showsWorkerCounter = (countType) =>
+  countType === "checks" || countType === "documents_workers";
+
 // Dot tone. Scanning/error take precedence; a cell with no data yet stays
 // neutral (gray) so a fresh, unscanned month doesn't read as all-pendiente.
 export function dotVariantFor(cell, { isScanning = false, countType = "documents" } = {}) {
