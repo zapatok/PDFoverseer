@@ -189,7 +189,7 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
-  saveOverride: async (sessionId, hospital, sigla, value, note, opts = {}) => {
+  saveOverride: async (sessionId, hospital, sigla, value, opts = {}) => {
     const key = `${hospital}|${sigla}`;
     const controller = new AbortController();
 
@@ -213,7 +213,7 @@ export const useSessionStore = create((set, get) => ({
 
     try {
       const result = await api.patchOverride(
-        sessionId, hospital, sigla, value, note,
+        sessionId, hospital, sigla, value,
         { signal: controller.signal, manual: opts.manual },
       );
 
@@ -228,7 +228,6 @@ export const useSessionStore = create((set, get) => ({
         hosp[sigla] = {
           ...hosp[sigla],
           user_override: result.user_override,
-          override_note: result.override_note,
         };
         cells[hospital] = hosp;
         const cleanedPending = new Map(prev._pendingSave);

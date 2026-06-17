@@ -98,7 +98,7 @@ export default function FileList({ hospital, sigla }) {
             <button
               type="button"
               onClick={() =>
-                saveOverride(session.session_id, hospital, sigla, null, cell?.override_note ?? null)
+                saveOverride(session.session_id, hospital, sigla, null)
               }
               className="underline underline-offset-2 hover:text-po-text"
             >

@@ -33,7 +33,7 @@ export default function CategoryRow({
   const placeholder = mode === "manual" ? "—" : null;
 
   const onCommitCount = (v) => {
-    saveOverride(session.session_id, hospital, sigla, v, cell?.override_note ?? null, { manual: mode === "manual" });
+    saveOverride(session.session_id, hospital, sigla, v, { manual: mode === "manual" });
     if (mode === "manual") onCommitNext?.();
   };
 

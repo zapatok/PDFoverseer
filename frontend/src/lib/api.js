@@ -44,8 +44,8 @@ export const api = {
       method: "POST",
     }).then(jsonOrThrow),
 
-  patchOverride: async (sessionId, hospital, sigla, value, note, opts = {}) => {
-    const body = { value, note };
+  patchOverride: async (sessionId, hospital, sigla, value, opts = {}) => {
+    const body = { value };
     if (opts.manual) body.manual = true;
     const r = await fetch(
       `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/override`,
