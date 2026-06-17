@@ -789,7 +789,7 @@ class NotePatch(BaseModel):
     """Body del PATCH note. text vacío/None borra la nota."""
 
     text: str | None = None
-    status: Literal["por_resolver", "resuelto"] | None = None
+    status: Literal["por_resolver", "resuelto"] = "por_resolver"
 
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/note")

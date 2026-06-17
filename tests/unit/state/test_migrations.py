@@ -158,14 +158,25 @@ def test_migrate_state_v2_to_v3_changed_then_idempotent():
 
 
 def test_chained_v1_v2_then_v2_v3_idempotent_no_churn():
-    """A FASE-1 cell chained through v1→v2 then v2→v3 carries no override_note."""
-    cell = {"count": 767, "confidence": "high", "method": "filename_glob"}
-    migrate_cell_v1_to_v2(cell)
-    migrate_cell_v2_to_v3(cell)
+    # The real load path runs both migrations chained. After one full pass, a
+    # SECOND full pass must report changed=False on BOTH steps (no override_note
+    # re-introduced) — this is what stops _load_and_migrate from rewriting the DB
+    # on every load. It is the guarantee that justifies relinquishing override_note
+    # from v1→v2.
+    state = {
+        "cells": {
+            "HRB": {"odi": {"count": 4, "override_note": "x"}},
+        }
+    }
+    state, c1 = migrate_state_v1_to_v2(state)
+    state, c2 = migrate_state_v2_to_v3(state)
+    assert (c1 or c2) is True
+    cell = state["cells"]["HRB"]["odi"]
     assert "override_note" not in cell
-    assert cell["note"] is None
-    assert cell["note_status"] is None
-    # Idempotent second v2→v3 pass
-    migrate_cell_v2_to_v3(cell)
-    assert "override_note" not in cell
-    assert cell["note"] is None
+    assert cell["note"] == "x"
+    assert cell["note_status"] == "resuelto"
+    # Second full chained pass: zero changes → no DB rewrite.
+    state, c1b = migrate_state_v1_to_v2(state)
+    state, c2b = migrate_state_v2_to_v3(state)
+    assert c1b is False
+    assert c2b is False

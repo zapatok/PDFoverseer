@@ -143,6 +143,20 @@ def test_patch_note_persists_text_and_status(client) -> None:
     assert body["note_status"] == "por_resolver"
 
 
+def test_patch_note_defaults_to_por_resolver(client) -> None:
+    # D4: a note created without an explicit status is born "por_resolver" — so it
+    # gates the dot amber and keeps the note⟺status invariant (no orphan note).
+    sess = _open_and_scan(client)
+    r = client.patch(
+        f"/api/sessions/{sess}/cells/HPV/odi/note",
+        json={"text": "sin estado"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["note"] == "sin estado"
+    assert body["note_status"] == "por_resolver"
+
+
 def test_patch_note_blank_clears(client) -> None:
     sess = _open_and_scan(client)
     client.patch(
