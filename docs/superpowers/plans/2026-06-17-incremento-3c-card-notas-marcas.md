@@ -384,7 +384,7 @@ Expected: FAIL — `AttributeError: 'SessionManager' object has no attribute 'se
 
 (b) In `apply_user_override`: remove the `note: str | None,` parameter; remove the line `cell["override_note"] = note if value is not None else None`; rewrite the docstring to drop all note language (it now sets only `user_override` + `manual_entry`).
 
-(c) Delete the line `cell.setdefault("override_note", None)` from `apply_filename_result` (~192), `apply_ocr_result` (~224), and both occurrences in `finalize_cell_ocr` (~286, ~332) — four lines total. In the `apply_filename_result` docstring, change "Never touches ocr_count, user_override, or override_note." to "Never touches ocr_count, user_override, note, or note_status." (`apply_per_file_ocr_result` was audited: it has **no** `override_note` setdefault — only `per_file`/`per_file_method`/`near_matches` — so no change there.)
+(c) Delete **every** `cell.setdefault("override_note", None)` line in `api/state.py`. There are **four**, at lines ~192, ~224, ~286, ~332 — distributed as **`apply_filename_result` (TWO: ~192 in its guarded branch and ~224 in its main branch)**, `apply_ocr_result` (one, ~286), and `finalize_cell_ocr` (one, ~332). Drive it by grep, not by function name: after the deletions, `git grep -nc 'setdefault("override_note"' api/state.py` must return **0**. In the `apply_filename_result` docstring, change "Never touches ocr_count, user_override, or override_note." to "Never touches ocr_count, user_override, note, or note_status." (`apply_per_file_ocr_result` was audited: it has **no** `override_note` setdefault — only `per_file`/`per_file_method`/`near_matches` — so no change there.)
 
 > **Why all four:** these setters run **after** `_load_and_migrate` (which popped `override_note` and added `note`/`note_status`). If any of them re-`setdefault`s `override_note`, the next load's v2→v3 pops it again → `changed=True` on every load → DB rewritten every load (the churn Task 1 prevents). Removing all four re-adders is what keeps the chained migration idempotent.
 
@@ -513,7 +513,9 @@ def test_patch_override_response_has_no_note(client):
     assert "override_note" not in r.json()
 ```
 
-Also update the **existing** `test_patch_override_sets_value` (`test_cells_routes.py` ~lines 40-51): it currently sends `json={"value": 1, "note": "revisado"}` and asserts `body["override_note"] == "revisado"`. Drop `"note": "revisado"` from the body and delete the `assert body["override_note"] == "revisado"` line (keep `assert body["user_override"] == 1`). Override no longer carries a note.
+Also update the **existing** override tests in `test_cells_routes.py` that mention a note (run `git grep -n '"note"\|override_note' tests/unit/api/test_cells_routes.py`):
+- `test_patch_override_sets_value` (~lines 40-51): currently sends `json={"value": 1, "note": "revisado"}` and asserts `body["override_note"] == "revisado"`. Drop `"note": "revisado"` from the body and delete the `assert body["override_note"] == "revisado"` line (keep `assert body["user_override"] == 1`).
+- `test_patch_override_null_clears` (~lines 54-65): drop the now-meaningless `"note"` keys from its request bodies (the asserts there are on `user_override`, so they stay green either way — this is just cleanup).
 
 - [ ] **Step 2: Run to verify failures**
 
@@ -564,7 +566,7 @@ def patch_note(
 
 > If `_find_category_folder` is not the exact helper name used by `patch_worker_count` in your checkout, copy that endpoint's folder-resolution lines verbatim.
 
-(c) In `patch_override`: delete `note = body.get("note")`; in the `mgr.apply_user_override(...)` call drop `note=note`; in the returned dict drop the `"override_note": cell.get("override_note"),` entry (leaving `{"user_override": cell.get("user_override")}`).
+(c) In `patch_override`: delete `note = body.get("note")`; in the `mgr.apply_user_override(...)` call drop `note=note`; in the returned dict drop the `"override_note": cell.get("override_note"),` entry (leaving `{"user_override": cell.get("user_override")}`). **Leave `body: dict = Body(...)` as-is** — keeping the permissive dict body means a stray `note` field from an as-yet-unupdated frontend (Chunk 2 hasn't run) is harmlessly ignored, not a 422.
 
 - [ ] **Step 4: Run to verify pass**
 
