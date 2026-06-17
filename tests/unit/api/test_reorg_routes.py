@@ -385,11 +385,18 @@ def test_delete_reorg_op_unknown_session(endpoint_client):
 
 @pytest.fixture
 def export_client(tmp_path, monkeypatch):
-    """TestClient with HPV/odi + a dedicated tmp output dir."""
-    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    """TestClient with HPV/odi + a dedicated tmp output dir.
+
+    The corpus and the output dir are SEPARATE trees (sibling subdirs of tmp_path),
+    mirroring production — and satisfying the export guard that forbids writing the
+    manifest under INFORME_MENSUAL_ROOT (the read-only corpus).
+    """
+    corpus = tmp_path / "corpus"
+    out_dir = tmp_path / "outputs"
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(corpus))
     monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test.db"))
-    monkeypatch.setenv("OVERSEER_OUTPUT_DIR", str(tmp_path / "outputs"))
-    odi_dir = tmp_path / "ABRIL" / "HPV" / "3.-ODI Visitas"
+    monkeypatch.setenv("OVERSEER_OUTPUT_DIR", str(out_dir))
+    odi_dir = corpus / "ABRIL" / "HPV" / "3.-ODI Visitas"
     odi_dir.mkdir(parents=True)
     (odi_dir / "2026-04-10_odi_TITAN.pdf").write_bytes(_one_page_pdf())
 
@@ -399,7 +406,7 @@ def export_client(tmp_path, monkeypatch):
 
     app = create_app()
     with TestClient(app) as c:
-        yield c, tmp_path / "outputs"
+        yield c, out_dir
 
 
 def test_export_writes_manifest_json(export_client):

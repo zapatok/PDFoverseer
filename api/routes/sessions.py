@@ -1139,6 +1139,12 @@ def export_reorg_manifest(
     from api.routes.output import _output_dir  # noqa: E402
 
     out_dir = _output_dir()
+    # Data-safety: the corpus (INFORME_MENSUAL_ROOT) is read-only. Never write the
+    # manifest there, even if OVERSEER_OUTPUT_DIR is ever misconfigured to point inside it.
+    if out_dir.resolve().is_relative_to(_informe_root().resolve()):
+        raise HTTPException(
+            500, "OVERSEER_OUTPUT_DIR no puede estar dentro de INFORME_MENSUAL_ROOT"
+        )
     out_dir.mkdir(parents=True, exist_ok=True)
     dest = out_dir / f"reorganizacion_{session_id}.json"
     tmp = dest.with_suffix(".json.tmp")
