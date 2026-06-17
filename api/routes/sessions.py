@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -1031,3 +1032,116 @@ def get_cell_pdf(
         raise HTTPException(400, "cell folder outside informe root")
 
     return FileResponse(pdf_path, media_type="application/pdf")
+
+
+# ── Reorg endpoints (Incr J T9–T11) ──────────────────────────────────────
+
+from api.reorg import build_manifest, resolve_op_defaults, validate_op  # noqa: E402
+
+
+class ReorgSource(BaseModel):
+    hospital: str
+    sigla: str
+    file: str
+    page_range: list[int] | None = None
+
+
+class ReorgDest(BaseModel):
+    hospital: str
+    sigla: str
+
+
+class ReorgOpCreate(BaseModel):
+    op_type: str
+    source: ReorgSource
+    dest: ReorgDest
+    empresa: str | None = None
+    preserve_date: bool = True
+    rotation_deg: int = 0
+    doc_count: int | None = None
+    worker_count: int | None = None
+    note: str | None = None
+
+
+@router.post("/sessions/{session_id}/reorg/ops")
+def create_reorg_op(
+    session_id: str,
+    body: ReorgOpCreate,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Create a reorg op; recompute deltas; return the op + affected cells."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    try:
+        state = mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+    op = body.model_dump()
+    src = op["source"]
+    month_root = Path(state.get("month_root", ""))
+    try:
+        src_folder = _find_category_folder(month_root / src["hospital"], src["sigla"])
+        _find_category_folder(month_root / op["dest"]["hospital"], op["dest"]["sigla"])
+    except KeyError as exc:
+        raise HTTPException(404, f"Unknown sigla: {exc}") from exc
+    src_cell = (state.get("cells", {}).get(src["hospital"], {}) or {}).get(src["sigla"])
+    if src_cell is None:
+        raise HTTPException(404, f"Cell not found: {src['hospital']}/{src['sigla']}")
+
+    src_pages = cell_page_counts(src_folder) if src_folder.exists() else {}
+    errors = validate_op(op, src_pages=src_pages, existing_ops=state.get("reorg_ops", []))
+    if errors:
+        raise HTTPException(400, "; ".join(errors))
+
+    op = resolve_op_defaults(op, src_cell=src_cell)
+    created = mgr.add_reorg_op(session_id, op)
+    refresh_reorg_deltas(mgr, session_id, check_applied=False)
+    state = mgr.get_session_state(session_id)
+    return {"op": created, "cells": state["cells"]}
+
+
+@router.delete("/sessions/{session_id}/reorg/ops/{op_id}")
+def delete_reorg_op(
+    session_id: str,
+    op_id: str,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Delete a reorg op; recompute deltas."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    try:
+        mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    if not mgr.delete_reorg_op(session_id, op_id):
+        raise HTTPException(404, f"Op not found: {op_id}")
+    refresh_reorg_deltas(mgr, session_id, check_applied=False)
+    state = mgr.get_session_state(session_id)
+    return {"deleted": op_id, "cells": state["cells"]}
+
+
+@router.post("/sessions/{session_id}/reorg/export")
+def export_reorg_manifest(
+    session_id: str,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Write the reorg manifest (pending ops) to OVERSEER_OUTPUT_DIR."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    try:
+        state = mgr.get_session_state(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    manifest = build_manifest(state, month=session_id)
+    if not manifest["operations"]:
+        raise HTTPException(400, "No hay operaciones pendientes para exportar")
+    from api.routes.output import _output_dir  # noqa: E402
+
+    out_dir = _output_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"reorganizacion_{session_id}.json"
+    tmp = dest.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(dest)
+    return {"path": str(dest), "operation_count": len(manifest["operations"])}

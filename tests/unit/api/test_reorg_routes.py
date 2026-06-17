@@ -203,3 +203,101 @@ def test_scan_flips_op_applied_when_source_file_gone(scan_client):
     assert state["reorg_ops"][0]["status"] == "applied"
     assert state["cells"]["HRB"]["art"]["reorg_doc_delta"] == 0
     assert state["cells"]["HRB"]["odi"]["reorg_doc_delta"] == 0
+
+
+# ── Task 9: POST /reorg/ops ────────────────────────────────────────────────
+
+
+@pytest.fixture
+def endpoint_client(tmp_path, monkeypatch):
+    """TestClient with HPV/odi containing one 1-page PDF (mirrors test_cells_routes)."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test.db"))
+    odi_dir = tmp_path / "ABRIL" / "HPV" / "3.-ODI Visitas"
+    odi_dir.mkdir(parents=True)
+    (odi_dir / "2026-04-10_odi_TITAN.pdf").write_bytes(_one_page_pdf())
+
+    from fastapi.testclient import TestClient
+
+    from api.main import create_app
+
+    app = create_app()
+    with TestClient(app) as c:
+        yield c
+
+
+def _open_and_scan(client) -> str:
+    r = client.post("/api/sessions", json={"year": 2026, "month": 4})
+    sid = r.json()["session_id"]
+    client.post(f"/api/sessions/{sid}/scan")
+    return sid
+
+
+def test_post_reorg_op_move_file_resolves_defaults(endpoint_client):
+    """POST /reorg/ops with doc_count omitted → 200, defaults filled, delta applied."""
+    client = endpoint_client
+    sid = _open_and_scan(client)
+
+    r = client.post(
+        f"/api/sessions/{sid}/reorg/ops",
+        json={
+            "op_type": "move_file",
+            "source": {"hospital": "HPV", "sigla": "odi", "file": "2026-04-10_odi_TITAN.pdf"},
+            "dest": {"hospital": "HPV", "sigla": "reunion"},
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    op = body["op"]
+    assert op["id"] == "op_001"
+    assert op["doc_count"] == 1  # resolved from per_file (1-page → 1 doc)
+    assert op["status"] == "pending"
+
+    # deltas must be reflected in the same response
+    cells = body["cells"]
+    assert cells["HPV"]["odi"]["reorg_doc_delta"] == -1
+    assert cells["HPV"]["reunion"]["reorg_doc_delta"] == 1
+
+
+def test_post_reorg_op_invalid_dest_equals_source(endpoint_client):
+    """dest == source → 400."""
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    r = client.post(
+        f"/api/sessions/{sid}/reorg/ops",
+        json={
+            "op_type": "move_file",
+            "source": {"hospital": "HPV", "sigla": "odi", "file": "2026-04-10_odi_TITAN.pdf"},
+            "dest": {"hospital": "HPV", "sigla": "odi"},
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_post_reorg_op_unknown_session(endpoint_client):
+    """Unknown session_id → 404."""
+    client = endpoint_client
+    r = client.post(
+        "/api/sessions/2099-01/reorg/ops",
+        json={
+            "op_type": "move_file",
+            "source": {"hospital": "HPV", "sigla": "odi", "file": "x.pdf"},
+            "dest": {"hospital": "HPV", "sigla": "reunion"},
+        },
+    )
+    assert r.status_code == 404
+
+
+def test_post_reorg_op_unknown_sigla(endpoint_client):
+    """Unknown sigla → 404."""
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    r = client.post(
+        f"/api/sessions/{sid}/reorg/ops",
+        json={
+            "op_type": "move_file",
+            "source": {"hospital": "HPV", "sigla": "induccion", "file": "x.pdf"},
+            "dest": {"hospital": "HPV", "sigla": "odi"},
+        },
+    )
+    assert r.status_code == 404

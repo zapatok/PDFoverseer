@@ -98,20 +98,24 @@ def resolve_op_defaults(op: dict, *, src_cell: dict) -> dict:
         marks = (src_cell.get("worker_marks") or {}).get(file) or []
         return sum((m.get("count") or 0) for m in marks if pred(m))
 
+    def _set_if_none(key: str, value) -> None:
+        if out.get(key) is None:
+            out[key] = value
+
     if ot == "move_file":
         per_file = src_cell.get("per_file") or {}
         overrides = src_cell.get("per_file_overrides") or {}
-        out.setdefault("doc_count", overrides.get(file, per_file.get(file, 1)))
-        out.setdefault("worker_count", _marks_total(lambda m: True))
+        _set_if_none("doc_count", overrides.get(file, per_file.get(file, 1)))
+        _set_if_none("worker_count", _marks_total(lambda m: True))
     elif ot == "extract_pages":
-        out.setdefault("doc_count", 1)
-        out.setdefault(
+        _set_if_none("doc_count", 1)
+        _set_if_none(
             "worker_count",
             _marks_total(lambda m: pr and pr[0] <= (m.get("page") or 0) <= pr[1]),
         )
     else:  # split_in_place, rotate
-        out.setdefault("doc_count", 0)
-        out.setdefault("worker_count", 0)
+        _set_if_none("doc_count", 0)
+        _set_if_none("worker_count", 0)
 
     out.setdefault("status", "pending")
     out.setdefault("preserve_date", True)
