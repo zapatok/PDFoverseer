@@ -785,6 +785,40 @@ def patch_worker_count(
     }
 
 
+class NotePatch(BaseModel):
+    """Body del PATCH note. text vacío/None borra la nota."""
+
+    text: str | None = None
+    status: Literal["por_resolver", "resuelto"] | None = None
+
+
+@router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/note")
+def patch_note(
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    body: NotePatch,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Set or clear a cell's note; refresh all_reliable (por_resolver → amber)."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(status_code=422, detail="session_id inválido")
+    try:
+        mgr.set_note(session_id, hospital, sigla, text=body.text, status=body.status)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Sesión {session_id} no encontrada") from exc
+    state = mgr.get_session_state(session_id)
+    month_root = Path(state.get("month_root", ""))
+    folder = _find_category_folder(month_root / hospital, sigla)
+    refresh_all_reliable(mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla))
+    cell = mgr.get_session_state(session_id)["cells"].get(hospital, {}).get(sigla, {})
+    return {
+        "note": cell.get("note"),
+        "note_status": cell.get("note_status"),
+        "all_reliable": cell.get("all_reliable"),
+    }
+
+
 class ConfirmRequest(BaseModel):
     confirmed: bool
 

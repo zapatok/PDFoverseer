@@ -124,3 +124,62 @@ def test_compute_settled_resuelto_does_not_block(tmp_path) -> None:
 
     cell = {"worker_status": "terminado", "note_status": "resuelto"}
     assert compute_settled(cell, tmp_path, count_type="checks") is True
+
+
+# ---------------------------------------------------------------------------
+# Task 5: PATCH .../note endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_patch_note_persists_text_and_status(client) -> None:
+    sess = _open_and_scan(client)
+    r = client.patch(
+        f"/api/sessions/{sess}/cells/HPV/odi/note",
+        json={"text": "revisar firma", "status": "por_resolver"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["note"] == "revisar firma"
+    assert body["note_status"] == "por_resolver"
+
+
+def test_patch_note_blank_clears(client) -> None:
+    sess = _open_and_scan(client)
+    client.patch(
+        f"/api/sessions/{sess}/cells/HPV/odi/note",
+        json={"text": "algo", "status": "por_resolver"},
+    )
+    r = client.patch(
+        f"/api/sessions/{sess}/cells/HPV/odi/note",
+        json={"text": "", "status": "resuelto"},
+    )
+    assert r.json()["note"] is None
+    assert r.json()["note_status"] is None
+
+
+def test_patch_note_rejects_bad_status(client) -> None:
+    sess = _open_and_scan(client)
+    r = client.patch(
+        f"/api/sessions/{sess}/cells/HPV/odi/note",
+        json={"text": "x", "status": "no_existe"},
+    )
+    assert r.status_code == 422
+
+
+def test_patch_note_unknown_session_404(client) -> None:
+    r = client.patch(
+        "/api/sessions/2099-01/cells/HPV/odi/note",
+        json={"text": "x", "status": "por_resolver"},
+    )
+    assert r.status_code == 404
+
+
+def test_patch_override_response_has_no_note(client) -> None:
+    sess = _open_and_scan(client)
+    # value=1 stays within the ≤páginas cap (odi PDF is 1 page)
+    r = client.patch(
+        f"/api/sessions/{sess}/cells/HPV/odi/override",
+        json={"value": 1},
+    )
+    assert r.status_code == 200
+    assert "override_note" not in r.json()
