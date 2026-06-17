@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { computeWorkerCount } from "./worker-count";
+import { computeWorkerCount, cellWorkerCount, fileSubtotal } from "./worker-count";
 
 describe("computeWorkerCount", () => {
   const marks = {
@@ -41,5 +41,42 @@ describe("computeWorkerCount", () => {
     };
     // Llamada con lista de archivos en disco (presentes), no per_file keys.
     expect(computeWorkerCount(marksF1, ["a.pdf", "b.pdf"])).toBe(46);
+  });
+});
+
+describe("cellWorkerCount (Incr J — reorg delta)", () => {
+  const marks = {
+    "a.pdf": [{ page: 1, count: 4 }],
+  };
+
+  it("sin delta: idéntico a computeWorkerCount", () => {
+    const cell = { worker_marks: marks };
+    expect(cellWorkerCount(cell, null)).toBe(4);
+  });
+
+  it("delta positivo suma al total de marcas", () => {
+    const cell = { worker_marks: marks, reorg_worker_delta: 3 };
+    expect(cellWorkerCount(cell, null)).toBe(7);
+  });
+
+  it("delta negativo resta al total de marcas", () => {
+    const cell = { worker_marks: marks, reorg_worker_delta: -2 };
+    expect(cellWorkerCount(cell, null)).toBe(2);
+  });
+
+  it("sin campo reorg_worker_delta (clave ausente) → sin cambio", () => {
+    const cell = { worker_marks: marks };
+    expect(cellWorkerCount(cell, null)).toBe(4);
+  });
+
+  it("celda null/undefined → 0 (sin error)", () => {
+    expect(cellWorkerCount(null, null)).toBe(0);
+    expect(cellWorkerCount(undefined, null)).toBe(0);
+  });
+
+  it("delta no afecta fileSubtotal (solo nivel de celda)", () => {
+    // fileSubtotal reads worker_marks directly, not through cellWorkerCount
+    const cell = { worker_marks: marks, reorg_worker_delta: 99 };
+    expect(fileSubtotal(cell.worker_marks, "a.pdf")).toBe(4); // unchanged
   });
 });

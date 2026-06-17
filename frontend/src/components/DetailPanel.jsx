@@ -13,7 +13,7 @@ import { SIGLA_DESCRIPTION, SIGLA_PAGE_RANGE, formatPageRange, countTypeFor } fr
 import { METHOD_LABEL } from "../lib/method-labels";
 import { composeMethodInfo } from "../lib/method-info";
 import { useSessionStore } from "../store/session";
-import { computeWorkerCount } from "../lib/worker-count";
+import { cellWorkerCount } from "../lib/worker-count";
 import { computeCellCount, computeFilesCount } from "../lib/cellCount";
 import SegmentedToggle from "../ui/SegmentedToggle";
 import { hasOverride, isCappedCountType, showsWorkerCounter } from "../lib/cell-status";
@@ -155,7 +155,7 @@ function WorkerCountModule({ hospital, sigla, cell, countType = "documents_worke
   const total =
     cell.worker_count != null
       ? cell.worker_count
-      : computeWorkerCount(cell.worker_marks, null);
+      : cellWorkerCount(cell, null);
   const started = status === "en_progreso" || status === "terminado";
   const unit = countType === "checks" ? "chequeos" : "trabajadores";
   const sectionLabel = countType === "checks" ? "Conteo de chequeos" : "Conteo de trabajadores";

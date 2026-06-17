@@ -143,7 +143,10 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
   // página acotada al archivo actual, por el mismo motivo que `fileIdx`
   const page = Math.min(Math.max(pageInFile, 1), Math.max(pageCount, 1));
   const fileNames = files.map((f) => f.name);
-  const total = computeWorkerCount(marks, fileNames);
+  // Incr J: add reorg_worker_delta so the viewer total matches the cell total.
+  // initCell is snapshotted at mount; the delta is stable during a counting
+  // session (reorg ops aren't created while the viewer is open).
+  const total = computeWorkerCount(marks, fileNames) + (initCell?.reorg_worker_delta ?? 0);
   const subtotal = fileSubtotal(marks, currentFile.name);
   const fixed = markFor(marks, currentFile.name, page);
 

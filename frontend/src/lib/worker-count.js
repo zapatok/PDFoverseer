@@ -32,3 +32,22 @@ export function fileSubtotal(marks, filename) {
   }
   return total;
 }
+
+/**
+ * Total de trabajadores de la celda, incluyendo el delta de reorganización
+ * de Incr J (`reorg_worker_delta`). Los subtotales por archivo (fileSubtotal)
+ * siguen siendo crudos — el delta es una cantidad a nivel de celda, no
+ * por archivo.
+ *
+ * Espeja el patrón base+delta de cellCount.js.
+ *
+ * @param {object} cell   - objeto de celda del store (puede ser null/undefined)
+ * @param {string[]} fileNames - nombres de los PDFs presentes hoy en la celda
+ * @returns {number}
+ */
+export function cellWorkerCount(cell, fileNames) {
+  return (
+    computeWorkerCount(cell?.worker_marks ?? {}, fileNames) +
+    (cell?.reorg_worker_delta ?? 0)
+  );
+}
