@@ -582,6 +582,79 @@ class SessionManager:
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     @_synchronized
+    def add_reorg_op(self, session_id: str, op: dict) -> dict:
+        """Append a reorg op with a stable, monotonic id (``op_NNN``).
+
+        The id counter (``state["reorg_seq"]``) never reuses numbers across
+        deletes, so an op's id stays meaningful for the manifest.
+
+        Args:
+            session_id: Target session identifier.
+            op: Op dict (must include ``op_type``, ``source``, ``dest``).
+
+        Returns:
+            The op dict with its assigned ``id`` field.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        seq = state.get("reorg_seq", 0) + 1
+        state["reorg_seq"] = seq
+        op = {**op, "id": f"op_{seq:03d}"}
+        state.setdefault("reorg_ops", []).append(op)
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+        return op
+
+    @_synchronized
+    def delete_reorg_op(self, session_id: str, op_id: str) -> bool:
+        """Remove a reorg op by id. Returns True if one was removed.
+
+        Args:
+            session_id: Target session identifier.
+            op_id: The op id to remove (e.g. ``"op_001"``).
+
+        Returns:
+            True if an op was found and removed; False otherwise.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        ops = state.get("reorg_ops", [])
+        kept = [o for o in ops if o.get("id") != op_id]
+        removed = len(kept) != len(ops)
+        state["reorg_ops"] = kept
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+        return removed
+
+    @_synchronized
+    def set_reorg_state(
+        self,
+        session_id: str,
+        *,
+        ops: list[dict],
+        deltas: dict[tuple[str, str], dict],
+    ) -> None:
+        """Replace the op list and rewrite every cell's reorg delta cache.
+
+        Zeros ``reorg_doc_delta``/``reorg_worker_delta`` on all cells, then
+        applies ``deltas`` (keyed by (hospital, sigla)). ``deltas`` is in-memory
+        only — never serialized — so tuple keys are fine.
+
+        Args:
+            session_id: Target session identifier.
+            ops: Replacement op list (replaces ``state["reorg_ops"]`` in full).
+            deltas: Per-cell delta dict keyed by (hospital, sigla) tuples with
+                ``{"doc": int, "worker": int}`` values.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        state["reorg_ops"] = ops
+        for siglas in state.get("cells", {}).values():
+            for cell in siglas.values():
+                cell["reorg_doc_delta"] = 0
+                cell["reorg_worker_delta"] = 0
+        for (hosp, sigla), d in deltas.items():
+            cell = state.setdefault("cells", {}).setdefault(hosp, {}).setdefault(sigla, {})
+            cell["reorg_doc_delta"] = d.get("doc", 0)
+            cell["reorg_worker_delta"] = d.get("worker", 0)
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    @_synchronized
     def apply_cell_result(
         self,
         session_id: str,

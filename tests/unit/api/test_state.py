@@ -359,6 +359,43 @@ def test_worker_marks_alone_mark_cell_as_worked():
     assert _cell_has_work(cell) is True
 
 
+# ── Task 5: reorg-op mutators ──────────────────────────────────────────────
+
+
+def test_add_reorg_op_assigns_stable_id(manager):
+    op = manager.add_reorg_op("2026-04", {"op_type": "move_file", "source": {}, "dest": {}})
+    assert op["id"] == "op_001"
+    op2 = manager.add_reorg_op("2026-04", {"op_type": "rotate", "source": {}, "dest": {}})
+    assert op2["id"] == "op_002"
+    state = manager.get_session_state("2026-04")
+    assert [o["id"] for o in state["reorg_ops"]] == ["op_001", "op_002"]
+
+
+def test_delete_reorg_op(manager):
+    manager.add_reorg_op("2026-04", {"op_type": "move_file", "source": {}, "dest": {}})
+    assert manager.delete_reorg_op("2026-04", "op_001") is True
+    assert manager.delete_reorg_op("2026-04", "op_404") is False
+    assert manager.get_session_state("2026-04").get("reorg_ops") == []
+
+
+def test_id_counter_survives_deletes(manager):
+    manager.add_reorg_op("2026-04", {"op_type": "rotate", "source": {}, "dest": {}})
+    manager.delete_reorg_op("2026-04", "op_001")
+    op = manager.add_reorg_op("2026-04", {"op_type": "rotate", "source": {}, "dest": {}})
+    assert op["id"] == "op_002"  # monotonic; no id reuse
+
+
+def test_set_reorg_state_writes_deltas(manager):
+    manager.set_reorg_state(
+        "2026-04",
+        ops=[{"id": "op_001", "status": "pending"}],
+        deltas={("HRB", "art"): {"doc": -1, "worker": 0}, ("HRB", "odi"): {"doc": 1, "worker": 0}},
+    )
+    state = manager.get_session_state("2026-04")
+    assert state["cells"]["HRB"]["art"]["reorg_doc_delta"] == -1
+    assert state["cells"]["HRB"]["odi"]["reorg_doc_delta"] == 1
+
+
 def test_filename_rescan_preserves_worker_counted_cell(manager):
     """End-to-end: a worker-counted cell that is NOT yet marked 'listo' survives a
     bulk filename re-scan that brings new files — its per_file is left intact so the
