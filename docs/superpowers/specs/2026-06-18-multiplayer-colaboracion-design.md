@@ -82,7 +82,11 @@ campos — ver §3 ítem 2).
     setter, difunden. Pro: la ruta ya conoce (hospital, sigla) y el `actor`. Contra: hay que
     cubrir cada ruta de escritura.
   Se recomienda (b) por el `actor` (lo conoce la ruta, no el setter) y porque mantiene
-  `state.py` ajeno al transporte.
+  `state.py` ajeno al transporte. **Importante:** (b) aplica **solo a los endpoints de
+  edición síncronos**. El escaneo corre en un hilo de fondo *después* de que su ruta retornó,
+  así que NO puede usar (b): emite por su cuenta tanto `cell_done` (ya hoy) como `cell_updated`
+  (nuevo) vía `_safe_broadcast` (ver puente abajo). Son **dos vías de emisión paralelas**, no
+  una elección — la ruta síncrona usa (b); el escáner siempre usa `_safe_broadcast`.
 - **Puente async-desde-sync (restricción real).** `broadcast` es `async`. Las rutas de
   edición HTTP son handlers `async` → pueden `await broadcast(...)` directo. Pero el escaneo
   corre en **hilos de fondo** y ya difunde vía el patrón existente
@@ -136,7 +140,10 @@ participants[session_id][participant_id] = {
 - **Sincronización:** el registro de participantes comparte el **mismo `RLock`** de
   `SessionManager` (no se introduce un segundo primitivo). Las operaciones de presencia/claim
   se serializan con las escrituras de celda, lo que además da el claim atómico de §6.4 gratis.
-  Para 2-3 participantes el bloqueo breve es irrelevante.
+  Para 2-3 participantes el bloqueo breve es irrelevante. *(Detalle de integración para el
+  plan: el `RLock` hoy es privado de `SessionManager`; el módulo de presencia debe poder
+  reusarlo — exponer un método sincronizado en `SessionManager` o alojar el registro dentro de
+  él, en vez de un lock aparte.)*
 
 ### 6.2 Endpoints HTTP
 
@@ -250,8 +257,11 @@ presencia con el snapshot.
   `ws://127.0.0.1:8000`), `frontend/src/lib/api.js` (L1, `http://127.0.0.1:8000/api`) y
   `frontend/src/lib/constants.js` (L1-2, `API_BASE`/`WS_BASE`). El navegador de Carla
   apuntaría a *su propio* localhost, no al servidor de Daniel. M1 DEBE derivar el host de
-  `window.location.hostname` (o una env de build) y consolidar esas tres fuentes en una. Sin
-  esto, `HOST=0.0.0.0` por sí solo no conecta a nadie en LAN. Ver §12 (M1).
+  `window.location.hostname` (o una env de build) y consolidar esas fuentes en **una sola**.
+  Ojo: `ws.js` define su `WS_BASE` **localmente** (no importa el de `constants.js`), así que hay
+  **dos `WS_BASE` independientes** + el `BASE` de `api.js` — el plan debe colapsarlos a un único
+  módulo de config y borrar los duplicados. Sin esto, `HOST=0.0.0.0` por sí solo no conecta a
+  nadie en LAN. Ver §12 (M1).
 - El `RLock`, el registro de participantes y el mapa `_CONNECTIONS` del WS viven en **ese**
   proceso. **Restricción dura: nunca `--workers N`** — con N procesos habría N copias aisladas
   (un claim del worker 1 es invisible para el worker 2; un WS del worker 3 no recibe el
@@ -271,12 +281,17 @@ Estilo de la serie Incr: cada etapa entrega valor sola y de-riesga la siguiente.
   tres fuentes de host hardcodeadas del frontend (`ws.js`/`api.js`/`constants.js`) para que
   deriven de `window.location.hostname` (§11). Sin presencia ni locks. Dos navegadores en
   **máquinas distintas de la LAN** ya ven en vivo lo que edita el otro. Aditivo, bajo riesgo,
-  cimiento. Incluye el punto único de choque del broadcast (§4).
+  cimiento. Incluye el punto único de choque del broadcast (§4). **Criterio de aceptación:** un
+  navegador en una **segunda máquina** de la LAN conecta el WS y recibe un `cell_updated` al
+  editar una celda desde la primera (no solo dos pestañas en la misma máquina).
 - **M2 — Presencia.** Identidad (nombre + color al entrar, `participant_id` en localStorage),
   registro de participantes + heartbeat + `focus`/`leave`, evento `presence`. UI: badge en la
   fila de categoría (espacio reservado en G4) mostrando quién está en cada celda + roster de
   conectados. Sin bloquear: se **ve** a Carla, pero nada frena. El badge de Claude cae casi
-  gratis (el escaneo ya emite eventos).
+  gratis (el escaneo ya emite eventos). **Seam M2 vs M3:** en M2, `focus` solo fija
+  `focused_cell` (presencia, **sin exclusividad** ni `mode` load-bearing — la UI no actúa sobre
+  el `mode` todavía); la exclusividad editor/viewer del claim y que la UI respete `mode` entran
+  en M3.
 - **M3 — Locks duros + enforcement + Claude.** `focus`=claim atómico bajo `RLock`,
   solo-lectura en celda ocupada (controles deshabilitados + badge del dueño), `participant_id`
   + chequeo de lock en los endpoints de escritura (409 si no se tiene), el escáner salta celdas
