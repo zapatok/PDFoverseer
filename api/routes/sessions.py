@@ -377,6 +377,7 @@ def get(
 
 @router.post("/sessions/{session_id}/scan")
 def scan(
+    request: Request,
     session_id: str,
     body: dict = Body(default={"scope": "all"}),
     mgr: SessionManager = Depends(get_manager),
@@ -397,6 +398,7 @@ def scan(
     for (hosp, sigla), r in results.items():
         mgr.apply_cell_result(session_id, hosp, sigla, r)
     refresh_reorg_deltas(mgr, session_id, check_applied=True)
+    _broadcast_session_refresh(request, session_id)
     return {
         "scanned": len(results),
         "summary": {f"{hosp}_{sigla}": r.count for (hosp, sigla), r in results.items()},
@@ -1148,6 +1150,7 @@ class ReorgOpCreate(BaseModel):
 
 @router.post("/sessions/{session_id}/reorg/ops")
 def create_reorg_op(
+    request: Request,
     session_id: str,
     body: ReorgOpCreate,
     mgr: SessionManager = Depends(get_manager),
@@ -1180,12 +1183,14 @@ def create_reorg_op(
     op = resolve_op_defaults(op, src_cell=src_cell)
     created = mgr.add_reorg_op(session_id, op)
     refresh_reorg_deltas(mgr, session_id, check_applied=False)
+    _broadcast_session_refresh(request, session_id)
     state = mgr.get_session_state(session_id)
     return {"op": created, "cells": state["cells"]}
 
 
 @router.delete("/sessions/{session_id}/reorg/ops/{op_id}")
 def delete_reorg_op(
+    request: Request,
     session_id: str,
     op_id: str,
     mgr: SessionManager = Depends(get_manager),
@@ -1200,6 +1205,7 @@ def delete_reorg_op(
     if not mgr.delete_reorg_op(session_id, op_id):
         raise HTTPException(404, f"Op not found: {op_id}")
     refresh_reorg_deltas(mgr, session_id, check_applied=False)
+    _broadcast_session_refresh(request, session_id)
     state = mgr.get_session_state(session_id)
     return {"deleted": op_id, "cells": state["cells"]}
 

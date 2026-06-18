@@ -104,6 +104,17 @@ def test_patch_worker_count_broadcasts_cell_updated(app) -> None:
             assert evt["cell"]["worker_status"] == "en_progreso"
 
 
+def test_scan_broadcasts_session_refresh(app) -> None:
+    """Un pase-1 (POST /scan) toca muchas celdas → difunde session_refresh."""
+    with TestClient(app) as client:
+        _open_session(client)
+        with client.websocket_connect("/ws/sessions/2026-04") as ws:
+            r = client.post("/api/sessions/2026-04/scan", json={"scope": "all"})
+            assert r.status_code == 200
+            evt = _recv_type(ws, "session_refresh")
+            assert evt["type"] == "session_refresh"
+
+
 def test_scan_followup_emits_cell_updated_after_cell_done(app) -> None:
     """Tras un cell_done, el drain del escaneo debe emitir un cell_updated completo."""
     from api.routes.sessions import _scan_followup_event  # noqa: PLC0415
