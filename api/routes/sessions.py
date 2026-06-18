@@ -505,10 +505,14 @@ def _emit(request: Request, session_id: str, event: dict) -> None:
 
     Los handlers son ``def`` síncronos → corren en un hilo del threadpool sin event
     loop, así que marshaleamos al loop guardado del app, igual que
-    ``scan_ocr._safe_broadcast``. Se descarta el evento si el loop ya se cerró
-    (teardown de TestClient) en vez de reventar el hilo.
+    ``scan_ocr._safe_broadcast``. Best-effort: si no hay loop (un ``TestClient`` sin
+    ``with`` no dispara el startup que fija ``app.state.loop``) o ya se cerró
+    (teardown), se descarta el evento en vez de reventar la escritura — el broadcast
+    nunca debe romper el camino HTTP real.
     """
-    loop = request.app.state.loop
+    loop = getattr(request.app.state, "loop", None)
+    if loop is None:
+        return
     try:
         if not loop.is_closed():
             asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
