@@ -76,3 +76,29 @@ def test_patch_override_broadcasts_cell_updated(app) -> None:
             assert evt["hospital"] == "HPV"
             assert evt["sigla"] == "odi"
             assert evt["cell"]["user_override"] == 9
+
+
+def test_patch_note_broadcasts_cell_updated(app) -> None:
+    with TestClient(app) as client:
+        _open_session(client)
+        with client.websocket_connect("/ws/sessions/2026-04") as ws:
+            r = client.patch(
+                "/api/sessions/2026-04/cells/HRB/odi/note",
+                json={"text": "revisar colado", "status": "por_resolver"},
+            )
+            assert r.status_code == 200
+            evt = _recv_type(ws, "cell_updated")
+            assert evt["cell"]["note"] == "revisar colado"
+
+
+def test_patch_worker_count_broadcasts_cell_updated(app) -> None:
+    with TestClient(app) as client:
+        _open_session(client)
+        with client.websocket_connect("/ws/sessions/2026-04") as ws:
+            r = client.patch(
+                "/api/sessions/2026-04/cells/HLL/charla/worker-count",
+                json={"status": "en_progreso"},
+            )
+            assert r.status_code == 200
+            evt = _recv_type(ws, "cell_updated")
+            assert evt["cell"]["worker_status"] == "en_progreso"

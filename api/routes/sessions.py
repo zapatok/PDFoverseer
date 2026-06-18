@@ -272,6 +272,7 @@ class ApplyRatioRequest(BaseModel):
 
 @router.post("/sessions/{session_id}/cells/{hospital}/{sigla}/apply-ratio")
 def apply_ratio(
+    request: Request,
     session_id: str,
     hospital: str,
     sigla: str,
@@ -341,6 +342,7 @@ def apply_ratio(
     refresh_all_reliable(
         mgr, session_id, hospital, sigla, folder, pages=pages, count_type=count_type_for(sigla)
     )
+    _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     state = mgr.get_session_state(session_id)
     return state["cells"][hospital][sigla]
 
@@ -715,6 +717,9 @@ def scan_file_ocr(
                 method=r["method"],
                 near_matches=r.get("near_matches") or [],
             )
+            cu = _cell_updated_event(mgr, session_id, hospital, sigla)
+            if cu is not None:
+                asyncio.run_coroutine_threadsafe(broadcast(session_id, cu), loop)
 
     cancel_token = CancellationToken()
 
@@ -784,6 +789,7 @@ class PerFileOverrideRequest(BaseModel):
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/files/{filename:path}/override")
 def patch_per_file_override(
+    request: Request,
     session_id: str,
     hospital: str,
     sigla: str,
@@ -821,6 +827,7 @@ def patch_per_file_override(
         )
     state, _ = mgr._load_and_migrate(session_id)
     cell = state["cells"][hospital][sigla]
+    _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     return {
         "filename": filename,
         "count": body.count,
@@ -837,6 +844,7 @@ class ClearNearMatchBody(BaseModel):
 
 @router.post("/sessions/{session_id}/cells/{hospital}/{sigla}/near-matches/clear")
 def clear_near_matches(
+    request: Request,
     session_id: str,
     hospital: str,
     sigla: str,
@@ -853,6 +861,7 @@ def clear_near_matches(
         pdf_name=body.pdf_name if body else None,
         page_index=body.page_index if body else None,
     )
+    _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     return {"ok": True}
 
 
@@ -866,6 +875,7 @@ class WorkerCountPatch(BaseModel):
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/worker-count")
 def patch_worker_count(
+    request: Request,
     session_id: str,
     hospital: str,
     sigla: str,
@@ -895,6 +905,7 @@ def patch_worker_count(
     # documents_workers this recomputes document settledness (no-op-ish). Closes
     # the gap that the worker PATCH didn't refresh all_reliable.
     refresh_all_reliable(mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla))
+    _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     return {
         "worker_marks": cell.get("worker_marks"),
         "worker_status": cell.get("worker_status"),
@@ -917,6 +928,7 @@ class NotePatch(BaseModel):
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/note")
 def patch_note(
+    request: Request,
     session_id: str,
     hospital: str,
     sigla: str,
@@ -940,6 +952,7 @@ def patch_note(
         raise HTTPException(status_code=404, detail=f"Categoría {sigla} desconocida") from exc
     refresh_all_reliable(mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla))
     cell = mgr.get_session_state(session_id)["cells"].get(hospital, {}).get(sigla, {})
+    _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     return {
         "note": cell.get("note"),
         "note_status": cell.get("note_status"),
@@ -953,6 +966,7 @@ class ConfirmRequest(BaseModel):
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/confirm")
 def patch_confirm(
+    request: Request,
     session_id: str,
     hospital: str,
     sigla: str,
@@ -973,6 +987,7 @@ def patch_confirm(
         raise HTTPException(404, str(exc)) from exc
     state = mgr.get_session_state(session_id)
     cell = state["cells"].get(hospital, {}).get(sigla, {})
+    _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     return {"confirmed": cell.get("confirmed", False)}
 
 
