@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from api.routes import history, months, output, sessions, siglas, ws
 from api.routes.sessions import get_manager
@@ -73,6 +74,15 @@ def create_app() -> FastAPI:
     app.include_router(history.router, prefix="/api")
     app.include_router(siglas.router, prefix="/api")
     app.include_router(ws.router)
+    # Serve the built frontend same-origin (multiplayer M1, LAN): a client on the LAN
+    # loads http://<server>:8000/ and config.js derives the backend host from
+    # window.location.hostname → API + WS hit the same origin (no CORS needed; the
+    # localhost:5173 CORS rule above stays for local Vite dev). Mounted LAST so
+    # /api/* and /ws/* take precedence; html=True serves index.html at "/". Skipped
+    # when the build is absent (dev without `npm run build`).
+    _dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if _dist.is_dir():
+        app.mount("/", StaticFiles(directory=_dist, html=True), name="ui")
     return app
 
 
