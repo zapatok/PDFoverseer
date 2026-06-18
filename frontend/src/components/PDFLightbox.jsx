@@ -176,7 +176,10 @@ export default function PDFLightbox() {
   // E4 — step to prev/next file with ←/→ (inspect mode only). Page nav (↑↓/PgUp/Dn)
   // is owned by InspectView; Left/Right are free.
   useEffect(() => {
-    if (!lightbox || lightbox.mode === "count_workers") return;
+    // Only the inspect mode steps files with ←/→. The worker-count and reorg
+    // viewers own their own file navigation; an outer step would re-mount them
+    // and discard in-progress state (worker marks / reorg range selection).
+    if (!lightbox || lightbox.mode !== "inspect") return;
     const onKey = (e) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       const el = document.activeElement;
@@ -203,7 +206,7 @@ export default function PDFLightbox() {
       openLightbox(lightbox.hospital, lightbox.sigla, next, lightbox.mode);
     }
   };
-  const canStep = !!files && files.length > 1 && lightbox.mode !== "count_workers";
+  const canStep = !!files && files.length > 1 && lightbox.mode === "inspect";
 
   const filename = files?.[lightbox.fileIndex]?.name ?? "…";
   const pageCount = files?.[lightbox.fileIndex]?.page_count;

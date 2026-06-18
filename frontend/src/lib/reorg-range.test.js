@@ -11,6 +11,7 @@ describe("reorg range", () => {
     expect(isValidRange(3, 11, 10)).toBe(false);
     expect(isValidRange(5, 3, 10)).toBe(false);
     expect(isValidRange(null, 3, 10)).toBe(false);
+    expect(isValidRange(3, null, 10)).toBe(false);
   });
   it("normalizes [start,end] sorted", () => {
     expect(normalizeRange(5, 3)).toEqual([3, 5]);
