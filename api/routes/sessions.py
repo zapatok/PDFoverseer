@@ -737,6 +737,7 @@ def scan_file_ocr(
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/override")
 def patch_override(
+    request: Request,
     session_id: str,
     hospital: str,
     sigla: str,
@@ -771,6 +772,7 @@ def patch_override(
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
     cell = state["cells"].get(hospital, {}).get(sigla, {})
+    _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     return {
         "user_override": cell.get("user_override"),
     }

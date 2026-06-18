@@ -54,3 +54,25 @@ def test_cell_updated_event_missing_cell_returns_none(app) -> None:
         mgr = app.state.manager
         mgr.open_session(year=2026, month=4, month_root=__import__("pathlib").Path("."))
         assert _cell_updated_event(mgr, "2026-04", "HPV", "nope") is None
+
+
+def _open_session(client: TestClient) -> None:
+    """Abre la sesión 2026-04 vía API (usa el corpus real montado en el repo)."""
+    r = client.post("/api/sessions", json={"year": 2026, "month": 4})
+    assert r.status_code == 200
+
+
+def test_patch_override_broadcasts_cell_updated(app) -> None:
+    """Un PATCH de override entrega cell_updated (celda completa) por el WS."""
+    with TestClient(app) as client:
+        _open_session(client)
+        with client.websocket_connect("/ws/sessions/2026-04") as ws:
+            r = client.patch(
+                "/api/sessions/2026-04/cells/HPV/odi/override",
+                json={"value": 9},
+            )
+            assert r.status_code == 200
+            evt = _recv_type(ws, "cell_updated")
+            assert evt["hospital"] == "HPV"
+            assert evt["sigla"] == "odi"
+            assert evt["cell"]["user_override"] == 9
