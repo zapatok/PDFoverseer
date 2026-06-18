@@ -122,7 +122,12 @@ function ReorgHud({
   const [rotDeg, setRotDeg] = useState(0);
   const [creating, setCreating] = useState(false);
 
-  const rangeValid = isValidRange(reorgStart, reorgEnd, pageCount);
+  // Validate the NORMALIZED range so marking end-before-start (pág. 7 then 3) is
+  // accepted — the HUD already shows it min–max and handleCreate normalizes too.
+  const rangeValid =
+    reorgStart != null &&
+    reorgEnd != null &&
+    isValidRange(...normalizeRange(reorgStart, reorgEnd), pageCount);
   const canCreate =
     rangeValid &&
     currentFile != null &&
@@ -139,7 +144,12 @@ function ReorgHud({
         file: currentFile,
         page_range: [start, end],
       },
-      dest: { hospital: destHospital, sigla: destSigla },
+      // split_in_place / rotate stay in the same cell — dest == source (a different
+      // dest would tell paso-1 to move a file that should not move).
+      dest:
+        opType === "split_in_place" || opType === "rotate"
+          ? { hospital: sourceHospital, sigla: sourceSigla }
+          : { hospital: destHospital, sigla: destSigla },
       doc_count: null,
       worker_count: null,
       rotation_deg: opType === "rotate" ? rotDeg : 0,

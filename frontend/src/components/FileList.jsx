@@ -45,7 +45,12 @@ function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated }) {
       await addReorgOp(sessionId, srcHospital, srcSigla, {
         op_type: opType,
         source: { file: file.name },
-        dest: { hospital: destHospital, sigla: destSigla },
+        // rotate stays in the same cell — dest == source (a different dest would
+        // tell paso-1 to move a file that should only be rotated in place).
+        dest:
+          opType === "rotate"
+            ? { hospital: srcHospital, sigla: srcSigla }
+            : { hospital: destHospital, sigla: destSigla },
         empresa: empresa || null,
         preserve_date: true,
         // rotation_deg must be a valid int (Pydantic rejects null for `int = 0`).
