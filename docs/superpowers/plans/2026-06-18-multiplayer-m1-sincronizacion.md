@@ -74,6 +74,17 @@ def app(tmp_path, monkeypatch):
     return create_app()
 
 
+def _recv_type(ws, expected_type, tries=5):
+    """Lee frames del WS hasta hallar el tipo esperado (salta el keepalive ``ping``
+    u otros eventos que lleguen antes). Evita flakes y mantiene TODOS los tests WS
+    consistentes (un solo patrón de recepción)."""
+    for _ in range(tries):
+        evt = json.loads(ws.receive_text())
+        if evt.get("type") == expected_type:
+            return evt
+    raise AssertionError(f"no se recibió {expected_type} en {tries} frames")
+
+
 def test_cell_updated_event_carries_full_cell(app) -> None:
     """_cell_updated_event devuelve el snapshot COMPLETO de la celda (no parcial)."""
     mgr = app.state.manager
@@ -207,8 +218,7 @@ def test_patch_override_broadcasts_cell_updated(app) -> None:
                 json={"value": 9},
             )
             assert r.status_code == 200
-            evt = json.loads(ws.receive_text())
-            assert evt["type"] == "cell_updated"
+            evt = _recv_type(ws, "cell_updated")
             assert evt["hospital"] == "HPV"
             assert evt["sigla"] == "odi"
             assert evt["cell"]["user_override"] == 9
@@ -264,13 +274,29 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 Aplica el **mismo patrón** de Task 2 (agregar `request: Request` como primer param si falta + `_broadcast_cell_updated(request, mgr, session_id, hospital, sigla)` después de toda mutación, antes del `return`) a:
 
-- `apply_ratio` (~L273) — agregar `request`.
+- `apply_ratio` (~L274, el `def`; L273 es el modelo `ApplyRatioRequest`) — agregar `request`.
 - `patch_per_file_override` (~L730) — agregar `request`.
 - `clear_near_matches` (~L783) — agregar `request`.
 - `patch_worker_count` (~L812) — agregar `request`.
 - `patch_note` (~L863) — agregar `request`.
 - `patch_confirm` (~L899) — agregar `request`.
-- `scan_file_ocr` (~L624) — **ya tiene `request`**; agregar el broadcast al final del handler (tras encolar/terminar la escritura per-file). Ojo: `scan_file_ocr` puede correr async/encolado; difunde `cell_updated` en el punto donde el `per_file` ya quedó escrito (tras `apply_per_file_ocr_result`). Si la escritura es en background, emite el `cell_updated` desde el mismo lugar donde hoy emite `file_scan_done`.
+- `scan_file_ocr` (~L624) — **CASO ESPECIAL, NO uses el patrón "antes del return".** Aquí la escritura del `per_file` ocurre en un **hilo de fondo** (`_run` → `scan_one_file_ocr` → `on_progress`), DESPUÉS de que el handler ya retornó `{"accepted": True, ...}`. Emitir `cell_updated` en el `return` síncrono (~L682) difundiría un snapshot **viejo** (aún sin el merge). La emisión va **dentro del closure `on_progress`** (~L652), justo **después** del `apply_per_file_ocr_result(...)` (~L656-664), usando el `loop` ya capturado (igual que el `broadcast` de L653 — NO `_emit(request,...)`):
+
+  ```python
+      def on_progress(event: dict) -> None:
+          asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
+          if event.get("type") == "file_scan_done":
+              r = event["result"]
+              mgr.apply_per_file_ocr_result(
+                  session_id, hospital, sigla, filename,
+                  count=r["ocr_count"], method=r["method"],
+                  near_matches=r.get("near_matches") or [],
+              )
+              # M1: tras fusionar el per_file, difunde la celda completa para los demás clientes.
+              cu = _cell_updated_event(mgr, session_id, hospital, sigla)
+              if cu is not None:
+                  asyncio.run_coroutine_threadsafe(broadcast(session_id, cu), loop)
+  ```
 
 **Files:**
 - Modify: `api/routes/sessions.py`
@@ -288,8 +314,7 @@ def test_patch_note_broadcasts_cell_updated(app) -> None:
                 json={"text": "revisar colado", "status": "por_resolver"},
             )
             assert r.status_code == 200
-            evt = json.loads(ws.receive_text())
-            assert evt["type"] == "cell_updated"
+            evt = _recv_type(ws, "cell_updated")
             assert evt["cell"]["note"] == "revisar colado"
 
 
@@ -302,8 +327,7 @@ def test_patch_worker_count_broadcasts_cell_updated(app) -> None:
                 json={"status": "en_progreso"},
             )
             assert r.status_code == 200
-            evt = json.loads(ws.receive_text())
-            assert evt["type"] == "cell_updated"
+            evt = _recv_type(ws, "cell_updated")
             assert evt["cell"]["worker_status"] == "en_progreso"
 ```
 
@@ -373,14 +397,14 @@ def _scan_followup_event(mgr: SessionManager, session_id: str, event: dict) -> d
     return _cell_updated_event(mgr, session_id, event["hospital"], event["sigla"])
 ```
 
-En `on_progress` (dentro de `scan_ocr`, ~L571), tras el `_safe_broadcast(_apply_scan_event(...))` agrega:
+**Modifica la función existente** `on_progress` (dentro de `scan_ocr`, ~L571) — NO la redefinas, solo agrega las 3 líneas del `followup` tras el `_safe_broadcast` que ya tiene, para que quede así:
 
 ```python
     def on_progress(event: dict) -> None:
         _safe_broadcast(_apply_scan_event(mgr, session_id, event))
-        followup = _scan_followup_event(mgr, session_id, event)
-        if followup is not None:
-            _safe_broadcast(followup)
+        followup = _scan_followup_event(mgr, session_id, event)   # ← nuevo
+        if followup is not None:                                   # ← nuevo
+            _safe_broadcast(followup)                              # ← nuevo
 ```
 
 - [ ] **Step 4: Corre → PASA** (`pytest tests/unit/api/test_multiplayer_sync.py -v`).
@@ -413,14 +437,8 @@ def test_scan_broadcasts_session_refresh(app) -> None:
         with client.websocket_connect("/ws/sessions/2026-04") as ws:
             r = client.post("/api/sessions/2026-04/scan", json={"scope": "all"})
             assert r.status_code == 200
-            # puede llegar algún ping primero; busca el session_refresh
-            seen = None
-            for _ in range(5):
-                evt = json.loads(ws.receive_text())
-                if evt["type"] == "session_refresh":
-                    seen = evt
-                    break
-            assert seen is not None
+            evt = _recv_type(ws, "session_refresh")  # salta pings (helper de Task 1)
+            assert evt["type"] == "session_refresh"
 ```
 
 - [ ] **Step 2: Corre → FALLA** (timeout / nunca llega session_refresh).
@@ -540,9 +558,12 @@ Expected: PASS.
 
 - [ ] **Step 5: Repunta las 3 fuentes hardcodeadas a `config.js`**
 
-- `frontend/src/lib/constants.js` L1-2: reemplaza las 2 defs por un re-export (no romper importadores):
+- `frontend/src/lib/constants.js`: reemplaza **solo las líneas 1-2** (las defs de `API_BASE`/`WS_BASE`) por un re-export. **CONSERVA intactas** las demás exports del archivo (`CTA_LLENAR_MANUAL`, `OCR_CONFIRM_PDF_THRESHOLD`, `OCR_EST_SECONDS_PER_PDF` y cualquier otra) — NO reescribas el archivo entero. Queda:
   ```js
   export { API_BASE, WS_BASE } from "./config";
+
+  export const CTA_LLENAR_MANUAL = "Llenar manualmente →";
+  // ... (resto de constantes existentes SIN cambios) ...
   ```
 - `frontend/src/lib/api.js` L1:
   ```js
@@ -702,10 +723,9 @@ describe("session_refresh / refetchSession", () => {
 
   it("session_refresh dispara un refetch de la sesión activa", async () => {
     useSessionStore.getState()._handleWSEvent({ type: "session_refresh" });
-    // microtask flush
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(api.getSession).toHaveBeenCalledWith("2026-04");
+    // refetchSession es fire-and-forget async; espera a que se complete sin asumir
+    // un nº fijo de microtasks (robusto si el mock cambia a uno con latencia).
+    await vi.waitFor(() => expect(api.getSession).toHaveBeenCalledWith("2026-04"));
   });
 });
 ```
