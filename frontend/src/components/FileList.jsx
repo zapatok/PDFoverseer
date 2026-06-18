@@ -48,9 +48,13 @@ function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated }) {
         dest: { hospital: destHospital, sigla: destSigla },
         empresa: empresa || null,
         preserve_date: true,
-        rotation_deg: opType === "rotate" ? rotDeg : null,
-        doc_count: file.effective_count ?? 0,
-        worker_count: 0,
+        // rotation_deg must be a valid int (Pydantic rejects null for `int = 0`).
+        rotation_deg: opType === "rotate" ? rotDeg : 0,
+        // Let the backend resolve counts per op_type: move_file → the file's per_file
+        // contribution + its worker marks; rotate/split_in_place → 0 (no count change).
+        // Hardcoding here would wrongly give a rotate a doc delta and never carry workers.
+        doc_count: null,
+        worker_count: null,
         note: null,
       });
       toast.success(`Operación creada — ${file.name}`);
