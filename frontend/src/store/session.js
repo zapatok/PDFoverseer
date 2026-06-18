@@ -27,6 +27,7 @@ export const useSessionStore = create((set, get) => ({
   fileScan: null,                      // {hospital, sigla, filename, page, pagesTotal, terminal} | null — single-file OCR (rev-2 #1)
   lightbox: null,                      // {hospital, sigla, fileIndex, mode} | null
   _ws: null,
+  _visHandler: null,                   // M1: visibilitychange handler ref for cleanup
 
   // FASE 3 — pending-save coordination (see spec §6.6).
   // Map keyed by `${hospital}|${sigla}` → { controller: AbortController, status: 'saving' }
@@ -60,13 +61,24 @@ export const useSessionStore = create((set, get) => ({
     try {
       await api.createSession(year, month);
       const session = await api.getSession(sessionId);
-      // Tear down any prior WS and reconnect for the new session
+      // Tear down any prior WS and vis handler, then reconnect for the new session.
       get()._ws?.close();
+      const prevVisHandler = get()._visHandler;
+      if (prevVisHandler) document.removeEventListener("visibilitychange", prevVisHandler);
       const ws = createWSClient(sessionId, {
         onEvent: get()._handleWSEvent,
         onReconnect: () => get().refetchSession(sessionId),
       });
-      set({ session, loading: false, _ws: ws, scanningCells: new Set(), scanProgress: null, historyDrawer: null });
+      // Auto-heal: re-fetch on tab refocus (a dropped event leaves us stale).
+      // Guard for SSR/node-env (document absent outside a browser).
+      let visHandler = null;
+      if (typeof document !== "undefined") {
+        visHandler = () => {
+          if (document.visibilityState === "visible") get().refetchSession(sessionId);
+        };
+        document.addEventListener("visibilitychange", visHandler);
+      }
+      set({ session, loading: false, _ws: ws, _visHandler: visHandler, scanningCells: new Set(), scanProgress: null, historyDrawer: null });
       if (Object.keys(session.cells || {}).length === 0) {
         // pase 1 only the first time the month is opened (spec §7); fire-and-forget,
         // runScan owns `loading`. Re-opening a scanned month never re-scans (it would
