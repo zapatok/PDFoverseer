@@ -5,7 +5,7 @@ import Dialog from "../ui/Dialog";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
-import { FileStack, ScanSearch, Maximize2, ZoomIn, ZoomOut, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileStack, ScanSearch, Maximize2, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Scissors } from "lucide-react";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { wheelToPageStep } from "../lib/viewer-nav";
 import OriginChip from "./OriginChip";
@@ -149,6 +149,7 @@ export default function PDFLightbox() {
   const session = useSessionStore((s) => s.session);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
   const scanFileOcr = useSessionStore((s) => s.scanFileOcr);
+  const addReorgOp = useSessionStore((s) => s.addReorgOp);
   const fileScan = useSessionStore((s) => s.fileScan);
   // Re-fetch after an OCR scan finishes for this cell (G3 / rev-2 #1).
   const tick = useSessionStore((s) =>
@@ -265,6 +266,18 @@ export default function PDFLightbox() {
             sigla={lightbox.sigla}
             initialFileIndex={lightbox.fileIndex}
           />
+        ) : lightbox.mode === "reorg" ? (
+          <WorkerCountViewer
+            mode="reorg"
+            sessionId={session.session_id}
+            hospital={lightbox.hospital}
+            sigla={lightbox.sigla}
+            initialFileIndex={lightbox.fileIndex}
+            onCreateOp={async (draft) => {
+              await addReorgOp(session.session_id, lightbox.hospital, lightbox.sigla, draft);
+              closeLightbox();
+            }}
+          />
         ) : (
           <>
             <div className="flex-1 overflow-hidden bg-black">
@@ -289,6 +302,19 @@ export default function PDFLightbox() {
                   Escanear con OCR
                 </Button>
               )}
+              <Button
+                variant="secondary"
+                icon={Scissors}
+                size="sm"
+                disabled={!currentFile}
+                onClick={() =>
+                  openLightbox(lightbox.hospital, lightbox.sigla, lightbox.fileIndex, "reorg")
+                }
+                className="mt-2 w-full justify-center"
+                title="Seleccionar un rango de páginas para extraer/dividir/rotar"
+              >
+                Reorganizar páginas
+              </Button>
               <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual del archivo</h4>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-po-text">Documentos:</span>
