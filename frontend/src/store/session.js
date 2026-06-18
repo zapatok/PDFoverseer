@@ -634,6 +634,17 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
+  // M1 multiplayer — re-fetch the full session from the server (used by
+  // session_refresh WS event, WS reconnect, and tab refocus auto-heal).
+  refetchSession: async (sessionId) => {
+    try {
+      const session = await api.getSession(sessionId);
+      set({ session });
+    } catch (error) {
+      console.error("refetchSession failed", error);
+    }
+  },
+
   // ---------- WS event handler ----------
   _handleWSEvent: (event) => {
     const state = get();
@@ -794,6 +805,11 @@ export const useSessionStore = create((set, get) => ({
         }));
         setTimeout(() => set((s) => (s.fileScan?.terminal === "error" ? { fileScan: null } : s)), 4000);
         break;
+      case "session_refresh": {
+        const sid = state.session?.session_id;
+        if (sid) get().refetchSession(sid);
+        break;
+      }
       case "ping":
         break;     // keepalive — no-op
       default:
