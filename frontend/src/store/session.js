@@ -679,6 +679,21 @@ export const useSessionStore = create((set, get) => ({
         }
         break;
       }
+      case "cell_updated": {
+        const session = state.session;
+        if (!session) break;
+        const cells = { ...session.cells };
+        const hosp = { ...(cells[event.hospital] || {}) };
+        hosp[event.sigla] = event.cell;           // reemplazo de celda COMPLETA (§4)
+        cells[event.hospital] = hosp;
+        const tickKey = cellKey(event.hospital, event.sigla);
+        const filesTick = {
+          ...state.filesTick,
+          [tickKey]: (state.filesTick[tickKey] ?? 0) + 1,
+        };
+        set({ session: { ...session, cells }, filesTick });
+        break;
+      }
       case "cell_error": {
         const next = new Set(state.scanningCells);
         next.delete(cellKey(event.hospital, event.sigla));
