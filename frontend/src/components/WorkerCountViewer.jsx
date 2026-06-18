@@ -10,7 +10,9 @@ import { useSpeechNumber } from "../hooks/useSpeechNumber";
 import { useSessionStore } from "../store/session";
 import { computeWorkerCount, fileSubtotal } from "../lib/worker-count";
 import { countTypeFor } from "../lib/sigla-info";
+import { isValidRange, normalizeRange } from "../lib/reorg-range";
 import Button from "../ui/Button";
+import Badge from "../ui/Badge";
 import { PdfPage } from "./PdfPage";
 import { WorkerBubble } from "./WorkerBubble";
 import { WorkerHud } from "./WorkerHud";
@@ -21,12 +23,273 @@ const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 0.2;
 
+// Hospitals and siglas for the reorg destination picker.
+const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
+const SIGLAS = [
+  "reunion", "irl", "odi", "charla", "chintegral", "dif_pts", "art",
+  "insgral", "bodega", "maquinaria", "ext", "senal", "exc", "altura",
+  "caliente", "herramientas_elec", "andamios", "chps",
+];
+
+const OP_TYPES_WITH_RANGE = ["extract_pages", "split_in_place", "rotate"];
+
 /** La marca de una página concreta de un archivo, o undefined. */
 function markFor(marks, filename, page) {
   return (marks[filename] || []).find((m) => m.page === page);
 }
 
-export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex }) {
+/**
+ * Columna de miniaturas con resaltado de rango de reorg.
+ * Extiende WorkerThumbnails visualmente con un fondo de selección en el rango.
+ */
+function ReorgThumbnails({ doc, pageCount, currentPage, reorgStart, reorgEnd, onSelect }) {
+  const refs = useRef({});
+  const currentRef = useRef(null);
+
+  useEffect(() => {
+    currentRef.current?.scrollIntoView({ block: "nearest" });
+  }, [currentPage]);
+
+  if (!doc || !pageCount) {
+    return <aside aria-hidden="true" className="w-28 shrink-0 border-r border-po-border bg-po-panel" />;
+  }
+
+  const inRange = (p) =>
+    reorgStart != null && reorgEnd != null && p >= reorgStart && p <= reorgEnd;
+  const isStart = (p) => p === reorgStart;
+  const isEnd = (p) => p === reorgEnd;
+
+  return (
+    <aside className="w-28 shrink-0 overflow-y-auto border-r border-po-border bg-po-panel p-1.5">
+      <ul className="flex flex-col gap-1.5">
+        {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
+          <li
+            key={p}
+            ref={(el) => {
+              refs.current[p] = el;
+              if (p === currentPage) currentRef.current = el;
+            }}
+          >
+            <button
+              onClick={() => onSelect(p)}
+              aria-current={p === currentPage ? "true" : undefined}
+              aria-label={`Página ${p}${isStart(p) ? " (inicio)" : ""}${isEnd(p) ? " (fin)" : ""}`}
+              className={[
+                "relative block w-full rounded border p-0.5 transition",
+                p === currentPage
+                  ? "border-po-accent ring-1 ring-po-accent"
+                  : inRange(p)
+                    ? "border-po-scanning bg-po-scanning-bg"
+                    : "border-po-border hover:border-po-border-strong",
+              ].join(" ")}
+            >
+              <div className="flex aspect-[3/4] w-full items-center justify-center bg-po-bg text-[10px] text-po-text-subtle">
+                …
+              </div>
+              <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] tabular-nums text-white">
+                {p}
+              </span>
+              {(isStart(p) || isEnd(p)) && (
+                <span className="absolute right-1 top-1 rounded-full bg-po-scanning px-1 text-[10px] font-medium text-white">
+                  {isStart(p) ? "A" : "Z"}
+                </span>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
+
+/**
+ * HUD lateral del modo reorganización: selección de rango + destino + crear op.
+ */
+function ReorgHud({
+  currentPage,
+  pageCount,
+  reorgStart,
+  reorgEnd,
+  onMarkStart,
+  onMarkEnd,
+  onClearRange,
+  onCreateOp,
+  currentFile,
+  sourceHospital,
+  sourceSigla,
+}) {
+  const [opType, setOpType] = useState("extract_pages");
+  const [destHospital, setDestHospital] = useState(HOSPITALS[0]);
+  const [destSigla, setDestSigla] = useState(SIGLAS[0]);
+  const [rotDeg, setRotDeg] = useState(0);
+  const [creating, setCreating] = useState(false);
+
+  const rangeValid = isValidRange(reorgStart, reorgEnd, pageCount);
+  const canCreate =
+    rangeValid &&
+    currentFile != null &&
+    (opType === "split_in_place" || opType === "rotate"
+      ? true
+      : destHospital !== sourceHospital || destSigla !== sourceSigla);
+
+  const handleCreate = async () => {
+    if (!canCreate) return;
+    const [start, end] = normalizeRange(reorgStart, reorgEnd);
+    const opDraft = {
+      op_type: opType,
+      source: {
+        file: currentFile,
+        page_range: [start, end],
+      },
+      dest: { hospital: destHospital, sigla: destSigla },
+      doc_count: null,
+      worker_count: null,
+      rotation_deg: opType === "rotate" ? rotDeg : 0,
+    };
+    setCreating(true);
+    try {
+      await onCreateOp(opDraft);
+      onClearRange();
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const selectClass =
+    "w-full rounded border border-po-border bg-po-panel px-2 py-1 text-xs text-po-text focus:outline-none focus:ring-1 focus:ring-po-accent";
+
+  return (
+    <aside className="flex w-52 shrink-0 flex-col gap-3 overflow-y-auto border-l border-po-border bg-po-panel p-3 text-xs">
+      <div className="font-semibold text-po-text">Reorganizar rango</div>
+
+      {/* Archivo actual */}
+      <div className="truncate text-[10px] text-po-text-muted" title={currentFile}>
+        {currentFile ?? "—"}
+      </div>
+
+      {/* Marcar inicio / fin */}
+      <div className="flex flex-col gap-1.5">
+        <Button
+          size="sm"
+          variant={reorgStart != null ? "primary" : "secondary"}
+          onClick={onMarkStart}
+        >
+          {reorgStart != null ? `Inicio: pág. ${reorgStart}` : "Marcar inicio"}
+        </Button>
+        <Button
+          size="sm"
+          variant={reorgEnd != null ? "primary" : "secondary"}
+          onClick={onMarkEnd}
+        >
+          {reorgEnd != null ? `Fin: pág. ${reorgEnd}` : "Marcar fin"}
+        </Button>
+        {(reorgStart != null || reorgEnd != null) && (
+          <button
+            className="text-[10px] text-po-text-muted underline hover:text-po-text"
+            onClick={onClearRange}
+          >
+            Limpiar selección
+          </button>
+        )}
+      </div>
+
+      {/* Estado del rango */}
+      {reorgStart != null && reorgEnd != null && (
+        <div className="rounded border border-po-border bg-po-bg px-2 py-1 text-[10px]">
+          {rangeValid ? (
+            <span className="text-po-confidence-high">
+              Páginas {Math.min(reorgStart, reorgEnd)}–{Math.max(reorgStart, reorgEnd)}
+            </span>
+          ) : (
+            <span className="text-po-error">Rango inválido</span>
+          )}
+        </div>
+      )}
+
+      {/* Tipo de operación */}
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] font-medium text-po-text-muted">Tipo de operación</label>
+        <select className={selectClass} value={opType} onChange={(e) => setOpType(e.target.value)}>
+          <option value="extract_pages">Extraer páginas</option>
+          <option value="split_in_place">Dividir en celda</option>
+          <option value="rotate">Rotar</option>
+        </select>
+      </div>
+
+      {/* Destino (no aplica para split_in_place ni rotate) */}
+      {opType === "extract_pages" && (
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium text-po-text-muted">Destino</label>
+          <select
+            className={selectClass}
+            value={destHospital}
+            onChange={(e) => setDestHospital(e.target.value)}
+          >
+            {HOSPITALS.map((h) => (
+              <option key={h} value={h}>{h}</option>
+            ))}
+          </select>
+          <select
+            className={selectClass}
+            value={destSigla}
+            onChange={(e) => setDestSigla(e.target.value)}
+          >
+            {SIGLAS.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          {destHospital === sourceHospital && destSigla === sourceSigla && (
+            <span className="text-[10px] text-po-error">
+              El destino debe ser diferente al origen.
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Rotación (solo para rotate) */}
+      {opType === "rotate" && (
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium text-po-text-muted">Rotación</label>
+          <select
+            className={selectClass}
+            value={rotDeg}
+            onChange={(e) => setRotDeg(Number(e.target.value))}
+          >
+            <option value={90}>90°</option>
+            <option value={180}>180°</option>
+            <option value={270}>270°</option>
+          </select>
+        </div>
+      )}
+
+      {/* Crear operación */}
+      <Button
+        size="sm"
+        variant="primary"
+        disabled={!canCreate || creating}
+        onClick={handleCreate}
+      >
+        {creating ? "Creando…" : "Crear operación"}
+      </Button>
+
+      {/* Chips informativas de la selección activa */}
+      {rangeValid && (
+        <div className="flex flex-wrap gap-1">
+          <Badge variant="blue">{opType}</Badge>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+export function WorkerCountViewer({
+  sessionId,
+  hospital,
+  sigla,
+  initialFileIndex,
+  mode = "worker",
+  onCreateOp,
+}) {
   const saveWorkerCount = useSessionStore((s) => s.saveWorkerCount);
   const saveStatus = useSessionStore(
     (s) => s.pendingSaves[`${hospital}|${sigla}|workers`] ?? "idle",
@@ -44,6 +307,10 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
   const [pending, setPending] = useState(null); // buffer de dígitos tecleados, o null
   const [micPaused, setMicPaused] = useState(false);
   const [zoom, setZoom] = useState(1);
+
+  // Reorg-mode state: page range selection (1-based; null = not yet marked).
+  const [reorgStartPage, setReorgStartPage] = useState(null);
+  const [reorgEndPage, setReorgEndPage] = useState(null);
 
   // --- carga de la lista de archivos (orden = sorted rglob del backend) ---
   useEffect(() => {
@@ -76,7 +343,11 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
   const { panelRef, fitScale } = useFitScale(doc, Math.max(pageInFile, 1));
 
   // --- autosave con debounce + flush al cerrar ---
+  // GATE: both the debounced save and the unmount flush are skipped in reorg
+  // mode — no worker marks should be POSTed to the worker-count endpoint when
+  // the viewer is in range-selection mode.
   const flushSave = useDebouncedCallback((m, st, cur) => {
+    if (mode === "reorg") return;
     saveWorkerCount(sessionId, hospital, sigla, { marks: m, status: st, cursor: cur });
   }, SAVE_DEBOUNCE_MS);
 
@@ -86,11 +357,14 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
   useEffect(() => {
     return () => {
       flushSave.cancel();
+      // GATE: skip unmount flush in reorg mode — prevent stale marks from being
+      // POSTed when closing the reorg viewer.
+      if (mode === "reorg") return;
       if (latest.current) {
         saveWorkerCount(sessionId, hospital, sigla, latest.current);
       }
     };
-  }, [sessionId, hospital, sigla, saveWorkerCount, flushSave]);
+  }, [sessionId, hospital, sigla, saveWorkerCount, flushSave, mode]);
 
   // limpia el buffer pendiente al cambiar de página
   useEffect(() => {
@@ -119,8 +393,11 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
   // --- voz: un número reconocido entra como pendiente, igual que tecleado ---
   // El hook se llama siempre (Rules-of-Hooks); se desactiva vía `enabled`.
   const { status: micStatus } = useSpeechNumber({
-    enabled: !micPaused && isWorkersMode,
-    onNumber: (n) => setPending(String(n)),
+    enabled: !micPaused && isWorkersMode && mode === "worker",
+    onNumber: (n) => {
+      if (mode === "reorg") return;
+      setPending(String(n));
+    },
   });
 
   if (!files) {
@@ -216,7 +493,10 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
   // refresca la ref del teclado con los closures de este render. El visor no
   // tiene ningún <input>, así que captura toda la entrada: los dígitos van al
   // buffer pendiente, Backspace lo corrige, y los atajos de §5.4 a la marca.
+  // GATE: in reorg mode the keyboard handler is a no-op — digits/PageDown must
+  // NOT write worker marks while the operator is selecting a page range.
   keyHandler.current = (e) => {
+    if (mode === "reorg") return;
     if (e.key === "PageDown") { e.preventDefault(); fixAndAdvance(); }
     else if (e.key === "PageUp") { e.preventDefault(); retreat(); }
     else if (e.key === "Delete") { e.preventDefault(); deleteMark(); }
@@ -233,16 +513,38 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
     }
   };
 
+  // --- reorg-mode helpers ---
+  const handleMarkStart = () => setReorgStartPage(page);
+  const handleMarkEnd = () => setReorgEndPage(page);
+  const handleClearRange = () => { setReorgStartPage(null); setReorgEndPage(null); };
+
+  const handleCreateOp = async (opDraft) => {
+    if (onCreateOp) {
+      await onCreateOp(opDraft);
+    }
+  };
+
   return (
     <div className="flex h-full w-full">
-      <WorkerThumbnails
-        doc={error ? null : doc}
-        pageCount={pageCount}
-        currentPage={page}
-        marks={marks[currentFile.name] || []}
-        onSelect={setPageInFile}
-        unit={unit}
-      />
+      {mode === "reorg" ? (
+        <ReorgThumbnails
+          doc={error ? null : doc}
+          pageCount={pageCount}
+          currentPage={page}
+          reorgStart={reorgStartPage}
+          reorgEnd={reorgEndPage}
+          onSelect={setPageInFile}
+        />
+      ) : (
+        <WorkerThumbnails
+          doc={error ? null : doc}
+          pageCount={pageCount}
+          currentPage={page}
+          marks={marks[currentFile.name] || []}
+          onSelect={setPageInFile}
+          unit={unit}
+        />
+      )}
       <div ref={panelRef} className="relative flex-1 overflow-auto bg-black">
         {/* Un PDF roto no es un dead-end: el HUD y los atajos siguen vivos
             (spec §10) — el error se muestra en el panel y Re Pág / Av Pág
@@ -259,7 +561,8 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
             </div>
           )
         )}
-        <WorkerBubble state={bubbleState} value={bubbleValue} />
+        {/* Worker bubble only in worker mode */}
+        {mode === "worker" && <WorkerBubble state={bubbleState} value={bubbleValue} />}
         {doc && !error && (
           <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg bg-po-panel/90 p-1 shadow-sm ring-1 ring-po-border backdrop-blur">
             <Button size="sm" variant="ghost" icon={ZoomOut} onClick={zoomOut} aria-label="Alejar" />
@@ -269,23 +572,45 @@ export function WorkerCountViewer({ sessionId, hospital, sigla, initialFileIndex
             <Button size="sm" variant="ghost" icon={ZoomIn} onClick={zoomIn} aria-label="Acercar" />
           </div>
         )}
+        {/* Reorg mode: page indicator overlay */}
+        {mode === "reorg" && (
+          <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-lg bg-po-panel/90 px-2 py-1 text-xs text-po-text-muted shadow-sm ring-1 ring-po-border backdrop-blur">
+            Pág. {page} / {pageCount}
+          </div>
+        )}
       </div>
-      <WorkerHud
-        files={files}
-        fileIndex={fileIdx}
-        pageInFile={page}
-        pageCount={pageCount}
-        subtotal={subtotal}
-        total={total}
-        marks={marks}
-        currentFilename={currentFile.name}
-        status={status}
-        saveStatus={saveStatus}
-        micStatus={micStatus}
-        onFinish={toggleFinish}
-        unit={unit}
-        showMic={isWorkersMode}
-      />
+      {mode === "worker" ? (
+        <WorkerHud
+          files={files}
+          fileIndex={fileIdx}
+          pageInFile={page}
+          pageCount={pageCount}
+          subtotal={subtotal}
+          total={total}
+          marks={marks}
+          currentFilename={currentFile.name}
+          status={status}
+          saveStatus={saveStatus}
+          micStatus={micStatus}
+          onFinish={toggleFinish}
+          unit={unit}
+          showMic={isWorkersMode}
+        />
+      ) : (
+        <ReorgHud
+          currentPage={page}
+          pageCount={pageCount}
+          reorgStart={reorgStartPage}
+          reorgEnd={reorgEndPage}
+          onMarkStart={handleMarkStart}
+          onMarkEnd={handleMarkEnd}
+          onClearRange={handleClearRange}
+          onCreateOp={handleCreateOp}
+          currentFile={currentFile.name}
+          sourceHospital={hospital}
+          sourceSigla={sigla}
+        />
+      )}
     </div>
   );
 }
