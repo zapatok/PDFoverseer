@@ -42,9 +42,14 @@ Tres piezas existen y calzan sin reescritura:
    Hoy solo lleva progreso de escaneo (servidor→cliente). Es el tubo que multiplayer
    necesita.
 2. **Merge de eventos en el frontend.** `frontend/src/store/session.js` (`_handleWSEvent`,
-   caso `cell_done` ~L649) ya aplica el snapshot de una celda empujado por el servidor al
-   estado local de Zustand. `frontend/src/lib/ws.js` ya tiene cliente WS con reconexión +
-   backoff. Se **generaliza** ese merge a cualquier celda.
+   caso `cell_done` ~L649) ya aplica un cambio de celda empujado por el servidor al estado
+   local de Zustand. **Ojo (precisión):** ese merge es **parcial** — copia solo 6 campos
+   (`ocr_count`, `method`, `confidence`, `duration_ms_ocr`, `near_matches`, `per_file`), NO
+   reemplaza la celda entera. `cell_updated` (§4) NO puede usar ese patrón parcial: un cambio
+   remoto puede tocar cualquier campo (`note`, `user_override`, `per_file_overrides`,
+   `confirmed`, `worker_marks`, `reorg_doc_delta`, …) y un merge de 6 campos los descartaría en
+   silencio. Por eso `cell_updated` lleva el **snapshot completo** y el frontend **reemplaza la
+   celda entera** (§4). `frontend/src/lib/ws.js` ya tiene cliente WS con reconexión + backoff.
 3. **Escrituras serializadas y seguras entre clientes.** `api/state.py` (`_synchronized` +
    `RLock`): cada setter hace *load → modifica solo su celda → reescribe el blob*. Dos
    escrituras a **celdas distintas** ya son seguras hoy. El único riesgo es pisar la misma
@@ -53,22 +58,38 @@ Tres piezas existen y calzan sin reescritura:
 ## 4. Modelo de sincronización (server-autoritativo, broadcast-on-write)
 
 El servidor sigue siendo la única fuente de verdad (blob en SQLite). Tras **cada escritura
-commiteada** de una celda, el servidor difunde `cell_updated` con el snapshot de esa celda;
-el frontend lo mergea al estado local.
+commiteada** de una celda, el servidor difunde `cell_updated` con el **snapshot completo** de
+esa celda; el frontend **reemplaza la celda entera** en su estado local (no un merge por
+campos — ver §3 ítem 2).
 
-- **Punto único de choque.** El broadcast NO se rocía por los ~12 setters de `state.py`. Se
-  centraliza (un wrapper/capa fina alrededor del commit de estado, o en una capa de servicio
-  por encima de las rutas) para que ningún setter pueda "olvidar" difundir. Decisión de plan:
-  el punto exacto se fija en M1.
 - **Evento (contrato).**
   ```json
   {"type": "cell_updated",
    "hospital": "HRB", "sigla": "odi",
    "actor": "<participant_id>",
-   "cell": { /* snapshot de la celda, mismo shape que GET /sessions/{id} */ }}
+   "cell": { /* snapshot COMPLETO de la celda, mismo shape que cada celda en GET /sessions/{id} */ }}
   ```
-  `actor` permite al cliente distinguir su propio cambio (ya aplicado localmente) de uno
-  remoto, y evitar parpadeos.
+  El frontend hace `cells[hospital][sigla] = event.cell` (reemplazo completo). `actor` permite
+  al cliente distinguir su propio cambio (ya aplicado localmente) de uno remoto, y evitar
+  parpadeos (puede ignorar el evento cuyo `actor` es su propio `participant_id`).
+- **Punto único de choque.** El broadcast NO se rocía por los ~12 setters de `state.py`. Se
+  centraliza para que ningún setter pueda "olvidar" difundir. Dos enfoques candidatos que el
+  plan de M1 debe elegir (no es trabajo de arquitectura abierto — están acotados aquí):
+  - (a) **Decorador/wrapper alrededor del commit** (`update_session_state` o `_synchronized`):
+    cada setter, al persistir, encola el `cell_updated` de su celda. Pro: imposible olvidarlo.
+    Contra: el setter debe saber qué (hospital, sigla) tocó.
+  - (b) **Capa de servicio por encima de las rutas:** las rutas de edición, tras llamar al
+    setter, difunden. Pro: la ruta ya conoce (hospital, sigla) y el `actor`. Contra: hay que
+    cubrir cada ruta de escritura.
+  Se recomienda (b) por el `actor` (lo conoce la ruta, no el setter) y porque mantiene
+  `state.py` ajeno al transporte.
+- **Puente async-desde-sync (restricción real).** `broadcast` es `async`. Las rutas de
+  edición HTTP son handlers `async` → pueden `await broadcast(...)` directo. Pero el escaneo
+  corre en **hilos de fondo** y ya difunde vía el patrón existente
+  `asyncio.run_coroutine_threadsafe(broadcast(session_id, event), app.state.loop)`
+  (`api/routes/sessions.py` `_safe_broadcast`, ~L560-567, con guarda `loop.is_closed()`).
+  Cualquier `cell_updated` emitido desde un hilo (p.ej. el escaneo) DEBE reusar ese mismo
+  puente, no `await` directo (no hay loop en el hilo).
 - **Auto-sanación (red de seguridad).** El modo de falla de broadcast-on-write es "se perdió
   un evento → pantalla vieja". Se cubre con: (a) el cliente ya re-fetchea la sesión completa
   al **reconectar** el WS; (b) se agrega re-fetch al **recuperar foco de pestaña**
@@ -112,20 +133,32 @@ participants[session_id][participant_id] = {
   del claim (atómico bajo `RLock`).
 - **Un lease por participante.** Vencerlo cascada: se elimina de presencia **y** se libera su
   lock. Sin casos especiales por tipo de borde (caída, suspensión, tarea de Claude cortada).
+- **Sincronización:** el registro de participantes comparte el **mismo `RLock`** de
+  `SessionManager` (no se introduce un segundo primitivo). Las operaciones de presencia/claim
+  se serializan con las escrituras de celda, lo que además da el claim atómico de §6.4 gratis.
+  Para 2-3 participantes el bloqueo breve es irrelevante.
 
 ### 6.2 Endpoints HTTP
 
 - `POST /api/sessions/{id}/presence/heartbeat` — body `{participant_id, name, color}`.
   Renueva el lease (lo crea si es nuevo = "join"). Periódico (~15 s) desde el navegador.
-  Devuelve el snapshot de presencia actual.
+  **Devuelve en el body HTTP el snapshot de presencia actual** — así un cliente que se conecta
+  cuando los demás están quietos conoce el estado al instante, sin esperar un cambio ajeno.
 - `POST /api/sessions/{id}/presence/focus` — body `{participant_id, cell: "H|sigla" | null}`.
   **Focus = claim.** Suelta la celda anterior del participante; si `cell` no es null, intenta
-  tomarla como editor (atómico): devuelve `{mode: "editor"}` si quedó libre, o
-  `{mode: "viewer", lock_holder: {participant_id, name, color, kind}}` si estaba ocupada.
-  `cell=null` = volver a vista mes/hospital (suelta sin tomar nada).
+  tomarla como editor (atómico bajo `RLock`): devuelve `{mode: "editor"}` si quedó libre, o
+  `{mode: "viewer", lock_holder: {participant_id, name, color, kind}}` si estaba ocupada. El
+  frontend DEBE actuar sobre `mode`: en `"viewer"`, además de deshabilitar los controles,
+  **muestra un aviso inline visible** ("Carla está editando esta celda") — nunca degradar a
+  solo-lectura en silencio. `cell=null` = volver a vista mes/hospital (suelta sin tomar nada).
 - `POST /api/sessions/{id}/presence/leave` — body `{participant_id}`. Quita al participante
   (best-effort al cerrar pestaña vía `navigator.sendBeacon`; el vencimiento del lease es el
   respaldo).
+
+**Cuándo se difunde `presence` (§7):** ante **cualquier cambio** del mapa de participantes
+(join, focus, leave, expiración) — **no** en cada heartbeat. El heartbeat sin cambios solo
+renueva el lease y responde el snapshot por HTTP; no genera tráfico WS. Así se evita ruido
+periódico con 2-3 participantes.
 
 ### 6.3 Liveness
 
@@ -137,14 +170,22 @@ participants[session_id][participant_id] = {
 
 ### 6.4 Enforcement (M3)
 
-Los endpoints que **escriben** una celda reciben `participant_id` y verifican el lock:
-- Humano: el navegador hizo `focus`(claim) antes de editar → tiene el lock → escritura
-  permitida. Si no lo tiene (celda de otro) → **409** y la UI ya estaba en solo-lectura.
-- Claude: su llamada incluye `participant_id="claude"`. El endpoint intenta el claim a su
-  nombre: libre → toma + escribe + difunde su badge; ocupada por otro → **409** y Claude lo
-  reporta al usuario ("esa celda la tiene Carla, no la toqué").
+Los endpoints que **escriben** una celda reciben `participant_id`. Hay **dos caminos
+distintos**, y ambos resuelven el chequeo de lock **dentro de la misma adquisición del
+`RLock`** que la escritura (sin ventana TOCTOU entre "verifico lock" y "escribo"):
+- **Humano (claim explícito y previo):** el navegador hizo `focus`(claim) **antes** de editar
+  → ya es editor. El endpoint de escritura solo **verifica** que `participant_id` siga siendo
+  el editor de esa celda: lo es → escribe; no lo es (la perdió / es de otro) → **409** (la UI
+  ya estaba en solo-lectura).
+- **Claude (claim implícito, atómico):** su llamada incluye `participant_id="claude"` y NO
+  pasa por `focus` previo. El endpoint hace **claim-y-escritura como una sola operación
+  atómica** bajo el `RLock`: si la celda está libre la toma, fija su `focused_cell`, renueva su
+  lease, escribe y difunde su badge; si está ocupada por otro → **409** sin escribir, y Claude
+  lo reporta ("esa celda la tiene Carla, no la toqué"). El claim y la escritura comparten el
+  lock → no hay forma de que otro se cuele entre medio.
 
-En M1/M2 las escrituras **no** chequean lock (sin enforcement todavía).
+En M1/M2 las escrituras **no** chequean lock (sin enforcement todavía); el `participant_id` y
+el chequeo/claim atómico entran en M3.
 
 ## 7. Eventos de bajada de presencia/lock
 
@@ -170,7 +211,11 @@ presencia con el snapshot.
 - **Borde fino — el usuario tiene abierta la celda que le manda a Claude.** Default acordado:
   Claude avisa ("la tienes abierta, ciérrala o muévete y la ajusto"), el usuario la suelta,
   Claude la toma. Se prefiere la regla única (nadie pisa a nadie) sobre la comodidad de
-  "prestar el lock", que metería una excepción al modelo.
+  "prestar el lock", que metería una excepción al modelo. **Nota de implementación:** este
+  borde se resuelve en el comportamiento conversacional de Claude (recibe el 409 y avisa), NO
+  en la API. **No existe ni debe construirse un endpoint "ceder/prestar lock"** — por diseño.
+  No es testeable mecánicamente; el test solo cubre que la escritura de Claude a una celda
+  ocupada devuelve 409 sin escribir.
 
 ## 9. Frontera: estado efímero vs estado de documento
 
@@ -182,17 +227,31 @@ presencia con el snapshot.
 
 ## 10. Escaneo masivo vs locks
 
-- El escáner toma el lock **por celda, solo mientras la escanea** (el badge salta con él). En
-  el pase de nombres es un parpadeo de ~4 s en todo el mes; en el pase OCR cada celda queda
-  tomada mientras dura su escaneo.
-- Si el escáner llega a una celda que **otro tiene en edición**, la **salta** y lo reporta
-  ("N celdas omitidas porque estaban en edición"), en vez de pisarla. Esto es adicional al
-  clobber-guard `_cell_has_work` que ya existe.
+- El escáner toma el lock **por celda, solo mientras la escanea** (el badge salta con él,
+  `participant_id="claude"`). En el pase de nombres es un parpadeo de ~4 s en todo el mes; en
+  el pase OCR cada celda queda tomada mientras dura su escaneo.
+- **Dónde se chequea el lock (contrato):** el bucle del escaneo, **justo antes de mutar cada
+  celda** (no al encolar), bajo el `RLock`: si esa celda está en `mode="editor"` por **otro**
+  participante, el escáner **no la toca** y emite un evento de salto; si está libre, la toma
+  (claim a nombre de `claude`), escribe y la suelta. Esto es adicional al clobber-guard
+  `_cell_has_work` que ya existe (ese protege contra pisar OCR/ediciones; este protege contra
+  pisar una **edición en vivo**).
+- **Evento de salto (contrato):** por cada celda omitida, el escáner emite por WS
+  `{"type": "cell_skipped", "hospital": ..., "sigla": ..., "reason": "locked",
+  "lock_holder": {participant_id, name}}`. Al terminar, `scan_complete` incluye
+  `"skipped": [{hospital, sigla}, ...]` para que la UI muestre el resumen ("N celdas omitidas
+  porque estaban en edición") y permita re-escanearlas luego.
 - El parpadeo del badge en el pase de nombres es cosmético; se puede atenuar con un debounce.
 
 ## 11. Despliegue y restricción de un-solo-proceso
 
-- Un solo proceso uvicorn con `HOST=0.0.0.0` para exponer en LAN.
+- Un solo proceso uvicorn con `HOST=0.0.0.0` para exponer en LAN. **Cuidado (no basta):** el
+  frontend hoy **hardcodea `127.0.0.1`** en tres lugares — `frontend/src/lib/ws.js` (L17,
+  `ws://127.0.0.1:8000`), `frontend/src/lib/api.js` (L1, `http://127.0.0.1:8000/api`) y
+  `frontend/src/lib/constants.js` (L1-2, `API_BASE`/`WS_BASE`). El navegador de Carla
+  apuntaría a *su propio* localhost, no al servidor de Daniel. M1 DEBE derivar el host de
+  `window.location.hostname` (o una env de build) y consolidar esas tres fuentes en una. Sin
+  esto, `HOST=0.0.0.0` por sí solo no conecta a nadie en LAN. Ver §12 (M1).
 - El `RLock`, el registro de participantes y el mapa `_CONNECTIONS` del WS viven en **ese**
   proceso. **Restricción dura: nunca `--workers N`** — con N procesos habría N copias aisladas
   (un claim del worker 1 es invisible para el worker 2; un WS del worker 3 no recibe el
@@ -206,10 +265,13 @@ presencia con el snapshot.
 Estilo de la serie Incr: cada etapa entrega valor sola y de-riesga la siguiente. Un solo spec
 (este); implementación por etapas, cada una con su plan. Se empieza por M1.
 
-- **M1 — Fundación de sincronización.** Broadcast-on-write + merge en vivo generalizado +
-  auto-sanación (re-fetch al reconectar/recuperar foco) + `HOST=0.0.0.0`. Sin presencia ni
-  locks. Dos navegadores ya ven en vivo lo que edita el otro. Aditivo, bajo riesgo, cimiento.
-  Incluye el punto único de choque del broadcast.
+- **M1 — Fundación de sincronización.** Broadcast-on-write con snapshot completo (§4) + merge
+  en vivo generalizado (reemplazo de celda entera, §3 ítem 2) + auto-sanación (re-fetch al
+  reconectar/recuperar foco) + **exposición LAN real**: `HOST=0.0.0.0` **y** consolidar las
+  tres fuentes de host hardcodeadas del frontend (`ws.js`/`api.js`/`constants.js`) para que
+  deriven de `window.location.hostname` (§11). Sin presencia ni locks. Dos navegadores en
+  **máquinas distintas de la LAN** ya ven en vivo lo que edita el otro. Aditivo, bajo riesgo,
+  cimiento. Incluye el punto único de choque del broadcast (§4).
 - **M2 — Presencia.** Identidad (nombre + color al entrar, `participant_id` en localStorage),
   registro de participantes + heartbeat + `focus`/`leave`, evento `presence`. UI: badge en la
   fila de categoría (espacio reservado en G4) mostrando quién está en cada celda + roster de
@@ -228,7 +290,8 @@ Estilo de la serie Incr: cada etapa entrega valor sola y de-riesga la siguiente.
     concurrencia: dos claims simultáneos a la misma celda → exactamente un grant).
   - Registro de presencia: join/focus/leave, cascada de expiración (vencer lease libera lock).
   - Punto único de broadcast: toda escritura de celda difunde `cell_updated`.
-  - Escáner salta celdas bloqueadas por otro.
+  - Escáner salta celdas bloqueadas por otro: emite `cell_skipped` (§10), NO muta la celda, y
+    la incluye en `scan_complete.skipped`. Celda libre → la toma/escribe/suelta normal.
   - Lease con **reloj inyectable** para probar expiración determinísticamente.
 - **Integración de 2 participantes sin navegador:** test que simula dos `participant_id`
   golpeando la API (heartbeat/focus/edit/release) + verifica los broadcasts y los 409. Cubre
@@ -248,7 +311,8 @@ Estilo de la serie Incr: cada etapa entrega valor sola y de-riesga la siguiente.
    conectado, todo se comporta idéntico a hoy. M1/M2/M3 son aditivas; escaneo/edición/Excel/
    reorg/conteo intactos.
 4. **Lock pegado.** → vencimiento de lease. Borde raro: un dueño que parpadeó vuelve a una
-   celda ya re-tomada → cae a solo-lectura con aviso "perdiste la edición de esta celda".
+   celda ya re-tomada → su `focus` devuelve `{mode: "viewer", lock_holder}` (§6.2) y la UI
+   muestra el aviso visible "perdiste la edición de esta celda" (no degrada en silencio).
 5. **Parpadeo del badge en el escaneo rápido de nombres.** → cosmético; debounce opcional.
 
 ## 15. Registro de decisiones (del brainstorm)
