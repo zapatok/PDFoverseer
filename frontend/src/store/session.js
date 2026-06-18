@@ -78,6 +78,8 @@ export const useSessionStore = create((set, get) => ({
         };
         document.addEventListener("visibilitychange", visHandler);
       }
+      // Nota: _visHandler solo se limpia al volver a llamar openMonth (no hay acción
+      // de "cerrar sesión" explícita todavía — limitación conocida de M1).
       set({ session, loading: false, _ws: ws, _visHandler: visHandler, scanningCells: new Set(), scanProgress: null, historyDrawer: null });
       if (Object.keys(session.cells || {}).length === 0) {
         // pase 1 only the first time the month is opened (spec §7); fire-and-forget,
@@ -710,7 +712,10 @@ export const useSessionStore = create((set, get) => ({
         if (!session) break;
         const cells = { ...session.cells };
         const hosp = { ...(cells[event.hospital] || {}) };
-        hosp[event.sigla] = event.cell;           // reemplazo de celda COMPLETA (§4)
+        // Reemplazo de celda COMPLETA (§4). En el flujo de escaneo llega DESPUÉS de
+        // cell_done; si llegaran fuera de orden igual es seguro (el merge parcial de
+        // cell_done solo escribe un subconjunto de campos sobre datos ya frescos).
+        hosp[event.sigla] = event.cell;
         cells[event.hospital] = hosp;
         const tickKey = cellKey(event.hospital, event.sigla);
         const filesTick = {
