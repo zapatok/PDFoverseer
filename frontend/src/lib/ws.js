@@ -12,18 +12,21 @@
 
 import { WS_BASE } from "./config";
 
-export function createWSClient(sessionId, { onEvent, factory, initialBackoffMs = 1000 } = {}) {
+export function createWSClient(sessionId, { onEvent, factory, onReconnect, initialBackoffMs = 1000 } = {}) {
   const url = `${WS_BASE}/ws/sessions/${sessionId}`;
   const makeWS = factory || ((u) => new WebSocket(u));
   let socket = null;
   let backoff = initialBackoffMs;
   let closedByUser = false;
   let reconnectTimer = null;
+  let hasConnected = false;
 
   function connect() {
     socket = makeWS(url);
     socket.addEventListener("open", () => {
       backoff = initialBackoffMs;
+      if (hasConnected) onReconnect?.();   // open posterior al primero = reconexión
+      hasConnected = true;
     });
     socket.addEventListener("message", (evt) => {
       try {

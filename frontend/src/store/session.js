@@ -62,7 +62,10 @@ export const useSessionStore = create((set, get) => ({
       const session = await api.getSession(sessionId);
       // Tear down any prior WS and reconnect for the new session
       get()._ws?.close();
-      const ws = createWSClient(sessionId, { onEvent: get()._handleWSEvent });
+      const ws = createWSClient(sessionId, {
+        onEvent: get()._handleWSEvent,
+        onReconnect: () => get().refetchSession(sessionId),
+      });
       set({ session, loading: false, _ws: ws, scanningCells: new Set(), scanProgress: null, historyDrawer: null });
       if (Object.keys(session.cells || {}).length === 0) {
         // pase 1 only the first time the month is opened (spec §7); fire-and-forget,
