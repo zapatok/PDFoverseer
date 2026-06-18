@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import create_app
-from api.routes.sessions import _cell_updated_event, get_manager
+from api.routes.sessions import _cell_updated_event
 
 
 @pytest.fixture
@@ -79,6 +79,7 @@ def test_patch_override_broadcasts_cell_updated(app) -> None:
 
 
 def test_patch_note_broadcasts_cell_updated(app) -> None:
+    """Un PATCH de nota entrega cell_updated (celda completa) por el WS."""
     with TestClient(app) as client:
         _open_session(client)
         with client.websocket_connect("/ws/sessions/2026-04") as ws:
@@ -92,6 +93,7 @@ def test_patch_note_broadcasts_cell_updated(app) -> None:
 
 
 def test_patch_worker_count_broadcasts_cell_updated(app) -> None:
+    """Un PATCH de worker-count entrega cell_updated (celda completa) por el WS."""
     with TestClient(app) as client:
         _open_session(client)
         with client.websocket_connect("/ws/sessions/2026-04") as ws:

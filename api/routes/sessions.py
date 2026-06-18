@@ -719,8 +719,18 @@ def scan_file_ocr(
     app = request.app
     loop = app.state.loop
 
+    def _safe_bc(event: dict) -> None:
+        # on_progress corre en el hilo del pool; marshalea al loop del app y
+        # descarta el evento si ya se cerró (teardown del TestClient) en vez de
+        # reventar el hilo. Espejo de scan_ocr._safe_broadcast.
+        try:
+            if not loop.is_closed():
+                asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
+        except RuntimeError:
+            pass
+
     def on_progress(event: dict) -> None:
-        asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
+        _safe_bc(event)
         if event.get("type") == "file_scan_done":
             r = event["result"]
             mgr.apply_per_file_ocr_result(
@@ -732,9 +742,10 @@ def scan_file_ocr(
                 method=r["method"],
                 near_matches=r.get("near_matches") or [],
             )
+            # M1: tras fusionar el per_file, difunde la celda completa para los demás clientes.
             cu = _cell_updated_event(mgr, session_id, hospital, sigla)
             if cu is not None:
-                asyncio.run_coroutine_threadsafe(broadcast(session_id, cu), loop)
+                _safe_bc(cu)
 
     cancel_token = CancellationToken()
 
