@@ -277,8 +277,12 @@ export default function PDFLightbox() {
             sigla={lightbox.sigla}
             initialFileIndex={lightbox.fileIndex}
             onCreateOp={async (draft) => {
-              await addReorgOp(session.session_id, lightbox.hospital, lightbox.sigla, draft);
-              closeLightbox();
+              try {
+                await addReorgOp(session.session_id, lightbox.hospital, lightbox.sigla, draft);
+                closeLightbox();
+              } catch {
+                // addReorgOp already toasted the error; keep the lightbox open to retry.
+              }
             }}
           />
         ) : (

@@ -31,8 +31,6 @@ const SIGLAS = [
   "caliente", "herramientas_elec", "andamios", "chps",
 ];
 
-const OP_TYPES_WITH_RANGE = ["extract_pages", "split_in_place", "rotate"];
-
 /** La marca de una página concreta de un archivo, o undefined. */
 function markFor(marks, filename, page) {
   return (marks[filename] || []).find((m) => m.page === page);
@@ -430,8 +428,12 @@ export function WorkerCountViewer({
   const bubbleState = pending != null && pending !== "" ? "pending" : fixed ? "fixed" : "empty";
   const bubbleValue = pending != null && pending !== "" ? pending : fixed ? fixed.count : "";
 
-  // posición derivada (siempre válida) — la que se muestra y se persiste
-  latest.current = { marks, status, cursor: { file: fileIdx, page } };
+  // posición derivada (siempre válida) — la que se muestra y se persiste.
+  // En reorg mode no se persiste nada de trabajadores (gate del unmount flush);
+  // no escribir `latest.current` aquí deja explícito que reorg no toca marcas.
+  if (mode !== "reorg") {
+    latest.current = { marks, status, cursor: { file: fileIdx, page } };
+  }
 
   // --- navegación continua ---
   const advance = () => {
