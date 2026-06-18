@@ -463,6 +463,59 @@ def _apply_scan_event(mgr: SessionManager, session_id: str, event: dict) -> dict
     return event
 
 
+def _cell_updated_event(
+    mgr: SessionManager, session_id: str, hospital: str, sigla: str
+) -> dict | None:
+    """Arma el evento ``cell_updated`` con el snapshot COMPLETO de la celda (M1).
+
+    Lleva la celda entera (no un merge por campos) porque un cambio remoto puede
+    tocar cualquier campo; el frontend reemplaza la celda completa. ``actor`` es
+    ``None`` en M1 (la identidad llega en M2). Devuelve ``None`` si la celda no
+    existe (nunca revienta el camino de escritura).
+    """
+    try:
+        cell = mgr.get_session_state(session_id)["cells"][hospital][sigla]
+    except KeyError:
+        return None
+    return {
+        "type": "cell_updated",
+        "hospital": hospital,
+        "sigla": sigla,
+        "actor": None,
+        "cell": cell,
+    }
+
+
+def _emit(request: Request, session_id: str, event: dict) -> None:
+    """Programa un broadcast WS desde un handler de ruta síncrono (M1).
+
+    Los handlers son ``def`` síncronos → corren en un hilo del threadpool sin event
+    loop, así que marshaleamos al loop guardado del app, igual que
+    ``scan_ocr._safe_broadcast``. Se descarta el evento si el loop ya se cerró
+    (teardown de TestClient) en vez de reventar el hilo.
+    """
+    loop = request.app.state.loop
+    try:
+        if not loop.is_closed():
+            asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
+    except RuntimeError:
+        pass
+
+
+def _broadcast_cell_updated(
+    request: Request, mgr: SessionManager, session_id: str, hospital: str, sigla: str
+) -> None:
+    """Difunde ``cell_updated`` para una celda tras escribirla (M1, punto único)."""
+    event = _cell_updated_event(mgr, session_id, hospital, sigla)
+    if event is not None:
+        _emit(request, session_id, event)
+
+
+def _broadcast_session_refresh(request: Request, session_id: str) -> None:
+    """Difunde ``session_refresh`` tras una operación que toca varias celdas (M1)."""
+    _emit(request, session_id, {"type": "session_refresh"})
+
+
 def _meta_result(r: dict) -> ScanResult:
     """Reconstruye un ScanResult de *solo metadata* desde el dict de un evento
     ``cell_done`` (la salida de ``orchestrator._cell_done_meta``) para pasarlo a
