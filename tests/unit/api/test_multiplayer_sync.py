@@ -102,3 +102,22 @@ def test_patch_worker_count_broadcasts_cell_updated(app) -> None:
             assert r.status_code == 200
             evt = _recv_type(ws, "cell_updated")
             assert evt["cell"]["worker_status"] == "en_progreso"
+
+
+def test_scan_followup_emits_cell_updated_after_cell_done(app) -> None:
+    """Tras un cell_done, el drain del escaneo debe emitir un cell_updated completo."""
+    from api.routes.sessions import _scan_followup_event  # noqa: PLC0415
+
+    with TestClient(app) as client:  # noqa: F841
+        mgr = app.state.manager
+        mgr.open_session(year=2026, month=4, month_root=__import__("pathlib").Path("."))
+        mgr.apply_user_override("2026-04", "HPV", "odi", value=3)
+
+        done_event = {"type": "cell_done", "hospital": "HPV", "sigla": "odi", "result": {}}
+        followup = _scan_followup_event(mgr, "2026-04", done_event)
+        assert followup is not None
+        assert followup["type"] == "cell_updated"
+        assert followup["cell"]["user_override"] == 3
+
+        # un evento que no es cell_done no genera followup
+        assert _scan_followup_event(mgr, "2026-04", {"type": "file_result"}) is None

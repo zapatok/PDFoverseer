@@ -488,6 +488,16 @@ def _cell_updated_event(
     }
 
 
+def _scan_followup_event(mgr: SessionManager, session_id: str, event: dict) -> dict | None:
+    """Tras un ``cell_done`` del escaneo, arma el ``cell_updated`` con la celda
+    completa (el ``cell_done`` solo lleva los 6 campos del progreso). Cualquier otro
+    evento → ``None`` (no genera seguimiento). M1.
+    """
+    if event.get("type") != "cell_done":
+        return None
+    return _cell_updated_event(mgr, session_id, event["hospital"], event["sigla"])
+
+
 def _emit(request: Request, session_id: str, event: dict) -> None:
     """Programa un broadcast WS desde un handler de ruta síncrono (M1).
 
@@ -628,6 +638,9 @@ def scan_ocr(
         # resultado. La lógica vive en _apply_scan_event (módulo-nivel) para poder
         # testearla sin la maquinaria async/ProcessPool.
         _safe_broadcast(_apply_scan_event(mgr, session_id, event))
+        followup = _scan_followup_event(mgr, session_id, event)  # M1: cell_updated tras cell_done
+        if followup is not None:
+            _safe_broadcast(followup)
 
     cancel_token = CancellationToken.from_event(handle.cancel_event)
 
