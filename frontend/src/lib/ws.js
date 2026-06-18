@@ -10,12 +10,7 @@
  *   open → message → close (auto-reconnect) | manual close (no reconnect)
  */
 
-const WS_BASE = (() => {
-  if (typeof window === "undefined") return "ws://127.0.0.1:8000";
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  // Vite dev server proxies /api — for /ws we point at the FastAPI port directly
-  return `${proto}//127.0.0.1:8000`;
-})();
+import { WS_BASE } from "./config";
 
 export function createWSClient(sessionId, { onEvent, factory, initialBackoffMs = 1000 } = {}) {
   const url = `${WS_BASE}/ws/sessions/${sessionId}`;

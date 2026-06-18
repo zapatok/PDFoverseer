@@ -1,4 +1,5 @@
-const BASE = "http://127.0.0.1:8000/api";
+import { API_BASE } from "./config";
+const BASE = API_BASE;
 
 async function jsonOrThrow(res) {
   if (!res.ok) {
