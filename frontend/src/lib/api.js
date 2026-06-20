@@ -177,4 +177,36 @@ export const api = {
 
   exportManifest: (sessionId) =>
     fetch(`${BASE}/sessions/${sessionId}/reorg/export`, { method: "POST" }).then(jsonOrThrow),
+
+  // Multiplayer M2 — presence endpoints.
+  presenceHeartbeat: (sessionId, body) =>
+    fetch(`${BASE}/sessions/${sessionId}/presence/heartbeat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(jsonOrThrow),
+
+  presenceFocus: (sessionId, body) =>
+    fetch(`${BASE}/sessions/${sessionId}/presence/focus`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(jsonOrThrow),
+
+  presenceLeave: (sessionId, body) =>
+    fetch(`${BASE}/sessions/${sessionId}/presence/leave`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(jsonOrThrow),
+
+  /** Fire-and-forget leave via sendBeacon (safe to call on unload). */
+  beaconLeave: (sessionId, body) => {
+    if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+      navigator.sendBeacon(
+        `${BASE}/sessions/${sessionId}/presence/leave`,
+        new Blob([JSON.stringify(body)], { type: "application/json" })
+      );
+    }
+  },
 };
