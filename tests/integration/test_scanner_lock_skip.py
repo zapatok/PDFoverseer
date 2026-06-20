@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from api.main import create_app
 from api.presence import AGENT_PARTICIPANT_ID, PresenceRegistry
+from api.routes.sessions import _handle_scan_progress
 from api.state import SessionManager
 from core.db.connection import open_connection
 from core.db.migrations import init_schema
@@ -132,6 +133,161 @@ def test_skip_then_claim_next_cell(tmp_path):
     snapshot = mgr.presence_snapshot(session_id)
     agent = next(p for p in snapshot if p["participant_id"] == AGENT_PARTICIPANT_ID)
     assert agent["focused_cell"] == "HRB|charla"
+
+
+# ---------------------------------------------------------------------------
+# Handler-level: _handle_scan_progress event routing (Task 5)
+# Drive the pase-2 progress handler directly with synthetic events + a capturing
+# emit. Skipped cells drop their events before _apply_scan_event, and cell_scanning
+# passes through it unchanged, so no real OCR/disk is needed.
+# ---------------------------------------------------------------------------
+
+
+def _new_ctx() -> dict:
+    return {
+        "skipped_set": set(),
+        "skipped_cells": [],
+        "agent_active": False,
+        "current_cell_skipped": False,
+    }
+
+
+def test_handler_skip_sequence_drops_events_and_enriches_complete(tmp_path):
+    """A human-held cell: cell_scanning emits ONE cell_skipped (not cell_scanning);
+    later pdf_progress/file_result/cell_done for it are dropped; scan_complete is
+    enriched with the skipped list."""
+    mgr = _make_manager(tmp_path)
+    sid = "2026-04"
+    registry: PresenceRegistry = mgr._presence  # type: ignore[attr-defined]
+    _register_human(registry, sid, pid="human-1", name="Daniel", color="#a")
+    registry.focus(sid, "human-1", "HRB|odi")
+
+    out: list[dict] = []
+    ctx = _new_ctx()
+    emit = out.append
+
+    _handle_scan_progress(
+        mgr, sid, {"type": "cell_scanning", "hospital": "HRB", "sigla": "odi"}, ctx, emit
+    )
+    # One cell_skipped, no cell_scanning, the cell recorded as skipped.
+    assert [e["type"] for e in out] == ["cell_skipped"]
+    assert out[0]["reason"] == "locked"
+    assert out[0]["lock_holder"]["participant_id"] == "human-1"
+    assert ("HRB", "odi") in ctx["skipped_set"]
+    assert ctx["current_cell_skipped"] is True
+
+    out.clear()
+    _handle_scan_progress(mgr, sid, {"type": "pdf_progress", "done": 1, "total": 2}, ctx, emit)
+    _handle_scan_progress(
+        mgr,
+        sid,
+        {
+            "type": "file_result",
+            "hospital": "HRB",
+            "sigla": "odi",
+            "filename": "x.pdf",
+            "count": 3,
+            "method": "v4",
+        },
+        ctx,
+        emit,
+    )
+    _handle_scan_progress(
+        mgr, sid, {"type": "cell_done", "hospital": "HRB", "sigla": "odi", "result": {}}, ctx, emit
+    )
+    assert out == []  # every later event for the skipped cell is dropped
+
+    _handle_scan_progress(
+        mgr, sid, {"type": "scan_complete", "scanned": 0, "errors": 0, "cancelled": 0}, ctx, emit
+    )
+    complete = next(e for e in out if e["type"] == "scan_complete")
+    assert complete["skipped"] == [{"hospital": "HRB", "sigla": "odi"}]
+
+
+def test_handler_claim_path_emits_presence_then_cell_scanning(tmp_path):
+    """A free cell: cell_scanning claims the agent (emits a presence snapshot with the
+    Claude badge) then passes the cell_scanning event through."""
+    mgr = _make_manager(tmp_path)
+    sid = "2026-04"
+    out: list[dict] = []
+    ctx = _new_ctx()
+
+    _handle_scan_progress(
+        mgr, sid, {"type": "cell_scanning", "hospital": "HRB", "sigla": "art"}, ctx, out.append
+    )
+
+    assert [e["type"] for e in out] == ["presence", "cell_scanning"]
+    agent = next(p for p in out[0]["participants"] if p["participant_id"] == AGENT_PARTICIPANT_ID)
+    assert agent["kind"] == "agent"
+    assert agent["focused_cell"] == "HRB|art"
+    assert ctx["agent_active"] is True
+    assert ctx["current_cell_skipped"] is False
+
+    # scan_complete releases the agent (presence WITHOUT claude) and reports no skips.
+    out.clear()
+    _handle_scan_progress(
+        mgr,
+        sid,
+        {"type": "scan_complete", "scanned": 1, "errors": 0, "cancelled": 0},
+        ctx,
+        out.append,
+    )
+    presence = next(e for e in out if e["type"] == "presence")
+    assert all(p["participant_id"] != AGENT_PARTICIPANT_ID for p in presence["participants"])
+    complete = next(e for e in out if e["type"] == "scan_complete")
+    assert complete["skipped"] == []
+    assert ctx["agent_active"] is False
+
+
+def test_handler_scan_cancelled_releases_agent_without_skipped_field(tmp_path):
+    """scan_cancelled releases the agent but must NOT carry a `skipped` field."""
+    mgr = _make_manager(tmp_path)
+    sid = "2026-04"
+    out: list[dict] = []
+    ctx = _new_ctx()
+
+    _handle_scan_progress(
+        mgr, sid, {"type": "cell_scanning", "hospital": "HRB", "sigla": "art"}, ctx, out.append
+    )
+    out.clear()
+    _handle_scan_progress(
+        mgr,
+        sid,
+        {"type": "scan_cancelled", "scanned": 0, "errors": 0, "cancelled": 1},
+        ctx,
+        out.append,
+    )
+
+    cancelled = next(e for e in out if e["type"] == "scan_cancelled")
+    assert "skipped" not in cancelled
+    assert ctx["agent_active"] is False
+    # agent released
+    assert all(p["participant_id"] != AGENT_PARTICIPANT_ID for p in mgr.presence_snapshot(sid))
+
+
+def test_handler_inertness_no_human_no_skips(tmp_path):
+    """With no human present, the handler never skips: scan_complete.skipped == []
+    and no cell_skipped is ever emitted (the agent badge still appears — that's the feature)."""
+    mgr = _make_manager(tmp_path)
+    sid = "2026-04"
+    out: list[dict] = []
+    ctx = _new_ctx()
+
+    for sigla in ("art", "charla"):
+        _handle_scan_progress(
+            mgr, sid, {"type": "cell_scanning", "hospital": "HRB", "sigla": sigla}, ctx, out.append
+        )
+    _handle_scan_progress(
+        mgr,
+        sid,
+        {"type": "scan_complete", "scanned": 2, "errors": 0, "cancelled": 0},
+        ctx,
+        out.append,
+    )
+
+    assert not any(e["type"] == "cell_skipped" for e in out)
+    complete = next(e for e in out if e["type"] == "scan_complete")
+    assert complete["skipped"] == []
 
 
 # ---------------------------------------------------------------------------
