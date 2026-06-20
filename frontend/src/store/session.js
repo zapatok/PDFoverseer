@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { createWSClient } from "../lib/ws";
+import { getIdentity, getParticipantId, HEARTBEAT_MS } from "../lib/identity";
 import { invalidateHistory } from "../lib/useHistoryStore";
 import { OCR_CONFIRM_PDF_THRESHOLD } from "../lib/constants";
 import { estimateScanSeconds, shouldConfirmScan, totalPdfsForPairs } from "../lib/scanCost";
@@ -26,8 +27,11 @@ export const useSessionStore = create((set, get) => ({
   filesTick: {},                       // "HPV|odi" → counter; bumped on cell_done so FileList/lightbox re-fetch per_file (G3)
   fileScan: null,                      // {hospital, sigla, filename, page, pagesTotal, terminal} | null — single-file OCR (rev-2 #1)
   lightbox: null,                      // {hospital, sigla, fileIndex, mode} | null
+  presence: [],                         // M2: participant list from presence WS events
   _ws: null,
   _visHandler: null,                   // M1: visibilitychange handler ref for cleanup
+  _heartbeat: null,                    // M2: setInterval handle for presence heartbeat
+  _unloadHandler: null,                // M2: pagehide handler ref for cleanup
 
   // FASE 3 — pending-save coordination (see spec §6.6).
   // Map keyed by `${hospital}|${sigla}` → { controller: AbortController, status: 'saving' }
@@ -61,10 +65,15 @@ export const useSessionStore = create((set, get) => ({
     try {
       await api.createSession(year, month);
       const session = await api.getSession(sessionId);
-      // Tear down any prior WS and vis handler, then reconnect for the new session.
+      // Tear down any prior WS, vis handler, heartbeat, and unload handler,
+      // then reconnect for the new session.
       get()._ws?.close();
       const prevVisHandler = get()._visHandler;
       if (prevVisHandler) document.removeEventListener("visibilitychange", prevVisHandler);
+      const prevHeartbeat = get()._heartbeat;
+      if (prevHeartbeat) clearInterval(prevHeartbeat);
+      const prevUnloadHandler = get()._unloadHandler;
+      if (prevUnloadHandler) window.removeEventListener("pagehide", prevUnloadHandler);
       const ws = createWSClient(sessionId, {
         onEvent: get()._handleWSEvent,
         onReconnect: () => get().refetchSession(sessionId),
@@ -80,7 +89,16 @@ export const useSessionStore = create((set, get) => ({
       }
       // Nota: _visHandler solo se limpia al volver a llamar openMonth (no hay acción
       // de "cerrar sesión" explícita todavía — limitación conocida de M1).
-      set({ session, loading: false, _ws: ws, _visHandler: visHandler, scanningCells: new Set(), scanProgress: null, historyDrawer: null });
+      set({ session, loading: false, _ws: ws, _visHandler: visHandler, _heartbeat: null, _unloadHandler: null, scanningCells: new Set(), scanProgress: null, historyDrawer: null, presence: [] });
+      // M2: start the presence heartbeat for the newly opened session.
+      get().startPresence();
+      // M2: register pagehide beacon so the server knows we left on hard-close/reload.
+      if (typeof window !== "undefined") {
+        const sid = session.session_id;
+        const unloadHandler = () => api.beaconLeave(sid, { participant_id: getParticipantId() });
+        window.addEventListener("pagehide", unloadHandler);
+        set({ _unloadHandler: unloadHandler });
+      }
       if (Object.keys(session.cells || {}).length === 0) {
         // pase 1 only the first time the month is opened (spec §7); fire-and-forget,
         // runScan owns `loading`. Re-opening a scanned month never re-scans (it would
@@ -832,8 +850,63 @@ export const useSessionStore = create((set, get) => ({
       }
       case "ping":
         break;     // keepalive — no-op
+      case "presence":
+        // M2: replace the participant list wholesale (server is authoritative).
+        set({ presence: event.participants ?? [] });
+        break;
       default:
         // Unknown event types ignored
     }
+  },
+
+  // M2 — Presence lifecycle actions -------------------------------------------
+
+  /**
+   * Start (or restart) the presence heartbeat for the currently open session.
+   * Idempotent: calling it while one is already running replaces the interval
+   * rather than stacking a second one. No-ops if no session is open or no
+   * identity has been set (user hasn't named themselves yet).
+   */
+  startPresence: () => {
+    const { session, _heartbeat } = get();
+    // Guard: localStorage is not available in node/test environments.
+    if (typeof localStorage === "undefined") return;
+    const id = getIdentity();
+    if (!session || !id) return;              // no month open or not named yet
+    if (_heartbeat) clearInterval(_heartbeat); // never double-start
+    const sid = session.session_id;
+    const beat = () =>
+      api.presenceHeartbeat(sid, { participant_id: id.participant_id, name: id.name, color: id.color })
+        .then((r) => set({ presence: r.participants ?? [] }))
+        .catch(() => {});
+    beat();                                    // immediate join
+    set({ _heartbeat: setInterval(beat, HEARTBEAT_MS) });
+  },
+
+  /**
+   * Tell the server which cell this participant is currently focused on.
+   * Fire-and-forget; no-op if no identity or no session.
+   * @param {string} cell  — e.g. "HRB|odi"
+   */
+  setFocus: (cell) => {
+    const { session } = get();
+    if (typeof localStorage === "undefined") return;
+    const id = getIdentity();
+    if (id && session) api.presenceFocus(session.session_id, { participant_id: id.participant_id, cell });
+  },
+
+  /**
+   * Stop the heartbeat and notify the server that this participant left.
+   * Called on intentional sign-out or identity reset; the pagehide beacon
+   * covers hard-close scenarios.
+   */
+  leavePresence: () => {
+    const { session, _heartbeat } = get();
+    if (_heartbeat) clearInterval(_heartbeat);
+    if (typeof localStorage !== "undefined") {
+      const id = getIdentity();
+      if (id && session) api.presenceLeave(session.session_id, { participant_id: id.participant_id });
+    }
+    set({ _heartbeat: null });
   },
 }));
