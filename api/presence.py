@@ -1,12 +1,14 @@
-"""In-memory participant registry for multiplayer presence (M2).
+"""In-memory participant registry for multiplayer presence (M2 + M3a).
 
 Ephemeral collaboration state — NEVER persisted to the session blob (spec §9).
 Pure logic + injectable clock; thread-safety is the caller's job (SessionManager
 serializes every call under its RLock, spec §6.1).
 
-M2 seam: `focus` only records `focused_cell` for presence. There is no exclusivity
-and `mode` is a non-load-bearing placeholder ("editor"); the hard lock / editor
-arbitration is M3. Do not add enforcement here.
+M3a: `focus` is now an atomic claim — free cell → caller becomes ``"editor"``;
+already-held cell → caller becomes ``"viewer"`` (the existing editor keeps
+``"editor"``). At-most-one editor per cell is guaranteed because every call runs
+under the caller's (SessionManager's) single RLock. `lock_holder` exposes the
+current editor of a cell for conflict checks.
 """
 
 from __future__ import annotations
@@ -60,18 +62,43 @@ class PresenceRegistry:
         return changed
 
     def focus(self, session_id: str, participant_id: str, cell: str | None) -> bool:
-        """Record the participant's focused cell (M2: presence only, no claim).
-        Returns True iff something changed."""
+        """Focus = atomic claim (caller holds the RLock). Free cell -> editor; held
+        cell -> viewer (the holder keeps editor). cell=None releases. Returns True
+        iff the roster changed."""
         changed = self._purge_expired(session_id)
-        members = self._participants.setdefault(session_id, {})
-        rec = members.get(participant_id)
+        rec = self._participants.setdefault(session_id, {}).get(participant_id)
         if rec is None:
             return changed  # focus before heartbeat: ignore, be forgiving
         rec["expires_at"] = self._now() + PRESENCE_TTL_SECONDS
-        if rec["focused_cell"] != cell:
+        if cell is None:
+            new_mode = "editor"  # mode is moot when not focused; reset to default
+        else:
+            new_mode = (
+                "viewer" if self._editor_of(session_id, cell, exclude=participant_id) else "editor"
+            )
+        if rec["focused_cell"] != cell or rec["mode"] != new_mode:
             rec["focused_cell"] = cell
+            rec["mode"] = new_mode
             return True
         return changed
+
+    def _editor_of(self, session_id: str, cell: str, exclude: str | None = None) -> str | None:
+        """participant_id of the live editor of `cell`, or None. Caller purges first."""
+        for pid, r in self._participants.get(session_id, {}).items():
+            if pid == exclude:
+                continue
+            if r["focused_cell"] == cell and r["mode"] == "editor":
+                return pid
+        return None
+
+    def lock_holder(self, session_id: str, cell: str, exclude: str | None = None) -> dict | None:
+        """Public snapshot of the cell's editor (excluding `exclude`), or None if free."""
+        self._purge_expired(session_id)
+        pid = self._editor_of(session_id, cell, exclude=exclude)
+        if pid is None:
+            return None
+        r = self._participants[session_id][pid]
+        return {k: r[k] for k in _PUBLIC_FIELDS}
 
     def leave(self, session_id: str, participant_id: str) -> bool:
         changed = self._purge_expired(session_id)
