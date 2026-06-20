@@ -794,6 +794,27 @@ export const useSessionStore = create((set, get) => ({
         set({ scanningCells: next });
         break;
       }
+      case "cell_skipped": {
+        // The scanner skipped this cell because a human is editing it (M3b).
+        // Do NOT touch session.cells (the cell wasn't processed). Remove from
+        // scanningCells (it won't emit cell_done/cell_error), and accumulate
+        // the cell into scanProgress.skipped for the summary UI.
+        const next = new Set(state.scanningCells);
+        next.delete(cellKey(event.hospital, event.sigla));
+        set((s) => ({
+          scanningCells: next,
+          scanProgress: s.scanProgress
+            ? {
+                ...s.scanProgress,
+                skipped: [
+                  ...(s.scanProgress.skipped ?? []),
+                  { hospital: event.hospital, sigla: event.sigla },
+                ],
+              }
+            : s.scanProgress,
+        }));
+        break;
+      }
       case "cell_done": {
         const next = new Set(state.scanningCells);
         next.delete(cellKey(event.hospital, event.sigla));
@@ -881,21 +902,42 @@ export const useSessionStore = create((set, get) => ({
         // (audit #1). Still emitted by the backend for test/compat reasons;
         // ignored here so it doesn't fight the per-PDF bar.
         break;
-      case "scan_complete":
+      case "scan_complete": {
         // Scan run terminated → no cell can still be scanning. Defensive:
         // clears any cell that never emitted its own cell_done/cell_error.
         // Finalize the PDF bar at 100% without clobbering its denominator.
-        set({
-          scanningCells: new Set(),
-          scanProgress: {
-            ...state.scanProgress,
-            terminal: "complete",
-            done: state.scanProgress?.total ?? 0,
-          },
+        // M3b: merge any cells that were skipped by the scanner (locked by a
+        // human) into scanProgress.skipped so the UI can offer a re-scan.
+        const skippedFromEvent = event.skipped ?? [];
+        set((s) => {
+          const prevSkipped = s.scanProgress?.skipped ?? [];
+          // Merge: cells accumulated via cell_skipped events + any in the
+          // final summary (de-dup by hospital+sigla to be safe).
+          const merged = [...prevSkipped];
+          for (const sk of skippedFromEvent) {
+            if (!merged.some((x) => x.hospital === sk.hospital && x.sigla === sk.sigla)) {
+              merged.push(sk);
+            }
+          }
+          return {
+            scanningCells: new Set(),
+            scanProgress: {
+              ...s.scanProgress,
+              terminal: "complete",
+              done: s.scanProgress?.total ?? 0,
+              skipped: merged,
+            },
+          };
         });
-        // Auto-dismiss after 5s
-        setTimeout(() => set((s) => (s.scanProgress?.terminal === "complete" ? { scanProgress: null } : s)), 5000);
+        // Auto-dismiss after 5s — BUT only when there are no skipped cells.
+        // When skipped.length > 0 the banner persists until the user acts.
+        setTimeout(() => set((s) => {
+          if (s.scanProgress?.terminal !== "complete") return {};
+          if ((s.scanProgress?.skipped?.length ?? 0) > 0) return {};
+          return { scanProgress: null };
+        }), 5000);
         break;
+      }
       case "scan_cancelled":
         // Scan run terminated → clear scanningCells. The interrupted cell
         // never emits cell_done/cell_error; without this it stays stuck
