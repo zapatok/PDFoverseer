@@ -1,4 +1,4 @@
-import { CheckCircle2, X, Loader2 } from "lucide-react";
+import { CheckCircle2, X, Loader2, AlertTriangle, RotateCcw } from "lucide-react";
 import { useSessionStore } from "../store/session";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
@@ -8,10 +8,13 @@ export default function ScanProgress() {
   const scanProgress = useSessionStore((s) => s.scanProgress);
   const session = useSessionStore((s) => s.session);
   const cancelScan = useSessionStore((s) => s.cancelScan);
+  const scanOcr = useSessionStore((s) => s.scanOcr);
 
   if (!scanProgress) return null;
 
   const { done, total, etaMs, terminal, pdfName } = scanProgress;
+  // Default skipped to [] OUTSIDE the selector to avoid Zustand v5 fresh-literal footgun.
+  const skipped = scanProgress.skipped ?? [];
   const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
 
   let icon, label, iconColorClass;
@@ -27,6 +30,22 @@ export default function ScanProgress() {
     icon = <Loader2 size={16} strokeWidth={1.75} className="animate-spin" />;
     iconColorClass = "text-po-scanning";
     label = "Escaneando…";
+  }
+
+  // M3b: when the scan is complete but some cells were skipped (a human was
+  // editing them), show a persistent suspect-tone summary with a re-scan action.
+  const hasSkipped = terminal === "complete" && skipped.length > 0;
+
+  function handleRescan() {
+    if (!session?.session_id) return;
+    const pairs = skipped.map((c) => [c.hospital, c.sigla]);
+    scanOcr(session.session_id, pairs);
+  }
+
+  function handleDismiss() {
+    // Force-clear the scanProgress; the store would have auto-dismissed if
+    // skipped were empty, but we need a manual dismiss path here.
+    useSessionStore.setState({ scanProgress: null });
   }
 
   return (
@@ -59,6 +78,45 @@ export default function ScanProgress() {
           style={{ width: `${pct}%` }}
         />
       </div>
+
+      {/* M3b — skipped-cells summary (persistent; shown only when complete + skipped > 0) */}
+      {hasSkipped && (
+        <div className="mt-3 rounded-lg border border-po-suspect-border bg-po-suspect-bg p-3">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-po-suspect">
+              <AlertTriangle size={14} strokeWidth={1.75} />
+              <span>
+                {skipped.length === 1
+                  ? "1 celda saltada (en edición)"
+                  : `${skipped.length} celdas saltadas (en edición)`}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="text-po-text-muted hover:text-po-text transition-colors"
+              aria-label="Cerrar"
+              onClick={handleDismiss}
+            >
+              <X size={14} strokeWidth={1.75} />
+            </button>
+          </div>
+          <ul className="text-xs text-po-suspect space-y-0.5 mb-3">
+            {skipped.map((c) => (
+              <li key={`${c.hospital}|${c.sigla}`} className="font-mono">
+                {c.hospital} · {c.sigla}
+              </li>
+            ))}
+          </ul>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleRescan}
+          >
+            <RotateCcw size={13} strokeWidth={1.75} className="mr-1.5" />
+            Re-escanear saltadas
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
