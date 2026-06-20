@@ -164,6 +164,7 @@ export const useSessionStore = create((set, get) => ({
   // E5 — clear near-match suspects for a cell. `entry` = { pdf_name, page_index }
   // drops one; omit it to clear all. Optimistic, then persists.
   clearNearMatches: async (sessionId, hospital, sigla, entry) => {
+    const participantId = getParticipantId();
     set((prev) => {
       const session = prev.session;
       const cell = session?.cells?.[hospital]?.[sigla];
@@ -181,8 +182,14 @@ export const useSessionStore = create((set, get) => ({
       return { session: { ...session, cells } };
     });
     try {
-      await api.clearNearMatches(sessionId, hospital, sigla, entry);
+      await api.clearNearMatches(sessionId, hospital, sigla, entry, participantId);
     } catch (error) {
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        toast.error(`${who} está editando esta celda`);
+        get().refetchSession(sessionId);
+        return;
+      }
       set({ error: String(error) });
     }
   },
@@ -205,8 +212,9 @@ export const useSessionStore = create((set, get) => ({
 
   // Incr 2 — apply ratio N to all Pendiente files in a cell, then refresh.
   applyRatioCell: async (sessionId, hospital, sigla, n) => {
+    const participantId = getParticipantId();
     try {
-      const updatedCell = await api.applyRatio(sessionId, hospital, sigla, n);
+      const updatedCell = await api.applyRatio(sessionId, hospital, sigla, n, participantId);
       const tickKey = `${hospital}|${sigla}`;
       set((prev) => {
         if (!prev.session) return {};
@@ -220,6 +228,12 @@ export const useSessionStore = create((set, get) => ({
         };
       });
     } catch (error) {
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        toast.error(`${who} está editando esta celda`);
+        get().refetchSession(sessionId);
+        return;
+      }
       set({ error: String(error) });
       throw error; // re-throw so the caller can show a failure toast (don't claim success)
     }
@@ -228,6 +242,7 @@ export const useSessionStore = create((set, get) => ({
   saveOverride: async (sessionId, hospital, sigla, value, opts = {}) => {
     const key = `${hospital}|${sigla}`;
     const controller = new AbortController();
+    const participantId = getParticipantId();
 
     // 1+2 combined in a functional set() so reads + writes happen atomically.
     // This prevents the stale-read race when two rapid calls overlap: both
@@ -250,7 +265,7 @@ export const useSessionStore = create((set, get) => ({
     try {
       const result = await api.patchOverride(
         sessionId, hospital, sigla, value,
-        { signal: controller.signal, manual: opts.manual },
+        { signal: controller.signal, manual: opts.manual, participantId },
       );
 
       // If our controller was aborted while in flight, the newer save wins.
@@ -290,6 +305,21 @@ export const useSessionStore = create((set, get) => ({
       }, 2000);
     } catch (error) {
       if (controller.signal.aborted) return;
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        set((prev) => {
+          const cleanedPending = new Map(prev._pendingSave);
+          if (cleanedPending.get(key)?.controller === controller) {
+            cleanedPending.delete(key);
+          }
+          const np = { ...prev.pendingSaves };
+          delete np[key];
+          return { _pendingSave: cleanedPending, pendingSaves: np };
+        });
+        toast.error(`${who} está editando esta celda`);
+        get().refetchSession(sessionId);
+        return;
+      }
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
         if (cleanedPending.get(key)?.controller === controller) {
@@ -307,6 +337,7 @@ export const useSessionStore = create((set, get) => ({
   savePerFileOverride: async (sessionId, hospital, sigla, filename, count) => {
     const key = `${hospital}|${sigla}|${filename}`;
     const controller = new AbortController();
+    const participantId = getParticipantId();
 
     set((prev) => {
       const existing = prev._pendingSave.get(key);
@@ -322,7 +353,7 @@ export const useSessionStore = create((set, get) => ({
     try {
       const result = await api.patchPerFileOverride(
         sessionId, hospital, sigla, filename, count,
-        { signal: controller.signal },
+        { signal: controller.signal, participantId },
       );
       if (controller.signal.aborted) return;
 
@@ -364,6 +395,21 @@ export const useSessionStore = create((set, get) => ({
       }, 2000);
     } catch (error) {
       if (controller.signal.aborted) return;
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        set((prev) => {
+          const cleanedPending = new Map(prev._pendingSave);
+          if (cleanedPending.get(key)?.controller === controller) {
+            cleanedPending.delete(key);
+          }
+          const np = { ...prev.pendingSaves };
+          delete np[key];
+          return { _pendingSave: cleanedPending, pendingSaves: np };
+        });
+        toast.error(`${who} está editando esta celda`);
+        get().refetchSession(sessionId);
+        return;
+      }
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
         if (cleanedPending.get(key)?.controller === controller) {
@@ -381,6 +427,7 @@ export const useSessionStore = create((set, get) => ({
   confirmCell: async (sessionId, hospital, sigla, confirmed) => {
     const key = `${hospital}|${sigla}|confirm`;
     const controller = new AbortController();
+    const participantId = getParticipantId();
 
     // Optimistic: flip the flag now so the dot turns listo/pendiente instantly
     // (matters for the "Marcar seleccionadas como listas" bulk action).
@@ -403,7 +450,7 @@ export const useSessionStore = create((set, get) => ({
 
     try {
       const result = await api.patchConfirm(
-        sessionId, hospital, sigla, confirmed, { signal: controller.signal },
+        sessionId, hospital, sigla, confirmed, { signal: controller.signal, participantId },
       );
       if (controller.signal.aborted) return;
 
@@ -434,6 +481,21 @@ export const useSessionStore = create((set, get) => ({
       }, 2000);
     } catch (error) {
       if (controller.signal.aborted) return;
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        set((prev) => {
+          const cleanedPending = new Map(prev._pendingSave);
+          if (cleanedPending.get(key)?.controller === controller) {
+            cleanedPending.delete(key);
+          }
+          const np = { ...prev.pendingSaves };
+          delete np[key];
+          return { _pendingSave: cleanedPending, pendingSaves: np };
+        });
+        toast.error(`${who} está editando esta celda`);
+        get().refetchSession(sessionId);
+        return;
+      }
       // Revert the optimistic flag on failure.
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
@@ -460,6 +522,7 @@ export const useSessionStore = create((set, get) => ({
   saveWorkerCount: async (sessionId, hospital, sigla, patch) => {
     const key = `${hospital}|${sigla}|workers`;
     const controller = new AbortController();
+    const participantId = getParticipantId();
 
     set((prev) => {
       const existing = prev._pendingSave.get(key);
@@ -474,7 +537,7 @@ export const useSessionStore = create((set, get) => ({
 
     try {
       const result = await api.patchWorkerCount(
-        sessionId, hospital, sigla, patch, { signal: controller.signal },
+        sessionId, hospital, sigla, patch, { signal: controller.signal, participantId },
       );
       if (controller.signal.aborted) return;
 
@@ -511,6 +574,21 @@ export const useSessionStore = create((set, get) => ({
       }, 2000);
     } catch (error) {
       if (controller.signal.aborted) return;
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        set((prev) => {
+          const cleanedPending = new Map(prev._pendingSave);
+          if (cleanedPending.get(key)?.controller === controller) {
+            cleanedPending.delete(key);
+          }
+          const np = { ...prev.pendingSaves };
+          delete np[key];
+          return { _pendingSave: cleanedPending, pendingSaves: np };
+        });
+        toast.error(`${who} está editando esta celda`);
+        get().refetchSession(sessionId);
+        return;
+      }
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
         if (cleanedPending.get(key)?.controller === controller) {
@@ -528,6 +606,7 @@ export const useSessionStore = create((set, get) => ({
   saveNote: async (sessionId, hospital, sigla, patch) => {
     const key = `${hospital}|${sigla}|note`;
     const controller = new AbortController();
+    const participantId = getParticipantId();
 
     set((prev) => {
       const existing = prev._pendingSave.get(key);
@@ -542,7 +621,7 @@ export const useSessionStore = create((set, get) => ({
 
     try {
       const result = await api.patchNote(
-        sessionId, hospital, sigla, patch, { signal: controller.signal },
+        sessionId, hospital, sigla, patch, { signal: controller.signal, participantId },
       );
       if (controller.signal.aborted) return;
 
@@ -580,6 +659,21 @@ export const useSessionStore = create((set, get) => ({
       }, 2000);
     } catch (error) {
       if (controller.signal.aborted) return;
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        set((prev) => {
+          const cleanedPending = new Map(prev._pendingSave);
+          if (cleanedPending.get(key)?.controller === controller) {
+            cleanedPending.delete(key);
+          }
+          const np = { ...prev.pendingSaves };
+          delete np[key];
+          return { _pendingSave: cleanedPending, pendingSaves: np };
+        });
+        toast.error(`${who} está editando esta celda`);
+        get().refetchSession(sessionId);
+        return;
+      }
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
         if (cleanedPending.get(key)?.controller === controller) {

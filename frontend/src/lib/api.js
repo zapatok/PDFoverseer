@@ -9,6 +9,20 @@ async function jsonOrThrow(res) {
   return res.json();
 }
 
+async function jsonOrThrowStructured(res) {
+  if (res.ok) return res.json();
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {
+    /* non-JSON error body */
+  }
+  const err = new Error(body?.detail || res.statusText);
+  err.status = res.status;
+  err.body = body; // {detail, hospital, sigla, lock_holder} on a 409
+  throw err;
+}
+
 export const api = {
   listMonths: () => fetch(`${BASE}/months`).then(jsonOrThrow),
   getMonth: (sessionId) => fetch(`${BASE}/months/${sessionId}`).then(jsonOrThrow),
@@ -48,6 +62,7 @@ export const api = {
   patchOverride: async (sessionId, hospital, sigla, value, opts = {}) => {
     const body = { value };
     if (opts.manual) body.manual = true;
+    body.participant_id = opts.participantId ?? null;
     const r = await fetch(
       `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/override`,
       {
@@ -57,8 +72,7 @@ export const api = {
         signal: opts.signal,
       }
     );
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+    return jsonOrThrowStructured(r);
   },
 
   patchPerFileOverride: async (sessionId, hospital, sigla, filename, count, opts = {}) => {
@@ -67,40 +81,39 @@ export const api = {
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count }),
+        body: JSON.stringify({ count, participant_id: opts.participantId ?? null }),
         signal: opts.signal,
       }
     );
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+    return jsonOrThrowStructured(r);
   },
 
   patchWorkerCount: async (sessionId, hospital, sigla, patch, opts = {}) => {
+    const body = { ...patch, participant_id: opts.participantId ?? null };
     const r = await fetch(
       `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/worker-count`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
+        body: JSON.stringify(body),
         signal: opts.signal,
       }
     );
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+    return jsonOrThrowStructured(r);
   },
 
   patchNote: async (sessionId, hospital, sigla, patch, opts = {}) => {
+    const body = { ...patch, participant_id: opts.participantId ?? null };
     const r = await fetch(
       `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/note`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
+        body: JSON.stringify(body),
         signal: opts.signal,
       }
     );
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+    return jsonOrThrowStructured(r);
   },
 
   patchConfirm: async (sessionId, hospital, sigla, confirmed, opts = {}) => {
@@ -109,12 +122,11 @@ export const api = {
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmed }),
+        body: JSON.stringify({ confirmed, participant_id: opts.participantId ?? null }),
         signal: opts.signal,
       }
     );
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+    return jsonOrThrowStructured(r);
   },
 
   getCellFiles: (sessionId, hospital, sigla) =>
@@ -139,24 +151,24 @@ export const api = {
 
   // Incr 2 — apply ratio N treatment to all Pendiente files in a cell.
   // n=1 implements "Apply R1" (each page = one document).
-  applyRatio: (sessionId, hospital, sigla, n) =>
+  applyRatio: (sessionId, hospital, sigla, n, participantId) =>
     fetch(`${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/apply-ratio`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ n }),
-    }).then(jsonOrThrow),
+      body: JSON.stringify({ n, participant_id: participantId ?? null }),
+    }).then(jsonOrThrowStructured),
 
   // E5 — clear near-match suspects for a cell. Omit `entry` = clear all;
   // pass { pdf_name, page_index } to drop a single candidate.
-  clearNearMatches: (sessionId, hospital, sigla, entry) =>
+  clearNearMatches: (sessionId, hospital, sigla, entry, participantId) =>
     fetch(
       `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/near-matches/clear`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(entry ?? {}),
+        body: JSON.stringify({ ...(entry ?? {}), participant_id: participantId ?? null }),
       },
-    ).then(jsonOrThrow),
+    ).then(jsonOrThrowStructured),
 
   getHistory: async (sessionId, n = 12) => {
     const r = await fetch(`${BASE}/sessions/${sessionId}/history?n=${n}`);
