@@ -9,8 +9,10 @@ import threading
 from pathlib import Path
 
 from api.presence import (
+    AGENT_PARTICIPANT_ID,
     CellLockedError,  # noqa: F401  re-exported for write endpoints (M3a)
     PresenceRegistry,
+    is_agent,  # noqa: F401  re-exported for Chunk 2 scanner wiring (M3b)
 )
 from core.cell_count import (  # noqa: F401  re-exported for api consumers
     _sum_marks,
@@ -744,6 +746,43 @@ class SessionManager:
         """Return the public snapshot of the cell's editor (excluding ``exclude``),
         or None if the cell is free."""
         return self._presence.lock_holder(session_id, cell, exclude=exclude)
+
+    @_synchronized
+    def agent_claim_cell(self, session_id: str, hospital: str, sigla: str) -> dict | None:
+        """Atomic claim for the Claude scanner/agent (M3b).
+
+        Returns the human holder dict if the cell is held by a DIFFERENT
+        participant (caller should skip/409), else claims the cell for the
+        agent and returns None. Running under the single RLock guarantees no
+        TOCTOU between the check and the claim.
+
+        Args:
+            session_id: Target session identifier (e.g. ``"2026-04"``).
+            hospital: Hospital code (e.g. ``"HRB"``).
+            sigla: Category code (e.g. ``"odi"``).
+
+        Returns:
+            None if the claim succeeded; the holder's public-fields dict if the
+            cell was already held by a human participant.
+        """
+        cell = f"{hospital}|{sigla}"
+        holder = self._presence.lock_holder(session_id, cell, exclude=AGENT_PARTICIPANT_ID)
+        if holder is not None:
+            return holder
+        self._presence.agent_focus(session_id, cell)
+        return None
+
+    @_synchronized
+    def agent_leave(self, session_id: str) -> bool:
+        """Drop the Claude agent's presence entry (scanner cleanup at scan end, M3b).
+
+        Args:
+            session_id: Target session identifier.
+
+        Returns:
+            True iff the roster changed (agent was present).
+        """
+        return self._presence.leave(session_id, AGENT_PARTICIPANT_ID)
 
     def _editor_conflict(
         self,
