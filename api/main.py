@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import history, months, output, sessions, siglas, ws
+from api.routes import history, months, output, presence, sessions, siglas, ws
 from api.routes.sessions import get_manager
 from api.state import SessionManager
 from core.db.connection import close_all, open_connection
@@ -74,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(history.router, prefix="/api")
     app.include_router(siglas.router, prefix="/api")
     app.include_router(ws.router)
+    app.include_router(presence.router, prefix="/api")
     # Serve the built frontend same-origin (multiplayer M1, LAN): a client on the LAN
     # loads http://<server>:8000/ and config.js derives the backend host from
     # window.location.hostname → API + WS hit the same origin (no CORS needed; the
