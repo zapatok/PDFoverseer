@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from api.main import create_app
 from api.presence import CellLockedError
 
-
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
