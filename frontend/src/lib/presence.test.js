@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { participantsInCell, rosterParticipants, initials } from "./presence";
+import { participantsInCell, rosterParticipants, initials, cellLockHolder } from "./presence";
 
 const ps = [
   { participant_id: "p1", name: "Daniel", color: "#a", focused_cell: "HRB|odi" },
@@ -27,4 +27,26 @@ it("initials: up to two words, uppercased; fallback for empty", () => {
   expect(initials("Daniel")).toBe("D");
   expect(initials("")).toBe("?");
   expect(initials(undefined)).toBe("?");
+});
+
+describe("cellLockHolder", () => {
+  const ps = [
+    { participant_id: "p1", name: "Daniel", color: "#a", focused_cell: "HRB|odi", mode: "editor" },
+    { participant_id: "p2", name: "Carla", color: "#b", focused_cell: "HRB|odi", mode: "viewer" },
+  ];
+
+  it("returns the editor of a cell when it isn't me", () => {
+    expect(cellLockHolder(ps, "HRB", "odi", "p2").participant_id).toBe("p1");
+  });
+  it("returns null when I am the editor", () => {
+    expect(cellLockHolder(ps, "HRB", "odi", "p1")).toBeNull();
+  });
+  it("returns null for a free cell / empty list", () => {
+    expect(cellLockHolder(ps, "HRB", "art", "p2")).toBeNull();
+    expect(cellLockHolder(undefined, "HRB", "odi", "p2")).toBeNull();
+  });
+  it("ignores viewers (only an editor locks)", () => {
+    const onlyViewer = [{ participant_id: "p2", focused_cell: "HRB|odi", mode: "viewer" }];
+    expect(cellLockHolder(onlyViewer, "HRB", "odi", "p1")).toBeNull();
+  });
 });

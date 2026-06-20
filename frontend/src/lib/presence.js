@@ -41,3 +41,24 @@ export function initials(name) {
     .map((w) => w[0].toUpperCase())
     .join("");
 }
+
+/**
+ * The editor of (hospital|sigla) when it's someone OTHER than me, else null.
+ * Only an "editor" locks; viewers don't. Used to derive read-only gating.
+ * @param {Array|undefined} participants - List from the presence registry.
+ * @param {string} hospital
+ * @param {string} sigla
+ * @param {string} selfId - participant_id to exclude (myself).
+ * @returns {object|null} the holder participant record, or null if free / mine.
+ */
+export function cellLockHolder(participants, hospital, sigla, selfId) {
+  const key = `${hospital}|${sigla}`;
+  return (
+    (participants ?? []).find(
+      (p) =>
+        p.focused_cell === key &&
+        p.mode === "editor" &&
+        p.participant_id !== selfId,
+    ) ?? null
+  );
+}
