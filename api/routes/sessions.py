@@ -15,7 +15,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.batch import make_handle
-from api.presence import AGENT_PARTICIPANT_ID, CellLockedError, is_agent  # noqa: F401
+from api.presence import AGENT_PARTICIPANT_ID
 from api.routes.ws import _emit, broadcast
 from api.state import (
     SessionManager,
@@ -417,7 +417,11 @@ def scan(
     skipped_keys: set[tuple[str, str]] = set()
     for (hosp, sigla), r in results.items():
         # M3b Task 6: skip cells that a human is currently editing (pase-1).
-        holder = mgr.presence_lock_holder(session_id, f"{hosp}|{sigla}")
+        # exclude=AGENT_PARTICIPANT_ID so a concurrent pase-2 Claude claim never
+        # causes pase-1 to skip the same cell (only humans block pase-1).
+        holder = mgr.presence_lock_holder(
+            session_id, f"{hosp}|{sigla}", exclude=AGENT_PARTICIPANT_ID
+        )
         if holder is not None:
             skipped.append({"hospital": hosp, "sigla": sigla})
             skipped_keys.add((hosp, sigla))
