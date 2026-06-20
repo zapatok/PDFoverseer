@@ -81,6 +81,16 @@ function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated, disabled
       <summary
         aria-disabled={disabled || undefined}
         onClick={disabled ? (e) => e.preventDefault() : undefined}
+        onKeyDown={
+          disabled
+            ? (e) => {
+                // <details> toggles on Enter/Space too; onClick only blocks the
+                // mouse, so guard the keyboard path or a locked cell's reorg menu
+                // would still open for keyboard users.
+                if (e.key === "Enter" || e.key === " ") e.preventDefault();
+              }
+            : undefined
+        }
         className={[
           "list-none flex items-center justify-center w-7 h-7 rounded text-po-text-muted",
           disabled

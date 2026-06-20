@@ -281,6 +281,8 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const maxPages = isCapped ? totalPages : null;
 
   function handleModeChange(next) {
+    // Redundant with SegmentedToggle's disabled={locked}, but guard the handler
+    // too so a future toggle-binding change can't reopen a write path on a locked cell.
     if (locked) return;
     setMode(next);
     if (next === "files") {

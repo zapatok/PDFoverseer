@@ -40,7 +40,9 @@ export default function SegmentedToggle({ value, onChange, options, ariaLabel, d
               "disabled:cursor-not-allowed",
               active
                 ? "bg-po-panel text-po-text shadow-sm"
-                : "text-po-text-muted hover:text-po-text",
+                : disabled
+                  ? "text-po-text-muted"
+                  : "text-po-text-muted hover:text-po-text",
             ].join(" ")}
           >
             {opt.label}
