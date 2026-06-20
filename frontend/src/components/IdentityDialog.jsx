@@ -24,8 +24,16 @@ export default function IdentityDialog() {
     setOpen(false);
   };
 
+  // Identity is required to participate, so the dialog is non-dismissible until
+  // submitted: ESC / click-outside (onOpenChange(false)) is ignored while there is
+  // still no identity. Otherwise a user could dismiss it into a no-presence state
+  // with no way to reopen short of a reload.
+  const handleOpenChange = (v) => {
+    if (v || getIdentity() !== null) setOpen(v);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <Dialog.Header>
         <Dialog.Title className="text-base font-semibold text-po-text">
           ¿Cómo te llamas?
