@@ -396,6 +396,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
               <Button
                 variant="ghost"
                 icon={X}
+                disabled={locked}
                 onClick={() => setRatioNOpen(false)}
               >
                 Cancelar
