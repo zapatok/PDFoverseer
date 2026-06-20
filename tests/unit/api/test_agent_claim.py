@@ -31,11 +31,8 @@ def _make_manager(tmp_path):
     return SessionManager(conn=conn)
 
 
-def _make_session(mgr, tmp_path) -> str:
-    from pathlib import Path
-
-    state = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))
-    return state["session_id"]
+# Presence is fully in-memory (keyed by session_id string); these tests do NOT
+# open a DB session — matching the idiom in test_presence_locks.py.
 
 
 # ── Task 1: PresenceRegistry ──────────────────────────────────────────────────
@@ -75,11 +72,21 @@ def test_agent_focus_none_releases():
     assert r.lock_holder("m", "HRB|odi", exclude="p9") is None
 
 
+def test_agent_focus_moving_between_cells_frees_the_previous():
+    """The scanner (Chunk 3) claims one cell at a time then moves to the next; the
+    previously claimed cell must become free when the agent's focus moves."""
+    r = _reg()
+    r.agent_focus("m", "HRB|odi")
+    r.agent_focus("m", "HRB|art")  # move to next cell
+    assert r.lock_holder("m", "HRB|odi", exclude="p9") is None  # previous freed
+    holder = r.lock_holder("m", "HRB|art", exclude="p9")
+    assert holder is not None and holder["participant_id"] == AGENT_PARTICIPANT_ID
+
+
 def test_agent_focus_returns_true_on_change_false_on_noop():
     r = _reg()
     assert r.agent_focus("m", "HRB|odi") is True  # new registration
-    # Same cell, same mode — only TTL refreshed, no roster change; but `changed`
-    # from `_purge_expired` is False and the rec already exists with same values.
+    # Same cell, same mode, no TTL expirations — lease refreshed but roster unchanged.
     assert r.agent_focus("m", "HRB|odi") is False
 
 
@@ -96,14 +103,12 @@ def test_agent_focus_kind_survives_snapshot():
 
 def test_agent_claim_free_cell_returns_none(tmp_path):
     mgr = _make_manager(tmp_path)
-    _make_session(mgr, tmp_path)
     result = mgr.agent_claim_cell("2026-04", "HRB", "odi")
     assert result is None
 
 
 def test_agent_claim_free_cell_makes_agent_editor(tmp_path):
     mgr = _make_manager(tmp_path)
-    _make_session(mgr, tmp_path)
     mgr.agent_claim_cell("2026-04", "HRB", "odi")
     holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
     assert holder is not None
@@ -113,7 +118,6 @@ def test_agent_claim_free_cell_makes_agent_editor(tmp_path):
 
 def test_agent_claim_human_held_cell_returns_holder(tmp_path):
     mgr = _make_manager(tmp_path)
-    _make_session(mgr, tmp_path)
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_focus("2026-04", "p1", "HRB|odi")  # human editor
     holder = mgr.agent_claim_cell("2026-04", "HRB", "odi")
@@ -123,21 +127,19 @@ def test_agent_claim_human_held_cell_returns_holder(tmp_path):
 
 def test_agent_claim_human_held_cell_does_not_make_agent_editor(tmp_path):
     mgr = _make_manager(tmp_path)
-    _make_session(mgr, tmp_path)
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_focus("2026-04", "p1", "HRB|odi")
     mgr.agent_claim_cell("2026-04", "HRB", "odi")
     # Human must still be the editor (not claude)
     snap = {p["participant_id"]: p for p in mgr.presence_snapshot("2026-04")}
     assert snap["p1"]["mode"] == "editor"
-    # Agent should NOT appear as editor; may not be in roster at all since claim was skipped
-    if AGENT_PARTICIPANT_ID in snap:
-        assert snap[AGENT_PARTICIPANT_ID]["mode"] != "editor"
+    # Claim was skipped (agent_claim_cell returned early before agent_focus), so the
+    # agent must not be in the roster at all — a hard assert documents that contract.
+    assert AGENT_PARTICIPANT_ID not in snap
 
 
 def test_agent_leave_removes_agent(tmp_path):
     mgr = _make_manager(tmp_path)
-    _make_session(mgr, tmp_path)
     mgr.agent_claim_cell("2026-04", "HRB", "odi")
     # agent should be in the roster
     snap_before = {p["participant_id"]: p for p in mgr.presence_snapshot("2026-04")}
@@ -151,7 +153,6 @@ def test_atomic_claim_two_agents_same_free_cell(tmp_path):
     """Two concurrent agent_claim_cell on same free cell: both return None (same agent).
     The cell must end up with exactly claude as editor."""
     mgr = _make_manager(tmp_path)
-    _make_session(mgr, tmp_path)
 
     results = []
     barrier = threading.Barrier(2)
@@ -180,7 +181,6 @@ def test_atomic_claim_agent_vs_human_exactly_one_editor(tmp_path):
     """One agent_claim_cell vs one human presence_focus on the same free cell.
     Exactly one must end up as the cell's editor."""
     mgr = _make_manager(tmp_path)
-    _make_session(mgr, tmp_path)
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
 
     barrier = threading.Barrier(2)
