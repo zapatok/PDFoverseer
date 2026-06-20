@@ -175,4 +175,30 @@ describe("Task 7: scan_complete.skipped handling", () => {
     vi.advanceTimersByTime(5000);
     expect(getState().scanProgress).toBeNull();     // auto-dismissed
   });
+
+  it("de-dupes a cell present in BOTH a cell_skipped event and scan_complete.skipped", () => {
+    // The cell arrives mid-scan via cell_skipped, then again in the terminal
+    // scan_complete.skipped — it must appear once, not twice.
+    getState()._handleWSEvent({
+      type: "cell_skipped",
+      hospital: "HRB",
+      sigla: "odi",
+      reason: "locked",
+      lock_holder: { participant_id: "p1", name: "Daniel", color: "#ef4444", kind: "human" },
+    });
+    getState()._handleWSEvent({
+      type: "scan_complete",
+      scanned: 0,
+      errors: 0,
+      cancelled: 0,
+      skipped: [
+        { hospital: "HRB", sigla: "odi" }, // overlaps the cell_skipped above
+        { hospital: "HPV", sigla: "charla" }, // new
+      ],
+    });
+    expect(getState().scanProgress.skipped).toEqual([
+      { hospital: "HRB", sigla: "odi" },
+      { hospital: "HPV", sigla: "charla" },
+    ]);
+  });
 });

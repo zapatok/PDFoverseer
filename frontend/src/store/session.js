@@ -796,23 +796,27 @@ export const useSessionStore = create((set, get) => ({
       }
       case "cell_skipped": {
         // The scanner skipped this cell because a human is editing it (M3b).
-        // Do NOT touch session.cells (the cell wasn't processed). Remove from
-        // scanningCells (it won't emit cell_done/cell_error), and accumulate
-        // the cell into scanProgress.skipped for the summary UI.
-        const next = new Set(state.scanningCells);
-        next.delete(cellKey(event.hospital, event.sigla));
-        set((s) => ({
-          scanningCells: next,
-          scanProgress: s.scanProgress
-            ? {
-                ...s.scanProgress,
-                skipped: [
-                  ...(s.scanProgress.skipped ?? []),
-                  { hospital: event.hospital, sigla: event.sigla },
-                ],
-              }
-            : s.scanProgress,
-        }));
+        // Do NOT touch session.cells (the cell wasn't processed) and accumulate
+        // the cell into scanProgress.skipped for the summary UI. The backend does
+        // NOT emit cell_scanning for a skipped cell, so it's normally not in
+        // scanningCells — the delete is defensive cleanup only. Derive everything
+        // from `s` so the update stays consistent if events batch.
+        set((s) => {
+          const next = new Set(s.scanningCells);
+          next.delete(cellKey(event.hospital, event.sigla));
+          return {
+            scanningCells: next,
+            scanProgress: s.scanProgress
+              ? {
+                  ...s.scanProgress,
+                  skipped: [
+                    ...(s.scanProgress.skipped ?? []),
+                    { hospital: event.hospital, sigla: event.sigla },
+                  ],
+                }
+              : s.scanProgress,
+          };
+        });
         break;
       }
       case "cell_done": {

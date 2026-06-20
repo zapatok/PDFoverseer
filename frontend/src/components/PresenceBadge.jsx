@@ -36,7 +36,7 @@ export default function PresenceBadge({ participant, size = "md" }) {
         aria-label={participant.name}
       >
         {isAgent
-          ? <Bot size={ICON_SIZES[size] ?? 15} strokeWidth={1.75} />
+          ? <Bot size={ICON_SIZES[size] ?? ICON_SIZES.md} strokeWidth={1.75} />
           : initials(participant.name)
         }
       </span>
