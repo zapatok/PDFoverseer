@@ -15,7 +15,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.batch import make_handle
-from api.presence import CellLockedError, is_agent
+from api.presence import AGENT_PARTICIPANT_ID, CellLockedError, is_agent  # noqa: F401
 from api.routes.ws import _emit, broadcast
 from api.state import (
     SessionManager,
@@ -413,13 +413,37 @@ def scan(
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
     results = scan_month(inv)
+    skipped: list[dict] = []
+    skipped_keys: set[tuple[str, str]] = set()
     for (hosp, sigla), r in results.items():
+        # M3b Task 6: skip cells that a human is currently editing (pase-1).
+        holder = mgr.presence_lock_holder(session_id, f"{hosp}|{sigla}")
+        if holder is not None:
+            skipped.append({"hospital": hosp, "sigla": sigla})
+            skipped_keys.add((hosp, sigla))
+            _emit(
+                request,
+                session_id,
+                {
+                    "type": "cell_skipped",
+                    "hospital": hosp,
+                    "sigla": sigla,
+                    "reason": "locked",
+                    "lock_holder": holder,
+                },
+            )
+            continue
         mgr.apply_cell_result(session_id, hosp, sigla, r)
     refresh_reorg_deltas(mgr, session_id, check_applied=True)
     _broadcast_session_refresh(request, session_id)
     return {
-        "scanned": len(results),
-        "summary": {f"{hosp}_{sigla}": r.count for (hosp, sigla), r in results.items()},
+        "scanned": len(results) - len(skipped),
+        "skipped": skipped,
+        "summary": {
+            f"{hosp}_{sigla}": r.count
+            for (hosp, sigla), r in results.items()
+            if (hosp, sigla) not in skipped_keys
+        },
     }
 
 
@@ -516,6 +540,91 @@ def _scan_followup_event(mgr: SessionManager, session_id: str, event: dict) -> d
     if event.get("type") != "cell_done":
         return None
     return _cell_updated_event(mgr, session_id, event["hospital"], event["sigla"])
+
+
+def _handle_scan_progress(
+    mgr: SessionManager,
+    session_id: str,
+    event: dict,
+    ctx: dict,
+    emit,
+) -> None:
+    """Apply one scan progress event under the agent lock-skip policy (M3b).
+
+    ``ctx`` is a per-scan dict: {
+        "skipped_set": set[tuple[str, str]],   # (hospital, sigla) pairs
+        "skipped_cells": list[dict],            # [{hospital, sigla}, ...]
+        "agent_active": bool,                   # True once the agent has claimed any cell
+        "current_cell_skipped": bool,           # True while the current cell is skipped
+    }.
+
+    - ``cell_scanning``: claim the cell as the Claude agent.
+      If a human holds it → record the skip, emit ``cell_skipped``, set
+      ``current_cell_skipped=True``, do NOT broadcast cell_scanning.
+      Else → mark agent_active, emit a presence snapshot (badge appears),
+      set ``current_cell_skipped=False``, fall through to the normal path.
+    - ``pdf_progress`` while ``current_cell_skipped`` → drop silently.
+    - ``file_result`` / ``cell_done`` while ``(h, s) in skipped_set`` → drop.
+    - ``scan_complete`` / ``scan_cancelled``: release the agent once; enrich
+      ``scan_complete`` with ``ctx["skipped_cells"]``; broadcast and return.
+    - Otherwise: normal path (``_apply_scan_event`` + ``cell_done`` followup).
+    """
+    etype = event.get("type")
+    h, s = event.get("hospital"), event.get("sigla")
+
+    if etype == "cell_scanning":
+        ctx["current_cell_skipped"] = False  # reset per cell
+        holder = mgr.agent_claim_cell(session_id, h, s)
+        if holder is not None:
+            ctx["skipped_set"].add((h, s))
+            ctx["skipped_cells"].append({"hospital": h, "sigla": s})
+            ctx["current_cell_skipped"] = True
+            emit(
+                {
+                    "type": "cell_skipped",
+                    "hospital": h,
+                    "sigla": s,
+                    "reason": "locked",
+                    "lock_holder": holder,
+                }
+            )
+            return
+        ctx["agent_active"] = True
+        emit(
+            {
+                "type": "presence",
+                "session_id": session_id,
+                "participants": mgr.presence_snapshot(session_id),
+            }
+        )
+        # Fall through: emit the cell_scanning event normally.
+
+    if etype == "pdf_progress" and ctx["current_cell_skipped"]:
+        return
+
+    if etype in ("file_result", "cell_done") and (h, s) in ctx["skipped_set"]:
+        return
+
+    if etype in ("scan_complete", "scan_cancelled"):
+        if ctx["agent_active"]:
+            mgr.agent_leave(session_id)
+            ctx["agent_active"] = False
+            emit(
+                {
+                    "type": "presence",
+                    "session_id": session_id,
+                    "participants": mgr.presence_snapshot(session_id),
+                }
+            )
+        if etype == "scan_complete":
+            event = {**event, "skipped": ctx["skipped_cells"]}
+        emit(event)
+        return
+
+    emit(_apply_scan_event(mgr, session_id, event))
+    followup = _scan_followup_event(mgr, session_id, event)
+    if followup is not None:
+        emit(followup)
 
 
 def _broadcast_cell_updated(
@@ -642,6 +751,15 @@ def scan_ocr(
         raise HTTPException(409, "another batch is already running for this session")
     loop = app.state.loop
 
+    # M3b: per-scan context for the agent lock-skip policy (mutated by
+    # _handle_scan_progress; lives in the route scope so on_progress closes over it).
+    ctx: dict = {
+        "skipped_set": set(),
+        "skipped_cells": [],
+        "agent_active": False,
+        "current_cell_skipped": False,
+    }
+
     def _safe_broadcast(event: dict) -> None:
         # El scan corre en un hilo de fondo; si el event loop ya se cerró (apagado
         # del server, o teardown del TestClient antes de que termine el batch), dejar
@@ -654,13 +772,10 @@ def scan_ocr(
             pass
 
     def on_progress(event: dict) -> None:
-        # Aplica el evento al estado (merge incremental / finalize) y difunde el
-        # resultado. La lógica vive en _apply_scan_event (módulo-nivel) para poder
-        # testearla sin la maquinaria async/ProcessPool.
-        _safe_broadcast(_apply_scan_event(mgr, session_id, event))
-        followup = _scan_followup_event(mgr, session_id, event)  # M1: cell_updated tras cell_done
-        if followup is not None:
-            _safe_broadcast(followup)
+        # M3b: delegate to the module-level handler which applies the agent
+        # lock-skip policy and then falls through to the normal apply+broadcast
+        # path for non-skipped events. ctx is in the enclosing scope.
+        _handle_scan_progress(mgr, session_id, event, ctx, _safe_broadcast)
 
     cancel_token = CancellationToken.from_event(handle.cancel_event)
 
@@ -675,6 +790,24 @@ def scan_ocr(
             )
         except Exception:
             logger.exception("scan_cells_ocr crashed for session %s", session_id)
+            # M3b: release the agent on crash so it doesn't haunt the roster.
+            if ctx["agent_active"]:
+                mgr.agent_leave(session_id)
+                ctx["agent_active"] = False
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        broadcast(
+                            session_id,
+                            {
+                                "type": "presence",
+                                "session_id": session_id,
+                                "participants": mgr.presence_snapshot(session_id),
+                            },
+                        ),
+                        loop,
+                    )
+                except RuntimeError:
+                    pass
             try:
                 asyncio.run_coroutine_threadsafe(
                     broadcast(

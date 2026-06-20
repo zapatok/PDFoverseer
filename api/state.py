@@ -824,6 +824,24 @@ class SessionManager:
         return self._presence.lock_holder(session_id, f"{hospital}|{sigla}", exclude=participant_id)
 
     @_synchronized
+    def agent_claim_cell(self, session_id: str, hospital: str, sigla: str) -> dict | None:
+        """Atomic claim of ``hospital|sigla`` for the Claude scanner agent (M3b).
+
+        Returns None if the claim succeeded (cell was free); returns the human
+        holder's public snapshot if a human already holds the cell (skip signal).
+        Runs under the RLock so check + write is atomic.
+        """
+        return self._presence.agent_focus(session_id, f"{hospital}|{sigla}")
+
+    @_synchronized
+    def agent_leave(self, session_id: str) -> bool:
+        """Release the Claude scanner agent from the presence registry (M3b).
+
+        Returns True iff the roster changed (agent was present).
+        """
+        return self._presence.leave(session_id, AGENT_PARTICIPANT_ID)
+
+    @_synchronized
     def check_cell_lock(
         self, session_id: str, hospital: str, sigla: str, participant_id: str | None
     ) -> None:
