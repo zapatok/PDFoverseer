@@ -8,7 +8,10 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from api.presence import PresenceRegistry
+from api.presence import (
+    CellLockedError,  # noqa: F401  re-exported for write endpoints (M3a)
+    PresenceRegistry,
+)
 from core.cell_count import (  # noqa: F401  re-exported for api consumers
     _sum_marks,
     compute_cell_count,
@@ -697,3 +700,29 @@ class SessionManager:
     @_synchronized
     def presence_snapshot(self, session_id: str) -> list[dict]:
         return self._presence.snapshot(session_id)
+
+    @_synchronized
+    def presence_lock_holder(
+        self, session_id: str, cell: str, exclude: str | None = None
+    ) -> dict | None:
+        """Return the public snapshot of the cell's editor (excluding ``exclude``),
+        or None if the cell is free."""
+        return self._presence.lock_holder(session_id, cell, exclude=exclude)
+
+    def _editor_conflict(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        participant_id: str | None,
+    ) -> dict | None:
+        """Return the lock_holder dict if ``hospital|sigla`` is held by a DIFFERENT
+        participant, else None. ``participant_id=None`` disables enforcement (legacy /
+        tests without a participant context).
+
+        MUST be called only from inside an already-``@_synchronized`` method so the
+        check + write is atomic under the held RLock (spec §6.4).
+        """
+        if participant_id is None:
+            return None
+        return self._presence.lock_holder(session_id, f"{hospital}|{sigla}", exclude=participant_id)

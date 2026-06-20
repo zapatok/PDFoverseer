@@ -23,6 +23,16 @@ PRESENCE_HEARTBEAT_SECONDS = 15.0
 _PUBLIC_FIELDS = ("participant_id", "name", "color", "kind", "focused_cell", "mode")
 
 
+class CellLockedError(Exception):
+    """Raised when a write targets a cell held by a different participant (M3a)."""
+
+    def __init__(self, hospital: str, sigla: str, holder: dict):
+        self.hospital = hospital
+        self.sigla = sigla
+        self.holder = holder
+        super().__init__(f"{hospital}|{sigla} locked by {holder.get('name')}")
+
+
 class PresenceRegistry:
     def __init__(self, now: Callable[[], float] = time.monotonic) -> None:
         self._now = now
