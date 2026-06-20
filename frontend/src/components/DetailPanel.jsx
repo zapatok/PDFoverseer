@@ -190,7 +190,13 @@ function WorkerCountModule({ hospital, sigla, cell, countType = "documents_worke
 
 export default function DetailPanel({ hospital, sigla, cell }) {
   const sessionId = useSessionStore((s) => s.session?.session_id);
-  const reorgOps = useSessionStore((s) => s.session?.reorg_ops ?? []);
+  // Zustand v5: a selector MUST return a referentially stable value. Putting
+  // `?? []` INSIDE the selector mints a fresh [] every render whenever
+  // reorg_ops is absent (e.g. a session where no reorg op was ever created,
+  // like a pre-Incr-J month) → the store reads the snapshot as "changed" every
+  // render → infinite update loop → React #185 → blank screen. Select the raw
+  // value (stable across renders) and apply the default OUTSIDE the selector.
+  const reorgOps = useSessionStore((s) => s.session?.reorg_ops) ?? [];
   const deleteReorgOp = useSessionStore((s) => s.deleteReorgOp);
   const exportManifest = useSessionStore((s) => s.exportManifest);
   const saveOverride = useSessionStore((s) => s.saveOverride);
