@@ -349,6 +349,7 @@ class SessionManager:
         *,
         value: int | None,
         manual: bool = False,
+        participant_id: str | None = None,
     ) -> None:
         """Set or clear the user override count.
 
@@ -363,7 +364,12 @@ class SessionManager:
             manual: When True, marks ``cell.manual_entry = True`` to indicate
                 the value was entered via the HLL manual-entry flow (no scan
                 data available). Defaults to False, preserving FASE 2 behavior.
+            participant_id: Caller's participant id for lock enforcement (M3a).
+                ``None`` disables enforcement (legacy / no-presence callers).
         """
+        holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
+        if holder is not None:
+            raise CellLockedError(hospital, sigla, holder)
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
         cell["user_override"] = value
@@ -384,6 +390,7 @@ class SessionManager:
         *,
         text: str | None,
         status: str | None,
+        participant_id: str | None = None,
     ) -> None:
         """Set or clear the cell note independently of the override count.
 
@@ -396,7 +403,12 @@ class SessionManager:
             sigla: Category code (e.g. ``"odi"``).
             text: Note text or None to clear.
             status: ``"por_resolver"`` | ``"resuelto"`` | None.
+            participant_id: Caller's participant id for lock enforcement (M3a).
+                ``None`` disables enforcement (legacy / no-presence callers).
         """
+        holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
+        if holder is not None:
+            raise CellLockedError(hospital, sigla, holder)
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
         stripped = text.strip() if text else None
@@ -412,6 +424,7 @@ class SessionManager:
         sigla: str,
         filename: str,
         count: int,
+        participant_id: str | None = None,
     ) -> None:
         """Persist per-file count override. Spec §5.2.
 
@@ -421,10 +434,15 @@ class SessionManager:
             sigla: Category code (e.g. ``"odi"``).
             filename: PDF filename to override.
             count: New count value (0 is valid — discards the file's contribution).
+            participant_id: Caller's participant id for lock enforcement (M3a).
+                ``None`` disables enforcement (legacy / no-presence callers).
 
         Raises:
             KeyError: if (hospital, sigla) cell is not in session state.
         """
+        holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
+        if holder is not None:
+            raise CellLockedError(hospital, sigla, holder)
         state, _ = self._load_and_migrate(session_id)
         cells = state.setdefault("cells", {})
         if hospital not in cells or sigla not in cells.get(hospital, {}):
@@ -483,6 +501,7 @@ class SessionManager:
         *,
         pdf_name: str | None = None,
         page_index: int | None = None,
+        participant_id: str | None = None,
     ) -> None:
         """Drop near-match suspects from a cell — one entry or the whole list (E5).
 
@@ -497,7 +516,12 @@ class SessionManager:
             sigla: category code.
             pdf_name: with ``page_index``, the specific entry to drop.
             page_index: page index of the entry to drop.
+            participant_id: Caller's participant id for lock enforcement (M3a).
+                ``None`` disables enforcement (legacy / no-presence callers).
         """
+        holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
+        if holder is not None:
+            raise CellLockedError(hospital, sigla, holder)
         state, _ = self._load_and_migrate(session_id)
         cell = (state.get("cells", {}).get(hospital, {}) or {}).get(sigla)
         if not cell or not cell.get("near_matches"):
@@ -522,6 +546,7 @@ class SessionManager:
         marks: dict | None = None,
         status: str | None = None,
         cursor: dict | None = None,
+        participant_id: str | None = None,
     ) -> None:
         """Mezcla los campos de conteo de trabajadores en una celda.
 
@@ -536,7 +561,12 @@ class SessionManager:
             marks: dict ``{archivo: [{page, count}, ...]}``, o None.
             status: ``"en_progreso"`` | ``"terminado"``, o None.
             cursor: ``{file, page}`` con la última posición, o None.
+            participant_id: Caller's participant id for lock enforcement (M3a).
+                ``None`` disables enforcement (legacy / no-presence callers).
         """
+        holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
+        if holder is not None:
+            raise CellLockedError(hospital, sigla, holder)
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
         if marks is not None:
@@ -555,6 +585,7 @@ class SessionManager:
         sigla: str,
         *,
         confirmed: bool,
+        participant_id: str | None = None,
     ) -> None:
         """Set the manual 'confirmed' (marcar listo) flag on a cell.
 
@@ -567,10 +598,15 @@ class SessionManager:
             hospital: Hospital code (e.g. ``"HRB"``).
             sigla: Category code (e.g. ``"exc"``).
             confirmed: New flag value.
+            participant_id: Caller's participant id for lock enforcement (M3a).
+                ``None`` disables enforcement (legacy / no-presence callers).
 
         Raises:
             KeyError: if the (hospital, sigla) cell is not in session state.
         """
+        holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
+        if holder is not None:
+            raise CellLockedError(hospital, sigla, holder)
         state, _ = self._load_and_migrate(session_id)
         cells = state.setdefault("cells", {})
         if hospital not in cells or sigla not in cells.get(hospital, {}):
@@ -726,3 +762,27 @@ class SessionManager:
         if participant_id is None:
             return None
         return self._presence.lock_holder(session_id, f"{hospital}|{sigla}", exclude=participant_id)
+
+    @_synchronized
+    def check_cell_lock(
+        self, session_id: str, hospital: str, sigla: str, participant_id: str | None
+    ) -> None:
+        """Raise CellLockedError if the cell is held by a different participant (M3a).
+
+        Thin gate for routes that do not delegate to the per-method guards (e.g.
+        apply-ratio, which loops ``apply_per_file_ocr_result`` — a scanner method
+        that must remain unenforced). The check runs under the RLock, so
+        check + write are atomic for the caller.
+
+        Args:
+            session_id: Target session identifier.
+            hospital: Hospital code.
+            sigla: Category code.
+            participant_id: Caller's participant id; ``None`` disables enforcement.
+
+        Raises:
+            CellLockedError: if the cell is held by a different participant.
+        """
+        holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
+        if holder is not None:
+            raise CellLockedError(hospital, sigla, holder)
