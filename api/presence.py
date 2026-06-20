@@ -60,7 +60,7 @@ class PresenceRegistry:
                 "color": color,
                 "kind": kind,
                 "focused_cell": None,
-                "mode": "editor",  # M2 placeholder; not load-bearing until M3
+                "mode": "editor",  # default; overwritten by focus() claim logic (M3a)
                 "expires_at": self._now() + PRESENCE_TTL_SECONDS,
             }
             return True

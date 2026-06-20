@@ -54,6 +54,23 @@ def test_moving_to_another_cell_frees_the_previous():
     assert r.lock_holder("m", "HRB|art", exclude="p2")["participant_id"] == "p1"
 
 
+def test_viewer_reclaims_as_editor_after_holder_leaves():
+    # Design decision 4: gating auto-recovers when the holder leaves. A viewer who
+    # re-focuses a now-free cell must be promoted to editor.
+    r = _reg()
+    r.heartbeat("m", "p1", name="D", color="#a")
+    r.heartbeat("m", "p2", name="C", color="#b")
+    r.focus("m", "p1", "HRB|odi")  # p1 editor
+    r.focus("m", "p2", "HRB|odi")  # p2 viewer
+    r.leave("m", "p1")  # editor leaves -> cell is free
+    r.focus("m", "p2", "HRB|odi")  # p2 re-focuses the now-free cell
+    rec = next(p for p in r.snapshot("m") if p["participant_id"] == "p2")
+    assert rec["mode"] == "editor"
+    # from p2's own perspective no one else holds it; p2 is now the editor of record
+    assert r.lock_holder("m", "HRB|odi", exclude="p2") is None
+    assert r.lock_holder("m", "HRB|odi", exclude="p1")["participant_id"] == "p2"
+
+
 # ── Task 2: SessionManager / CellLockedError ──────────────────────────────────
 
 
