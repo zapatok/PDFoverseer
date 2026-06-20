@@ -7,7 +7,6 @@ by session_id string and does not require a persisted session in the DB.
 
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 
 from api.main import create_app
