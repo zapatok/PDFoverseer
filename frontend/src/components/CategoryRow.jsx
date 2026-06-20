@@ -8,6 +8,9 @@ import { dotVariantFor } from "../lib/cell-status";
 import { computeCellCount } from "../lib/cellCount";
 import { countTypeFor } from "../lib/sigla-info";
 import InlineEditCount from "./InlineEditCount";
+import { participantsInCell } from "../lib/presence";
+import { getParticipantId } from "../lib/identity";
+import PresenceBadge from "./PresenceBadge";
 
 
 export default function CategoryRow({
@@ -26,6 +29,8 @@ export default function CategoryRow({
   const pendingSaves = useSessionStore((s) => s.pendingSaves);
   const session = useSessionStore((s) => s.session);
   const saveOverride = useSessionStore((s) => s.saveOverride);
+  const presence = useSessionStore((s) => s.presence);
+  const here = participantsInCell(presence, hospital, sigla, getParticipantId());
 
   const cellKey = `${hospital}|${sigla}`;
   const isScanning = scanningCells.has(cellKey);
@@ -58,11 +63,17 @@ export default function CategoryRow({
       </Tooltip>
       <Dot variant={dotVariantFor(cell, { isScanning, countType: countTypeFor(sigla) })} className={isPendingSave ? "animate-pulse" : ""} />
 
-      {/* Trailing slot: only the count now. Status (error/manual/compilación)
-          lives in the Detalle column; error reads as the red dot beside the
-          sigla. The space is reserved for a future "user working here" chip.
+      {/* Trailing slot: presence badges (others focused here) + count/scan state.
+          Status (error/manual/compilación) lives in the Detalle column.
           "Escaneando…" stays — it is transient live feedback, not a status. */}
       <div className="ml-auto flex items-center gap-2">
+        {here.length > 0 && (
+          <div className="flex items-center -space-x-1.5">
+            {here.map((p) => (
+              <PresenceBadge key={p.participant_id} participant={p} size="sm" />
+            ))}
+          </div>
+        )}
         {isScanning ? (
           <Badge variant="state-scanning" icon={Loader2}>Escaneando…</Badge>
         ) : (

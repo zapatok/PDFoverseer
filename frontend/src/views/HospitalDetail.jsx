@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useSessionStore } from "../store/session";
 import CategoryGroup from "../components/CategoryGroup";
@@ -16,6 +16,14 @@ export default function HospitalDetail({ hospital, onBack }) {
   const focusSigla = useSessionStore((s) => s.focusSigla);
   const [selected, setSelected] = useState(null);
   const [selectedSet, setSelectedSet] = useState(new Set());
+
+  const setFocus = useSessionStore((s) => s.setFocus);
+
+  // Keep store focus in sync with the locally-selected cell.
+  useEffect(() => {
+    setFocus(selected ? `${hospital}|${selected}` : null);
+    return () => setFocus(null); // clear on unmount / hospital change
+  }, [hospital, selected, setFocus]);
 
   const cells = session?.cells?.[hospital] || {};
   const total = Object.entries(cells).reduce((s, [sig, c]) => s + computeCellCount(c, countTypeFor(sig)), 0);
