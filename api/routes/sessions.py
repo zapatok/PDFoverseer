@@ -276,6 +276,7 @@ def _cell_total_pages(state: dict, hospital: str, sigla: str) -> int:
 
 class ApplyRatioRequest(BaseModel):
     n: int = Field(ge=1)
+    participant_id: str | None = None
 
 
 @router.post("/sessions/{session_id}/cells/{hospital}/{sigla}/apply-ratio")
@@ -306,6 +307,7 @@ def apply_ratio(
     per_file_overrides = cell.get("per_file_overrides") or {}
     cell_method = cell.get("method") or "filename_glob"
     n = body.n
+    mgr.check_cell_lock(session_id, hospital, sigla, body.participant_id)
     for pdf in sorted(folder.rglob("*.pdf")):
         origin = file_origin(
             method=per_file_method.get(pdf.name) or cell_method,
@@ -765,6 +767,7 @@ def patch_override(
     _validate_session_id(session_id)
     value = body.get("value")
     manual = bool(body.get("manual", False))
+    participant_id: str | None = body.get("participant_id")
     if value is not None:
         if not isinstance(value, int) or isinstance(value, bool):
             raise HTTPException(400, "value must be int or null")
@@ -784,7 +787,9 @@ def patch_override(
                     {"error": "count_exceeds_pages", "max": total_pages},
                 )
     try:
-        mgr.apply_user_override(session_id, hospital, sigla, value=value, manual=manual)
+        mgr.apply_user_override(
+            session_id, hospital, sigla, value=value, manual=manual, participant_id=participant_id
+        )
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
@@ -797,6 +802,7 @@ def patch_override(
 
 class PerFileOverrideRequest(BaseModel):
     count: int
+    participant_id: str | None = None
 
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/files/{filename:path}/override")
@@ -830,7 +836,9 @@ def patch_per_file_override(
                 {"error": "count_exceeds_pages", "max": file_pages},
             )
     try:
-        mgr.apply_per_file_override(session_id, hospital, sigla, filename, body.count)
+        mgr.apply_per_file_override(
+            session_id, hospital, sigla, filename, body.count, body.participant_id
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if folder.exists():  # best-effort metadata; skip (don't 500) if folder is gone
@@ -852,6 +860,7 @@ class ClearNearMatchBody(BaseModel):
 
     pdf_name: str | None = None
     page_index: int | None = None
+    participant_id: str | None = None
 
 
 @router.post("/sessions/{session_id}/cells/{hospital}/{sigla}/near-matches/clear")
@@ -871,6 +880,7 @@ def clear_near_matches(
         sigla,
         pdf_name=body.pdf_name if body else None,
         page_index=body.page_index if body else None,
+        participant_id=body.participant_id if body else None,
     )
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     return {"ok": True}
@@ -882,6 +892,7 @@ class WorkerCountPatch(BaseModel):
     marks: dict | None = None
     status: Literal["en_progreso", "terminado"] | None = None
     cursor: dict | None = None
+    participant_id: str | None = None
 
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/worker-count")
@@ -904,6 +915,7 @@ def patch_worker_count(
             marks=body.marks,
             status=body.status,
             cursor=body.cursor,
+            participant_id=body.participant_id,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Sesión {session_id} no encontrada") from exc
@@ -935,6 +947,7 @@ class NotePatch(BaseModel):
 
     text: str | None = None
     status: Literal["por_resolver", "resuelto"] = "por_resolver"
+    participant_id: str | None = None
 
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/note")
@@ -950,7 +963,14 @@ def patch_note(
     if not _SESSION_ID_RE.match(session_id):
         raise HTTPException(status_code=422, detail="session_id inválido")
     try:
-        mgr.set_note(session_id, hospital, sigla, text=body.text, status=body.status)
+        mgr.set_note(
+            session_id,
+            hospital,
+            sigla,
+            text=body.text,
+            status=body.status,
+            participant_id=body.participant_id,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Sesión {session_id} no encontrada") from exc
     state = mgr.get_session_state(session_id)
@@ -973,6 +993,7 @@ def patch_note(
 
 class ConfirmRequest(BaseModel):
     confirmed: bool
+    participant_id: str | None = None
 
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/confirm")
@@ -992,7 +1013,13 @@ def patch_confirm(
     """
     _validate_session_id(session_id)
     try:
-        mgr.apply_confirmed(session_id, hospital, sigla, confirmed=body.confirmed)
+        mgr.apply_confirmed(
+            session_id,
+            hospital,
+            sigla,
+            confirmed=body.confirmed,
+            participant_id=body.participant_id,
+        )
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
     state = mgr.get_session_state(session_id)

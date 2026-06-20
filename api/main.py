@@ -9,8 +9,10 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from api.presence import CellLockedError
 from api.routes import history, months, output, presence, sessions, siglas, ws
 from api.routes.sessions import get_manager
 from api.state import SessionManager
@@ -61,6 +63,19 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="PDFoverseer", lifespan=lifespan)
+
+    @app.exception_handler(CellLockedError)
+    async def _cell_locked_handler(_request, exc: CellLockedError):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": "cell_locked",
+                "hospital": exc.hospital,
+                "sigla": exc.sigla,
+                "lock_holder": exc.holder,
+            },
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173"],
