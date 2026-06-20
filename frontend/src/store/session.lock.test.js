@@ -156,6 +156,31 @@ describe("Task 7b: clearNearMatches passes participantId and handles 409", () =>
   });
 });
 
+describe("Task 7b: savePerFileOverride handles 409", () => {
+  it("passes participantId in opts to patchPerFileOverride", async () => {
+    api.patchPerFileOverride.mockResolvedValueOnce({ new_cell_count: 3 });
+    await getState().savePerFileOverride("2026-04", "HRB", "odi", "a.pdf", 3);
+    expect(api.patchPerFileOverride).toHaveBeenCalledTimes(1);
+    const [, , , , , opts] = api.patchPerFileOverride.mock.calls[0];
+    expect(typeof opts.participantId).toBe("string");
+    expect(opts.participantId.length).toBeGreaterThan(0);
+  });
+
+  it("on 409 toasts, refetches, clears pending, and bumps filesTick (re-sync FileList)", async () => {
+    const tickKey = "HRB|odi";
+    const before = getState().filesTick?.[tickKey] ?? 0;
+    api.patchPerFileOverride.mockRejectedValueOnce(make409("Carla"));
+    await getState().savePerFileOverride("2026-04", "HRB", "odi", "a.pdf", 3);
+    expect(toast.error.mock.calls[0][0]).toContain("Carla");
+    expect(api.getSession).toHaveBeenCalledWith("2026-04");
+    expect(getState().error).toBeNull();
+    const key = "HRB|odi|a.pdf";
+    expect(getState().pendingSaves[key]).toBeUndefined();
+    expect(getState()._pendingSave.has(key)).toBe(false);
+    expect(getState().filesTick[tickKey]).toBe(before + 1);
+  });
+});
+
 describe("Task 7b: fallback toast message when lock_holder name is absent", () => {
   it("uses 'Otro usuario' when lock_holder.name is missing", async () => {
     const err = new Error("cell_locked");

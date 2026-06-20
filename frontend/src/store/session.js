@@ -397,6 +397,7 @@ export const useSessionStore = create((set, get) => ({
       if (controller.signal.aborted) return;
       if (error.status === 409) {
         const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        const tickKey = `${hospital}|${sigla}`;
         set((prev) => {
           const cleanedPending = new Map(prev._pendingSave);
           if (cleanedPending.get(key)?.controller === controller) {
@@ -404,7 +405,14 @@ export const useSessionStore = create((set, get) => ({
           }
           const np = { ...prev.pendingSaves };
           delete np[key];
-          return { _pendingSave: cleanedPending, pendingSaves: np };
+          // Bump filesTick so FileList re-fetches: the per-file InlineEditCount
+          // holds the typed value locally, so after a blocked edit we force a
+          // re-sync to server truth (the success path bumps it for the same reason).
+          return {
+            _pendingSave: cleanedPending,
+            pendingSaves: np,
+            filesTick: { ...prev.filesTick, [tickKey]: (prev.filesTick[tickKey] ?? 0) + 1 },
+          };
         });
         toast.error(`${who} está editando esta celda`);
         get().refetchSession(sessionId);
