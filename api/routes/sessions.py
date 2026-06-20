@@ -15,7 +15,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.batch import make_handle
-from api.presence import AGENT_PARTICIPANT_ID
+from api.presence import AGENT_PARTICIPANT_ID, CellLockedError, is_agent
 from api.routes.ws import _emit, broadcast
 from api.state import (
     SessionManager,

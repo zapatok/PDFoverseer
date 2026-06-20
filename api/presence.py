@@ -19,19 +19,6 @@ from collections.abc import Callable
 PRESENCE_TTL_SECONDS = 45.0
 PRESENCE_HEARTBEAT_SECONDS = 15.0
 
-# M3b: fixed identity for the Claude scanner participant.
-AGENT_PARTICIPANT_ID = "claude"
-AGENT_COLOR = "#6366f1"  # indigo — distinguishable from human palette
-
-
-def is_agent(participant_id: str | None) -> bool:
-    """True iff the participant is the Claude scanner agent."""
-    return participant_id == AGENT_PARTICIPANT_ID
-
-
-# Fields exposed in the presence snapshot (the `expires_at` lease is internal).
-_PUBLIC_FIELDS = ("participant_id", "name", "color", "kind", "focused_cell", "mode")
-
 # ── Claude agent identity (M3b) ───────────────────────────────────────────────
 
 AGENT_PARTICIPANT_ID = "claude"
@@ -43,6 +30,10 @@ AGENT_KIND = "agent"
 def is_agent(participant_id: str | None) -> bool:
     """Return True iff ``participant_id`` belongs to the Claude agent."""
     return participant_id == AGENT_PARTICIPANT_ID
+
+
+# Fields exposed in the presence snapshot (the `expires_at` lease is internal).
+_PUBLIC_FIELDS = ("participant_id", "name", "color", "kind", "focused_cell", "mode")
 
 
 class CellLockedError(Exception):
@@ -168,40 +159,6 @@ class PresenceRegistry:
             return None
         r = self._participants[session_id][pid]
         return {k: r[k] for k in _PUBLIC_FIELDS}
-
-    def agent_focus(self, session_id: str, cell: str) -> dict | None:
-        """Atomic claim for the Claude scanner agent (M3b).
-
-        If ``cell`` is free (no human editor): registers the agent (heartbeat +
-        focus as editor) and returns None (claim OK).
-        If a human already holds it: returns their public snapshot (skip signal).
-
-        The agent always uses ``AGENT_PARTICIPANT_ID`` with ``kind="agent"``.
-        """
-        self._purge_expired(session_id)
-        members = self._participants.setdefault(session_id, {})
-        # Check for a human editor BEFORE registering the agent.
-        human_editor_pid = self._editor_of(session_id, cell, exclude=AGENT_PARTICIPANT_ID)
-        if human_editor_pid is not None:
-            r = members[human_editor_pid]
-            return {k: r[k] for k in _PUBLIC_FIELDS}
-        # Cell is free — install / refresh the agent and claim it as editor.
-        agent_rec = members.get(AGENT_PARTICIPANT_ID)
-        if agent_rec is None:
-            members[AGENT_PARTICIPANT_ID] = {
-                "participant_id": AGENT_PARTICIPANT_ID,
-                "name": "Claude",
-                "color": AGENT_COLOR,
-                "kind": "agent",
-                "focused_cell": cell,
-                "mode": "editor",
-                "expires_at": self._now() + PRESENCE_TTL_SECONDS,
-            }
-        else:
-            agent_rec["focused_cell"] = cell
-            agent_rec["mode"] = "editor"
-            agent_rec["expires_at"] = self._now() + PRESENCE_TTL_SECONDS
-        return None
 
     def leave(self, session_id: str, participant_id: str) -> bool:
         changed = self._purge_expired(session_id)
