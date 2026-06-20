@@ -8,6 +8,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
+from api.presence import PresenceRegistry
 from core.cell_count import (  # noqa: F401  re-exported for api consumers
     _sum_marks,
     compute_cell_count,
@@ -95,6 +96,7 @@ class SessionManager:
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
         self._lock = threading.RLock()
+        self._presence = PresenceRegistry()
 
     @_synchronized
     def open_session(
@@ -673,3 +675,25 @@ class SessionManager:
             session_id: Target session identifier.
         """
         finalize_session(self._conn, session_id)
+
+    # ── Presence (M2) — ephemeral, shares this manager's RLock (spec §6.1) ──
+
+    @_synchronized
+    def presence_heartbeat(
+        self, session_id: str, participant_id: str, *, name: str, color: str, kind: str = "human"
+    ) -> bool:
+        return self._presence.heartbeat(
+            session_id, participant_id, name=name, color=color, kind=kind
+        )
+
+    @_synchronized
+    def presence_focus(self, session_id: str, participant_id: str, cell: str | None) -> bool:
+        return self._presence.focus(session_id, participant_id, cell)
+
+    @_synchronized
+    def presence_leave(self, session_id: str, participant_id: str) -> bool:
+        return self._presence.leave(session_id, participant_id)
+
+    @_synchronized
+    def presence_snapshot(self, session_id: str) -> list[dict]:
+        return self._presence.snapshot(session_id)
