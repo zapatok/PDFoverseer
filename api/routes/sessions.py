@@ -15,6 +15,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.batch import make_handle
+from api.presence import CellLockedError, is_agent
 from api.routes.ws import _emit, broadcast
 from api.state import (
     SessionManager,
@@ -307,7 +308,15 @@ def apply_ratio(
     per_file_overrides = cell.get("per_file_overrides") or {}
     cell_method = cell.get("method") or "filename_glob"
     n = body.n
-    mgr.check_cell_lock(session_id, hospital, sigla, body.participant_id)
+    participant_id = body.participant_id
+    # M3b: agent path uses agent_claim_cell (auto-claim on free cell; 409 if human
+    # holds it). Human/legacy path keeps the existing check_cell_lock gate.
+    if is_agent(participant_id):
+        holder = mgr.agent_claim_cell(session_id, hospital, sigla)
+        if holder is not None:
+            raise CellLockedError(hospital, sigla, holder)
+    else:
+        mgr.check_cell_lock(session_id, hospital, sigla, participant_id)
     for pdf in sorted(folder.rglob("*.pdf")):
         origin = file_origin(
             method=per_file_method.get(pdf.name) or cell_method,
@@ -352,6 +361,8 @@ def apply_ratio(
         mgr, session_id, hospital, sigla, folder, pages=pages, count_type=count_type_for(sigla)
     )
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
+    if is_agent(participant_id):
+        _broadcast_presence(request, mgr, session_id)
     state = mgr.get_session_state(session_id)
     return state["cells"][hospital][sigla]
 
@@ -514,6 +525,19 @@ def _broadcast_cell_updated(
     event = _cell_updated_event(mgr, session_id, hospital, sigla)
     if event is not None:
         _emit(request, session_id, event)
+
+
+def _broadcast_presence(request: Request, mgr: SessionManager, session_id: str) -> None:
+    """Difunde el snapshot de presencia (el badge del agente aparece/salta tras su escritura)."""
+    _emit(
+        request,
+        session_id,
+        {
+            "type": "presence",
+            "session_id": session_id,
+            "participants": mgr.presence_snapshot(session_id),
+        },
+    )
 
 
 def _broadcast_session_refresh(request: Request, session_id: str) -> None:
@@ -795,6 +819,8 @@ def patch_override(
         raise HTTPException(404, str(exc)) from exc
     cell = state["cells"].get(hospital, {}).get(sigla, {})
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
+    if is_agent(participant_id):
+        _broadcast_presence(request, mgr, session_id)
     return {
         "user_override": cell.get("user_override"),
     }
@@ -848,6 +874,8 @@ def patch_per_file_override(
     state, _ = mgr._load_and_migrate(session_id)
     cell = state["cells"][hospital][sigla]
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
+    if is_agent(body.participant_id):
+        _broadcast_presence(request, mgr, session_id)
     return {
         "filename": filename,
         "count": body.count,
@@ -874,15 +902,18 @@ def clear_near_matches(
 ) -> dict:
     """Clear near-match suspects for a cell — all, or one entry (E5)."""
     _validate_session_id(session_id)
+    participant_id = body.participant_id if body else None
     mgr.clear_near_matches(
         session_id,
         hospital,
         sigla,
         pdf_name=body.pdf_name if body else None,
         page_index=body.page_index if body else None,
-        participant_id=body.participant_id if body else None,
+        participant_id=participant_id,
     )
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
+    if is_agent(participant_id):
+        _broadcast_presence(request, mgr, session_id)
     return {"ok": True}
 
 
@@ -929,6 +960,8 @@ def patch_worker_count(
     # the gap that the worker PATCH didn't refresh all_reliable.
     refresh_all_reliable(mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla))
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
+    if is_agent(body.participant_id):
+        _broadcast_presence(request, mgr, session_id)
     return {
         "worker_marks": cell.get("worker_marks"),
         "worker_status": cell.get("worker_status"),
@@ -984,6 +1017,8 @@ def patch_note(
     refresh_all_reliable(mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla))
     cell = mgr.get_session_state(session_id)["cells"].get(hospital, {}).get(sigla, {})
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
+    if is_agent(body.participant_id):
+        _broadcast_presence(request, mgr, session_id)
     return {
         "note": cell.get("note"),
         "note_status": cell.get("note_status"),
@@ -1025,6 +1060,8 @@ def patch_confirm(
     state = mgr.get_session_state(session_id)
     cell = state["cells"].get(hospital, {}).get(sigla, {})
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
+    if is_agent(body.participant_id):
+        _broadcast_presence(request, mgr, session_id)
     return {"confirmed": cell.get("confirmed", False)}
 
 
