@@ -528,7 +528,11 @@ def _broadcast_cell_updated(
 
 
 def _broadcast_presence(request: Request, mgr: SessionManager, session_id: str) -> None:
-    """Difunde el snapshot de presencia (el badge del agente aparece/salta tras su escritura)."""
+    """Difunde el snapshot de presencia (el badge del agente aparece/salta tras su escritura).
+
+    Same event shape as ``_presence_event`` in ``api/routes/presence.py`` (M2) — keep
+    the two in sync if the ``presence`` payload ever gains a field.
+    """
     _emit(
         request,
         session_id,

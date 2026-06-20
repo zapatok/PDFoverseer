@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -211,8 +212,6 @@ def test_atomic_claim_agent_vs_human_exactly_one_editor(tmp_path):
 
 def _make_session(mgr, tmp_path) -> str:
     """Create session 2026-04 in the DB; returns the session_id."""
-    from pathlib import Path
-
     state = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))
     return state["session_id"]
 
