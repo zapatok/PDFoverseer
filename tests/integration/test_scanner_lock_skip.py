@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import create_app
-from api.presence import AGENT_PARTICIPANT_ID, PresenceRegistry
+from api.presence import AGENT_PARTICIPANT_ID
 from api.routes.sessions import _handle_scan_progress
 from api.state import SessionManager
 from core.db.connection import open_connection
@@ -35,13 +35,15 @@ def _make_manager(tmp_path: Path) -> SessionManager:
 
 
 def _register_human(
-    registry: PresenceRegistry,
+    mgr: SessionManager,
     session_id: str,
     pid: str = "human-1",
     name: str = "Daniel",
     color: str = "#a",
 ) -> None:
-    registry.heartbeat(session_id, pid, name=name, color=color, kind="human")
+    """Seed a human editor via the public @_synchronized pass-throughs (same path
+    production uses) — not the private registry — so the test reflects real locking."""
+    mgr.presence_heartbeat(session_id, pid, name=name, color=color)
 
 
 # ---------------------------------------------------------------------------
@@ -55,9 +57,8 @@ def test_skip_path_human_holds_cell(tmp_path):
     session_id = "2026-04"
 
     # Register a human participant and focus them on the cell.
-    registry: PresenceRegistry = mgr._presence  # type: ignore[attr-defined]
-    _register_human(registry, session_id, pid="human-1", name="Daniel", color="#a")
-    registry.focus(session_id, "human-1", "HRB|odi")
+    _register_human(mgr, session_id, pid="human-1", name="Daniel", color="#a")
+    mgr.presence_focus(session_id, "human-1", "HRB|odi")
 
     # agent_focus should detect the human editor and return their public snapshot.
     holder = mgr.agent_claim_cell(session_id, "HRB", "odi")
@@ -118,9 +119,8 @@ def test_skip_then_claim_next_cell(tmp_path):
     mgr = _make_manager(tmp_path)
     session_id = "2026-04"
 
-    registry: PresenceRegistry = mgr._presence  # type: ignore[attr-defined]
-    _register_human(registry, session_id, pid="human-1", name="Daniel", color="#a")
-    registry.focus(session_id, "human-1", "HRB|odi")
+    _register_human(mgr, session_id, pid="human-1", name="Daniel", color="#a")
+    mgr.presence_focus(session_id, "human-1", "HRB|odi")
 
     # First cell is held — skip.
     holder_odi = mgr.agent_claim_cell(session_id, "HRB", "odi")
@@ -158,9 +158,8 @@ def test_handler_skip_sequence_drops_events_and_enriches_complete(tmp_path):
     enriched with the skipped list."""
     mgr = _make_manager(tmp_path)
     sid = "2026-04"
-    registry: PresenceRegistry = mgr._presence  # type: ignore[attr-defined]
-    _register_human(registry, sid, pid="human-1", name="Daniel", color="#a")
-    registry.focus(sid, "human-1", "HRB|odi")
+    _register_human(mgr, sid, pid="human-1", name="Daniel", color="#a")
+    mgr.presence_focus(sid, "human-1", "HRB|odi")
 
     out: list[dict] = []
     ctx = _new_ctx()

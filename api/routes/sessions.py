@@ -577,7 +577,7 @@ def _handle_scan_progress(
     h, s = event.get("hospital"), event.get("sigla")
 
     if etype == "cell_scanning":
-        ctx["current_cell_skipped"] = False  # reset per cell
+        ctx["current_cell_skipped"] = False  # reset first; the skip path below overwrites to True
         holder = mgr.agent_claim_cell(session_id, h, s)
         if holder is not None:
             ctx["skipped_set"].add((h, s))
@@ -817,6 +817,9 @@ def scan_ocr(
                     broadcast(
                         session_id,
                         {
+                            # `skipped` intentionally absent on the crash path (the normal
+                            # path enriches it via _handle_scan_progress); frontend uses
+                            # `event.skipped ?? []`.
                             "type": "scan_complete",
                             "scanned": 0,
                             "errors": len(cells_with_paths),
