@@ -907,6 +907,6 @@ export const useSessionStore = create((set, get) => ({
       const id = getIdentity();
       if (id && session) api.presenceLeave(session.session_id, { participant_id: id.participant_id });
     }
-    set({ _heartbeat: null });
+    set({ _heartbeat: null, presence: [] });
   },
 }));

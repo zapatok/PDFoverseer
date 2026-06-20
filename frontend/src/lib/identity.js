@@ -18,8 +18,10 @@ const KEY_IDENTITY = "po_identity";
 /**
  * Returns the stable participant UUID for this browser.
  * Mints one on first call and persists it to localStorage.
+ * Returns null in non-browser environments (SSR/node).
  */
 export function getParticipantId() {
+  if (typeof localStorage === "undefined") return null;
   let id = localStorage.getItem(KEY_ID);
   if (!id) {
     id =
@@ -34,8 +36,10 @@ export function getParticipantId() {
 /**
  * Returns the stored identity or null if not yet set.
  * Shape: { participant_id, name, color }
+ * Returns null in non-browser environments (SSR/node).
  */
 export function getIdentity() {
+  if (typeof localStorage === "undefined") return null;
   const raw = localStorage.getItem(KEY_IDENTITY);
   if (!raw) return null;
   try {
@@ -49,9 +53,11 @@ export function getIdentity() {
 
 /**
  * Persists name and color to localStorage.
+ * No-op in non-browser environments (SSR/node).
  * @param {{ name: string, color: string }} identity
  */
 export function setIdentity({ name, color }) {
+  if (typeof localStorage === "undefined") return;
   localStorage.setItem(KEY_IDENTITY, JSON.stringify({ name, color }));
 }
 
