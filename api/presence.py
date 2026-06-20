@@ -22,6 +22,18 @@ PRESENCE_HEARTBEAT_SECONDS = 15.0
 # Fields exposed in the presence snapshot (the `expires_at` lease is internal).
 _PUBLIC_FIELDS = ("participant_id", "name", "color", "kind", "focused_cell", "mode")
 
+# ── Claude agent identity (M3b) ───────────────────────────────────────────────
+
+AGENT_PARTICIPANT_ID = "claude"
+AGENT_NAME = "Claude"
+AGENT_COLOR = "#0ea5e9"  # cian/sky — outside the 6 human colors in identity.js
+AGENT_KIND = "agent"
+
+
+def is_agent(participant_id: str | None) -> bool:
+    """Return True iff ``participant_id`` belongs to the Claude agent."""
+    return participant_id == AGENT_PARTICIPANT_ID
+
 
 class CellLockedError(Exception):
     """Raised when a write targets a cell held by a different participant (M3a)."""
@@ -85,6 +97,43 @@ class PresenceRegistry:
         else:
             new_mode = (
                 "viewer" if self._editor_of(session_id, cell, exclude=participant_id) else "editor"
+            )
+        if rec["focused_cell"] != cell or rec["mode"] != new_mode:
+            rec["focused_cell"] = cell
+            rec["mode"] = new_mode
+            return True
+        return changed
+
+    def agent_focus(self, session_id: str, cell: str | None) -> bool:
+        """Register/refresh the Claude agent focused on ``cell`` (claim under the
+        caller's RLock). Free cell -> agent is editor; held by another -> viewer
+        (never steals). cell=None releases. Returns True iff the roster changed.
+
+        The agent record carries the same keys as :meth:`heartbeat` so
+        :meth:`snapshot` projects it cleanly through ``_PUBLIC_FIELDS``.
+        """
+        changed = self._purge_expired(session_id)
+        members = self._participants.setdefault(session_id, {})
+        rec = members.get(AGENT_PARTICIPANT_ID)
+        if rec is None:
+            rec = members[AGENT_PARTICIPANT_ID] = {
+                "participant_id": AGENT_PARTICIPANT_ID,
+                "name": AGENT_NAME,
+                "color": AGENT_COLOR,
+                "kind": AGENT_KIND,
+                "focused_cell": None,
+                "mode": "editor",
+                "expires_at": self._now() + PRESENCE_TTL_SECONDS,
+            }
+            changed = True
+        rec["expires_at"] = self._now() + PRESENCE_TTL_SECONDS
+        if cell is None:
+            new_mode = "editor"  # mode is moot when not focused; mirror focus() release
+        else:
+            new_mode = (
+                "viewer"
+                if self._editor_of(session_id, cell, exclude=AGENT_PARTICIPANT_ID)
+                else "editor"
             )
         if rec["focused_cell"] != cell or rec["mode"] != new_mode:
             rec["focused_cell"] = cell
