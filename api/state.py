@@ -771,8 +771,15 @@ class SessionManager:
 
         Thin gate for routes that do not delegate to the per-method guards (e.g.
         apply-ratio, which loops ``apply_per_file_ocr_result`` — a scanner method
-        that must remain unenforced). The check runs under the RLock, so
-        check + write are atomic for the caller.
+        that must remain unenforced). The check itself runs under the RLock, but
+        the caller's subsequent writes happen in their own lock acquisitions, so
+        this is NOT a single atomic check-and-write like the per-method guards.
+        It is safe for apply-ratio because of editorship exclusivity: the operator
+        reached that route by selecting the cell in the UI (a ``focus`` claim), so
+        they are the cell's editor; a second participant who opens the same cell
+        becomes a *viewer*, never a competing editor — there is no other holder
+        that could appear mid-loop. Do not reuse this for a route where the caller
+        has not already claimed the cell.
 
         Args:
             session_id: Target session identifier.
