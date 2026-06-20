@@ -8,6 +8,7 @@ import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
 import PdfCoverViewer from "./PdfCoverViewer";
+import PresenceBadge from "./PresenceBadge";
 import { SIGLA_LABELS, siglaDisplay } from "../lib/sigla-labels";
 import { SIGLA_DESCRIPTION, SIGLA_PAGE_RANGE, formatPageRange, countTypeFor } from "../lib/sigla-info";
 import { METHOD_LABEL } from "../lib/method-labels";
@@ -18,10 +19,12 @@ import { computeCellCount, computeFilesCount } from "../lib/cellCount";
 import SegmentedToggle from "../ui/SegmentedToggle";
 import { hasOverride, isCappedCountType, showsWorkerCounter } from "../lib/cell-status";
 import { copyFlavorStub } from "../lib/flavorStub";
+import { cellLockHolder } from "../lib/presence";
+import { getParticipantId } from "../lib/identity";
 import { api } from "../lib/api";
 import { toast } from "sonner";
 
-function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
+function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex, locked = false }) {
   const [viewerOpen, setViewerOpen] = useState(false);
   const clearNearMatches = useSessionStore((s) => s.clearNearMatches);
   // pdfIndex < 0 means the near-match PDF name was not found among the
@@ -56,6 +59,7 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
         )}
       </div>
       <div className="flex items-center gap-2 mt-1">
+        {/* Ver portada: read-only viewing — always enabled */}
         <Button
           variant="secondary"
           icon={ScanSearch}
@@ -69,6 +73,7 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
             PDF no ubicado en la celda
           </span>
         )}
+        {/* Marcar como nuevo flavor: clipboard copy — always enabled */}
         <Button
           variant="secondary"
           icon={ClipboardCopy}
@@ -79,6 +84,7 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
         <Button
           variant="ghost"
           icon={X}
+          disabled={locked}
           onClick={() =>
             clearNearMatches(sessionId, hospital, sigla, {
               pdf_name: nm.pdf_name,
@@ -102,7 +108,7 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex }) {
   );
 }
 
-function NearMatchesSection({ hospital, sigla, cell, sessionId }) {
+function NearMatchesSection({ hospital, sigla, cell, sessionId, locked = false }) {
   const clearNearMatches = useSessionStore((s) => s.clearNearMatches);
   const nearMatches = cell.near_matches;
   if (!nearMatches || nearMatches.length === 0) return null;
@@ -120,8 +126,9 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId }) {
         </h4>
         <button
           type="button"
+          disabled={locked}
           onClick={() => clearNearMatches(sessionId, hospital, sigla)}
-          className="inline-flex items-center gap-1 text-xs text-po-text-muted hover:text-po-error transition shrink-0"
+          className="inline-flex items-center gap-1 text-xs text-po-text-muted hover:text-po-error transition shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Trash2 size={13} strokeWidth={1.75} /> Limpiar todo
         </button>
@@ -137,6 +144,7 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId }) {
               sigla={sigla}
               sessionId={sessionId}
               pdfIndex={pdfIndex}
+              locked={locked}
             />
           );
         })}
@@ -145,7 +153,7 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId }) {
   );
 }
 
-function WorkerCountModule({ hospital, sigla, cell, countType = "documents_workers" }) {
+function WorkerCountModule({ hospital, sigla, cell, countType = "documents_workers", locked = false }) {
   const openWorkerCount = useSessionStore((s) => s.openWorkerCount);
   const status = cell.worker_status;
   // F1 fix: prefer the backend-authoritative worker_count (filtered by present
@@ -178,6 +186,7 @@ function WorkerCountModule({ hospital, sigla, cell, countType = "documents_worke
       <Button
         variant={started ? "secondary" : "primary"}
         icon={Users}
+        disabled={locked}
         onClick={() => openWorkerCount(hospital, sigla)}
       >
         {!started && startLabel}
@@ -202,6 +211,11 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const saveOverride = useSessionStore((s) => s.saveOverride);
   const applyRatioCell = useSessionStore((s) => s.applyRatioCell);
   const filesTick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
+  // M3a: presence for read-only gating. Select the raw array (stable); defaulting
+  // with `?? []` INSIDE the selector triggers the same React #185 footgun as
+  // reorg_ops. Presence is always initialized to [] in the store, so the raw
+  // selector is stable.
+  const presence = useSessionStore((s) => s.presence);
   const [scanInfo, setScanInfo] = useState(null);
   const [totalPages, setTotalPages] = useState(null);
   const [ratioNOpen, setRatioNOpen] = useState(false);
@@ -249,6 +263,10 @@ export default function DetailPanel({ hospital, sigla, cell }) {
     );
   }
 
+  // M3a: read-only gating. Plain calls (not hooks) — safe below the early return.
+  const lockHolder = cellLockHolder(presence, hospital, sigla, getParticipantId());
+  const locked = lockHolder !== null;
+
   const countType = countTypeFor(sigla);
   const isChecks = countType === "checks";
 
@@ -263,6 +281,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const maxPages = isCapped ? totalPages : null;
 
   function handleModeChange(next) {
+    if (locked) return;
     setMode(next);
     if (next === "files") {
       // Clear the cell override → total = files sum. The note is independent of
@@ -276,6 +295,14 @@ export default function DetailPanel({ hospital, sigla, cell }) {
 
   return (
     <div className="rounded-xl bg-po-panel border border-po-border p-5">
+      {/* M3a lock notice — shown when another participant holds this cell */}
+      {locked && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-po-suspect-border bg-po-suspect-bg px-3 py-2 text-xs text-po-suspect">
+          <PresenceBadge participant={lockHolder} size="sm" />
+          <span>{lockHolder.name} está editando esta celda</span>
+        </div>
+      )}
+
       <div className="flex items-baseline gap-2 mb-1">
         <span className="font-mono text-sm text-po-text">{siglaDisplay(sigla)}</span>
         {showLabel && (
@@ -299,6 +326,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
             ariaLabel="Origen del conteo"
             value={mode}
             onChange={handleModeChange}
+            disabled={locked}
             options={[
               { value: "files", label: "Por archivos" },
               { value: "manual", label: "Manual" },
@@ -316,6 +344,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
           <Button
             variant="secondary"
             icon={Ratio}
+            disabled={locked}
             onClick={async () => {
               try {
                 await applyRatioCell(sessionId, hospital, sigla, 1);
@@ -331,6 +360,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
             <Button
               variant="secondary"
               icon={Ratio}
+              disabled={locked}
               onClick={() => setRatioNOpen(true)}
             >
               Aplicar ratio N…
@@ -340,15 +370,17 @@ export default function DetailPanel({ hospital, sigla, cell }) {
               <input
                 type="number"
                 min={1}
+                disabled={locked}
                 value={ratioNValue}
                 onChange={(e) => {
                   const parsed = parseInt(e.target.value, 10);
                   setRatioNValue(Number.isNaN(parsed) ? 1 : Math.max(1, parsed));
                 }}
-                className="w-16 rounded border border-po-border bg-po-bg px-2 py-1 text-sm tabular-nums focus:border-po-accent focus:outline-none"
+                className="w-16 rounded border border-po-border bg-po-bg px-2 py-1 text-sm tabular-nums focus:border-po-accent focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <Button
                 variant="primary"
+                disabled={locked}
                 onClick={async () => {
                   try {
                     await applyRatioCell(sessionId, hospital, sigla, ratioNValue);
@@ -437,7 +469,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
             hospital={hospital}
             sigla={sigla}
             cell={cell}
-            disabled={mode === "files"}
+            disabled={mode === "files" || locked}
             focusNonce={focusNonce}
             maxPages={maxPages}
             countType={scanInfo?.count_type}
@@ -446,7 +478,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
       )}
 
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Nota</h4>
-      <NotePanel hospital={hospital} sigla={sigla} cell={cell} />
+      <NotePanel hospital={hospital} sigla={sigla} cell={cell} locked={locked} />
 
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Reorganización</h4>
       <ReorganizacionPanel
@@ -461,7 +493,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
           and checks (maquinaria). dif_pts wired to N15 in Incr 3B. Keep above
           near-match suspects. */}
       {showsWorkerCounter(countType) && (
-        <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} countType={countType} />
+        <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} countType={countType} locked={locked} />
       )}
 
       <NearMatchesSection
@@ -469,6 +501,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
         sigla={sigla}
         cell={cell}
         sessionId={sessionId}
+        locked={locked}
       />
     </div>
   );

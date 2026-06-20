@@ -8,7 +8,9 @@ import SaveIndicator from "../ui/SaveIndicator";
 // N1 (Incr 3C): per-cell note with state, decoupled from the override. A
 // por_resolver note forces the cell dot amber (see isCellReady) without
 // blocking actions; resuelto is read-only until reopened. Blank clears it.
-export default function NotePanel({ hospital, sigla, cell }) {
+// locked (M3a): when another participant holds the cell, textarea + buttons
+// are disabled so local edits cannot collide with the remote editor.
+export default function NotePanel({ hospital, sigla, cell, locked = false }) {
   const session = useSessionStore((s) => s.session);
   const saveNote = useSessionStore((s) => s.saveNote);
   const pendingSaves = useSessionStore((s) => s.pendingSaves);
@@ -61,21 +63,21 @@ export default function NotePanel({ hospital, sigla, cell }) {
         onChange={onChange}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        disabled={readOnly}
+        disabled={readOnly || locked}
         rows={3}
         className={`w-full rounded border px-2 py-1.5 text-sm placeholder-po-text-subtle outline-none resize-none ${
-          readOnly
+          readOnly || locked
             ? "cursor-not-allowed border-po-border bg-po-bg text-po-text-muted"
             : "border-po-border bg-po-bg focus:border-po-accent"
         }`}
       />
       {status === "por_resolver" && (
-        <Button variant="secondary" onClick={markResolved} disabled={text.trim() === ""}>
+        <Button variant="secondary" onClick={markResolved} disabled={text.trim() === "" || locked}>
           Marcar resuelta
         </Button>
       )}
       {status === "resuelto" && (
-        <Button variant="ghost" onClick={reopen}>
+        <Button variant="ghost" onClick={reopen} disabled={locked}>
           Reabrir
         </Button>
       )}

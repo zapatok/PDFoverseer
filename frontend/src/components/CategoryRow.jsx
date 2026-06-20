@@ -8,7 +8,7 @@ import { dotVariantFor } from "../lib/cell-status";
 import { computeCellCount } from "../lib/cellCount";
 import { countTypeFor } from "../lib/sigla-info";
 import InlineEditCount from "./InlineEditCount";
-import { participantsInCell } from "../lib/presence";
+import { participantsInCell, cellLockHolder } from "../lib/presence";
 import { getParticipantId } from "../lib/identity";
 import PresenceBadge from "./PresenceBadge";
 
@@ -31,6 +31,8 @@ export default function CategoryRow({
   const saveOverride = useSessionStore((s) => s.saveOverride);
   const presence = useSessionStore((s) => s.presence);
   const here = participantsInCell(presence, hospital, sigla, getParticipantId());
+  // M3a: non-null when another participant is editing this cell.
+  const lockHolder = cellLockHolder(presence, hospital, sigla, getParticipantId());
 
   const cellKey = `${hospital}|${sigla}`;
   const isScanning = scanningCells.has(cellKey);
@@ -68,11 +70,15 @@ export default function CategoryRow({
           "Escaneando…" stays — it is transient live feedback, not a status. */}
       <div className="ml-auto flex items-center gap-2">
         {here.length > 0 && (
-          <div className="flex items-center -space-x-1.5">
-            {here.map((p) => (
-              <PresenceBadge key={p.participant_id} participant={p} size="sm" />
-            ))}
-          </div>
+          // When lockHolder is set, wrap with a tooltip so the operator can see
+          // "Editando" affordance without adding a separate lock icon.
+          <Tooltip content={lockHolder ? `${lockHolder.name} está editando` : undefined}>
+            <div className={["flex items-center -space-x-1.5", lockHolder ? "ring-1 ring-po-suspect-border rounded-full" : ""].filter(Boolean).join(" ")}>
+              {here.map((p) => (
+                <PresenceBadge key={p.participant_id} participant={p} size="sm" />
+              ))}
+            </div>
+          </Tooltip>
         )}
         {isScanning ? (
           <Badge variant="state-scanning" icon={Loader2}>Escaneando…</Badge>
@@ -82,6 +88,7 @@ export default function CategoryRow({
             onCommit={onCommitCount}
             placeholder={placeholder}
             autoFocus={autoFocus}
+            disabled={!!lockHolder}
           />
         )}
       </div>

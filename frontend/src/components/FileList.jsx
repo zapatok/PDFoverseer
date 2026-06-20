@@ -8,9 +8,12 @@ import Skeleton from "../ui/Skeleton";
 import Tooltip from "../ui/Tooltip";
 import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
+import PresenceBadge from "./PresenceBadge";
 import { fileCountDisplay } from "../lib/file-origin";
 import { hasOverride, isCappedCountType } from "../lib/cell-status";
 import { SIGLAS } from "../lib/sigla-labels";
+import { cellLockHolder } from "../lib/presence";
+import { getParticipantId } from "../lib/identity";
 
 // Known hospitals in canonical order.
 const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
@@ -19,7 +22,7 @@ const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
  * Compact popover menu for creating a whole-file reorg op.
  * Uses <details>/<summary> to avoid needing a portal.
  */
-function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated }) {
+function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated, disabled = false }) {
   const addReorgOp = useSessionStore((s) => s.addReorgOp);
   const detailsRef = useRef(null);
 
@@ -76,8 +79,15 @@ function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated }) {
   return (
     <details ref={detailsRef} className="relative">
       <summary
-        className="list-none flex items-center justify-center w-7 h-7 rounded text-po-text-muted hover:text-po-text hover:bg-po-panel-hover cursor-pointer"
-        title="Reorganizar archivo"
+        aria-disabled={disabled || undefined}
+        onClick={disabled ? (e) => e.preventDefault() : undefined}
+        className={[
+          "list-none flex items-center justify-center w-7 h-7 rounded text-po-text-muted",
+          disabled
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:text-po-text hover:bg-po-panel-hover cursor-pointer",
+        ].join(" ")}
+        title={disabled ? "Bloqueado por otro participante" : "Reorganizar archivo"}
         aria-label="Reorganizar archivo"
       >
         <MoreHorizontal size={14} strokeWidth={1.75} />
@@ -188,6 +198,8 @@ export default function FileList({ hospital, sigla }) {
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
   const cell = useSessionStore((s) => s.session?.cells?.[hospital]?.[sigla]);
   const saveOverride = useSessionStore((s) => s.saveOverride);
+  // M3a: raw presence selector — never `?? []` inside a selector (Zustand v5 footgun).
+  const presence = useSessionStore((s) => s.presence);
   // Re-fetch after an OCR scan finishes for this cell (G3, review #5/#6).
   const tick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
   const [files, setFiles] = useState(null);
@@ -215,6 +227,10 @@ export default function FileList({ hospital, sigla }) {
 
   // Per-file count is capped at page_count when the sigla counts documents or documents+workers.
   const isCapped = isCappedCountType(scanInfo?.count_type);
+
+  // M3a: read-only gating. Plain calls, not hooks — safe here despite early returns below.
+  const lockHolder = cellLockHolder(presence, hospital, sigla, getParticipantId());
+  const locked = lockHolder !== null;
 
   if (!sigla) {
     return (
@@ -262,6 +278,13 @@ export default function FileList({ hospital, sigla }) {
 
   return (
     <div className="rounded-xl bg-po-panel border border-po-border overflow-hidden">
+      {/* M3a lock notice */}
+      {locked && (
+        <div className="flex items-center gap-2 border-b border-po-suspect-border bg-po-suspect-bg px-3 py-2 text-xs text-po-suspect">
+          <PresenceBadge participant={lockHolder} size="sm" />
+          <span>{lockHolder.name} está editando esta celda</span>
+        </div>
+      )}
       {hasOverride(cell) && (
         <div className="flex items-start gap-2 border-b border-po-suspect-border bg-po-suspect-bg px-3 py-2 text-xs text-po-suspect">
           <span aria-hidden>⚠</span>
@@ -269,10 +292,13 @@ export default function FileList({ hospital, sigla }) {
             La celda usa un total manual ({cell.user_override}) que anula los archivos.{" "}
             <button
               type="button"
-              onClick={() =>
-                saveOverride(session.session_id, hospital, sigla, null)
+              disabled={locked}
+              onClick={
+                locked
+                  ? undefined
+                  : () => saveOverride(session.session_id, hospital, sigla, null)
               }
-              className="underline underline-offset-2 hover:text-po-text"
+              className="underline underline-offset-2 hover:text-po-text disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
             >
               usar conteo por archivos
             </button>
@@ -324,6 +350,7 @@ export default function FileList({ hospital, sigla }) {
                   <InlineEditCount
                     value={value}
                     placeholder={placeholder}
+                    disabled={locked}
                     max={isCapped ? (f.page_count ?? null) : null}
                     onCommit={(newCount) => {
                       setFiles((prev) =>
@@ -348,6 +375,7 @@ export default function FileList({ hospital, sigla }) {
                 srcHospital={hospital}
                 srcSigla={sigla}
                 sessionId={session?.session_id}
+                disabled={locked}
                 onCreated={() => {}}
               />
             </div>

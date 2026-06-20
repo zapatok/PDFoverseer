@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef } from "react";
 
-export default function InlineEditCount({ value, onCommit, placeholder = null, autoFocus = false, max = null }) {
+export default function InlineEditCount({ value, onCommit, placeholder = null, autoFocus = false, max = null, disabled = false }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [invalid, setInvalid] = useState(false);
@@ -16,8 +16,9 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
 
   // AutoFocus effect: enter edit mode immediately when autoFocus prop is true.
   // Separate from the value-reset effect — different deps, different concern.
+  // Guard with !disabled so a locked cell never auto-opens for editing.
   useEffect(() => {
-    if (autoFocus) {
+    if (autoFocus && !disabled) {
       setDraft(value ?? "");
       setEditing(true);
     }
@@ -30,13 +31,19 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
     return (
       <button
         ref={buttonRef}
-        onClick={(e) => {
+        disabled={disabled}
+        onClick={disabled ? undefined : (e) => {
           e.stopPropagation();
           setDraft(value ?? "");
           setInvalid(false);
           setEditing(true);
         }}
-        className="font-mono tabular-nums text-sm w-14 text-right text-po-text hover:text-po-accent focus-visible:outline-none focus-visible:text-po-accent"
+        className={[
+          "font-mono tabular-nums text-sm w-14 text-right",
+          disabled
+            ? "text-po-text-muted cursor-not-allowed opacity-50"
+            : "text-po-text hover:text-po-accent focus-visible:outline-none focus-visible:text-po-accent",
+        ].join(" ")}
       >
         {displayValue}
       </button>
