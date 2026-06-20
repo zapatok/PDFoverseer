@@ -15,7 +15,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.batch import make_handle
-from api.routes.ws import broadcast
+from api.routes.ws import _emit, broadcast
 from api.state import (
     SessionManager,
     compute_cell_count,
@@ -40,6 +40,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _SESSION_ID_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
+
+
+def _validate_session_id(session_id: str) -> None:
+    """Raise 400 if session_id is not a valid YYYY-MM (format check, before any
+    DB lookup). Shared by the session and presence routers."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(400, f"Invalid session_id: {session_id}")
+
 
 _MONTH_NAMES = {
     "ENERO": 1,
@@ -280,8 +288,7 @@ def apply_ratio(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Treat every Pendiente file as round(pages/N) documents (RN treatment)."""
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -367,8 +374,7 @@ def get(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Return the persisted state dict for a session."""
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     try:
         return mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -383,8 +389,7 @@ def scan(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Trigger a full scan of the session's month folder and persist results."""
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -500,26 +505,6 @@ def _scan_followup_event(mgr: SessionManager, session_id: str, event: dict) -> d
     return _cell_updated_event(mgr, session_id, event["hospital"], event["sigla"])
 
 
-def _emit(request: Request, session_id: str, event: dict) -> None:
-    """Programa un broadcast WS desde un handler de ruta síncrono (M1).
-
-    Los handlers son ``def`` síncronos → corren en un hilo del threadpool sin event
-    loop, así que marshaleamos al loop guardado del app, igual que
-    ``scan_ocr._safe_broadcast``. Best-effort: si no hay loop (un ``TestClient`` sin
-    ``with`` no dispara el startup que fija ``app.state.loop``) o ya se cerró
-    (teardown), se descarta el evento en vez de reventar la escritura — el broadcast
-    nunca debe romper el camino HTTP real.
-    """
-    loop = getattr(request.app.state, "loop", None)
-    if loop is None:
-        return
-    try:
-        if not loop.is_closed():
-            asyncio.run_coroutine_threadsafe(broadcast(session_id, event), loop)
-    except RuntimeError:
-        pass
-
-
 def _broadcast_cell_updated(
     request: Request, mgr: SessionManager, session_id: str, hospital: str, sigla: str
 ) -> None:
@@ -566,8 +551,7 @@ def scan_ocr(
 
     Body: ``{"cells": [["HPV", "odi"], ["HRB", "art"], ...]}``
     """
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -710,8 +694,7 @@ def scan_file_ocr(
     then runs ``scan_one_file_ocr`` on the dispatch pool — broadcasting ``file_*``
     events over the session WS and merging the result on ``file_scan_done``.
     """
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -779,8 +762,7 @@ def patch_override(
     body: dict = Body(...),
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     value = body.get("value")
     manual = bool(body.get("manual", False))
     if value is not None:
@@ -882,8 +864,7 @@ def clear_near_matches(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Clear near-match suspects for a cell — all, or one entry (E5)."""
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     mgr.clear_near_matches(
         session_id,
         hospital,
@@ -1009,8 +990,7 @@ def patch_confirm(
     lo re-afirman con setdefault), así que confirmar una celda sobrevive a un
     re-escaneo de pase 1 u OCR.
     """
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     try:
         mgr.apply_confirmed(session_id, hospital, sigla, confirmed=body.confirmed)
     except KeyError as exc:
@@ -1028,8 +1008,7 @@ def get_cell_files(
     sigla: str,
     mgr: SessionManager = Depends(get_manager),
 ) -> list[dict]:
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -1101,8 +1080,7 @@ def get_cell_pdf(
     index: int = 0,
     mgr: SessionManager = Depends(get_manager),
 ) -> FileResponse:
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     if index < 0:
         raise HTTPException(400, "index must be ≥ 0")
     try:
@@ -1171,8 +1149,7 @@ def create_reorg_op(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Create a reorg op; recompute deltas; return the op + affected cells."""
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -1211,8 +1188,7 @@ def delete_reorg_op(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Delete a reorg op; recompute deltas."""
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     try:
         mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -1231,8 +1207,7 @@ def export_reorg_manifest(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Write the reorg manifest (pending ops) to OVERSEER_OUTPUT_DIR."""
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(400, f"Invalid session_id: {session_id}")
+    _validate_session_id(session_id)
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
