@@ -5,6 +5,8 @@ import MonthOverview from "./views/MonthOverview";
 import HospitalDetail from "./views/HospitalDetail";
 import PDFLightbox from "./components/PDFLightbox";
 import ScanProgress from "./components/ScanProgress";
+import IdentityDialog from "./components/IdentityDialog";
+import PresenceRoster from "./components/PresenceRoster";
 
 export default function App() {
   const { view, hospital, setView } = useSessionStore();
@@ -12,8 +14,11 @@ export default function App() {
   return (
     <Tooltip.Provider delayDuration={300}>
       <div className="min-h-screen bg-po-bg text-po-text font-sans">
-        <header className="px-6 py-4 border-b border-po-border">
+        <header className="px-6 py-4 border-b border-po-border flex items-center gap-4">
           <h1 className="text-lg font-semibold">PDFoverseer</h1>
+          <div className="ml-auto">
+            <PresenceRoster />
+          </div>
         </header>
         <main className="px-6 py-6 max-w-[1600px] mx-auto">
           {view === "month" && <MonthOverview />}
@@ -23,6 +28,7 @@ export default function App() {
         </main>
         <PDFLightbox />
         <ScanProgress />
+        <IdentityDialog />
         <Toaster position="bottom-right" theme="dark" className="z-[60]" />
       </div>
     </Tooltip.Provider>
