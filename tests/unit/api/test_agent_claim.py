@@ -204,3 +204,60 @@ def test_atomic_claim_agent_vs_human_exactly_one_editor(tmp_path):
     editors = [p for p in snap.values() if p["focused_cell"] == "HRB|odi" and p["mode"] == "editor"]
     # At-most-one editor invariant (spec §13)
     assert len(editors) == 1
+
+
+# ── Task 3: agent auto-claim on write ────────────────────────────────────────
+
+
+def _make_session(mgr, tmp_path) -> str:
+    """Create session 2026-04 in the DB; returns the session_id."""
+    from pathlib import Path
+
+    state = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))
+    return state["session_id"]
+
+
+def test_agent_override_claims_free_cell(tmp_path):
+    """Agent writing to a free cell with participant_id='claude' claims it as editor."""
+    mgr = _make_manager(tmp_path)
+    _make_session(mgr, tmp_path)
+    mgr.apply_user_override("2026-04", "HRB", "odi", value=5, participant_id="claude")
+    holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
+    assert holder is not None
+    assert holder["participant_id"] == AGENT_PARTICIPANT_ID
+    assert holder["kind"] == AGENT_KIND
+
+
+def test_agent_write_to_human_held_cell_raises(tmp_path):
+    """Agent trying to write a human-held cell gets CellLockedError (M3a path)."""
+    from api.presence import CellLockedError
+
+    mgr = _make_manager(tmp_path)
+    _make_session(mgr, tmp_path)
+    mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
+    mgr.presence_focus("2026-04", "p1", "HRB|odi")  # human editor
+    with pytest.raises(CellLockedError):
+        mgr.apply_user_override("2026-04", "HRB", "odi", value=3, participant_id="claude")
+
+
+def test_human_write_free_cell_does_not_claim(tmp_path):
+    """A human write to a free cell does NOT auto-claim (only agents claim on write)."""
+    mgr = _make_manager(tmp_path)
+    _make_session(mgr, tmp_path)
+    mgr.apply_user_override("2026-04", "HRB", "odi", value=5, participant_id="p1")
+    # No heartbeat was issued for p1, so no presence record exists — free cell
+    holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
+    assert holder is None
+
+
+def test_agent_set_note_claims_free_cell(tmp_path):
+    """Agent set_note on a free cell auto-claims it (pattern spans all 6 methods)."""
+    mgr = _make_manager(tmp_path)
+    _make_session(mgr, tmp_path)
+    mgr.apply_user_override("2026-04", "HRB", "odi", value=1)  # create cell first (no participant)
+    mgr.set_note(
+        "2026-04", "HRB", "odi", text="check this", status="por_resolver", participant_id="claude"
+    )
+    holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
+    assert holder is not None
+    assert holder["participant_id"] == AGENT_PARTICIPANT_ID

@@ -372,6 +372,12 @@ class SessionManager:
         holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
         if holder is not None:
             raise CellLockedError(hospital, sigla, holder)
+        # M3b: an agent write to a FREE cell claims it (Claude becomes editor → its
+        # badge shows + others go read-only). The conflict check above guarantees no
+        # OTHER participant holds it. Humans don't auto-claim (their browser focus-
+        # claimed first); no-op for non-agents.
+        if is_agent(participant_id):
+            self._presence.agent_focus(session_id, f"{hospital}|{sigla}")
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
         cell["user_override"] = value
@@ -411,6 +417,9 @@ class SessionManager:
         holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
         if holder is not None:
             raise CellLockedError(hospital, sigla, holder)
+        # M3b: agent auto-claim on write (see apply_user_override for full comment).
+        if is_agent(participant_id):
+            self._presence.agent_focus(session_id, f"{hospital}|{sigla}")
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
         stripped = text.strip() if text else None
@@ -445,6 +454,9 @@ class SessionManager:
         holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
         if holder is not None:
             raise CellLockedError(hospital, sigla, holder)
+        # M3b: agent auto-claim on write (see apply_user_override for full comment).
+        if is_agent(participant_id):
+            self._presence.agent_focus(session_id, f"{hospital}|{sigla}")
         state, _ = self._load_and_migrate(session_id)
         cells = state.setdefault("cells", {})
         if hospital not in cells or sigla not in cells.get(hospital, {}):
@@ -524,6 +536,9 @@ class SessionManager:
         holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
         if holder is not None:
             raise CellLockedError(hospital, sigla, holder)
+        # M3b: agent auto-claim on write (see apply_user_override for full comment).
+        if is_agent(participant_id):
+            self._presence.agent_focus(session_id, f"{hospital}|{sigla}")
         state, _ = self._load_and_migrate(session_id)
         cell = (state.get("cells", {}).get(hospital, {}) or {}).get(sigla)
         if not cell or not cell.get("near_matches"):
@@ -569,6 +584,9 @@ class SessionManager:
         holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
         if holder is not None:
             raise CellLockedError(hospital, sigla, holder)
+        # M3b: agent auto-claim on write (see apply_user_override for full comment).
+        if is_agent(participant_id):
+            self._presence.agent_focus(session_id, f"{hospital}|{sigla}")
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
         if marks is not None:
@@ -609,6 +627,9 @@ class SessionManager:
         holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
         if holder is not None:
             raise CellLockedError(hospital, sigla, holder)
+        # M3b: agent auto-claim on write (see apply_user_override for full comment).
+        if is_agent(participant_id):
+            self._presence.agent_focus(session_id, f"{hospital}|{sigla}")
         state, _ = self._load_and_migrate(session_id)
         cells = state.setdefault("cells", {})
         if hospital not in cells or sigla not in cells.get(hospital, {}):
