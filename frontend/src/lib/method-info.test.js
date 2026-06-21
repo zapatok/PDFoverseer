@@ -23,8 +23,12 @@ describe("composeMethodInfo", () => {
     expect(t).toMatch(/tipo de inducción/);
   });
 
-  it("describes pagination siglas", () => {
+  it("describes pagination siglas via scan-info kind", () => {
     expect(composeMethodInfo("v4", { kind: "pagination" })).toMatch(/Página N de M/);
+  });
+
+  it("describes pagination siglas via method='pagination'", () => {
+    expect(composeMethodInfo("pagination", null)).toMatch(/Página N de M/);
   });
 
   it("falls back per method without scan-info", () => {

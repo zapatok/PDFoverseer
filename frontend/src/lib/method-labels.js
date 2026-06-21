@@ -6,6 +6,7 @@ export const METHOD_LABEL = {
   header_band_anchors: "OCR encabezados",
   corner_count:        "Recuadro de página",
   v4:                  "Paginación OCR",
+  pagination:          "Paginación",
   page_count_pure:     "Conteo de páginas",
   manual:              "Manual",
 };

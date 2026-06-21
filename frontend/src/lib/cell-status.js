@@ -17,6 +17,7 @@ export const OCR_METHODS = new Set([
   "corner_count",
   "header_band_anchors",
   "v4",
+  "pagination",
 ]);
 
 // Incr 2 — count_types whose document override caps at ≤ pages (Decisión 4).

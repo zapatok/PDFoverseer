@@ -9,6 +9,7 @@ export const METHOD_INFO = {
   header_band_anchors: "Lee el encabezado de cada página y cuenta una portada por documento.",
   corner_count: "Cuenta documentos por la numeración de página detectada por OCR.",
   v4: "Cuenta documentos por la numeración 'Página N de M' detectada por OCR.",
+  pagination: "Cuenta documentos por la numeración 'Página N de M' detectada por OCR.",
   manual: "Valor ingresado a mano por el operador.",
 };
 
@@ -25,7 +26,7 @@ export function composeMethodInfo(method, scanInfo) {
   if (scanInfo?.kind === "anchors" && scanInfo.looks_for?.length) {
     return `OCR de encabezado. Busca: ${scanInfo.looks_for.join(" · ")}.`;
   }
-  if (scanInfo?.kind === "pagination" || method === "v4") {
+  if (scanInfo?.kind === "pagination" || method === "v4" || method === "pagination") {
     return "Cuenta documentos por la numeración 'Página N de M'.";
   }
   return _FALLBACK[method] ?? METHOD_INFO[method] ?? "Conteo por nombre de archivo.";

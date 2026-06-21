@@ -261,3 +261,30 @@ describe("hospitalWorkerStatus", () => {
     expect(hospitalWorkerStatus({ charla: { ocr_count: 5 } })).toBe("pendiente");
   });
 });
+
+describe("OCR_METHODS — pagination chip (Task 12)", () => {
+  it("pagination method is treated as OCR (unreliable without override)", () => {
+    expect(anyUnreliableOcrFile({ per_file_method: { "a.pdf": "pagination" } })).toBe(true);
+  });
+
+  it("pagination file with per-file override is reliable", () => {
+    expect(
+      anyUnreliableOcrFile({
+        per_file_method: { "a.pdf": "pagination" },
+        per_file_overrides: { "a.pdf": 3 },
+      }),
+    ).toBe(false);
+  });
+
+  it("cell with pagination method is not allFilesReliable", () => {
+    expect(
+      allFilesReliable({ confidence: "high", per_file_method: { "a.pdf": "pagination" } }),
+    ).toBe(false);
+  });
+
+  it("dotVariantFor → amber for pagination without override (same as v4)", () => {
+    expect(
+      dotVariantFor({ confidence: "high", per_file_method: { "a.pdf": "pagination" } }),
+    ).toBe("confidence-low");
+  });
+});
