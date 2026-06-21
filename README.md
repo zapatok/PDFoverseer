@@ -1,101 +1,90 @@
 # PDFoverseer
 
-**PDF document analyzer** that counts internal documents in lecture PDFs using an OCR + AI inference engine. Process folders of PDFs with real-time progress, pause/resume, and per-document error reporting.
+**PDF document analyzer** — counts the internal documents inside monthly prevention PDFs
+per *(hospital, category)* and writes a 72-cell summary Excel (`RESUMEN_<YYYY>-<MM>.xlsx`).
+It is "paso 2" of a three-step monthly pipeline (a sibling project normalizes the PDFs →
+**PDFoverseer counts + generates the resumen** → another project builds the consolidated
+stats workbook).
 
-## Features
+## Counting model (two regimes)
 
-- 📁 **Folder browsing** with native OS dialogs (Windows file picker + tkinter)
-- 📄 **Batch PDF processing** with pause/resume and per-document progress
-- 🔍 **Dual-tier OCR** pipeline: Tesseract (CPU) + EasyOCR fallback (GPU optional)
-- 🧠 **Multi-phase inference engine** (soft-alignment-v3-sweep1): period detection + Dempster-Shafer evidence fusion
-- ⚡ **Real-time updates** via WebSocket, no page refresh
-- 📊 **Session history** with persistent database (SQLite)
-- 🎯 **Per-issue correction UI** for manual validation and retraining feedback
+- **~90% filename-trivial** — 1 PDF = 1 document. Counted by filename glob, no OCR
+  (`SimpleFilenameScanner`).
+- **~10% implicit compilations** — many documents bundled into one PDF. Counted by OCR:
+  - **Pagination-first** (`PaginationScanner`, the primary engine since 2026-06-21): OCRs
+    only the top-right "Página N de M" corner, recovers unreadable corners by completing the
+    numeric cycle from neighbors, and counts a document at each `curr == 1`. Low-confidence
+    counts route to the keyboard counter for review.
+  - **Header anchors** (`AnchorsScanner`): for the few templates that repeat "Página 1 de 2"
+    on continuations (which would break pagination) — OCRs the header band and matches
+    per-template cover anchors.
+
+The per-sigla strategy lives in `core/scanners/patterns.py` (single source of truth). The
+effective per-cell count is derived in one place — `core/cell_count.py` — so the UI, the
+Excel, and the historical record can never disagree.
 
 ## Quick Start
 
 ```bash
 # Install Python dependencies
-pip install -r requirements.txt  # CPU-only
+pip install -r requirements.txt        # CPU-only (Tesseract + PyMuPDF)
 # OR
-pip install -r requirements-gpu.txt  # GPU (EasyOCR + PyTorch CUDA)
+pip install -r requirements-gpu.txt    # adds PyTorch CUDA (super-resolution for the deferred V4 path)
 
-# Backend (FastAPI)
-source .venv-cuda/Scripts/activate  # or: .\.venv-cuda\Scripts\activate (Windows)
-python server.py                     # → http://localhost:8000
+# Backend (FastAPI + WebSocket)
+source .venv-cuda/Scripts/activate     # or: .\.venv-cuda\Scripts\activate (Windows)
+python server.py                       # → http://localhost:8000
 
 # Frontend (React + Vite)
 cd frontend && npm install
-npm run dev                          # → http://localhost:5173
+npm run dev                            # → http://localhost:5173
+
+# Tests / lint
+pytest                                 # full suite
+ruff check .                           # must be 0 violations
 ```
 
-Then open http://localhost:5173 in your browser.
+Open the month folder under `A:\informe mensual\<MES>\`; the app enumerates 4 hospitals ×
+18 categories, counts pase 1 (filename glob), and lets you run pase 2 (OCR) per cell. Export
+writes the RESUMEN Excel atomically to `data/outputs/` (override via `OVERSEER_OUTPUT_DIR`).
 
 ## Requirements
 
 - **Python 3.10+**
-- **Node.js 18+** (for frontend)
-- **Tesseract OCR** (system PATH or `TESSERACT_CMD` env var)
-  - Windows: [Descargar](https://github.com/UB-Mannheim/tesseract/wiki)
-  - Ubuntu: `sudo apt install tesseract-ocr`
-- **Ghostscript** (for PyMuPDF)
-- *Optional:* **CUDA 12.1+** for GPU EasyOCR (see requirements-gpu.txt)
+- **Node.js 18+** (frontend)
+- **Tesseract OCR** (system PATH or `TESSERACT_CMD` env var) — the sole OCR engine
+  - Windows: <https://github.com/UB-Mannheim/tesseract/wiki>
+- **PyMuPDF** (PDF rendering) — installed via requirements
+- *Optional:* **CUDA** — only used by the deferred V4 fallback's super-resolution tier
 
-## Architecture
+## Tech Stack
 
-### V4 OCR Pipeline (Producer-Consumer)
+- **Backend:** Python 3.10+ / FastAPI / PyMuPDF / Tesseract, single process (collaboration
+  state is in-memory — never run with `--workers N`).
+- **Frontend:** React + Vite, with live multiplayer sync/presence/locks over a per-session
+  WebSocket.
+- **Persistence:** SQLite (`overseer.db`) — session state + `historical_counts`.
 
-1. **Producers** (6 parallel workers): PyMuPDF render + Tesseract Tier 1 (standard crop) + Tier 2 (super-resolution 4x)
-2. **GPU Consumer** (1 thread): EasyOCR fallback on failed pages
-3. **Post-scan**: Period detection (autocorrelation) + D-S evidence fusion + confidence calibration
+## Collaboration (multiplayer)
 
-### Inference Engine (soft-alignment-v3-sweep1)
+Two people (and Claude, as a participant) can work the same month live: edits broadcast over
+the WebSocket, presence shows who is in which cell, and per-cell locks prevent clobbering. See
+the multiplayer design under `docs/superpowers/specs/`.
 
-- **Phase 1–2:** Forward/backward propagation of OCR reads
-- **Phase 3:** Cross-validation of inferred boundaries
-- **Phase 4:** Gap solver for missing detections
-- **Phase 5:** Dempster-Shafer post-validation with neighbor evidence
-- **Phase 5b:** Period-aware boundary correction
-- **Multi-period (MP):** Local sliding-window correction for repeated doc patterns
+## Project layout
 
-**Key parameters** (eval-tuned):
-- `MIN_CONF_FOR_NEW_DOC = 0.65` — confidence threshold for new boundaries
-- `CLASH_BOUNDARY_PEN = 2.0` — gap-solver penalty
-- `PH5B_CONF_MIN = 0.60` — period confidence floor
-
-## Page Number Pattern
-
-Spanish-centric regex (adaptable):
-```regex
-P.{0,2}[gq](?:ina?)?\.?\s*(\d{1,3})\s*\.?\s*de\s*(\d{1,3})
+```
+core/      OCR scanners + counting engine + DB + Excel writer   (see core/CLAUDE.md)
+api/       FastAPI routes, sessions, presence, WebSocket         (see api/CLAUDE.md)
+frontend/  React UI
+eval/      evaluation harness: fixtures + sanctioned sandboxes   (see eval/CLAUDE.md)
+tools/     standalone dev/audit utilities
+docs/      specs, plans, research notes
 ```
 
-Matches: "Página 1 de 10", "Pag 1 de 10", "page 1 of 10", etc.
+> **Note on V4:** the original V4 OCR+inference engine (`core/pipeline.py`,
+> `core/inference.py`, `core/ocr.py`) is retained as a *deferred fallback* — it is no longer
+> wired into counting (the pagination engine replaced it) but kept importable for reference.
 
----
-
-## FASE 1 MVP (overhaul branch)
-
-The `research/pixel-density` branch ships a folder-driven overhaul. Open
-a month folder in `A:\informe mensual\<MES>\` and the app enumerates 4
-hospitals × 18 categories, counts documents with filename-glob, and writes
-`RESUMEN_<YYYY>-<MM>.xlsx` to `data/outputs/` (overridable via
-`OVERSEER_OUTPUT_DIR`).
-
-Quick start:
-
-```bash
-python server.py            # backend  → http://localhost:8000
-cd frontend && npm run dev  # frontend → http://localhost:5173
-```
-
-Scope of FASE 1: filename-glob scanners only (no OCR), parallel
-ProcessPoolExecutor scan_month, atomic Excel write through 80 named
-ranges in `data/templates/RESUMEN_template_v1.xlsx`. Manual correction
-UI, OCR for compilation PDFs, and WebSocket scan progress are deferred
-to FASE 2.
-
-For the full design and rationale see
-`docs/superpowers/specs/2026-05-11-pdfoverseer-overhaul-design.md`.
-The implementation plan is at
-`docs/superpowers/plans/2026-05-11-pdfoverseer-overhaul-fase-1.md`.
+For the architecture and design history, see `CLAUDE.md`, `core/CLAUDE.md`, and the dated
+specs/plans under `docs/superpowers/`.
