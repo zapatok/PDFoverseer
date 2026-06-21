@@ -49,6 +49,15 @@ class ScanResult:
 
 @runtime_checkable
 class Scanner(Protocol):
+    """Pase-1 scanner contract: every sigla exposes ``count`` (filename glob).
+
+    Pase-2 OCR is an *optional* capability, deliberately NOT declared here: the OCR
+    scanners (``AnchorsScanner``, ``PaginationScanner``) also implement
+    ``count_ocr(...)``, but ``SimpleFilenameScanner`` (``scan_strategy="none"``) does
+    not. The orchestrator dispatches OCR via ``getattr(scanner, "count_ocr", None)``
+    so a non-OCR sigla isn't forced to implement an unused method.
+    """
+
     sigla: str
 
     def count(

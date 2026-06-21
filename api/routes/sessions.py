@@ -1089,8 +1089,7 @@ def patch_worker_count(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Autosalva el conteo de trabajadores de una celda (patch parcial)."""
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(status_code=422, detail="session_id inválido")
+    _validate_session_id(session_id)
     try:
         mgr.apply_worker_count(
             session_id,
@@ -1146,8 +1145,7 @@ def patch_note(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Set or clear a cell's note; refresh all_reliable (por_resolver → amber)."""
-    if not _SESSION_ID_RE.match(session_id):
-        raise HTTPException(status_code=422, detail="session_id inválido")
+    _validate_session_id(session_id)
     try:
         mgr.set_note(
             session_id,
