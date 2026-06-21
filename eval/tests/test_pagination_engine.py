@@ -22,6 +22,8 @@ from eval.pagination_count.engine import (
         ("F-CRS-ART-01 Rev 02", (None, None)),  # no pagination
         ("", (None, None)),
         ("Pagina 12 de 20", (12, 20)),  # full regex wins over curr-only
+        ("Pagina 5 de 4", (None, None)),  # implausible C>M → rejected as no-read
+        ("Pagina 0 de 4", (None, None)),  # C==0 implausible
     ],
 )
 def test_parse_pagination(raw, expected):
@@ -160,6 +162,7 @@ def test_count_documents_cover_code_irl(tmp_path, make_pagination_pdf):
     )
     r = count_documents_by_pagination(pdf, cancel=CancellationToken(), cover_code="F-CRS-ODI-01")
     assert r.count == 1
+    assert r.cover_code_recovery is False  # clean synthetic → no recovery → flag off
 
 
 def test_count_documents_landscape(tmp_path, make_pagination_pdf):
@@ -183,3 +186,27 @@ def test_count_documents_on_page_callback(tmp_path, make_pagination_pdf):
         pdf, cancel=CancellationToken(), on_page=lambda d, t: seen.append((d, t))
     )
     assert seen == [(1, 2), (2, 2)]
+
+
+def test_recover_gap_before_boundary_no_spurious_start():
+    # Highest-risk path: a gap right before a real curr==1 boundary must recover to
+    # the cycle end (4), NOT invent a second start. dom=4.
+    parsed = [(1, 4, "A"), (2, 4, "A"), (3, 4, "A"), (None, None, None), (1, 4, "A")]
+    out = recover_sequence(parsed)
+    assert _currs(out) == [1, 2, 3, 4, 1]
+    assert out[3].status == "recovered"
+    assert sum(1 for c in _currs(out) if c == 1) == 2  # exactly two real starts
+
+
+def test_recover_two_leading_gaps_documented_limitation():
+    # Two consecutive leading gaps: only the rightmost of the prefix is recovered
+    # (right-neighbor); index 0 stays failed. Undercount-safe, never a spurious start.
+    parsed = [(None, None, None), (None, None, None), (3, 4, "A"), (4, 4, "A")]
+    out = recover_sequence(parsed)
+    assert _status(out) == ["failed", "recovered", "direct", "direct"]
+    assert _currs(out) == [None, 2, 3, 4]
+
+
+def test_dominant_total_tie_prefers_smaller():
+    parsed = [(1, 2, "A"), (1, 4, "A")]  # totals 2 and 4 equally frequent
+    assert dominant_total(parsed) == 2

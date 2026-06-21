@@ -15,6 +15,7 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import fitz
 import pytesseract
@@ -53,10 +54,14 @@ def parse_pagination(raw: str) -> tuple[int | None, int | None]:
     norm = raw.replace("\n", " ")
     m = _PAG_FULL.search(norm) or _PAG_FULL.search(norm.translate(_DIGIT))
     if m:
-        return int(m.group(1)), int(m.group(2))
+        curr, total = int(m.group(1)), int(m.group(2))
+        # plausibility: a real "C de M" has 0 < C <= M. Reject OCR noise like
+        # "5 de 4" as a no-read so it can't poison sequence recovery as a bad anchor.
+        return (curr, total) if 0 < curr <= total else (None, None)
     m = _PAG_CURR.search(norm) or _PAG_CURR.search(norm.translate(_DIGIT))
     if m:
-        return int(m.group(1)), None
+        curr = int(m.group(1))
+        return (curr, None) if curr > 0 else (None, None)
     return None, None
 
 
@@ -73,13 +78,22 @@ class PageRead:
     curr: int | None
     total: int | None
     code: str | None
-    status: str  # "direct" | "recovered" | "failed"
+    status: Literal["direct", "recovered", "failed"]
 
 
 def dominant_total(parsed: list[tuple[int | None, int | None, str | None]]) -> int | None:
-    """The most frequent read total (the pagination period), or None if no totals read."""
+    """The most frequent read total (the pagination period), or None if no totals read.
+
+    Deterministic tie-break: among equally-frequent totals, the smaller wins (a
+    shorter assumed period under-merges rather than over-merges — safer for a
+    counts-then-review system, and stable across runs/Python versions).
+    """
     totals = [t for _, t, _ in parsed if t]
-    return Counter(totals).most_common(1)[0][0] if totals else None
+    if not totals:
+        return None
+    counts = Counter(totals)
+    top = max(counts.values())
+    return min(t for t, c in counts.items() if c == top)
 
 
 def recover_sequence(
@@ -93,6 +107,14 @@ def recover_sequence(
     left neighbor, else from the original right neighbor. A gap with no usable
     sequence context stays ``failed``. Recovered pages carry ``total = dom`` and
     ``code = None`` (their corner wasn't read).
+
+    Boundary note (lite-recovery limitation, by design): in a run of consecutive
+    gaps at the very START of the document (index 0..k with no readable left
+    neighbor), only the rightmost gap of that prefix is recovered via the right
+    neighbor; the earlier ones stay ``failed``. This can only UNDERCOUNT (a missed
+    start), never invent a spurious ``curr==1`` — the safe direction. Interior gap
+    runs fill completely left-to-right. ``failed`` reads drive LOW confidence so
+    the operator reviews.
     """
     if dom is None:
         dom = dominant_total(parsed)
