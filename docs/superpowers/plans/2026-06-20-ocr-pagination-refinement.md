@@ -578,7 +578,14 @@ SAMPLES: list[Sample] = [
 
 ### Task 13: Migrate validated siglas + version bump
 
-> **GO list** (from Task 9 — replace this placeholder with the actual benchmark result before executing): `odi, ext, bodega, caliente, art, irl` (+ any of `exc, herramientas_elec, andamios` that passed). `altura, insgral` already `pagination` → their engine is now the new one automatically. RCH (charla/chintegral/dif_pts), senal, chps, maquinaria, reunion stay unchanged.
+> **GO list** (DECIDED in Task 9 — see `docs/research/2026-06-21-pagination-benchmark-results.md`):
+> **MIGRATE to `pagination`:** `odi, ext, bodega, caliente, exc, herramientas_elec, art, andamios`,
+> and `irl` (add `"cover_code": "F-CRS-ODI-01"`). `altura, insgral` are already `pagination` →
+> their engine auto-upgrades to the lite one (no patterns change for them).
+> **KEEP `anchors` (controller override of the mechanical verdict):** `charla, chintegral, dif_pts`
+> (RCH "1 de 2" bug, D6), `senal` (landscape — both methods got 0/18; open follow-up), `chps`,
+> `maquinaria` (checks), `reunion` (none). `andamios` migrates but is expected to be honestly
+> LOW-confidence (high recovery ratio) → keyboard-counter review.
 
 - [ ] **Step 1: Guard test:** extend the patterns completeness test to assert each GO-list sigla now has `scan_strategy == "pagination"` and `irl` has `cover_code == "F-CRS-ODI-01"`.
 - [ ] **Step 2: Run, fail.**

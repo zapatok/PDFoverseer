@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -191,6 +192,9 @@ def run_benchmark(
 
 
 def main() -> None:
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")  # Windows cp1252 console safety (→/Δ glyphs)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",

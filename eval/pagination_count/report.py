@@ -11,6 +11,7 @@ table to stdout.  Run ``benchmark.py`` first to generate the JSON.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 _RESULTS_FILE = Path(__file__).parent / "results" / "benchmark.json"
@@ -93,6 +94,8 @@ def _fmt_delta(d: int) -> str:
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # Windows cp1252 console safety (Δ/Σ glyphs)
     if not _RESULTS_FILE.exists():
         print(f"Results file not found: {_RESULTS_FILE}\nRun benchmark.py first.")
         return
