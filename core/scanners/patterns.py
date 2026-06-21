@@ -706,7 +706,7 @@ PATTERNS: dict[str, SiglaPattern] = {
     },
     "art": {
         "filename_glob": r"^.*art.*\.pdf$",
-        "scan_strategy": "anchors",
+        "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         # top_fraction defaults to 0.25 per spec §7 ("top_fraction=1/4 default,
         # no override"). recursive_glob=True per spec §7 ("Nota de enumeración"):
         # HRB has 7.-ART/<EMPRESA>/*.pdf subfolders that must be enumerated.
@@ -715,12 +715,13 @@ PATTERNS: dict[str, SiglaPattern] = {
     },
     "irl": {
         "filename_glob": r"^.*irl.*\.pdf$",
-        "scan_strategy": "anchors",
+        "scan_strategy": "pagination",  # v4: migrated — packet covers via cover_code
+        "cover_code": "F-CRS-ODI-01",  # count only IRL form covers, not appendix page-1s
         "cover_flavors": _IRL_ANCHORS,
     },
     "odi": {
         "filename_glob": r"^.*odi.*\.pdf$",
-        "scan_strategy": "anchors",
+        "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "cover_flavors": _ODI_ANCHORS,
     },
     "charla": {
@@ -754,18 +755,18 @@ PATTERNS: dict[str, SiglaPattern] = {
     },
     "bodega": {
         "filename_glob": r"^.*bodega.*\.pdf$",
-        "scan_strategy": "anchors",
+        "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "cover_flavors": _BODEGA_ANCHORS,
     },
     "caliente": {
         "filename_glob": r"^.*caliente.*\.pdf$",
-        "scan_strategy": "anchors",
+        "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "recursive_glob": True,
         "cover_flavors": _CALIENTE_ANCHORS,
     },
     "exc": {
         "filename_glob": r"^.*exc.*\.pdf$",
-        "scan_strategy": "anchors",
+        "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "recursive_glob": True,
         "cover_flavors": _EXC_ANCHORS,
     },
@@ -780,13 +781,13 @@ PATTERNS: dict[str, SiglaPattern] = {
     },
     "ext": {
         "filename_glob": r"^.*ext.*\.pdf$",
-        "scan_strategy": "anchors",
+        "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "recursive_glob": True,
         "cover_flavors": _EXT_ANCHORS,
     },
     "maquinaria": {
         "filename_glob": r"^.*maquinaria.*\.pdf$",
-        "scan_strategy": "anchors",
+        "scan_strategy": "anchors",  # KEEP: count_type=checks (not documents) — not migrated
         "recursive_glob": True,
         "cover_flavors": _MAQUINARIA_ANCHORS,
     },
@@ -821,7 +822,7 @@ PATTERNS: dict[str, SiglaPattern] = {
     },
     "herramientas_elec": {
         "filename_glob": r"^.*herramientas_elec.*\.pdf$",
-        "scan_strategy": "anchors",
+        "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "recursive_glob": True,
         # top_fraction defaults to 0.25 per spec §16 line 2204 (explicit
         # "top_fraction": 0.25 in the spec'"'"'s Python block). Earlier
@@ -831,7 +832,7 @@ PATTERNS: dict[str, SiglaPattern] = {
     },
     "andamios": {
         "filename_glob": r"^.*andamios.*\.pdf$",
-        "scan_strategy": "anchors",
+        "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "recursive_glob": True,
         "cover_flavors": _ANDAMIOS_ANCHORS,
     },

@@ -71,7 +71,8 @@ def test_scan_cells_ocr_emits_pdf_progress(tmp_path, monkeypatch):
     for name in ("a.pdf", "b.pdf", "c.pdf"):
         (folder / name).write_bytes(b"%PDF-1.4\n%%EOF\n")
     # Force the A7 path (1-page) so no Tesseract runs.
-    monkeypatch.setattr("core.scanners.anchors_scanner.get_page_count", lambda p: 1)
+    # odi is scan_strategy="pagination" (v4) → its scanner is PaginationScanner.
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda p: 1)
 
     events: list[dict] = []
     scan_cells_ocr(
@@ -107,7 +108,8 @@ def test_scan_cells_ocr_emits_per_file_via_file_result(tmp_path, monkeypatch):
     for name in ("a.pdf", "b.pdf"):
         (folder / name).write_bytes(b"%PDF-1.4\n%%EOF\n")
     # A7 path: each 1-page PDF counts as 1 document, no Tesseract.
-    monkeypatch.setattr("core.scanners.anchors_scanner.get_page_count", lambda p: 1)
+    # odi is scan_strategy="pagination" (v4) → its scanner is PaginationScanner.
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda p: 1)
 
     events: list[dict] = []
     scan_cells_ocr(

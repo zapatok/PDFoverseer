@@ -88,3 +88,46 @@ def test_flavor_naming_convention_a9():
             assert rx.match(flavor["name"]), (
                 f"{sigla}: flavor name '{flavor['name']}' violates A9 (must match {rx.pattern})"
             )
+
+
+def test_v4_pagination_migration_state():
+    """v4 pagination-first migration GO-list (benchmark 2026-06-21, see
+    docs/research/2026-06-21-pagination-benchmark-results.md). Pins which siglas
+    moved anchors→pagination so an accidental revert is caught. Migrated siglas keep
+    their anchor flavors on the entry (unused) for one-line reversibility."""
+    pagination_expected = {
+        "odi",
+        "ext",
+        "bodega",
+        "caliente",
+        "exc",
+        "herramientas_elec",
+        "art",
+        "andamios",
+        "irl",
+        "altura",
+        "insgral",
+    }
+    anchors_expected = {"charla", "chintegral", "dif_pts", "senal", "chps", "maquinaria"}
+    for sigla in pagination_expected:
+        assert PATTERNS[sigla]["scan_strategy"] == "pagination", f"{sigla} must be pagination"
+    for sigla in anchors_expected:
+        assert PATTERNS[sigla]["scan_strategy"] == "anchors", (
+            f"{sigla} must stay anchors (RCH '1 de 2' bug / landscape / checks)"
+        )
+    assert PATTERNS["reunion"]["scan_strategy"] == "none"
+
+
+def test_irl_pagination_has_cover_code():
+    """IRL counts only its F-CRS-ODI-01 covers (ignores appendix page-1s)."""
+    assert PATTERNS["irl"]["scan_strategy"] == "pagination"
+    assert PATTERNS["irl"].get("cover_code") == "F-CRS-ODI-01"
+
+
+def test_cover_code_only_on_pagination_siglas():
+    """cover_code is a pagination-only field; anchors siglas must not set it."""
+    for sigla, pattern in PATTERNS.items():
+        if pattern.get("cover_code"):
+            assert pattern["scan_strategy"] == "pagination", (
+                f"{sigla} sets cover_code but is not pagination"
+            )

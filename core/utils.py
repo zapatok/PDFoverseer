@@ -56,7 +56,10 @@ PAGE_PATTERN_VERSION = (
 SCANNER_PATTERNS_VERSION = (
     # v2: pase-1 honest confidence + page-count for FIXED_PAGE_SIGLAS
     # v3: count_type por sigla (documents/documents_workers/checks) — Incr. 1A
-    "v3-count-type"
+    # v4: pagination-first engine — migrated odi/ext/bodega/caliente/exc/
+    #     herramientas_elec/art/andamios + irl(cover_code) anchors→pagination.
+    #     Anchor flavors kept on migrated siglas for one-line reversibility.
+    "v4-pagination"
 )
 
 # Tipos de conteo válidos por sigla (Decisión 4 / grupo F del triage). La
