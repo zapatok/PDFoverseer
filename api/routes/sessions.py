@@ -495,9 +495,18 @@ def _apply_scan_event(mgr: SessionManager, session_id: str, event: dict) -> dict
         hosp = event["hospital"]
         sigla = event["sigla"]
         cell = mgr.finalize_cell_ocr(session_id, hosp, sigla, _meta_result(event["result"]))
-        event["result"]["per_file"] = cell.get("per_file")
-        event["result"]["ocr_count"] = cell.get("ocr_count")
-        event["result"]["near_matches"] = cell.get("near_matches") or []
+        # Copy before enriching — never mutate the orchestrator's event dict in place.
+        # It originates on the drain thread; in-place edits would alias shared state if
+        # the event were ever fanned to a second consumer. Mirrors the scan_complete copy.
+        event = {
+            **event,
+            "result": {
+                **event["result"],
+                "per_file": cell.get("per_file"),
+                "ocr_count": cell.get("ocr_count"),
+                "near_matches": cell.get("near_matches") or [],
+            },
+        }
         # Recompute all_reliable now that every file has been OCR-merged (RLock is
         # reentrant so calling get_session_state + set_all_reliable here is safe).
         # Best-effort: skip when the folder isn't on disk (synthetic-event tests) —
