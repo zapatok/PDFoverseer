@@ -130,3 +130,12 @@ def test_count_starts_cover_code_skips_recovered_cover_DOCUMENTED_LIMITATION():
     # reads exist (Task 11), so the operator reviews. This test pins the behavior.
     reads = _reads([(1, None, "recovered"), (2, "F-CRS-ODI-01", "direct")])
     assert count_starts(reads, cover_code="F-CRS-ODI-01") == 0
+
+
+def test_make_pagination_pdf(tmp_path, make_pagination_pdf):
+    from core.scanners.utils.pdf_render import get_page_count
+
+    pdf = make_pagination_pdf(tmp_path / "x.pdf", docs=[(2, "F-CRS-ODI-03"), (2, "F-CRS-ODI-03")])
+    assert get_page_count(pdf) == 4
+    land = make_pagination_pdf(tmp_path / "l.pdf", docs=[(1, "F-CRS-LCH-22")], landscape=True)
+    assert get_page_count(land) == 1
