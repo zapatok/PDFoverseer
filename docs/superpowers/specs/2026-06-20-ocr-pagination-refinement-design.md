@@ -172,11 +172,16 @@ def count_documents_by_pagination(
    - solo-curr (fallback): `p[aá]gina\.?\s*(\d+)` → (curr, None) — para formularios que
      imprimen "Página 1" sin total.
    - código: `F[-\s]?[A-Z]{2,4}[-\s][A-Z0-9\-]{2,12}`.
+   - **Precedencia:** se prueba la regex completa primero; la solo-curr aplica **solo** si la
+     completa no matchea (evita un doble match en "Página 12 de 20").
 3. **Recuperación de huecos por secuencia** (D3). `dominant_total` = total más frecuente.
    Para páginas sin lectura: inferir `curr` continuando el ciclo desde el vecino izquierdo
    (`prev % dom + 1`) o derecho. Marca esas lecturas como `recovered` (menor confianza).
    **Sin** autocorrelación ni Dempster-Shafer (eso es V4); esto es completar una secuencia
-   aritmética. No alimenta ningún solver → sin el daño cascada del postmortem.
+   aritmética. No alimenta ningún solver → sin el daño cascada del postmortem. **Semántica de
+   lecturas:** una página sin lectura pero rodeada de lecturas válidas con total consistente →
+   `recovered`; una sin contexto de secuencia utilizable (sin total dominante, u huérfana en un
+   extremo sin vecino válido) → `failed`.
 4. **Conteo de límites.** Un documento empieza en cada página con `curr == 1`. Si
    `cover_code` está seteado (IRL): contar solo las `curr==1` cuyo código de página matchea
    `cover_code` (ignora portadas-1 de anexos). (D5)
@@ -194,12 +199,16 @@ correcto → fallback a 1 + LOW; un PDF ilegible → 1 + LOW + flag.
 
 - **`patterns.py`**: extender `SiglaPattern` con campos opcionales para `scan_strategy="pagination"`:
   `cover_code: NotRequired[str]` (IRL). Migrar las siglas Tier A a `scan_strategy="pagination"`.
-  Bump de `SCANNER_PATTERNS_VERSION`.
+  Bump de `SCANNER_PATTERNS_VERSION`. Para IRL los **tres cambios van juntos**: extender el
+  typedef, setear `cover_code="F-CRS-ODI-01"` en la entrada `irl`, y bump de versión (si no, el
+  campo se ignora en runtime hasta que la entrada lo use).
 - **`PaginationScanner`**: hoy llama `count_documents_v4`. Pasa a llamar
   `count_documents_by_pagination(...)` (motor liviano) como **primario**, leyendo `cover_code`
   del pattern. Mantiene **idéntica** la interfaz `count_ocr(folder, *, cancel, on_pdf, only,
   skip, on_page)`, el manejo A7/A8, el `per_file`, los `flags`, y el callback `on_pdf` (method
-  pasa a `"pagination"`). (D1)
+  pasa a `"pagination"`). Además **enhebra `on_page`** desde `count_ocr` hacia el motor: a
+  diferencia de V4 (sin hook por página), el motor nuevo lo dispara por página → la barra del
+  visor por fin muestra progreso en vivo para insgral/altura. (D1)
 - **V4 como fallback opcional** (D10): si el motor liviano devuelve `LOW` (mucha
   recuperación), el scanner *puede* reintentar con `count_documents_v4` y quedarse con el de
   mayor confianza. Decisión de activarlo: gated por el eval (si V4 no mejora, no se invoca —
@@ -242,7 +251,7 @@ Nuevo stage `eval/pagination_count/` (committeado, no throwaway):
   multipágina, altura). Rebanadas de ~30–60 páginas, nunca los monstruos enteros (restricción
   de Daniel: "el cuerpo completo es demasiado").
 - `benchmark.py` — corre, por muestra: **scanner actual** (anclas/V4) vs **motor nuevo** vs GT.
-- `report.py` — exactitud por familia + tasa de recuperación + falsos límites.
+- `report.py` — exactitud por familia + tasa de recuperación + falsos límites (tabla Markdown a stdout).
 - Métrica de aceptación por sigla (gate de migración, D7): error absoluto del motor nuevo ≤
   error del método actual, en todas las muestras de esa sigla.
 
