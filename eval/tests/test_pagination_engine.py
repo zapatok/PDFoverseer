@@ -139,3 +139,47 @@ def test_make_pagination_pdf(tmp_path, make_pagination_pdf):
     assert get_page_count(pdf) == 4
     land = make_pagination_pdf(tmp_path / "l.pdf", docs=[(1, "F-CRS-LCH-22")], landscape=True)
     assert get_page_count(land) == 1
+
+
+def test_count_documents_synthetic_art(tmp_path, make_pagination_pdf):
+    from core.scanners.cancellation import CancellationToken
+    from eval.pagination_count.engine import count_documents_by_pagination
+
+    pdf = make_pagination_pdf(tmp_path / "art.pdf", docs=[(4, "F-CRS-ART-01")] * 3)
+    r = count_documents_by_pagination(pdf, cancel=CancellationToken())
+    assert r.count == 3 and r.failed_reads == 0 and r.dominant_total == 4
+
+
+def test_count_documents_cover_code_irl(tmp_path, make_pagination_pdf):
+    from core.scanners.cancellation import CancellationToken
+    from eval.pagination_count.engine import count_documents_by_pagination
+
+    pdf = make_pagination_pdf(
+        tmp_path / "irl.pdf",
+        docs=[(5, "F-CRS-ODI-01"), (1, "F-CRS-ODI-02"), (1, "F-CRS-ODI-02")],
+    )
+    r = count_documents_by_pagination(pdf, cancel=CancellationToken(), cover_code="F-CRS-ODI-01")
+    assert r.count == 1
+
+
+def test_count_documents_landscape(tmp_path, make_pagination_pdf):
+    from core.scanners.cancellation import CancellationToken
+    from eval.pagination_count.engine import count_documents_by_pagination
+
+    pdf = make_pagination_pdf(
+        tmp_path / "senal.pdf", docs=[(1, "F-CRS-LCH-22")] * 5, landscape=True
+    )
+    r = count_documents_by_pagination(pdf, cancel=CancellationToken())
+    assert r.count == 5
+
+
+def test_count_documents_on_page_callback(tmp_path, make_pagination_pdf):
+    from core.scanners.cancellation import CancellationToken
+    from eval.pagination_count.engine import count_documents_by_pagination
+
+    pdf = make_pagination_pdf(tmp_path / "p.pdf", docs=[(2, "F-CRS-ODI-03")])
+    seen = []
+    count_documents_by_pagination(
+        pdf, cancel=CancellationToken(), on_page=lambda d, t: seen.append((d, t))
+    )
+    assert seen == [(1, 2), (2, 2)]
