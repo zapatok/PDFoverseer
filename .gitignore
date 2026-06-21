@@ -33,6 +33,7 @@ Thumbs.db
 # User data
 history.json
 data/sessions/
+observations.txt
 
 # Runtime logs
 *.log
