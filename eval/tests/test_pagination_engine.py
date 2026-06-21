@@ -2,6 +2,7 @@ import pytest
 
 from eval.pagination_count.engine import (
     PageRead,
+    count_starts,
     dominant_total,
     extract_code,
     parse_pagination,
@@ -95,3 +96,37 @@ def test_recover_orphan_is_failed():
     parsed = [(None, None, None)]  # no dominant total, no neighbor
     out = recover_sequence(parsed)
     assert out[0].status == "failed" and out[0].curr is None
+
+
+def _reads(specs):  # specs: list of (curr, code, status)
+    return [PageRead(c, None, code, st) for c, code, st in specs]
+
+
+def test_count_starts_plain():
+    reads = _reads([(1, "A", "direct"), (2, "A", "direct"), (1, "A", "direct"), (2, "A", "direct")])
+    assert count_starts(reads, cover_code=None) == 2
+
+
+def test_count_starts_cover_code_filters_appendix():
+    reads = _reads(
+        [
+            (1, "F-CRS-ODI-01", "direct"),
+            (2, "F-CRS-ODI-01", "direct"),
+            (1, "F-CRS-ODI-02", "direct"),
+            (1, "F-CRS-ODI-02", "direct"),
+        ]
+    )
+    assert count_starts(reads, cover_code="F-CRS-ODI-01") == 1
+
+
+def test_count_starts_cover_code_substring_match():
+    reads = _reads([(1, "Código-F-CRS-ODI-01-rev", "direct")])
+    assert count_starts(reads, cover_code="F-CRS-ODI-01") == 1
+
+
+def test_count_starts_cover_code_skips_recovered_cover_DOCUMENTED_LIMITATION():
+    # A recovered curr==1 has code=None → not counted under cover_code. The scanner
+    # compensates by forcing LOW confidence when cover_code is set and recovered
+    # reads exist (Task 11), so the operator reviews. This test pins the behavior.
+    reads = _reads([(1, None, "recovered"), (2, "F-CRS-ODI-01", "direct")])
+    assert count_starts(reads, cover_code="F-CRS-ODI-01") == 0
