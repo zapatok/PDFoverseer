@@ -1,11 +1,11 @@
 """Smoke test for the insgral pagination pattern (Task 5.3).
 
-Runs the real V4 pipeline against a fixture PDF. When the fixture is absent
+Runs the real pagination engine against a fixture PDF. When the fixture is absent
 (gitignored), the test is skipped — not failed — so CI stays green.
 
 Fixture: a real 10-page HRB insgral compilation — 10 standalone
-'CHEQUEO SISTEMA LAVADO DE RUEDAS' forms, each 'Página 1 de 1'. V4 counts
-10 documents (all read directly). See ground_truth.json.
+'CHEQUEO SISTEMA LAVADO DE RUEDAS' forms, each 'Página 1 de 1'. The pagination
+engine counts 10 documents (all read directly). See ground_truth.json.
 """
 
 from __future__ import annotations
@@ -40,8 +40,8 @@ def _fixture_pdf() -> Path:
 def test_insgral_count_ocr_smoke():
     """PaginationScanner counts every document in the real insgral compilation.
 
-    The fixture is one PDF bundling 10 standalone 1-page forms; the V4
-    pipeline must recover all 10. Method must be 'v4'.
+    The fixture is one PDF bundling 10 standalone 1-page forms; the pagination
+    engine must recover all 10. Method must be 'pagination'.
     """
     if not _fixture_pdf().exists():
         pytest.skip("Insgral fixture PDF not present (gitignored)")
@@ -50,7 +50,7 @@ def test_insgral_count_ocr_smoke():
     scanner = PaginationScanner(sigla="insgral")
     result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
 
-    assert result.method == "v4", f"Expected method 'v4', got {result.method!r}"
+    assert result.method == "pagination", f"Expected method 'pagination', got {result.method!r}"
     assert result.count == gt["covers_expected"], (
         f"Insgral count mismatch: got {result.count}, expected "
         f"{gt['covers_expected']}. per_file={result.per_file!r} "
@@ -61,8 +61,8 @@ def test_insgral_count_ocr_smoke():
 def test_insgral_count_ocr_per_file_and_confidence():
     """The compilation yields a per_file entry and a HIGH-confidence result.
 
-    Every page of this fixture reads directly, so V4 produces a trustworthy
-    count — the cell must not be flagged v4_low_confidence.
+    Every page of this fixture reads directly, so the pagination engine produces
+    a trustworthy count — the cell must not be flagged pagination_low_confidence.
     """
     if not _fixture_pdf().exists():
         pytest.skip("Insgral fixture PDF not present (gitignored)")
@@ -73,4 +73,4 @@ def test_insgral_count_ocr_per_file_and_confidence():
 
     assert result.per_file[gt["fixture"]] == gt["covers_expected"]
     assert result.confidence == ConfidenceLevel.HIGH
-    assert "v4_low_confidence" not in result.flags
+    assert "pagination_low_confidence" not in result.flags

@@ -4,16 +4,14 @@ These siglas have heterogeneous templates with no stable anchor set, so they
 are counted by their per-document "Página N de M" pagination instead
 (``scan_strategy="pagination"``).
 
-The counting engine is the **full V4 pipeline** (``core/pipeline.py``), reached
-through ``core/scanners/utils/v4_count.count_documents_v4``. V4 OCRs every
-page, detects the pagination period by autocorrelation and recovers
-OCR-failed pages with Dempster-Shafer inference. This replaced the original
-lightweight ``corner_count`` helper, which undercounted on the real corpus
-(13/18 documents where V4 recovered 18/18 — decided 2026-05-21).
-
-A7 still applies: 1-page PDFs contribute 1 document without OCR. A V4 result
-built mostly from inferred (guessed) reads downgrades the cell to LOW
-confidence so the operator reviews it.
+The counting engine is the **pagination engine**
+(``core/scanners/utils/pagination_count.count_documents_by_pagination``), which
+OCRs only the top-right corner of each page, recovers gaps in the pagination
+sequence with a lightweight forward-fill algorithm, and counts document
+boundaries (``curr == 1`` transitions). A7 still applies: 1-page PDFs
+contribute 1 document without OCR. A count that needed heavy gap-recovery or
+produced any unresolved failed reads downgrades the cell to LOW confidence so
+the operator reviews it.
 """
 
 from __future__ import annotations
@@ -25,27 +23,19 @@ from pathlib import Path
 
 from core.scanners.base import ConfidenceLevel, ScanResult
 from core.scanners.cancellation import CancellationToken, CancelledError
+from core.scanners.patterns import PATTERNS
 from core.scanners.simple_factory import SimpleFilenameScanner
 from core.scanners.utils.cell_enumeration import enumerate_cell_pdfs
+from core.scanners.utils.pagination_count import (
+    RECOVERY_LOW_CONF_RATIO,
+    count_documents_by_pagination,
+)
 from core.scanners.utils.pdf_render import PdfRenderError, get_page_count
-from core.scanners.utils.v4_count import V4CountResult, count_documents_v4
-
-
-def _v4_result_is_trustworthy(v4: V4CountResult) -> bool:
-    """A V4 count is trustworthy when most pages were read directly.
-
-    A count built mostly from Dempster-Shafer ``inferred`` reads (or with any
-    unresolved ``failed`` read, or no documents at all) is guesswork — the
-    cell is downgraded to LOW confidence for operator review.
-    """
-    if v4.count == 0 or v4.failed_reads > 0:
-        return False
-    return v4.direct_reads >= v4.inferred_reads
 
 
 @dataclass
 class PaginationScanner:
-    """Counts documents in compilations via the V4 pagination pipeline."""
+    """Counts documents in compilations via the pagination engine."""
 
     sigla: str
 
@@ -64,12 +54,12 @@ class PaginationScanner:
         skip: set[str] | None = None,
         on_page: Callable[[int, int], None] | None = None,
     ) -> ScanResult:
-        """Run pase-2 OCR by counting "Página N de M" documents via V4.
+        """Run pase-2 OCR by counting "Página N de M" documents via the pagination engine.
 
         For each PDF in *folder*: single-page files contribute 1 document
-        without OCR (A7 lock); multi-page files are analyzed by the V4
-        pipeline, which counts document boundaries from the pagination
-        stamps.
+        without OCR (A7 lock); multi-page files are analyzed by the pagination
+        engine, which counts document boundaries from the top-right corner
+        pagination stamps.
 
         Args:
             folder: Directory containing the PDFs to scan.
@@ -78,25 +68,29 @@ class PaginationScanner:
             on_pdf: Optional callback invoked once per processed PDF as
                 ``on_pdf(filename, count, method, near_matches)`` (Incr. 1A):
                 ``count`` = docs found (``None`` if unreadable), ``method`` =
-                ``"filename_glob"`` for A7/1-page (chip R1) else ``"v4"``,
-                ``near_matches`` = always ``[]`` (V4 has no near-matches). Drives
-                the per-PDF progress bar AND the incremental merge; never called
-                for a PDF aborted by cancellation.
+                ``"filename_glob"`` for A7/1-page (chip R1) else
+                ``"pagination"``, ``near_matches`` = always ``[]`` (pagination
+                engine has no near-matches). Drives the per-PDF progress bar
+                AND the incremental merge; never called for a PDF aborted by
+                cancellation.
             only: scope the scan to a single filename (per-file re-scan).
             skip: filenames to NOT scan — already reliable (R1/manual/prior OCR).
+            on_page: Optional callback invoked per page as ``on_page(done, total)``
+                by the pagination engine while processing each multi-page PDF.
 
         Returns:
             A ``ScanResult`` with:
               - ``count``: total documents found across all PDFs.
-              - ``method``: ``"v4"`` (or ``"filename_glob"`` when the folder
-                is missing or empty).
+              - ``method``: ``"pagination"`` (or ``"filename_glob"`` when the
+                folder is missing or empty).
               - ``confidence``: ``HIGH`` only if every multi-page PDF was
-                counted from a trustworthy (mostly-direct) V4 read; ``LOW``
-                if any PDF errored or produced a guesswork count.
+                counted from a trustworthy (mostly-direct) read; ``LOW``
+                if any PDF errored, had too many recovered reads, or had
+                failed reads.
               - ``flags``: includes ``"a7_one_page_locked"`` when at least
                 one single-page PDF was counted trivially, and
-                ``"v4_low_confidence"`` when at least one PDF's count is
-                guesswork.
+                ``"pagination_low_confidence"`` when at least one PDF's count
+                is guesswork.
               - ``per_file``: per-filename document count.
         """
         cancel.check()
@@ -106,15 +100,15 @@ class PaginationScanner:
 
         pdfs = enumerate_cell_pdfs(folder)
         if only is not None:
-            # Single-file scan (rev-2 #1). `on_page` is accepted for interface
-            # parity but ignored: V4 (pipeline.analyze_pdf) has no per-page hook,
-            # so the viewer bar stays indeterminate for insgral/altura.
             pdfs = [p for p in pdfs if p.name == only]
         if skip:
             # Incr. 1A fusionar-y-saltar: omite los archivos ya confiables.
             pdfs = [p for p in pdfs if p.name not in skip]
         if not pdfs:
             return base
+
+        # Look up optional cover_code for this sigla (used by IRL-style siglas).
+        cover_code: str | None = PATTERNS[self.sigla].get("cover_code")  # type: ignore[assignment]
 
         start = time.perf_counter()
         total = 0
@@ -145,24 +139,33 @@ class PaginationScanner:
                     file_count, file_method = 1, "filename_glob"
                     continue
                 try:
-                    v4 = count_documents_v4(pdf, cancel=cancel)
+                    pag = count_documents_by_pagination(
+                        pdf, cancel=cancel, cover_code=cover_code, on_page=on_page
+                    )
                 except CancelledError:
                     raise
                 except (PdfRenderError, OSError, RuntimeError) as exc:
-                    errors.append(f"v4_failed:{pdf.name}:{exc}")
+                    errors.append(f"pagination_failed:{pdf.name}:{exc}")
                     # Conservative fallback: count the compilation as 1 document.
                     per_file[pdf.name] = 1
                     total += 1
                     low_confidence_files.append(pdf.name)
-                    file_count, file_method = 1, "v4"
+                    file_count, file_method = 1, "pagination"
                     continue
                 # A degenerate count of 0 for a multi-page PDF is never right —
                 # fall back to 1 and flag it.
-                pdf_count = v4.count if v4.count > 0 else 1
+                pdf_count = pag.count if pag.count > 0 else 1
                 per_file[pdf.name] = pdf_count
                 total += pdf_count
-                file_count, file_method = pdf_count, "v4"
-                if not _v4_result_is_trustworthy(v4):
+                file_count, file_method = pdf_count, "pagination"
+                # Low-trust per-PDF rule: any failed read, heavy recovery, or
+                # cover_code with recovered reads (possible missed cover) → LOW.
+                low_trust = (
+                    pag.failed_reads > 0
+                    or pag.recovered_reads / max(1, pag.pages_total) > RECOVERY_LOW_CONF_RATIO
+                    or pag.cover_code_recovery
+                )
+                if low_trust:
                     low_confidence_files.append(pdf.name)
             except CancelledError:
                 # Cancelled mid-PDF: this file did not finish — do not tick it.
@@ -170,14 +173,15 @@ class PaginationScanner:
                 raise
             finally:
                 # `finally` runs through every `continue` above, so A7/error
-                # branches still count as one processed PDF. V4 has no near-matches.
+                # branches still count as one processed PDF. Pagination engine
+                # has no near-matches.
                 if emit and on_pdf is not None:
                     on_pdf(pdf.name, file_count, file_method, [])
 
         if a7_used:
             flags.append("a7_one_page_locked")
         if low_confidence_files:
-            flags.append("v4_low_confidence")
+            flags.append("pagination_low_confidence")
 
         duration_ms = int((time.perf_counter() - start) * 1000)
         confidence = (
@@ -186,7 +190,7 @@ class PaginationScanner:
         return ScanResult(
             count=total,
             confidence=confidence,
-            method="v4",
+            method="pagination",
             breakdown=base.breakdown,
             flags=flags,
             errors=errors,

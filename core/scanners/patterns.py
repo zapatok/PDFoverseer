@@ -43,6 +43,9 @@ class SiglaPattern(TypedDict):
     `top_fraction`: optional — default 0.25 (A2).
     `recursive_glob`: optional — INFORMATIONAL ONLY (count_pdfs_by_sigla
         already uses rglob unconditionally; this field documents intent).
+    `cover_code`: pagination only — count only covers whose form code contains
+        this substring (e.g. ``"F-CRS-ODI-01"`` for IRL). When absent, every
+        ``curr==1`` page counts as a document start.
     """
 
     filename_glob: str
@@ -50,6 +53,7 @@ class SiglaPattern(TypedDict):
     cover_flavors: NotRequired[list[Flavor]]
     top_fraction: NotRequired[float]
     recursive_glob: NotRequired[bool]
+    cover_code: NotRequired[str]
 
 
 # Defaults documented as source of truth.

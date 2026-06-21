@@ -1,5 +1,7 @@
 """PaginationScanner.count_ocr emits per-PDF progress via the optional on_pdf
 callback (same contract as AnchorsScanner) and uses the shared enumeration.
+
+All tests in this file use the A7 path (1-page PDFs) to avoid real engine calls.
 """
 
 import pytest

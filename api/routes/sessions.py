@@ -73,7 +73,7 @@ from core.scanners.patterns import count_type_for  # noqa: E402
 
 _MAX_REASONABLE_COUNT = 10_000
 
-_OCR_METHODS = ("header_detect", "corner_count", "header_band_anchors", "v4")
+_OCR_METHODS = ("header_detect", "corner_count", "header_band_anchors", "v4", "pagination")
 
 
 def file_origin(
