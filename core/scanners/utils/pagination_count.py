@@ -1,4 +1,4 @@
-"""Pagination-first document counter (eval prototype). See spec §6.
+"""Pagination-first document counter (production engine; prototyped in eval/pagination_count/). See spec §6.
 
 Pure functions (parse_pagination / extract_code / dominant_total / recover_sequence /
 count_starts) have zero OCR/PDF dependency and are unit-tested directly.

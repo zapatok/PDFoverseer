@@ -10,9 +10,9 @@ from pathlib import Path
 
 from api.presence import (
     AGENT_PARTICIPANT_ID,
-    CellLockedError,  # noqa: F401  re-exported for write endpoints (M3a)
+    CellLockedError,
     PresenceRegistry,
-    is_agent,  # noqa: F401  re-exported for Chunk 2 scanner wiring (M3b)
+    is_agent,
 )
 from core.cell_count import (  # noqa: F401  re-exported for api consumers
     _sum_marks,

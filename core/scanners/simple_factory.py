@@ -1,7 +1,8 @@
 """Factory for trivial filename-glob scanners.
 
-In FASE 1 ALL 18 siglas use this factory. In FASE 2, 4 of them
-(art, irl, odi, charla) get replaced with specialized scanners.
+All 18 siglas use this scanner for pase 1 (filename glob). For pase 2, the
+implicit-compilation siglas dispatch to AnchorsScanner or PaginationScanner
+(see core.scanners.patterns); the rest stay filename-glob only.
 
 Pase-1 confidence is honest (conteo-confiable spec, Tema A1): a cell is HIGH
 (green/listo) only when its count is verifiable without OCR — every matched PDF

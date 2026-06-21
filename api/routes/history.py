@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 
@@ -31,7 +31,7 @@ def get_history(
         Dict mapping "HOSPITAL|sigla" keys to lists of monthly records,
         each with year, month, count, confidence, method fields.
     """
-    today = datetime.utcnow()
+    today = datetime.now(timezone.utc)
     to_year, to_month = today.year, today.month
     to_idx = to_year * 12 + (to_month - 1)
     from_idx = to_idx - (n - 1)

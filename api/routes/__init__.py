@@ -1,5 +1,5 @@
-"""API routes — modules added incrementally per task."""
+"""API route modules.
 
-from api.routes import months, output, sessions
-
-__all__ = ["months", "output", "sessions"]
+Routers are wired explicitly in ``api.main``; this package exposes no aggregate
+surface (importing it does not import the individual route modules).
+"""
