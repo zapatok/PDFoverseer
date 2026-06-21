@@ -55,6 +55,7 @@ package-lock.json
 eval/inference_tuning/results/
 eval/graph_inference/results/
 eval/ocr_preprocessing/results/
+eval/pagination_count/results/
 
 # VLM sweep results
 vlm/results/*.json
