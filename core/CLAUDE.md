@@ -116,10 +116,12 @@ SIGLAS (enforced by a completeness-gate test).
 |---------------|---------|--------------------|
 | `none` | `SimpleFilenameScanner` | filename glob only (pase 1) |
 | `anchors` | `AnchorsScanner` | OCR the header band, match flavor anchors |
-| `pagination` | `PaginationScanner` | count documents via the V4 pipeline |
+| `pagination` | `PaginationScanner` | count documents via the pagination engine ("Página N de M" corner OCR + lite recovery) |
 
-Distribution today: 1 `none` (reunion), 15 `anchors`, 2 `pagination`
-(insgral, altura).
+Distribution today (v4-pagination migration, 2026-06-21): 1 `none` (reunion),
+6 `anchors` (charla, chintegral, dif_pts — RCH "1 de 2" bug; senal — landscape;
+chps; maquinaria — `count_type=checks`), 11 `pagination` (art, irl [`cover_code`],
+odi, insgral, bodega, caliente, exc, ext, altura, herramientas_elec, andamios).
 
 ### AnchorsScanner
 
@@ -130,20 +132,33 @@ a flavor may declare **anti_anchors** that reject a page even when anchors
 match (kills cross-category misfiles and shadow covers). Anchors are structural
 text — titles, field labels, pagination — never raw form codes (decision A12).
 
-### PaginationScanner + V4
+### PaginationScanner + the pagination engine
 
-For the open-universe siglas (insgral, altura — heterogeneous templates, no
-stable anchor set) `PaginationScanner` counts documents by their
-"Página N de M" pagination. The engine is the **full V4 pipeline**
-(`pipeline.analyze_pdf`), reached through the `utils/v4_count.py` adapter —
-V4's autocorrelation period-detection + Dempster-Shafer inference recover
-OCR-failed pages. A count built mostly from inferred (guessed) reads
-downgrades the cell to LOW confidence for operator review.
+`PaginationScanner` counts documents by their "Página N de M" pagination via
+`utils/pagination_count.count_documents_by_pagination` (the **lite engine**,
+`SCANNER_PATTERNS_VERSION = v4-pagination`). Per page it OCRs only the
+**top-right corner** (orientation-aware), parses the pagination + the form code,
+and **recovers** unreadable corners by completing the numeric sequence from
+neighbors (plain forward-fill — no autocorrelation / Dempster-Shafer). A document
+starts at every `curr == 1`; `cover_code` (IRL) restricts that to covers whose
+form code matches (so appendix page-1s inside an induction packet don't count).
+A7 still applies (1-page = 1 doc, no OCR). A count that needed heavy recovery
+(>30% of pages), had any unresolved failed read, or hit the cover_code-with-recovery
+edge downgrades the cell to LOW confidence for review (keyboard counter).
 
-> V4 (`pipeline.py`) is no longer a standalone scanner — it is reached ONLY
-> through `PaginationScanner`. The earlier lightweight `corner_count` helper
-> was deleted after it undercounted the real corpus (13/18 documents where
-> V4 recovered 18/18).
+Validated by a real-corpus benchmark (`docs/research/2026-06-21-pagination-benchmark-results.md`):
+pagination wins or ties anchors on every paginated sigla (clean ART anchors 0/5 →
+pagination 5/5; degraded merged ART −11 → +1 via recovery; herramientas_elec −17 →
+60/60). Migrated siglas keep their anchor flavors on the `patterns.py` entry
+(unused) for **one-line reversibility** (flip `scan_strategy` back to `anchors`).
+
+> The heavy **V4 pipeline** (`pipeline.py` / `utils/v4_count.py`) is retained in
+> the repo as a **deferred fallback** (spec D10) — no longer wired into any
+> scanner. It supersedes the original `corner_count` helper that undercounted
+> (13/18); the lite engine's recovery layer + honest LOW-confidence routing now
+> close that gap without the full solver. RCH (charla/chintegral/dif_pts) stays on
+> anchors — its template repeats "Página 1 de 2" on continuations (the bug), so
+> pagination would over-count.
 
 ### Uniform behaviors
 
