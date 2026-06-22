@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -96,6 +97,12 @@ def create_app() -> FastAPI:
     # localhost:5173 CORS rule above stays for local Vite dev). Mounted LAST so
     # /api/* and /ws/* take precedence; html=True serves index.html at "/". Skipped
     # when the build is absent (dev without `npm run build`).
+    # Windows registers no MIME type for `.mjs`, so StaticFiles would serve the
+    # Vite/pdf.js worker bundles as text/plain and browsers reject them under strict
+    # module MIME checking (PDF preview fails with "No se pudo abrir el PDF"). Force
+    # the correct JS type process-wide before mounting.
+    mimetypes.add_type("text/javascript", ".mjs")
+    mimetypes.add_type("text/javascript", ".js")
     _dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
     if _dist.is_dir():
         app.mount("/", StaticFiles(directory=_dist, html=True), name="ui")
