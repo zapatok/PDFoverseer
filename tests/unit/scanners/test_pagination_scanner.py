@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from core.scanners.base import ConfidenceLevel
-from core.scanners.cancellation import CancellationToken
+from core.scanners.cancellation import CancellationToken, CancelledError
 from core.scanners.pagination_scanner import PaginationScanner
 from core.scanners.utils.pagination_count import PaginationCountResult
 
@@ -239,3 +239,48 @@ def test_pagination_scanner_on_page_forwarded_to_engine(tmp_path: Path, monkeypa
     assert captured_on_page == [(1, 3), (2, 3), (3, 3)]
     # The outer seen_pages should also be populated (same callback passed through)
     assert seen_pages == [(1, 3), (2, 3), (3, 3)]
+
+
+def test_pagination_count_ocr_cancel_mid_pdf_no_tick(tmp_path: Path, monkeypatch):
+    """A cancel raised mid-PDF (inside the engine) propagates as CancelledError and
+    the cancelled PDF is NOT ticked via on_pdf (emit=False).
+
+    Pins the cancel contract across the engine boundary — load-bearing for the
+    OcrScannerBase split, which moves the engine call into _count_one_pdf.
+    """
+    pdf = tmp_path / "2026-04_insgral.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    def _raise_cancel(*a, **k):
+        raise CancelledError()
+
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda _: 5)
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_documents_by_pagination", _raise_cancel
+    )
+
+    ticks: list = []
+    scanner = PaginationScanner(sigla="insgral")
+    with pytest.raises(CancelledError):
+        scanner.count_ocr(tmp_path, cancel=CancellationToken(), on_pdf=lambda *a: ticks.append(a))
+    assert ticks == [], "a mid-PDF-cancelled file must not be ticked via on_pdf"
+
+
+def test_pagination_count_ocr_pre_cancelled_token_no_tick(tmp_path: Path, monkeypatch):
+    """A token already cancelled raises CancelledError and never ticks on_pdf."""
+    pdf = tmp_path / "2026-04_insgral.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda _: 5)
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_documents_by_pagination",
+        lambda *a, **k: _pag(2, pages=5, direct=5),
+    )
+
+    token = CancellationToken()
+    token.cancel()
+    ticks: list = []
+    scanner = PaginationScanner(sigla="insgral")
+    with pytest.raises(CancelledError):
+        scanner.count_ocr(tmp_path, cancel=token, on_pdf=lambda *a: ticks.append(a))
+    assert ticks == []

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from core.scanners.anchors_scanner import AnchorsScanner
 from core.scanners.base import ConfidenceLevel
-from core.scanners.cancellation import CancellationToken
+from core.scanners.cancellation import CancellationToken, CancelledError
 
 
 def test_anchors_scanner_falls_through_to_filename_glob_for_pase1(tmp_path: Path):
@@ -279,3 +281,49 @@ def test_count_ocr_enriched_callback_carries_count_method_nm(tmp_path: Path, mon
     assert by_name["2026-04-01_andamios_one.pdf"][2] == "filename_glob"
     # near_matches siempre lista serializable (dicts), nunca NearMatchEntry.
     assert all(isinstance(r[3], list) for r in rows)
+
+
+def test_anchors_count_ocr_cancel_mid_pdf_no_tick(tmp_path: Path, monkeypatch):
+    """A cancel raised mid-PDF (inside the engine) propagates as CancelledError and
+    the cancelled PDF is NOT ticked via on_pdf (emit=False).
+
+    Pins the cancel contract across the engine boundary — load-bearing for the
+    OcrScannerBase split, which moves the engine call into _count_one_pdf.
+    """
+    pdf = tmp_path / "2026-04_andamios_multi.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    import core.scanners.anchors_scanner as _mod
+
+    monkeypatch.setattr(_mod, "PATTERNS", {"andamios": _FAKE_PATTERN})
+    monkeypatch.setattr(_mod, "get_page_count", lambda _: 5)  # >1 → reach the engine
+
+    def _raise_cancel(*a, **k):
+        raise CancelledError()
+
+    monkeypatch.setattr("core.scanners.anchors_scanner.count_covers_by_anchors", _raise_cancel)
+
+    ticks: list = []
+    scanner = AnchorsScanner(sigla="andamios")
+    with pytest.raises(CancelledError):
+        scanner.count_ocr(tmp_path, cancel=CancellationToken(), on_pdf=lambda *a: ticks.append(a))
+    assert ticks == [], "a mid-PDF-cancelled file must not be ticked via on_pdf"
+
+
+def test_anchors_count_ocr_pre_cancelled_token_no_tick(tmp_path: Path, monkeypatch):
+    """A token already cancelled raises CancelledError and never ticks on_pdf."""
+    pdf = tmp_path / "2026-04_andamios_multi.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    import core.scanners.anchors_scanner as _mod
+
+    monkeypatch.setattr(_mod, "PATTERNS", {"andamios": _FAKE_PATTERN})
+    monkeypatch.setattr(_mod, "get_page_count", lambda _: 5)
+
+    token = CancellationToken()
+    token.cancel()
+    ticks: list = []
+    scanner = AnchorsScanner(sigla="andamios")
+    with pytest.raises(CancelledError):
+        scanner.count_ocr(tmp_path, cancel=token, on_pdf=lambda *a: ticks.append(a))
+    assert ticks == []
