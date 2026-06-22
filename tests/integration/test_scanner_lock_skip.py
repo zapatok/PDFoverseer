@@ -326,12 +326,14 @@ def test_pase1_skips_human_held_cell(tmp_path, monkeypatch):
         per_file={"fake.pdf": 5},
     )
 
-    import api.routes.sessions as sessions_mod
+    import api.routes.sessions.scan as scan_mod
 
     def _stub_scan_month(_inv):
         return {("HRB", "odi"): fake_result}
 
-    monkeypatch.setattr(sessions_mod, "scan_month", _stub_scan_month)
+    # scan_month is now imported into the scan sub-router module; patch it there
+    # (the route resolves the name in its own module namespace).
+    monkeypatch.setattr(scan_mod, "scan_month", _stub_scan_month)
 
     app = create_app()
     with TestClient(app) as c:
