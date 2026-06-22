@@ -8,6 +8,8 @@ import Tooltip from "../ui/Tooltip";
 import { FileStack, ScanSearch, Maximize2, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Scissors } from "lucide-react";
 import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { wheelToPageStep } from "../lib/viewer-nav";
+import { cellLockHolder } from "../lib/presence";
+import { getParticipantId } from "../lib/identity";
 import OriginChip from "./OriginChip";
 import InlineEditCount from "./InlineEditCount";
 import FileViewerProgress from "./FileViewerProgress";
@@ -151,6 +153,11 @@ export default function PDFLightbox() {
   const scanFileOcr = useSessionStore((s) => s.scanFileOcr);
   const addReorgOp = useSessionStore((s) => s.addReorgOp);
   const fileScan = useSessionStore((s) => s.fileScan);
+  const presence = useSessionStore((s) => s.presence);
+  // B1: another participant editing this cell → read-only (disable the OCR button).
+  const isLocked = !!(
+    lightbox && cellLockHolder(presence, lightbox.hospital, lightbox.sigla, getParticipantId())
+  );
   // Re-fetch after an OCR scan finishes for this cell (G3 / rev-2 #1).
   const tick = useSessionStore((s) =>
     lightbox ? (s.filesTick[`${lightbox.hospital}|${lightbox.sigla}`] ?? 0) : 0,
@@ -299,12 +306,18 @@ export default function PDFLightbox() {
                   variant="primary"
                   icon={ScanSearch}
                   size="sm"
-                  disabled={noOcr || !currentFile}
+                  disabled={noOcr || !currentFile || isLocked}
                   onClick={() =>
                     scanFileOcr(session.session_id, lightbox.hospital, lightbox.sigla, currentFile.name)
                   }
                   className="mt-4 w-full justify-center"
-                  title={noOcr ? "Esta categoría no usa OCR" : undefined}
+                  title={
+                    isLocked
+                      ? "Bloqueado por otro participante"
+                      : noOcr
+                        ? "Esta categoría no usa OCR"
+                        : undefined
+                  }
                 >
                   Escanear con OCR
                 </Button>

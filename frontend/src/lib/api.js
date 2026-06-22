@@ -143,11 +143,17 @@ export const api = {
   getScanInfo: (sigla) => fetch(`${BASE}/siglas/${sigla}/scan-info`).then(jsonOrThrow),
 
   // rev-2 #1 — OCR-scan a single file of a cell (progress streams over the WS).
-  scanFileOcr: (sessionId, hospital, sigla, filename) =>
+  // B1: carries participant_id so the backend can 409 a cell another participant
+  // holds; jsonOrThrowStructured preserves the 409 body (lock_holder) for the store.
+  scanFileOcr: (sessionId, hospital, sigla, filename, participantId) =>
     fetch(
       `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/files/${encodeURIComponent(filename)}/scan-ocr`,
-      { method: "POST" },
-    ).then(jsonOrThrow),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participant_id: participantId ?? null }),
+      },
+    ).then(jsonOrThrowStructured),
 
   // Incr 2 — apply ratio N treatment to all Pendiente files in a cell.
   // n=1 implements "Apply R1" (each page = one document).

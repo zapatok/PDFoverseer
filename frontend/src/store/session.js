@@ -155,8 +155,15 @@ export const useSessionStore = create((set, get) => ({
   // arrive over the WS; this just kicks it off.
   scanFileOcr: async (sessionId, hospital, sigla, filename) => {
     try {
-      await api.scanFileOcr(sessionId, hospital, sigla, filename);
+      await api.scanFileOcr(sessionId, hospital, sigla, filename, getParticipantId());
     } catch (error) {
+      // B1: another participant holds the cell → the OCR never starts. Toast the
+      // holder and no-op (no optimistic state to revert; nothing to refetch).
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        toast.error(`${who} está editando esta celda`);
+        return;
+      }
       set({ error: String(error) });
     }
   },
