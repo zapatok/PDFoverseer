@@ -143,3 +143,87 @@ def test_override_endpoint_409_when_locked_by_another():
         )
         assert r.status_code == 409
         assert r.json()["lock_holder"]["name"] == "Carla"
+
+
+# ── B1: scan_file_ocr (single-file OCR) endpoint lock gate ────────────────────
+
+
+def _make_pdf(path, pages: int) -> None:
+    import fitz
+
+    doc = fitz.open()
+    for _ in range(pages):
+        doc.new_page()
+    doc.save(str(path))
+    doc.close()
+
+
+def test_scan_file_ocr_endpoint_409_when_locked_by_another(tmp_path, monkeypatch):
+    """B1: single-file OCR 409s when another participant holds the cell.
+
+    The file must exist (the route 404s a missing file BEFORE the lock check), so
+    set up a real month_root + a 1-page a.pdf under HRB/odi.
+    """
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "b1.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "a.pdf", 1)
+
+        # Carla (p2) holds HRB|odi
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "p2", "name": "Carla", "color": "#b"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/focus",
+            json={"participant_id": "p2", "cell": "HRB|odi"},
+        )
+
+        # Daniel (p1) tries to OCR a file in Carla's cell → 409
+        r = c.post(
+            f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr",
+            json={"participant_id": "p1"},
+        )
+        assert r.status_code == 409, r.text
+        assert r.json()["lock_holder"]["name"] == "Carla"
+
+
+def test_scan_file_ocr_endpoint_allows_editor_and_legacy(tmp_path, monkeypatch):
+    """B1: the editor + the legacy (no participant_id) paths still 200."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "b1b.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "a.pdf", 1)
+
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "p1", "name": "Daniel", "color": "#a"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/focus",
+            json={"participant_id": "p1", "cell": "HRB|odi"},
+        )
+
+        # editor (p1) → 200
+        ed = c.post(
+            f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr",
+            json={"participant_id": "p1"},
+        )
+        assert ed.status_code == 200, ed.text
+        # legacy no-body → 200 (unenforced)
+        legacy = c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr")
+        assert legacy.status_code == 200, legacy.text

@@ -544,6 +544,10 @@ def cancel(request: Request, session_id: str) -> dict:
     return {"ok": True}
 
 
+class ScanFileOcrRequest(BaseModel):
+    participant_id: str | None = None
+
+
 @router.post("/sessions/{session_id}/cells/{hospital}/{sigla}/files/{filename}/scan-ocr")
 def scan_file_ocr(
     request: Request,
@@ -551,6 +555,7 @@ def scan_file_ocr(
     hospital: str,
     sigla: str,
     filename: str,
+    body: ScanFileOcrRequest | None = Body(None),
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Pase 2 for a single file (rev-2 #1): OCR-scan one PDF of a cell and merge.
@@ -560,6 +565,7 @@ def scan_file_ocr(
     events over the session WS and merging the result on ``file_scan_done``.
     """
     _validate_session_id(session_id)
+    participant_id = body.participant_id if body else None
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -567,6 +573,10 @@ def scan_file_ocr(
     folder = _find_category_folder(Path(state.get("month_root", "")) / hospital, sigla)
     if not folder.exists() or filename not in {p.name for p in folder.rglob("*.pdf")}:
         raise HTTPException(404, f"File not found in cell: {filename}")
+    # B1: gate starting the scan on the M3 per-cell lock (apply_ratio's human gate;
+    # editorship-exclusivity holds — the operator focus-claimed the cell by opening the
+    # viewer). check_cell_lock raises CellLockedError → 409 via the main.py handler.
+    mgr.check_cell_lock(session_id, hospital, sigla, participant_id)
 
     app = request.app
     loop = app.state.loop
