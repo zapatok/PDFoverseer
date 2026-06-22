@@ -123,6 +123,18 @@ Distribution today (v4-pagination migration, 2026-06-21): 1 `none` (reunion),
 chps; maquinaria — `count_type=checks`), 11 `pagination` (art, irl [`cover_code`],
 odi, insgral, bodega, caliente, exc, ext, altura, herramientas_elec, andamios).
 
+### OcrScannerBase (shared harness)
+
+`AnchorsScanner` and `PaginationScanner` both subclass `OcrScannerBase`
+(`ocr_scanner_base.py`) — a Template Method that owns the ~75% shared `count_ocr`
+scaffolding (folder guard, PDF enumeration, `only`/`skip` filtering, the per-PDF
+loop with cancel + A7 + `on_pdf` emit semantics, and `ScanResult` assembly). Each
+subclass implements only `_count_one_pdf(pdf)` (page-count + A7 + its engine +
+fallback → a `_PdfOutcome`) plus an optional `_precheck` (anchors' no-flavors
+short-circuit). The per-PDF I/O (`get_page_count` + the engine) is kept in the
+subclass module so the unit tests' monkeypatches (which target
+`core.scanners.{anchors,pagination}_scanner.*`) still bind.
+
 ### AnchorsScanner
 
 OCRs the top fraction of each page (`top_fraction`, default 0.25) and counts a
