@@ -106,3 +106,21 @@ def compute_cell_count(
     """
     base = _base_count(cell, count_type, present_files)
     return base + (cell.get("reorg_doc_delta") or 0)
+
+
+def compute_worker_count(cell: dict, present_files: set[str] | None = None) -> int:
+    """Total de marcas de una celda (trabajadores en charla/chintegral, o
+    chequeos en maquinaria — mismo mecanismo). Filtra por archivos presentes;
+    ver :func:`_sum_marks` para la semántica de ``present_files``.
+
+    Args:
+        cell: el dict de estado de una celda.
+        present_files: conjunto de nombres de archivo presentes en la carpeta
+            de la celda. ``None`` usa el comportamiento legacy (filtra por
+            per_file cuando no está vacío).
+
+    Returns:
+        La suma de marcas más el delta de reorganización ``reorg_worker_delta``
+        (Incr J, aditivo sobre el total de marcas); 0 si no hay marcas ni delta.
+    """
+    return _sum_marks(cell, present_files) + (cell.get("reorg_worker_delta") or 0)

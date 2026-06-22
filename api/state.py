@@ -17,6 +17,7 @@ from api.presence import (
 from core.cell_count import (  # noqa: F401  re-exported for api consumers
     _sum_marks,
     compute_cell_count,
+    compute_worker_count,
 )
 from core.db.sessions_repo import (
     SessionRecord,
@@ -57,24 +58,6 @@ def _cell_has_work(cell: dict) -> bool:
         return True
     per_file_method = cell.get("per_file_method") or {}
     return any(m and m != "filename_glob" for m in per_file_method.values())
-
-
-def compute_worker_count(cell: dict, present_files: set[str] | None = None) -> int:
-    """Total de marcas de una celda (trabajadores en charla/chintegral, o
-    chequeos en maquinaria — mismo mecanismo). Filtra por archivos presentes;
-    ver core.cell_count._sum_marks para la semántica de ``present_files``.
-
-    Args:
-        cell: el dict de estado de una celda.
-        present_files: conjunto de nombres de archivo presentes en la carpeta
-            de la celda. ``None`` usa el comportamiento legacy (filtra por
-            per_file cuando no está vacío).
-
-    Returns:
-        La suma de marcas más el delta de reorganización ``reorg_worker_delta``
-        (Incr J, aditivo sobre el total de marcas); 0 si no hay marcas ni delta.
-    """
-    return _sum_marks(cell, present_files) + (cell.get("reorg_worker_delta") or 0)
 
 
 def _synchronized(method):
