@@ -1,7 +1,7 @@
 """_ocr_worker reintenta scans OCR fallidos en silencio — FASE 5 Feature 3."""
 
 import core.scanners as scanner_registry
-from core import orchestrator
+from core.orchestrator import ocr_worker
 from core.scanners.cancellation import CancelledError
 
 
@@ -20,16 +20,16 @@ class _FlakyScanner:
 
 
 def _setup(monkeypatch, scanner):
-    monkeypatch.setattr(orchestrator, "_WORKER_EVENT", None)
+    monkeypatch.setattr(ocr_worker, "_WORKER_EVENT", None)
     monkeypatch.setattr(scanner_registry, "get", lambda sigla: scanner)
-    monkeypatch.setattr(orchestrator.time, "sleep", lambda s: None)
+    monkeypatch.setattr(ocr_worker.time, "sleep", lambda s: None)
 
 
 def test_recovers_after_retries(monkeypatch):
     scanner = _FlakyScanner(fail_times=2)
     _setup(monkeypatch, scanner)
 
-    h, s, result, err = orchestrator._ocr_worker(("HRB", "art", "/tmp/x", []))
+    h, s, result, err = ocr_worker._ocr_worker(("HRB", "art", "/tmp/x", []))
 
     assert err is None
     assert result == "OK_RESULT"
@@ -40,7 +40,7 @@ def test_gives_up_after_two_retries(monkeypatch):
     scanner = _FlakyScanner(fail_times=99)
     _setup(monkeypatch, scanner)
 
-    h, s, result, err = orchestrator._ocr_worker(("HRB", "art", "/tmp/x", []))
+    h, s, result, err = ocr_worker._ocr_worker(("HRB", "art", "/tmp/x", []))
 
     assert result is None
     assert "transient tesseract crash" in err
@@ -59,7 +59,7 @@ def test_cancelled_does_not_retry(monkeypatch):
     scanner = _CancelScanner()
     _setup(monkeypatch, scanner)
 
-    h, s, result, err = orchestrator._ocr_worker(("HRB", "art", "/tmp/x", []))
+    h, s, result, err = ocr_worker._ocr_worker(("HRB", "art", "/tmp/x", []))
 
     assert err == "cancelled"
     assert scanner.calls == 1  # sin reintento
