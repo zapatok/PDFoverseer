@@ -69,11 +69,12 @@ of the on-disk number.) No alias needed.
 
 Add one `SiglaPattern` per new sigla (mirroring existing entries):
 - `revdocmaq`: `{filename_glob: r"^.*(revision|documentacion).*\.pdf$", scan_strategy: "none"}`
-  (provisional token; `none` → `SimpleFilenameScanner`). Must NOT collide with
-  `maquinaria` in `extract_sigla` — verify the filename-glob precedence so a
-  revdocmaq file is not absorbed by `maquinaria` and vice versa (a real risk since
-  both names contain "maquinaria"; resolved here by requiring "revision"/
-  "documentacion" tokens). Moot while 0 files, but build it right.
+  (provisional token; `none` → `SimpleFilenameScanner`). On the collision concern:
+  `extract_sigla` keys off the **sigla name** as a token (`"revdocmaq"` vs
+  `"maquinaria"` — neither is a substring-token of the other), so it is safe **by
+  construction**; the `filename_glob` here only governs the **OCR scanner's file
+  discovery** and is where the "revision/documentacion" tokens earn their keep.
+  Moot while 0 files, but build it right.
 - `espacios`: `{filename_glob: r"^.*espacios.*\.pdf$", scan_strategy: "pagination",
   cover_code: "F-PETS-CRS-08-01"}` (a brand-new pagination sigla; no `cover_flavors`
   — that field is required only for `anchors`).
@@ -83,25 +84,39 @@ Add both to `COUNT_TYPE_BY_SIGLA` as `"documents"`.
 **Bump `SCANNER_PATTERNS_VERSION`** in `core/utils.py` (new scan strategies added).
 *(Note: the hookify `bump-version-tags` BLOCK rule covers `core/{pipeline,ocr,inference,image}.py` + `vlm/*` — patterns.py is not in it; this bump is by the patterns convention, not that gate.)*
 
-### 3. Excel template (`data/templates/build_template_v1.py` → regenerate)
+### 3. Excel template — edit the `.xlsx` directly (do NOT regenerate)
 
-The template is **generated** by this script (idempotent, from the production
-sample), and rows 22 & 26 are **orphan rows already present** for layout fidelity.
-So:
-- **Wire the orphan rows:** add `{HOSP}_revdocmaq_count` → row 22 and
-  `{HOSP}_espacios_count` → row 26 (G/I/K/M columns, 4 hospitals × 2 = 8 new named
-  ranges) to the builder's sigla→row map.
-- **Drop `chps` from the Excel:** remove the `{HOSP}_chps_count` named ranges from
-  the builder; leave the B31 "CHPS" label/row intact (Carla can fill it by hand if
-  ever needed). Net count-ranges: 72 − 4 (chps) + 8 (new) = **76**.
-- Regenerate `RESUMEN_template_v1.xlsx` (it is reproducible). Keep `v1` (no layout
-  break: rows already exist, only named ranges change). Update the builder docstring
-  + `data/templates/README.md` (the two rows are no longer "orphan"; chps is now
-  unwired-by-design, not just empty).
+**Critical:** `build_template_v1.py` is **NOT idempotent** — its own docstring
+declares the shipped `RESUMEN_template_v1.xlsx` the *authoritative artifact* and
+warns it carries **hand-patches the script does not reproduce** (the 2026-06-04
+O11/O12 `#REF!` fix, the 2026-06-06 logo/font/borders/number-format work).
+Running `build()` would **rebuild from the MARZO sample and wipe those patches**
+— a violation of the "editable deliverables are user property" rule. So the
+template change is made by **editing the `.xlsx` in place** (named ranges only),
+never by regenerating.
 
-**Safety:** back up the current `.xlsx` (dated copy) before regenerating; diff
-`defined_names` before/after to confirm exactly +8 (revdocmaq/espacios) and −4
-(chps), nothing else moved.
+Rows 22 & 26 are **orphan rows already present** in the sheet (labels intact).
+The edit (via `openpyxl`, additive — touches only `defined_names`, never content
+or formatting):
+- **Wire the orphan rows:** add `{HOSP}_revdocmaq_count` → `$G/$I/$K/$M$22` and
+  `{HOSP}_espacios_count` → `…$26` (4 hospitals × 2 = **8 new** named ranges).
+- **Drop `chps` from the Excel:** delete the 4 `{HOSP}_chps_count` named ranges;
+  leave the B31 "CHPS" label/row intact (manual fill if ever needed). Net
+  count-ranges: 72 − 4 + 8 = **76**.
+
+**Safety (load-bearing, since an openpyxl edit via a script does NOT trigger the
+Write/Edit guard hook):** make a **dated backup** of the `.xlsx` first; after the
+edit, **diff `defined_names` before/after** to prove exactly +8 / −4 and that no
+other range, cell, or format changed; surface that diff to Daniel at the smoke
+gate before committing the `.xlsx`.
+
+**Keep the builder in sync (no regeneration):** update `build_template_v1.py`'s
+`SIGLA_ROW`/`ORPHAN_ROWS` maps (remove 22/26 from orphans, add
+`revdocmaq:22`/`espacios:26`; remove `chps`) and its `verify()` assertion
+(`count_names == 76`, and no `{HOSP}_chps_count`) so the script stays consistent
+with the `.xlsx` for any future `v2` — but it is documentation only here, not run.
+Update `data/templates/README.md` (rows 22/26 no longer "orphan"; chps unwired by
+design).
 
 ### 4. Excel writer value map (`api/routes/output.py`)
 
@@ -143,22 +158,44 @@ scan / new month. This is the one place B could silently fail its goal.
 
 ## Test fan-out (enumerate; the plan turns each into a step)
 
-- `tests/unit/test_domain.py`: `SIGLAS` tuple (→20), `len(SIGLAS)==20`,
-  `len(CATEGORY_FOLDERS)==20`; add `revdocmaq`/`espacios` to the expected tuple
-  in order; roundtrip still covers all (now 20).
-- `tests/unit/test_orchestrator.py`: `len(inv.cells[hosp])==18` → `==20`.
+Adding 2 siglas inverts several existing assertions. The plan MUST handle each:
+
+- `tests/unit/test_domain.py`:
+  - `test_siglas_are_the_18_canonical` — rename + update the verbatim tuple
+    (insert `"revdocmaq"` after `"senal"`, `"espacios"` after `"caliente"`),
+    `len(SIGLAS)==20`, `len(CATEGORY_FOLDERS)==20`.
+  - `test_folder_to_sigla_unmodeled_corpus_folders_return_none` — **invert**:
+    `"13.-Revision Documentacion Maquinaria" → "revdocmaq"` and
+    `"17.-Espacios Confinados" → "espacios"` (no longer `None`). Rename it.
+  - `test_folder_match_texts_pairwise_distinct` — must still pass (verified:
+    "Revision Documentacion Maquinaria"/"Espacios Confinados" collide with no
+    existing canonical); run it as a gate.
+- `tests/unit/test_orchestrator.py`:
+  - `test_enumerate_month_populates_18_categories_per_hospital` and
+    `test_enumerate_month_returns_zero_for_missing_category`: `18 → 20`.
+  - `test_find_category_folder_resolves_renumbered_corpus` (added in Increment A) —
+    **invert** the two `… not in returned` assertions (lines ~72-75) to `… in
+    returned`, and add positive resolution checks for `revdocmaq → "13.-…"`,
+    `espacios → "17.-…"`. Update the stale "never returned" comment.
+- `tests/unit/test_orchestrator_scan.py`: `len(results)==72` → `==80`.
+- `tests/e2e/test_smoke.py`: `scanned == 72` → `== 80`.
 - `tests/integration/test_abril_full_corpus.py` (slow): `len(results)==72` → `==80`.
+- `core/orchestrator/enumeration.py`: docstrings say "18 category cells" — update
+  to 20 (≥5 spots).
 - Completeness gates: `tests/unit/scanners/test_count_type.py` and
-  `test_patterns_registry.py` will now require entries for the 2 new siglas (the
-  gates are the enforcement — they fail until patterns + count_type are added).
-- New Excel test: revdocmaq→B22 and espacios→B26 receive values; **no
-  `chps` value is written** (B31 stays blank); a builder/defined-names test for the
-  76 count ranges + the absence of `{HOSP}_chps_count`.
-- New scanner test: espacios pagination counts a 2-inspection compilation as 2 (a
-  synthetic 4-page "Página N de 2" fixture, or assert via the existing pagination
-  engine unit harness — no personal-data fixture).
-- Frontend: update the sigla-set assertion in `sigla-info.test.js`/labels test.
-- Grep `18`/`72` for any other count assertion and update.
+  `test_patterns_registry.py` require entries for both new siglas (they fail until
+  added). In particular `test_patterns_registry.py::test_v4_pagination_migration_state`
+  hardcodes the 18-sigla strategy split — add `"espacios"` to the pagination set and
+  account for `"revdocmaq"` (strategy `none`; add a `none`/`reunion`-style bucket).
+- New Excel test: revdocmaq→B22 and espacios→B26 receive values; **no `chps` value
+  is written**; assert the `.xlsx` `defined_names` have the 8 new ranges and no
+  `{HOSP}_chps_count` (76 count ranges total).
+- New scanner test: espacios pagination counts a 2-inspection "Página N de 2"
+  compilation as 2 (synthetic fixture; no personal-data corpus slice).
+- Frontend: update the sigla-set assertion in `sigla-info.test.js` / the labels
+  test; add label+description entries.
+- Final grep `18`/`72` across backend + frontend to catch any remaining count
+  assertion.
 
 ## Risks
 
