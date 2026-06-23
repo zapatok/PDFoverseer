@@ -157,24 +157,25 @@ def test_output_writes_dynamic_month_title(client, tmp_path):
 def test_build_cell_values_emits_zero_for_uncounted_cells():
     """Cells absent from session state (a hospital not yet counted) must be written
     as 0, not left blank. Regression for the 2026-06-06 empty-cell report."""
-    from api.routes.output import _build_cell_values
+    from api.routes.output import EXCEL_EXCLUDED_SIGLAS, _build_cell_values
     from core.domain import HOSPITALS, SIGLAS
 
     state = {"cells": {"HLL": {"art": {"user_override": 5}}}}
     vals = _build_cell_values(state)
     assert vals["HLL_art_count"] == 5
     assert vals["HLU_reunion_count"] == 0  # never counted → explicit 0
-    assert len(vals) == len(HOSPITALS) * len(SIGLAS)
+    assert "HLL_chps_count" not in vals  # chps excluded from the Excel (Incr B)
+    assert len(vals) == len(HOSPITALS) * (len(SIGLAS) - len(EXCEL_EXCLUDED_SIGLAS))
 
 
 def test_build_cell_values_skips_excluded():
-    from api.routes.output import _build_cell_values
+    from api.routes.output import EXCEL_EXCLUDED_SIGLAS, _build_cell_values
     from core.domain import HOSPITALS, SIGLAS
 
     state = {"cells": {"HLL": {"art": {"user_override": 5, "excluded": True}}}}
     vals = _build_cell_values(state)
     assert "HLL_art_count" not in vals  # excluded → skipped, left blank
-    assert len(vals) == len(HOSPITALS) * len(SIGLAS) - 1
+    assert len(vals) == len(HOSPITALS) * (len(SIGLAS) - len(EXCEL_EXCLUDED_SIGLAS)) - 1
 
 
 def test_build_cell_values_honors_per_file_overrides():

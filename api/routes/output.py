@@ -88,6 +88,12 @@ def _build_report_title(year: int, month: int) -> str:
     return _REPORT_TITLE_TMPL.format(mes=_MESES[month - 1], year=year)
 
 
+# chps (CPHS — Comité Paritario) is modeled + counted but NOT written to the
+# RESUMEN (Daniel, 2026-06-23: "solo cphs no va al excel"). The template carries no
+# {HOSP}_chps_count range either; history still persists it. Excluded here only.
+EXCEL_EXCLUDED_SIGLAS: frozenset[str] = frozenset({"chps"})
+
+
 def _build_cell_values(state: dict) -> dict[str, int]:
     """Translate session.cells into named-range-keyed dict for the writer.
 
@@ -103,6 +109,8 @@ def _build_cell_values(state: dict) -> dict[str, int]:
     for hosp in HOSPITALS:
         hosp_cells = cells.get(hosp, {})
         for sigla in SIGLAS:
+            if sigla in EXCEL_EXCLUDED_SIGLAS:
+                continue
             ct = count_type_for(sigla)
             present = None
             if ct == "checks":
