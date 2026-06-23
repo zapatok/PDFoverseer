@@ -1,7 +1,7 @@
 """Build RESUMEN_template_v1.xlsx programmatically.
 
 Takes the production RESUMEN_ABRIL_2026.xlsx as a layout base, then:
-  1. Adds 72 named ranges for cantidad cells (4 hospitals × 18 siglas)
+  1. Adds 76 named ranges for cantidad cells (4 hospitals × 19 siglas; chps excluded — Incr B)
   2. Adds 8 named ranges for workforce cells (chgen + chintegral × 4 hospitals)
   3. Adds the `report_title` named range (E2) for the dynamic month title
   4. Blanks any pre-existing cantidad values so the template ships clean
@@ -55,11 +55,13 @@ LOGO = PROJECT_ROOT / "data" / "templates" / "logoConstructoraSur.png"
 # best-effort recipe, do not blindly regenerate over the live template.
 
 # Rows that exist in the sample but map to no canonical sigla (no named range).
-# They ship as an explicit 0 in every hospital column so the report never shows
-# a blank where the other hospitals show 0 (Daniel's 2026-06-06 report).
-ORPHAN_ROWS: tuple[int, ...] = (22, 26)
+# Incr B (2026-06-23): rows 22/26 are no longer orphan — they are revdocmaq /
+# espacios siglas now. So there are no orphan rows to zero-fill.
+ORPHAN_ROWS: tuple[int, ...] = ()
 
 # Sigla → row index in the worksheet.
+# NOTE: chps is intentionally absent — "solo cphs no va al excel" (Incr B). Its
+# B31 "CPHS" label is still drawn below, but it has NO count range.
 SIGLA_ROW: dict[str, int] = {
     "reunion": 10,
     "irl": 11,
@@ -73,14 +75,13 @@ SIGLA_ROW: dict[str, int] = {
     "maquinaria": 19,
     "ext": 20,
     "senal": 21,
-    # 22 = orphan
+    "revdocmaq": 22,
     "exc": 23,
     "altura": 24,
     "caliente": 25,
-    # 26 = orphan
+    "espacios": 26,
     "herramientas_elec": 27,
     "andamios": 28,
-    "chps": 31,  # Added in this script — sample lacks CHPS row
 }
 
 # Hospital → cantidad column letter
@@ -177,8 +178,8 @@ def verify() -> None:
     count_names = sorted(n for n in names if n.endswith("_count"))
     worker_names = sorted(n for n in names if "_workers_" in n)
 
-    if len(count_names) != 72:
-        raise AssertionError(f"Expected 72 cantidad named ranges, got {len(count_names)}")
+    if len(count_names) != 76:
+        raise AssertionError(f"Expected 76 cantidad named ranges, got {len(count_names)}")
     if len(worker_names) != 9:
         raise AssertionError(f"Expected 9 worker named ranges, got {len(worker_names)}")
 
@@ -195,7 +196,7 @@ def verify() -> None:
     for name, expected_coord in [
         ("HPV_art_count", f"'{ws.title}'!$M$16"),
         ("HLL_reunion_count", f"'{ws.title}'!$G$10"),
-        ("HRB_chps_count", f"'{ws.title}'!$K$31"),
+        ("HRB_revdocmaq_count", f"'{ws.title}'!$K$22"),
         ("HLU_workers_chgen", f"'{ws.title}'!$J$29"),
     ]:
         actual = wb.defined_names[name].attr_text
