@@ -77,7 +77,7 @@ def test_folder_to_sigla_unmodeled_corpus_folders_return_none():
 
 def test_folder_match_texts_pairwise_distinct():
     # Load-bearing no-collision guarantee for the startswith(+" ") predicate.
-    from core.domain import CATEGORY_FOLDERS, _SIGLA_FOLDER_ALIASES, _folder_text
+    from core.domain import _SIGLA_FOLDER_ALIASES, CATEGORY_FOLDERS, _folder_text
 
     texts = [_folder_text(v) for v in CATEGORY_FOLDERS.values()]
     for aliases in _SIGLA_FOLDER_ALIASES.values():

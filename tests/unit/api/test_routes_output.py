@@ -321,3 +321,19 @@ def test_output_writes_difpts_total_to_n15(client, tmp_path, monkeypatch):
     wb = openpyxl.load_workbook(out["output_path"])
     sheet, coord = list(wb.defined_names["HPV_workers_difpts"].destinations)[0]
     assert wb[sheet][coord].value == 12
+
+
+def test_document_excel_value_independent_of_folder_resolution(tmp_path):
+    # A document cell's Excel value comes from stored state, not folder
+    # resolution — so the renumber fix cannot move it. month_root is bogus
+    # (folder can't resolve) yet the value still equals the pure count.
+    from api.routes.output import _build_cell_values
+    from api.state import compute_cell_count
+
+    cell = {"per_file": {"a.pdf": 7, "b.pdf": 5}}
+    state = {
+        "month_root": str(tmp_path / "nonexistent"),
+        "cells": {"HRB": {"caliente": cell}},
+    }
+    values = _build_cell_values(state)
+    assert values["HRB_caliente_count"] == compute_cell_count(cell, "documents", None)
