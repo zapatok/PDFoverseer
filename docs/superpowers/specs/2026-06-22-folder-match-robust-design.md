@@ -97,26 +97,30 @@ the sigla's stripped canonical text, **or** starts with `canonical_text + " "`
 (this keeps `TOTAL`/` 0`/`934` contractor-count suffixes working, e.g.
 `"7.-ART 934" → art`).
 
-**`chps`/`CPHS` spelling:** the canonical text for `chps` is corrected to the real
-spelling **`CPHS`** (Comité Paritario de Higiene y Seguridad — the code's `CHPS`
-was a transposition typo). A small alias set keeps the legacy `CHPS` spelling
-accepted too, so a folder named either way resolves to `chps`. The **sigla string
-stays `"chps"`** (no change to `SIGLAS`, fixtures, patterns, or the Excel range
-name) — only the folder *text* it matches against changes.
+**`chps`/`CPHS` spelling:** the disk spells it `CPHS` (Comité Paritario de Higiene
+y Seguridad — the code's `CHPS` is a transposition typo). Rather than edit the
+constant (which would break existing assertions), `CATEGORY_FOLDERS["chps"]` is
+left **unchanged** (`"18.-CHPS"`, still used as the nominal absent-folder path) and
+the `CPHS` spelling is accepted via a small **alias** set, so a folder named either
+way resolves to `chps`. The sigla string stays `"chps"`; nothing in `SIGLAS`,
+fixtures, patterns, the Excel range name, or `test_domain.py` changes.
 
 ### Functions
 
 - `core/domain.py`
   - New private `_folder_text(name: str) -> str` — strips the numeric index.
-  - New `_SIGLA_FOLDER_ALIASES: dict[str, tuple[str, ...]]` — `{"chps": ("CHPS",)}`
-    (extra accepted spellings beyond the canonical text). Minimal, documented.
-  - `CATEGORY_FOLDERS["chps"]` value text corrected from `"18.-CHPS"` to use
-    `CPHS` (kept with a nominal number for the absent-folder fallback path; the
-    number is irrelevant to matching now).
+  - New `_SIGLA_FOLDER_ALIASES: dict[str, tuple[str, ...]]` — `{"chps": ("CPHS",)}`
+    (extra folder-text spellings a sigla also matches, beyond its canonical text).
+  - `CATEGORY_FOLDERS` is **unchanged** — `chps` stays `"18.-CHPS"` (the nominal
+    absent-folder path); the disk `CPHS` spelling is handled purely by the alias,
+    so every existing `test_domain.py` assertion stays green.
   - `folder_to_sigla(folder_name)` reimplemented on the rule: compute
     `_folder_text(folder_name)`, compare against each sigla's
-    `_folder_text(canonical)` (and its aliases) by the match predicate; return the
-    sigla or `None`. Roundtrip and unknown-folder behavior preserved.
+    `_folder_text(canonical)` **and its aliases** by the match predicate; return
+    the sigla or `None`. Roundtrip and unknown-folder behavior preserved.
+  - Remove the now-dead `_FOLDER_TO_SIGLA` module dict — the reimplemented
+    `folder_to_sigla` iterates `CATEGORY_FOLDERS` + aliases directly (avoids a stale
+    unused constant / ruff warning).
   - `sigla_to_folder` unchanged (still returns the canonical, used for nominal
     "folder absent" paths).
 - `core/orchestrator/enumeration.py`
@@ -133,13 +137,19 @@ name) — only the folder *text* it matches against changes.
 
 ### Data flow (who benefits, transitively)
 
-All live folder resolution goes through `_find_category_folder` (imported from
-`core.orchestrator`): the cell-files + cell-pdf routes (`api/routes/sessions/files.py`),
-pase-1 filename scan and pase-2 OCR (via `enumerate_month` / the orchestrator),
-and the Excel writer's `checks`/`workers` present-files filter (`api/routes/output.py`).
-Fixing the one resolver fixes every consumer. `folder_to_sigla` is currently only
-referenced by `tests/unit/test_domain.py`; it is fixed for coherence with the
-shared rule.
+All live folder resolution goes through the single `_find_category_folder`
+(imported from `core.orchestrator`); fixing it fixes every consumer transitively.
+The full consumer set (verified by search, all benefit with no per-site change):
+`api/routes/sessions/files.py` (cell-files + cell-pdf), `api/routes/output.py`
+(Excel cell-values, worker-values, **and the history-upsert loop**),
+`api/routes/sessions/_common.py` (apply_ratio + per-file override),
+`api/routes/sessions/writes.py` (apply_confirmed / set_note / apply_worker_count),
+`api/routes/sessions/reorg.py` (op source/dest validation),
+`api/routes/sessions/scan.py` (pase-1 + pase-2), and `enumerate_month` itself.
+No other code matches folder names by `sub.name ==`/`startswith` — `filename_glob.py`
+and `simple_factory.py` receive an **already-resolved** folder and only `rglob`
+inside it. `folder_to_sigla` is currently referenced only by
+`tests/unit/test_domain.py`; it is fixed for coherence with the shared rule.
 
 ### Excel-neutrality (the hard constraint)
 
@@ -150,10 +160,13 @@ because:
   `patterns.py::COUNT_TYPE_BY_SIGLA`). Document cells get their Excel value from
   `resolve_cell_value(cell)` over **stored state**, with `present_files=None` — no
   folder access. Restoring resolution does not recompute them.
-- The only Excel paths that re-resolve the folder live are `checks` (maquinaria)
-  and `workers` (charla/chintegral/dif_pts). All four are **pre-senal**, already
-  resolve correctly today (their numbers are unshifted), and are untouched by the
-  rule change.
+- The only Excel paths that re-resolve the folder live are `checks` (maquinaria —
+  folder 10, in both `_build_cell_values` and the history-upsert loop) and
+  `workers` (charla 4 / chintegral 5 / dif_pts 6, in `_build_worker_values`). All
+  are **pre-senal** (numbers ≤ 10, below the 12-boundary where the shift starts),
+  already resolve correctly today, and are untouched by the rule change. The
+  renumbering only affects folders 13+ (exc onward), none of which feed a live
+  folder-resolve on the Excel path.
 
 Restoring resolution gives the operator back the ability to **review and
 re-count** the six (which *will* update their stored counts when the operator
@@ -174,14 +187,18 @@ generate-before/after regression check guards this.
 
 ## Testing
 
-- **`core/domain.py` (unit):** `folder_to_sigla` maps the **current** disk names
-  for all 18 siglas (`"14.-Excavaciones y Vanos" → exc`, …, `"20.-CPHS" → chps`)
-  **and** the legacy names (`"13.-Excavaciones y Vanos" → exc`, `"18.-CHPS" → chps`)
-  — proving renumber tolerance. Suffix tolerance retained
-  (`"7.-ART 934" → art`, `+" 0"`). Unmodeled folders → `None`
-  (`"13.-Revision Documentacion Maquinaria"`, `"17.-Espacios Confinados"`,
-  `"99.-Unknown"`). Roundtrip `sigla_to_folder`→`folder_to_sigla` preserved.
-  Pairwise-distinctness assertion over the 18 stripped canonicals.
+- **`core/domain.py` (unit):** the **existing** `test_domain.py` assertions stay
+  green unchanged (CATEGORY_FOLDERS is untouched; roundtrip + `+" 0"`/`+" 934"`
+  suffix + unknown→None all still hold). New cases: `folder_to_sigla` maps the
+  **current** disk names for all 18 siglas (`"14.-Excavaciones y Vanos" → exc`, …,
+  `"20.-CPHS" → chps`) **and** the legacy names (`"13.-Excavaciones y Vanos" → exc`,
+  `"18.-CHPS" → chps`) — proving renumber + spelling tolerance; a `charla` suffix
+  case (`"4.-Charlas 0" → charla`); the two unmodeled folders → `None`
+  (`"13.-Revision Documentacion Maquinaria"`, `"17.-Espacios Confinados"`).
+  **Pairwise-distinctness test:** over the set of all stripped match texts (18
+  canonicals + the `CPHS` alias), assert for every distinct pair `(a, b)`:
+  `a != b and not a.startswith(b + " ") and not b.startswith(a + " ")` — the
+  load-bearing no-collision guarantee for the predicate.
 - **`_find_category_folder` (unit, tmp dirs):** build a fake hospital dir with the
   **20-folder** layout; assert each of the 18 siglas resolves to the right folder,
   the two extras are never returned, and the fast path still works for an aligned
