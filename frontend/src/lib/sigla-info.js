@@ -16,9 +16,11 @@ export const SIGLA_DESCRIPTION = {
   maquinaria: "Inspección del estado de maquinaria.",
   ext: "Registro/inspección de extintores.",
   senal: "Inspección de señaléticas de la obra.",
+  revdocmaq: "Revisión de la documentación de la maquinaria.",
   exc: "Chequeo de excavaciones y vanos.",
   altura: "Chequeo/permiso de trabajos en altura.",
   caliente: "Chequeo/permiso de trabajos en caliente.",
+  espacios: "Inspección de seguridad para trabajos en espacios confinados.",
   herramientas_elec: "Inspección de herramientas eléctricas.",
   andamios: "Lista de chequeo de andamios.",
   chps: "Acta del Comité Paritario de Higiene y Seguridad.",
@@ -38,16 +40,18 @@ export const SIGLA_PAGE_RANGE = {
   maquinaria: { p25: 2, p75: 8 },
   ext: { p25: 1, p75: 5 },
   senal: { p25: 4, p75: 6 },
+  revdocmaq: { p25: 1, p75: 2 },
   exc: { p25: 5, p75: 21 },
   altura: { p25: 1, p75: 3 },
   caliente: { p25: 1, p75: 2 },
+  espacios: { p25: 2, p75: 2 },
   herramientas_elec: { p25: 1, p75: 1 },
   andamios: { p25: 1, p75: 3 },
   chps: { p25: 3, p75: 3 },
 };
 
 // Mirror of core/scanners/patterns.py::COUNT_TYPE_BY_SIGLA. Must stay verbatim
-// in sync — 18 entries, same values. Verified by sigla-info.test.js (completeness gate).
+// in sync — 20 entries, same values. Verified by sigla-info.test.js (completeness gate).
 // countTypeFor fallback = "documents" so future siglas added to the backend before
 // the JS mirror is updated degrade gracefully rather than break.
 export const SIGLA_COUNT_TYPE = {
@@ -69,6 +73,8 @@ export const SIGLA_COUNT_TYPE = {
   dif_pts: "documents_workers",
   herramientas_elec: "documents",
   andamios: "documents",
+  revdocmaq: "documents",
+  espacios: "documents",
 };
 
 export const countTypeFor = (sigla) => SIGLA_COUNT_TYPE[sigla] ?? "documents";

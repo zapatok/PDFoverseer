@@ -4,7 +4,7 @@ import { SIGLAS } from "./sigla-labels";
 import { SIGLA_DESCRIPTION, SIGLA_PAGE_RANGE, formatPageRange, SIGLA_COUNT_TYPE, countTypeFor } from "./sigla-info";
 
 describe("sigla-info", () => {
-  it("covers all 18 siglas", () => {
+  it("covers all 20 siglas", () => {
     for (const s of SIGLAS) {
       expect(typeof SIGLA_DESCRIPTION[s]).toBe("string");
       expect(SIGLA_DESCRIPTION[s].length).toBeGreaterThan(0);
@@ -24,7 +24,7 @@ describe("sigla-info", () => {
 describe("SIGLA_COUNT_TYPE", () => {
   const VALID_TYPES = new Set(["documents", "documents_workers", "checks"]);
 
-  it("covers all 18 siglas with a valid count_type", () => {
+  it("covers all 20 siglas with a valid count_type", () => {
     for (const s of SIGLAS) {
       expect(SIGLA_COUNT_TYPE[s], `${s} must have a count_type`).toBeDefined();
       expect(VALID_TYPES.has(SIGLA_COUNT_TYPE[s]), `${s} count_type must be valid`).toBe(true);

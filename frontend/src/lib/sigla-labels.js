@@ -17,9 +17,11 @@ export const SIGLA_LABELS = {
   maquinaria: "Inspección de maquinaria",
   ext: "Extintores",
   senal: "Señaléticas",
+  revdocmaq: "Revisión doc. maquinaria",
   exc: "Excavaciones y vanos",
   altura: "Trabajos en altura",
   caliente: "Inspección trabajos en caliente",
+  espacios: "Espacios confinados",
   herramientas_elec: "Inspección herramientas eléctricas",
   andamios: "Andamios",
   chps: "CPHS",
@@ -31,11 +33,12 @@ export const SIGLA_LABELS = {
 export const SIGLA_DISPLAY = { chps: "cphs" };
 export const siglaDisplay = (s) => SIGLA_DISPLAY[s] ?? s;
 
-// Canonical sigla order — the 18 categories in the order they appear in the
+// Canonical sigla order — the 20 categories in the order they appear in the
 // monthly Excel. Single source of truth for HospitalCard, HospitalDetail
 // and SparkGrid.
 export const SIGLAS = [
   "reunion", "irl", "odi", "charla", "chintegral", "dif_pts",
   "art", "insgral", "bodega", "maquinaria", "ext", "senal",
-  "exc", "altura", "caliente", "herramientas_elec", "andamios", "chps",
+  "revdocmaq", "exc", "altura", "caliente", "espacios",
+  "herramientas_elec", "andamios", "chps",
 ];
