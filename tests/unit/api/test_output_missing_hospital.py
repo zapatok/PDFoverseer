@@ -7,10 +7,11 @@ still skipped. This supersedes the earlier "skip missing hospital, leave templat
 default" behavior.
 """
 
-from api.routes.output import _build_cell_values
+from api.routes.output import EXCEL_EXCLUDED_SIGLAS, _build_cell_values
 from core.domain import HOSPITALS, SIGLAS
 
-_GRID = len(HOSPITALS) * len(SIGLAS)
+# chps is excluded from the Excel (Incr B), so the emitted grid is the written set.
+_GRID = len(HOSPITALS) * (len(SIGLAS) - len(EXCEL_EXCLUDED_SIGLAS))
 
 
 def _cells(filename_count: int) -> dict:
@@ -30,7 +31,8 @@ def test_build_cell_values_emits_zero_for_missing_hospital():
     state = {"cells": {"HPV": _cells(5), "HRB": _cells(3), "HLU": _cells(1)}}
     out = _build_cell_values(state)
     assert len(out) == _GRID  # full grid, nothing skipped
-    assert all(out[f"HLL_{s}_count"] == 0 for s in SIGLAS)  # missing hospital → 0
+    # missing hospital → 0 for every written sigla (chps is not emitted at all)
+    assert all(out[f"HLL_{s}_count"] == 0 for s in SIGLAS if s not in EXCEL_EXCLUDED_SIGLAS)
     assert out[f"HPV_{SIGLAS[0]}_count"] == 5
 
 
