@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.domain import CATEGORY_FOLDERS, HOSPITALS, SIGLAS
+from core.domain import CATEGORY_FOLDERS, HOSPITALS, SIGLAS, folder_to_sigla
 
 
 @dataclass(frozen=True)
@@ -26,15 +26,15 @@ class MonthInventory:
 
 
 def _find_category_folder(hosp_dir: Path, sigla: str) -> Path:
-    """Locate the folder for `sigla` inside a hospital dir, tolerating
-    TOTAL/' 0' suffixes.
+    """Locate the folder for `sigla` inside a hospital dir, tolerating numeric
+    renumbering and TOTAL/' 0' suffixes.
 
     Args:
         hosp_dir: Path to the hospital directory.
         sigla: The category sigla to look up.
 
     Returns:
-        Path to the category folder (nominal path even if it doesn't exist).
+        Path to the category folder (nominal canonical path even if absent).
     """
     canonical = CATEGORY_FOLDERS[sigla]
     direct = hosp_dir / canonical
@@ -42,11 +42,9 @@ def _find_category_folder(hosp_dir: Path, sigla: str) -> Path:
         return direct
     if not hosp_dir.exists():
         return direct  # nominal path when hospital dir is absent
-    # search for a directory matching canonical name with a numeric/text suffix
+    # Renumber-tolerant: return the subdirectory whose name resolves to this sigla.
     for sub in hosp_dir.iterdir():
-        if not sub.is_dir():
-            continue
-        if sub.name == canonical or sub.name.startswith(canonical + " "):
+        if sub.is_dir() and folder_to_sigla(sub.name) == sigla:
             return sub
     return direct  # nominal path even if it doesn't exist
 
