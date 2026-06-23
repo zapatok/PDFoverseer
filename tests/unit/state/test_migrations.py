@@ -7,6 +7,7 @@ from core.state.migrations import (
     migrate_cell_v2_to_v3,
     migrate_state_v1_to_v2,
     migrate_state_v2_to_v3,
+    migrate_state_v3_to_v4,
 )
 
 
@@ -180,3 +181,39 @@ def test_chained_v1_v2_then_v2_v3_idempotent_no_churn():
     state, c2b = migrate_state_v2_to_v3(state)
     assert c1b is False
     assert c2b is False
+
+
+# ---------------------------------------------------------------------------
+# v3 → v4 migration (reconcile: seed missing siglas so all categories appear)
+# ---------------------------------------------------------------------------
+
+
+def test_v3_to_v4_seeds_missing_siglas_without_touching_existing():
+    state = {"cells": {"HRB": {"odi": {"filename_count": 21, "note": None}}}}
+    result, changed = migrate_state_v3_to_v4(state)
+    assert changed is True
+    hrb = result["cells"]["HRB"]
+    # existing cell untouched
+    assert hrb["odi"] == {"filename_count": 21, "note": None}
+    # the new siglas seeded as empty cells
+    assert hrb["revdocmaq"] == {}
+    assert hrb["espacios"] == {}
+    # every modeled sigla now present
+    from core.domain import SIGLAS
+
+    assert set(hrb) >= set(SIGLAS)
+
+
+def test_v3_to_v4_idempotent_second_call_no_change():
+    state = {"cells": {"HRB": {"odi": {}}}}
+    state, c1 = migrate_state_v3_to_v4(state)
+    assert c1 is True
+    _, c2 = migrate_state_v3_to_v4(state)
+    assert c2 is False
+
+
+def test_v3_to_v4_no_cells_is_fine():
+    state = {"session_id": "2026-04"}
+    result, changed = migrate_state_v3_to_v4(state)
+    assert result == state
+    assert changed is False

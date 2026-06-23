@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.domain import SIGLAS
+
 
 def migrate_cell_v1_to_v2(cell: dict) -> dict:
     """Migrate a single cell dict from FASE 1 to FASE 2 schema.
@@ -82,5 +84,31 @@ def migrate_state_v2_to_v3(state: dict) -> tuple[dict, bool]:
             had_legacy = "override_note" in cell or "note" not in cell
             migrate_cell_v2_to_v3(cell)
             if had_legacy:
+                changed = True
+    return state, changed
+
+
+def migrate_state_v3_to_v4(state: dict) -> tuple[dict, bool]:
+    """Seed an empty ``{}`` cell for every (present hospital, sigla) pair missing
+    from the session. Idempotent; never overwrites an existing cell.
+
+    The frontend renders only siglas that have a cell, so a sigla added to
+    ``SIGLAS`` after a session was scanned (e.g. revdocmaq/espacios in Increment B)
+    would stay hidden on that session until a re-scan. Seeding an empty cell is
+    output-neutral — ``compute_cell_count({}, …) == 0`` and the Excel path already
+    treats an absent cell as ``{}`` — it only makes the full category set appear.
+
+    Returns:
+        (state, changed) where ``changed`` is True iff a cell was seeded (only on
+        the first call per session after a new sigla is introduced).
+    """
+    changed = False
+    cells = state.get("cells")
+    if not cells:
+        return state, False
+    for hosp_cells in cells.values():
+        for sigla in SIGLAS:
+            if sigla not in hosp_cells:
+                hosp_cells[sigla] = {}
                 changed = True
     return state, changed

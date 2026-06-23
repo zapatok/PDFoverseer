@@ -27,7 +27,11 @@ from core.db.sessions_repo import (
     update_session_state,
 )
 from core.scanners.base import ScanResult
-from core.state.migrations import migrate_state_v1_to_v2, migrate_state_v2_to_v3
+from core.state.migrations import (
+    migrate_state_v1_to_v2,
+    migrate_state_v2_to_v3,
+    migrate_state_v3_to_v4,
+)
 
 
 def _cell_has_work(cell: dict) -> bool:
@@ -141,10 +145,11 @@ class SessionManager:
     def _load_and_migrate(self, session_id: str) -> tuple[dict, SessionRecord]:
         """Load session state, run lazy migrations, return (state, record).
 
-        Internal helper used by all setters + getter. Chains v1→v2 then v2→v3.
-        Persists migrated state back via update_session_state only when at least
-        one migration actually changed something — idempotent on subsequent calls
-        (both migrations return changed=False on already-migrated sessions).
+        Internal helper used by all setters + getter. Chains v1→v2, v2→v3, then
+        v3→v4 (reconcile: seed missing siglas). Persists migrated state back via
+        update_session_state only when at least one migration actually changed
+        something — idempotent on subsequent calls (all return changed=False on
+        already-migrated/reconciled sessions).
         """
         rec = get_session(self._conn, session_id)
         if rec is None:
@@ -152,7 +157,8 @@ class SessionManager:
         state = json.loads(rec.state_json)
         state, changed1 = migrate_state_v1_to_v2(state)
         state, changed2 = migrate_state_v2_to_v3(state)
-        if changed1 or changed2:
+        state, changed3 = migrate_state_v3_to_v4(state)
+        if changed1 or changed2 or changed3:
             update_session_state(self._conn, session_id, state_json=json.dumps(state))
         return state, rec
 
