@@ -66,6 +66,26 @@ def test_pagination_scanner_invokes_engine(tmp_path: Path, monkeypatch):
     assert r.per_file[pdf.name] == 4
 
 
+def test_espacios_pagination_counts_compilation(tmp_path: Path, monkeypatch):
+    """Incr B: espacios is a pagination sigla — a single PDF that compiles two
+    2-page "Página N de 2" F-PETS-CRS-08-01 inspections counts as 2 documents."""
+    pdf = tmp_path / "2026-05_espacios.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_documents_by_pagination",
+        lambda *a, **k: _pag(2, pages=4, direct=4),
+    )
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda _: 4)
+
+    scanner = PaginationScanner(sigla="espacios")
+    r = scanner.count_ocr(tmp_path, cancel=CancellationToken())
+    assert r.count == 2
+    assert r.method == "pagination"
+    assert r.confidence == ConfidenceLevel.HIGH
+    assert r.per_file[pdf.name] == 2
+
+
 def test_pagination_scanner_a7_one_page_pdfs(tmp_path: Path, monkeypatch):
     """A7: 1-page PDFs counted trivially (no engine call)."""
     one = tmp_path / "2026-04-01_insgral_x.pdf"

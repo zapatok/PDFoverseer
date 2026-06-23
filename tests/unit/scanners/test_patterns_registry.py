@@ -107,15 +107,18 @@ def test_v4_pagination_migration_state():
         "irl",
         "altura",
         "insgral",
+        "espacios",  # Incr B: new pagination sigla (F-PETS-CRS-08-01 compilations)
     }
     anchors_expected = {"charla", "chintegral", "dif_pts", "senal", "chps", "maquinaria"}
+    none_expected = {"reunion", "revdocmaq"}  # revdocmaq: no samples → filename glob
     for sigla in pagination_expected:
         assert PATTERNS[sigla]["scan_strategy"] == "pagination", f"{sigla} must be pagination"
     for sigla in anchors_expected:
         assert PATTERNS[sigla]["scan_strategy"] == "anchors", (
             f"{sigla} must stay anchors (RCH '1 de 2' bug / landscape / checks)"
         )
-    assert PATTERNS["reunion"]["scan_strategy"] == "none"
+    for sigla in none_expected:
+        assert PATTERNS[sigla]["scan_strategy"] == "none", f"{sigla} must be none"
 
 
 def test_irl_pagination_has_cover_code():

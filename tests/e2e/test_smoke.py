@@ -45,7 +45,7 @@ def test_end_to_end_abril_flow(client, tmp_path):
         f"/api/sessions/{abril['session_id']}/scan",
         json={"scope": "all"},
     ).json()
-    assert scan_result["scanned"] == 72
+    assert scan_result["scanned"] == 80
 
     out = client.post(
         f"/api/sessions/{abril['session_id']}/output",

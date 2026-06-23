@@ -59,7 +59,8 @@ SCANNER_PATTERNS_VERSION = (
     # v4: pagination-first engine — migrated odi/ext/bodega/caliente/exc/
     #     herramientas_elec/art/andamios + irl(cover_code) anchors→pagination.
     #     Anchor flavors kept on migrated siglas for one-line reversibility.
-    "v4-pagination"
+    # v5: + revdocmaq (none) + espacios (pagination, F-PETS-CRS-08-01) → 20 siglas.
+    "v5-new-categories"
 )
 
 # Tipos de conteo válidos por sigla (Decisión 4 / grupo F del triage). La

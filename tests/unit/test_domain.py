@@ -5,7 +5,7 @@ def test_hospitals_are_the_four_codes():
     assert HOSPITALS == ("HPV", "HRB", "HLU", "HLL")
 
 
-def test_siglas_are_the_18_canonical():
+def test_siglas_are_the_20_canonical():
     expected = (
         "reunion",
         "irl",
@@ -19,22 +19,26 @@ def test_siglas_are_the_18_canonical():
         "maquinaria",
         "ext",
         "senal",
+        "revdocmaq",
         "exc",
         "altura",
         "caliente",
+        "espacios",
         "herramientas_elec",
         "andamios",
         "chps",
     )
     assert SIGLAS == expected
-    assert len(SIGLAS) == 18
+    assert len(SIGLAS) == 20
 
 
 def test_category_folders_map_to_numbered_names():
     assert CATEGORY_FOLDERS["reunion"] == "1.-Reunion Prevencion"
     assert CATEGORY_FOLDERS["art"] == "7.-ART"
     assert CATEGORY_FOLDERS["chps"] == "18.-CHPS"
-    assert len(CATEGORY_FOLDERS) == 18
+    assert CATEGORY_FOLDERS["revdocmaq"] == "13.-Revision Documentacion Maquinaria"
+    assert CATEGORY_FOLDERS["espacios"] == "17.-Espacios Confinados"
+    assert len(CATEGORY_FOLDERS) == 20
 
 
 def test_sigla_to_folder_and_back():
@@ -70,9 +74,10 @@ def test_folder_to_sigla_compound_name_with_suffix():
     assert folder_to_sigla("5.-Charla Integral 0") == "chintegral"
 
 
-def test_folder_to_sigla_unmodeled_corpus_folders_return_none():
-    assert folder_to_sigla("13.-Revision Documentacion Maquinaria") is None
-    assert folder_to_sigla("17.-Espacios Confinados") is None
+def test_folder_to_sigla_new_corpus_folders_resolve():
+    # Modeled in Increment B → no longer None.
+    assert folder_to_sigla("13.-Revision Documentacion Maquinaria") == "revdocmaq"
+    assert folder_to_sigla("17.-Espacios Confinados") == "espacios"
 
 
 def test_folder_match_texts_pairwise_distinct():

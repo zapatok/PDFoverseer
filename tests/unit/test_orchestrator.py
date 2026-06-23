@@ -11,18 +11,18 @@ def test_enumerate_month_returns_4_hospitals():
     assert not inv.hospitals_missing
 
 
-def test_enumerate_month_populates_18_categories_per_hospital():
+def test_enumerate_month_populates_20_categories_per_hospital():
     inv = enumerate_month(ABRIL)
     for hosp in ("HPV", "HRB", "HLU", "HLL"):
-        assert len(inv.cells[hosp]) == 18
+        assert len(inv.cells[hosp]) == 20
 
 
 def test_enumerate_month_returns_zero_for_missing_category(tmp_path):
     (tmp_path / "HPV").mkdir()  # empty hospital folder
     inv = enumerate_month(tmp_path)
     assert "HPV" in inv.hospitals_present
-    # all 18 categories should be present (as missing folders)
-    assert len(inv.cells["HPV"]) == 18
+    # all 20 categories should be present (as missing folders)
+    assert len(inv.cells["HPV"]) == 20
 
 
 def test_find_category_folder_resolves_renumbered_corpus(tmp_path):
@@ -69,10 +69,12 @@ def test_find_category_folder_resolves_renumbered_corpus(tmp_path):
     # pre-senal siglas unaffected
     assert _find_category_folder(hosp, "art").name == "7.-ART"
     assert _find_category_folder(hosp, "maquinaria").name == "10.-Inspeccion de Maquinaria"
-    # the two unmodeled folders are never returned for any sigla
+    # the two formerly-unmodeled folders now resolve to their siglas (Increment B)
+    assert _find_category_folder(hosp, "revdocmaq").name == "13.-Revision Documentacion Maquinaria"
+    assert _find_category_folder(hosp, "espacios").name == "17.-Espacios Confinados"
     returned = {_find_category_folder(hosp, s).name for s in SIGLAS}
-    assert "13.-Revision Documentacion Maquinaria" not in returned
-    assert "17.-Espacios Confinados" not in returned
+    assert "13.-Revision Documentacion Maquinaria" in returned
+    assert "17.-Espacios Confinados" in returned
 
 
 def test_find_category_folder_absent_hospital_returns_nominal(tmp_path):

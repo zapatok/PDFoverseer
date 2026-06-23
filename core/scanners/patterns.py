@@ -836,6 +836,25 @@ PATTERNS: dict[str, SiglaPattern] = {
         "recursive_glob": True,
         "cover_flavors": _ANDAMIOS_ANCHORS,
     },
+    "revdocmaq": {
+        # Incr B: "Revisión de Documentación de Maquinaria" (folder 13). No sample
+        # PDFs exist anywhere in the corpus yet → filename glob (1 PDF = 1 doc);
+        # the token requires revision/documentacion so it never collides with the
+        # OCR file-discovery of maquinaria. Provisional; revisit when files appear.
+        "filename_glob": r"^.*(revision|documentacion).*\.pdf$",
+        "scan_strategy": "none",
+        "recursive_glob": True,
+    },
+    "espacios": {
+        # Incr B: "Espacios Confinados" (folder 17). The lone sample is a
+        # compilation of 2-page "Página N de 2" inspection forms (F-PETS-CRS-08-01)
+        # → pagination counts the inspections; cover_code restricts doc-starts to
+        # that form's covers. count_type=documents.
+        "filename_glob": r"^.*espacios.*\.pdf$",
+        "scan_strategy": "pagination",
+        "cover_code": "F-PETS-CRS-08-01",
+        "recursive_glob": True,
+    },
 }
 
 
@@ -875,6 +894,8 @@ COUNT_TYPE_BY_SIGLA: dict[str, CountType] = {
     "dif_pts": "documents_workers",
     "herramientas_elec": "documents",
     "andamios": "documents",
+    "revdocmaq": "documents",
+    "espacios": "documents",
 }
 
 

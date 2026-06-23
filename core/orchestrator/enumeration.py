@@ -1,4 +1,4 @@
-"""Month/cell enumeration: discover hospitals + their 18 category cells."""
+"""Month/cell enumeration: discover hospitals + their 20 category cells."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class MonthInventory:
     month_root: Path
     hospitals_present: list[str]
     hospitals_missing: list[str]
-    cells: dict[str, list[CellInventory]]  # hospital → list of 18 cells
+    cells: dict[str, list[CellInventory]]  # hospital → list of 20 cells
 
 
 def _find_category_folder(hosp_dir: Path, sigla: str) -> Path:
@@ -50,10 +50,10 @@ def _find_category_folder(hosp_dir: Path, sigla: str) -> Path:
 
 
 def enumerate_month(month_root: Path) -> MonthInventory:
-    """Discover hospitals and their 18 category cells inside a month folder.
+    """Discover hospitals and their 20 category cells inside a month folder.
 
     A hospital directory is considered *present* only if at least one of its
-    18 canonical category folders exists inside it.  Directories that exist on
+    20 canonical category folders exists inside it.  Directories that exist on
     disk but contain no recognised category subfolders (e.g. HLL with only a
     OneDrive zip) are classified as *missing*.
 
@@ -62,7 +62,7 @@ def enumerate_month(month_root: Path) -> MonthInventory:
 
     Returns:
         A :class:`MonthInventory` with hospitals_present, hospitals_missing,
-        and a cells dict mapping each present hospital to its 18
+        and a cells dict mapping each present hospital to its 20
         :class:`CellInventory` entries.
 
     Raises:
@@ -78,7 +78,7 @@ def enumerate_month(month_root: Path) -> MonthInventory:
     for hosp in HOSPITALS:
         hosp_dir = month_root / hosp
 
-        # Build the 18 cells regardless of whether the hospital dir exists.
+        # Build the 20 cells regardless of whether the hospital dir exists.
         cell_list: list[CellInventory] = []
         if hosp_dir.exists():
             for sigla in SIGLAS:

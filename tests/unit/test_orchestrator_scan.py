@@ -21,8 +21,8 @@ def test_scan_cell_hpv_art_returns_count():
 def test_scan_month_returns_result_per_cell():
     inv = enumerate_month(ABRIL)
     results = scan_month(inv)
-    # 4 hospitals × 18 cats = 72 cells
-    assert len(results) == 72
+    # 4 hospitals × 20 cats = 80 cells
+    assert len(results) == 80
     # All have a count (possibly zero)
     for (hosp, sigla), r in results.items():
         assert r.count >= 0
