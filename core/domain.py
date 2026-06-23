@@ -6,6 +6,8 @@ Single source of truth: do not duplicate these lists anywhere else.
 
 from __future__ import annotations
 
+import re
+
 HOSPITALS: tuple[str, ...] = ("HPV", "HRB", "HLU", "HLL")
 
 # 18 canonical siglas (order matches the 18 prevention categories)
@@ -52,7 +54,32 @@ CATEGORY_FOLDERS: dict[str, str] = {
     "chps": "18.-CHPS",
 }
 
-_FOLDER_TO_SIGLA: dict[str, str] = {v: k for k, v in CATEGORY_FOLDERS.items()}
+# Strip a leading "NN.-" numeric index from a category folder name so matching
+# survives corpus renumbering (the live corpus inserts categories mid-list).
+_INDEX_RE = re.compile(r"^\s*\d+\s*\.\s*-?\s*")
+
+
+def _folder_text(name: str) -> str:
+    """Return a folder name without its leading ``NN.-`` numeric index.
+
+    Examples:
+        '14.-Excavaciones y Vanos' -> 'Excavaciones y Vanos'
+        '7.-ART 934' -> 'ART 934'
+    """
+    return _INDEX_RE.sub("", name).strip()
+
+
+# Extra folder-text spellings a sigla also matches, beyond its canonical text.
+# 'CPHS' is the real spelling on disk (Comité Paritario); the canonical 'CHPS'
+# is a transposition typo kept only as the nominal fallback path.
+_SIGLA_FOLDER_ALIASES: dict[str, tuple[str, ...]] = {
+    "chps": ("CPHS",),
+}
+
+
+def _match_texts(sigla: str) -> tuple[str, ...]:
+    """All folder texts (canonical + aliases) that resolve to ``sigla``."""
+    return (_folder_text(CATEGORY_FOLDERS[sigla]), *_SIGLA_FOLDER_ALIASES.get(sigla, ()))
 
 
 def sigla_to_folder(sigla: str) -> str:
@@ -61,16 +88,20 @@ def sigla_to_folder(sigla: str) -> str:
 
 
 def folder_to_sigla(folder_name: str) -> str | None:
-    """Map a folder name (with or without TOTAL/' 0' suffix) back to its sigla.
+    """Map a folder name back to its sigla, tolerant of the leading ``NN.-``
+    numeric index (so corpus renumbering doesn't break it) and of TOTAL/' 0'/
+    contractor-count suffixes.
 
     Examples:
-        '7.-ART' → 'art'
-        '7.-ART 934' → 'art'
-        '12.-Senaleticas 0' → 'senal'
-        '99.-Unknown' → None
+        '7.-ART' -> 'art'
+        '14.-Excavaciones y Vanos' -> 'exc'   (renumbered)
+        '20.-CPHS' -> 'chps'                  (alias spelling)
+        '7.-ART 934' -> 'art'
+        '13.-Revision Documentacion Maquinaria' -> None  (unmodeled)
     """
-    # strip suffix after the canonical name
-    for canonical, sigla in _FOLDER_TO_SIGLA.items():
-        if folder_name == canonical or folder_name.startswith(canonical + " "):
-            return sigla
+    text = _folder_text(folder_name)
+    for sigla in CATEGORY_FOLDERS:
+        for canon in _match_texts(sigla):
+            if text == canon or text.startswith(canon + " "):
+                return sigla
     return None
