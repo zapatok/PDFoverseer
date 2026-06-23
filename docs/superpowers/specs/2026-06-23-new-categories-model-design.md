@@ -159,6 +159,12 @@ unchanged** for everything already counted — it only makes the full 20-categor
 frontend filter includes it.) Add a unit test: loading a v3 session missing a sigla
 yields a `{}` cell for it without touching the others.
 
+*Persistence detail (plan-level):* `_load_and_migrate` only writes back when a
+migration changed the blob. Add a `changed` flag for the seeding step so the newly
+seeded cells are persisted on first open (not only on the next write) — not a
+correctness gap (the seeded dict already flows into the returned state for display
++ Excel), but it makes the reconcile durable.
+
 ## What changes in the output (NOT Excel-neutral — intended)
 
 - B22 (revdocmaq) and B26 (espacios) now receive counts (mostly 0; espacios HLL =
