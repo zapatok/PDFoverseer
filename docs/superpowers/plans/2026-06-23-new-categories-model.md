@@ -158,7 +158,17 @@ git commit -m "fix(state): reconcile-on-load seeds missing siglas so all 20 cate
 - Modify: `api/routes/output.py` (`_build_cell_values`)
 - Test: `tests/unit/api/test_routes_output.py`
 
-- [ ] **Step 1: Failing/updated test** — assert `_build_cell_values` emits **no** `*_chps_count` key, and that the emitted count = `len(HOSPITALS) * len(SIGLAS) - len(EXCEL_EXCLUDED_SIGLAS)` (= 76). Update the existing `… - 1` assertion to `… - len(EXCEL_EXCLUDED_SIGLAS)`. Add an explicit `assert "HRB_chps_count" not in values`. Run → FAIL.
+- [ ] **Step 1: Failing/updated test** — the `chps` exclusion drops **4** cells
+  (one per hospital), so BOTH count assertions in `tests/unit/api/test_routes_output.py`
+  must change (read the file to confirm exact line numbers/setup):
+  - the **no-excluded** grid test (~line 167, `== len(HOSPITALS) * len(SIGLAS)`) →
+    `== len(HOSPITALS) * (len(SIGLAS) - len(EXCEL_EXCLUDED_SIGLAS))` (= 4×19 = **76**).
+  - the **excluded-art** test (~line 177, currently `… - 1`) → keep the `- 1` for the
+    `excluded=True` art cell but also account for chps:
+    `== len(HOSPITALS) * (len(SIGLAS) - len(EXCEL_EXCLUDED_SIGLAS)) - 1` (= 76 − 1 = **75**).
+  - Add an explicit `assert "HRB_chps_count" not in values`.
+  Run → FAIL. (NB: `- len(EXCEL_EXCLUDED_SIGLAS)` alone is wrong — exclusion is
+  per-hospital, hence the `len(HOSPITALS) * (…)` factoring.)
 
 - [ ] **Step 2: Implement** — in `api/routes/output.py`, module level:
 ```python
@@ -203,15 +213,15 @@ sheet = wb.active.title
 cols = {"HLL": "G", "HLU": "I", "HRB": "K", "HPV": "M"}
 for hosp, col in cols.items():
     for sigla, row in (("revdocmaq", 22), ("espacios", 26)):
-        wb.defined_names.add(DefinedName(f"{hosp}_{sigla}_count",
-                                         attr_text=f"'{sheet}'!${col}${row}"))
+        name = f"{hosp}_{sigla}_count"
+        wb.defined_names[name] = DefinedName(name, attr_text=f"'{sheet}'!${col}${row}")
     del wb.defined_names[f"{hosp}_chps_count"]
 wb.save(p)
 after = set(openpyxl.load_workbook(p).defined_names.keys())
 print("ADDED:", sorted(after - before))
 print("REMOVED:", sorted(before - after))
 ```
-Expected: ADDED = the 8 revdocmaq/espacios ranges; REMOVED = the 4 chps ranges; nothing else. **If the diff shows anything else, restore from the backup and stop.** (openpyxl ≥3.1 `defined_names` is a dict-like — `.add(DefinedName(...))`; if the installed API differs, use `wb.defined_names[name] = DefinedName(name, attr_text=ref)`. Verify with `pip show openpyxl`.)
+Expected: ADDED = the 8 revdocmaq/espacios ranges; REMOVED = the 4 chps ranges; nothing else. **If the diff shows anything else, restore from the backup and stop.** (The installed openpyxl exposes `defined_names` as a dict — `.keys()` and `wb.defined_names[name] = DefinedName(name, attr_text=ref)` both work; confirmed by the earlier template dump. `del wb.defined_names[name]` removes one.)
 
 - [ ] **Step 3: Update `test_template.py`** — `assert len(cantidad_names) == 72` → `== 76`; add `assert "HRB_revdocmaq_count" in names`, `assert "HLL_espacios_count" in names`, `assert "HRB_chps_count" not in names`.
 
