@@ -83,4 +83,16 @@ describe("cellWorkerCount (Incr J — reorg delta)", () => {
   it("clamps a negative effective worker total at 0 (F5)", () => {
     expect(cellWorkerCount({ worker_marks: {}, reorg_worker_delta: -3 }, null)).toBe(0);
   });
+
+  it("F1: fallback filtra huérfanas por per_file (espeja _sum_marks(cell, None))", () => {
+    // PIN cross-language: idéntico input/expected que
+    // test_worker_count_legacy_orphan_filter_by_per_file en tests/test_cell_count.py.
+    // gone.pdf no está en per_file → 0, NO 9. Antes del fix cellWorkerCount(cell,
+    // null) no filtraba y devolvía 9.
+    const cell = {
+      worker_marks: { "gone.pdf": [{ page: 1, count: 9 }] },
+      per_file: { "real.pdf": 1 },
+    };
+    expect(cellWorkerCount(cell, null)).toBe(0);
+  });
 });

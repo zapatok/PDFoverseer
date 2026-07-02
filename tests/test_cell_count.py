@@ -33,3 +33,16 @@ def test_negative_effective_worker_count_clamped_to_zero():
     assert compute_worker_count({"worker_marks": {}, "reorg_worker_delta": -3}) == 0
     cell = {"worker_marks": {"a.pdf": [{"page": 1, "count": 2}]}, "reorg_worker_delta": -5}
     assert compute_worker_count(cell, {"a.pdf"}) == 0
+
+
+def test_worker_count_legacy_orphan_filter_by_per_file():
+    # F1 cross-language PIN: IDENTICAL input/expected as the JS test
+    # "F1: fallback filtra huérfanas por per_file" in
+    # frontend/src/lib/worker-count.test.js. present_files=None (legacy) filters
+    # marks by per_file keys → gone.pdf orphan excluded → 0 (NOT 9). This is the
+    # exact fallback DetailPanel uses before the backend worker_count lands.
+    cell = {
+        "worker_marks": {"gone.pdf": [{"page": 1, "count": 9}]},
+        "per_file": {"real.pdf": 1},
+    }
+    assert compute_worker_count(cell, None) == 0
