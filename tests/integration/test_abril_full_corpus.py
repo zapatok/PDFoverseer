@@ -13,7 +13,7 @@ ABRIL = Path("A:/informe mensual/ABRIL")
 
 
 @pytest.mark.slow
-def test_abril_full_corpus_yields_72_cells():
+def test_abril_full_corpus_yields_80_cells():
     inv = enumerate_month(ABRIL)
     results = scan_month(inv)
     assert len(results) == 80
