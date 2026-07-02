@@ -4,6 +4,7 @@ import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 
 import { api } from "../lib/api";
 import { useDebouncedCallback } from "../lib/hooks/useDebouncedCallback";
+import { HOSPITALS, SIGLAS } from "../lib/sigla-labels";
 import { usePdfDocument } from "../hooks/usePdfDocument";
 import { useFitScale } from "../hooks/useFitScale";
 import { useSpeechNumber } from "../hooks/useSpeechNumber";
@@ -22,14 +23,6 @@ const SAVE_DEBOUNCE_MS = 700;
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 0.2;
-
-// Hospitals and siglas for the reorg destination picker.
-const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
-const SIGLAS = [
-  "reunion", "irl", "odi", "charla", "chintegral", "dif_pts", "art",
-  "insgral", "bodega", "maquinaria", "ext", "senal", "exc", "altura",
-  "caliente", "herramientas_elec", "andamios", "chps",
-];
 
 /** La marca de una página concreta de un archivo, o undefined. */
 function markFor(marks, filename, page) {

@@ -42,3 +42,6 @@ export const SIGLAS = [
   "revdocmaq", "exc", "altura", "caliente", "espacios",
   "herramientas_elec", "andamios", "chps",
 ];
+
+// Canonical hospital order — the 4 obras counted every month.
+export const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
