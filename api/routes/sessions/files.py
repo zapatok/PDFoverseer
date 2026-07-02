@@ -12,6 +12,7 @@ from core.orchestrator import _find_category_folder
 
 from ._common import (
     _informe_root,
+    _validate_cell_coords,
     _validate_session_id,
     cell_page_counts,
     file_origin,
@@ -29,6 +30,7 @@ def get_cell_files(
     mgr: SessionManager = Depends(get_manager),
 ) -> list[dict]:
     _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -101,6 +103,7 @@ def get_cell_pdf(
     mgr: SessionManager = Depends(get_manager),
 ) -> FileResponse:
     _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
     if index < 0:
         raise HTTPException(400, "index must be ≥ 0")
     try:

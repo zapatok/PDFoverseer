@@ -15,6 +15,7 @@ from core.orchestrator import _find_category_folder
 from ._common import (
     _broadcast_session_refresh,
     _informe_root,
+    _validate_cell_coords,
     _validate_session_id,
     cell_page_counts,
     get_manager,
@@ -64,12 +65,13 @@ def create_reorg_op(
 
     op = body.model_dump()
     src = op["source"]
+    dst = op["dest"]
+    # F13/F3: both endpoints must be canonical cell coordinates (400 if not) —
+    # replaces the ad-hoc KeyError→404 "Unknown sigla" mapping.
+    _validate_cell_coords(src["hospital"], src["sigla"])
+    _validate_cell_coords(dst["hospital"], dst["sigla"])
     month_root = Path(state.get("month_root", ""))
-    try:
-        src_folder = _find_category_folder(month_root / src["hospital"], src["sigla"])
-        _find_category_folder(month_root / op["dest"]["hospital"], op["dest"]["sigla"])
-    except KeyError as exc:
-        raise HTTPException(404, f"Unknown sigla: {exc}") from exc
+    src_folder = _find_category_folder(month_root / src["hospital"], src["sigla"])
     src_cell = (state.get("cells", {}).get(src["hospital"], {}) or {}).get(src["sigla"])
     if src_cell is None:
         raise HTTPException(404, f"Cell not found: {src['hospital']}/{src['sigla']}")

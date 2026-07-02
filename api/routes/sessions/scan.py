@@ -33,6 +33,7 @@ from ._common import (
     _broadcast_presence,
     _broadcast_session_refresh,
     _cell_updated_event,
+    _validate_cell_coords,
     _validate_session_id,
     cell_page_counts,
     file_origin,
@@ -61,6 +62,7 @@ def apply_ratio(
 ) -> dict:
     """Treat every Pendiente file as round(pages/N) documents (RN treatment)."""
     _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -565,6 +567,7 @@ def scan_file_ocr(
     events over the session WS and merging the result on ``file_scan_done``.
     """
     _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
     participant_id = body.participant_id if body else None
     try:
         state = mgr.get_session_state(session_id)

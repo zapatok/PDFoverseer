@@ -22,6 +22,7 @@ from ._common import (
     _broadcast_presence,
     _cell_total_pages,
     _is_capped_sigla,
+    _validate_cell_coords,
     _validate_session_id,
     cell_page_counts,
     get_manager,
@@ -41,6 +42,7 @@ def patch_override(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
     value = body.get("value")
     manual = bool(body.get("manual", False))
     participant_id: str | None = body.get("participant_id")
@@ -94,6 +96,7 @@ def patch_per_file_override(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Persist per-file count override. Spec §5.2 + §7.2."""
+    _validate_cell_coords(hospital, sigla)
     try:
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
@@ -154,6 +157,7 @@ def clear_near_matches(
 ) -> dict:
     """Clear near-match suspects for a cell — all, or one entry (E5)."""
     _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
     participant_id = body.participant_id if body else None
     mgr.clear_near_matches(
         session_id,
@@ -189,6 +193,7 @@ def patch_worker_count(
 ) -> dict:
     """Autosalva el conteo de trabajadores de una celda (patch parcial)."""
     _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
     try:
         mgr.apply_worker_count(
             session_id,
@@ -245,6 +250,7 @@ def patch_note(
 ) -> dict:
     """Set or clear a cell's note; refresh all_reliable (por_resolver → amber)."""
     _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
     try:
         mgr.set_note(
             session_id,
@@ -297,6 +303,7 @@ def patch_confirm(
     re-escaneo de pase 1 u OCR.
     """
     _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
     try:
         mgr.apply_confirmed(
             session_id,

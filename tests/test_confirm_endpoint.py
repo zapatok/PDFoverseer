@@ -79,10 +79,12 @@ def test_patch_confirm_can_clear(client_with_seeded):
     assert r.json()["confirmed"] is False
 
 
-def test_patch_confirm_404_unknown_cell(client_with_seeded):
+def test_patch_confirm_unknown_cell_400(client_with_seeded):
+    # F13: unknown hospital+sigla coordinate → 400 (was 404), rejected before any
+    # state write.
     client, sid, _mgr = client_with_seeded
     r = client.patch(
         f"/api/sessions/{sid}/cells/HXX/yyy/confirm",
         json={"confirmed": True},
     )
-    assert r.status_code == 404
+    assert r.status_code == 400

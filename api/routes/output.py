@@ -236,6 +236,8 @@ def generate(
     history_root = Path(state.get("month_root", ""))
     for hospital, hosp_cells in state.get("cells", {}).items():
         for sigla, cell in hosp_cells.items():
+            if sigla not in SIGLAS:
+                continue  # F13: never write a phantom sigla (e.g. a stale no_existe cell)
             if cell.get("excluded"):
                 continue
             # Single source of truth (2026-06-06): history must match the Excel.
@@ -254,7 +256,9 @@ def generate(
                 hospital=hospital,
                 sigla=sigla,
                 count=int(effective_count or 0),
-                confidence=cell.get("confidence", "high"),
+                # D5: a cell with no confidence field was never really counted —
+                # record honest "low", not a fabricated "high".
+                confidence=cell.get("confidence") or "low",
                 method=_method_for_history(cell),
             )
     mgr._conn.commit()

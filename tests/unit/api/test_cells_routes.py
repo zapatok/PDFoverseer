@@ -85,10 +85,11 @@ def test_get_files_lists_pdfs(client) -> None:
     assert files[0]["page_count"] == 1
 
 
-def test_get_files_missing_cell_returns_404(client) -> None:
+def test_get_files_unknown_sigla_returns_400(client) -> None:
+    # F13: an unknown sigla is not a valid cell coordinate → 400 (was 404).
     sess = _open_and_scan(client)
     r = client.get(f"/api/sessions/{sess}/cells/HPV/inexistente/files")
-    assert r.status_code == 404
+    assert r.status_code == 400
 
 
 def test_get_pdf_streams_file(client) -> None:
@@ -188,14 +189,15 @@ def test_patch_note_unknown_session_404(client) -> None:
     assert r.status_code == 404
 
 
-def test_patch_note_unknown_sigla_404(client) -> None:
-    # An unknown sigla must be a clean 404 (category folder lookup), not a 500.
+def test_patch_note_unknown_sigla_400(client) -> None:
+    # F13: an unknown sigla is not a valid cell coordinate → 400 (was 404).
+    # Prevents a phantom `no_existe` cell from being persisted at all.
     sess = _open_and_scan(client)
     r = client.patch(
         f"/api/sessions/{sess}/cells/HPV/no_existe/note",
         json={"text": "x", "status": "por_resolver"},
     )
-    assert r.status_code == 404
+    assert r.status_code == 400
 
 
 def test_patch_override_response_has_no_note(client) -> None:

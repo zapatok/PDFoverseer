@@ -20,6 +20,7 @@ from fastapi import HTTPException, Request
 
 from api.routes.ws import _emit
 from api.state import SessionManager
+from core.domain import HOSPITALS, SIGLAS
 from core.orchestrator import _find_category_folder
 from core.scanners.patterns import count_type_for
 
@@ -57,6 +58,18 @@ def _validate_session_id(session_id: str) -> None:
     DB lookup). Shared by the session and presence routers."""
     if not _SESSION_ID_RE.match(session_id):
         raise HTTPException(400, f"Invalid session_id: {session_id}")
+
+
+def _validate_cell_coords(hospital: str, sigla: str) -> None:
+    """Raise 400 if ``(hospital, sigla)`` is not a canonical cell coordinate (F13).
+
+    The only valid cells are ``HOSPITALS × SIGLAS`` (``core.domain``). Rejecting
+    unknown coordinates at the route boundary stops a typo'd/stale sigla from
+    minting a phantom cell in session state — the exact hole that left a
+    ``no_existe`` cell in the production DB, which then leaked into history/Excel.
+    """
+    if hospital not in HOSPITALS or sigla not in SIGLAS:
+        raise HTTPException(400, f"Unknown hospital/sigla: {hospital}/{sigla}")
 
 
 def _informe_root() -> Path:

@@ -324,6 +324,48 @@ def test_output_writes_difpts_total_to_n15(client, tmp_path, monkeypatch):
     assert wb[sheet][coord].value == 12
 
 
+def test_output_history_skips_phantom_sigla(client):
+    # F13: a phantom cell (unknown sigla, e.g. the `no_existe` already in the
+    # production DB) must NOT produce a historical_counts row.
+    import json as _json
+
+    from core.db.historical_repo import get_counts_for_month
+    from core.db.sessions_repo import update_session_state
+    from core.domain import SIGLAS
+
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    mgr = client.app.dependency_overrides[get_manager]()
+    state = mgr.get_session_state("2026-04")
+    state["cells"].setdefault("HPV", {})["zzz"] = {"user_override": 3}
+    update_session_state(mgr._conn, "2026-04", state_json=_json.dumps(state))
+
+    r = client.post("/api/sessions/2026-04/output", json={})
+    assert r.status_code == 200, r.text
+    rows = get_counts_for_month(mgr._conn, year=2026, month=4)
+    assert all(row.sigla != "zzz" for row in rows)
+    assert any(row.sigla in SIGLAS for row in rows)  # real cells still written
+
+
+def test_output_history_never_counted_is_low_confidence(client):
+    # D5: a cell with no confidence field (never really counted) is written to
+    # history as honest "low", not a fabricated "high".
+    import json as _json
+
+    from core.db.historical_repo import get_counts_for_month
+    from core.db.sessions_repo import update_session_state
+
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    mgr = client.app.dependency_overrides[get_manager]()
+    state = mgr.get_session_state("2026-04")
+    state["cells"].setdefault("HRB", {})["odi"] = {"user_override": 4}  # no confidence key
+    update_session_state(mgr._conn, "2026-04", state_json=_json.dumps(state))
+
+    client.post("/api/sessions/2026-04/output", json={})
+    rows = get_counts_for_month(mgr._conn, year=2026, month=4)
+    hrb_odi = next(r for r in rows if r.hospital == "HRB" and r.sigla == "odi")
+    assert hrb_odi.confidence == "low"
+
+
 def test_document_excel_value_independent_of_folder_resolution(tmp_path):
     # A document cell's Excel value comes from stored state, not folder
     # resolution — so the renumber fix cannot move it. month_root is bogus

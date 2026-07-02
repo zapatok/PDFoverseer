@@ -70,10 +70,12 @@ def test_patch_per_file_override_rejects_negative_count(client_with_seeded):
     assert r.status_code in (400, 422), r.text
 
 
-def test_patch_per_file_override_404_unknown_cell(client_with_seeded):
+def test_patch_per_file_override_unknown_cell_400(client_with_seeded):
+    # F13: unknown hospital+sigla coordinate → 400 (was 404). Rejected before any
+    # folder resolution or state write.
     client, sid = client_with_seeded
     r = client.patch(
         f"/api/sessions/{sid}/cells/HXX/yyy/files/whatever.pdf/override",
         json={"count": 5},
     )
-    assert r.status_code == 404
+    assert r.status_code == 400

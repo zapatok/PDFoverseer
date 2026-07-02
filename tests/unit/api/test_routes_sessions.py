@@ -82,3 +82,26 @@ def test_patch_worker_count_session_404(client):
         json={"status": "terminado"},
     )
     assert r.status_code == 404
+
+
+def test_patch_override_unknown_hospital_400(client, monkeypatch):
+    # F13: an unknown hospital coordinate is a clean 400 (bad request), never a
+    # phantom cell. Prevents the `no_existe`-in-DB hole at the route boundary.
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    r = client.patch(
+        "/api/sessions/2026-04/cells/BOGUS/odi/override",
+        json={"value": 1},
+    )
+    assert r.status_code == 400
+
+
+def test_patch_worker_count_unknown_sigla_400(client, monkeypatch):
+    # F13: an unknown sigla coordinate is rejected with 400 before any state write.
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    r = client.patch(
+        "/api/sessions/2026-04/cells/HPV/FAKE/worker-count",
+        json={"status": "terminado"},
+    )
+    assert r.status_code == 400

@@ -317,7 +317,7 @@ def test_post_reorg_op_unknown_session(endpoint_client):
 
 
 def test_post_reorg_op_unknown_sigla(endpoint_client):
-    """Unknown sigla → 404."""
+    """F13/F3: an unknown sigla is not a valid cell coordinate → 400 (was 404)."""
     client = endpoint_client
     sid = _open_and_scan(client)
     r = client.post(
@@ -328,7 +328,7 @@ def test_post_reorg_op_unknown_sigla(endpoint_client):
             "dest": {"hospital": "HPV", "sigla": "odi"},
         },
     )
-    assert r.status_code == 404
+    assert r.status_code == 400
 
 
 # ── Task 10: DELETE /reorg/ops/{op_id} ────────────────────────────────────
