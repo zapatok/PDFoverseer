@@ -90,7 +90,8 @@ def compute_cell_count(
     4. Fallback: ``ocr_count`` or ``filename_count`` or 0.
 
     ``reorg_doc_delta`` (Incr J) is then added unconditionally on top of the
-    base result, for all ``count_type`` values.
+    base result, for all ``count_type`` values. The effective count is finally
+    clamped at 0 (F5) — a reorg delta can never drive a cell negative.
 
     Args:
         cell: the persisted state dict of a single cell.
@@ -105,7 +106,7 @@ def compute_cell_count(
         The effective document (or check-tally) count for the cell.
     """
     base = _base_count(cell, count_type, present_files)
-    return base + (cell.get("reorg_doc_delta") or 0)
+    return max(0, base + (cell.get("reorg_doc_delta") or 0))
 
 
 def compute_worker_count(cell: dict, present_files: set[str] | None = None) -> int:
@@ -122,5 +123,6 @@ def compute_worker_count(cell: dict, present_files: set[str] | None = None) -> i
     Returns:
         La suma de marcas más el delta de reorganización ``reorg_worker_delta``
         (Incr J, aditivo sobre el total de marcas); 0 si no hay marcas ni delta.
+        El resultado se acota a 0 (F5) — el delta nunca deja el total negativo.
     """
-    return _sum_marks(cell, present_files) + (cell.get("reorg_worker_delta") or 0)
+    return max(0, _sum_marks(cell, present_files) + (cell.get("reorg_worker_delta") or 0))

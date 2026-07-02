@@ -79,4 +79,8 @@ describe("cellWorkerCount (Incr J — reorg delta)", () => {
     const cell = { worker_marks: marks, reorg_worker_delta: 99 };
     expect(fileSubtotal(cell.worker_marks, "a.pdf")).toBe(4); // unchanged
   });
+
+  it("clamps a negative effective worker total at 0 (F5)", () => {
+    expect(cellWorkerCount({ worker_marks: {}, reorg_worker_delta: -3 }, null)).toBe(0);
+  });
 });

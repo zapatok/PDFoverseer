@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -22,10 +21,9 @@ def main() -> None:
     args = ap.parse_args()
     conn = open_connection(Path(args.db))
     rows = conn.execute("SELECT session_id FROM sessions ORDER BY session_id").fetchall()
-    os.environ["OVERSEER_DB_PATH"] = args.db
     mgr = SessionManager(conn)
     out: dict = {}
-    for (sid,) in (tuple(r) for r in rows):
+    for (sid,) in rows:
         state = mgr.get_session_state(sid)
         cells = {}
         for hosp, sigla_map in state.get("cells", {}).items():

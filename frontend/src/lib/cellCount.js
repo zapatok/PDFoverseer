@@ -62,5 +62,6 @@ function _baseCount(cell, countType = "documents", presentFiles = null) {
 }
 
 export function computeCellCount(cell, countType = "documents", presentFiles = null) {
-  return _baseCount(cell, countType, presentFiles) + (cell?.reorg_doc_delta ?? 0);
+  // F5: clamp at 0 — a reorg delta can never drive the effective count negative.
+  return Math.max(0, _baseCount(cell, countType, presentFiles) + (cell?.reorg_doc_delta ?? 0));
 }

@@ -46,8 +46,9 @@ export function fileSubtotal(marks, filename) {
  * @returns {number}
  */
 export function cellWorkerCount(cell, fileNames) {
-  return (
-    computeWorkerCount(cell?.worker_marks ?? {}, fileNames) +
-    (cell?.reorg_worker_delta ?? 0)
+  // F5: clamp at 0 — a reorg delta can never drive the worker total negative.
+  return Math.max(
+    0,
+    computeWorkerCount(cell?.worker_marks ?? {}, fileNames) + (cell?.reorg_worker_delta ?? 0),
   );
 }

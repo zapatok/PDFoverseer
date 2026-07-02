@@ -143,4 +143,7 @@ describe("reorg_doc_delta (Incr J)", () => {
     const cell = { worker_marks: { "a.pdf": [{ page: 1, count: 4 }] }, reorg_doc_delta: 1 };
     expect(computeCellCount(cell, "checks", ["a.pdf"])).toBe(5);
   });
+  it("clamps a negative effective count at 0 (F5)", () => {
+    expect(computeCellCount({ filename_count: 2, reorg_doc_delta: -5 })).toBe(0);
+  });
 });
