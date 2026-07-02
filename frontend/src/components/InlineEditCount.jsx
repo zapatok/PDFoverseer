@@ -57,12 +57,13 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
       value={draft}
       onChange={(e) => { setDraft(e.target.value); setInvalid(false); }}
       onClick={(e) => e.stopPropagation()}
+      min={0}
       max={max ?? undefined}
       title={invalid && max != null ? `máx. ${max} (páginas)` : undefined}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           const v = parseInt(draft, 10);
-          if (!Number.isNaN(v) && (max === null || v <= max)) {
+          if (!Number.isNaN(v) && v >= 0 && (max === null || v <= max)) {
             onCommit(v);
             setEditing(false);
           } else {

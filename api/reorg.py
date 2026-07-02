@@ -17,13 +17,24 @@ def _ranges_overlap(a: list[int], b: list[int]) -> bool:
     return a[0] <= b[1] and b[0] <= a[1]
 
 
-def validate_op(op: dict, *, src_pages: dict[str, int], existing_ops: list[dict]) -> list[str]:
+def validate_op(
+    op: dict,
+    *,
+    src_pages: dict[str, int],
+    existing_ops: list[dict],
+    src_contribution: int | None = None,
+) -> list[str]:
     """Return a list of human-readable error strings ([] = valid).
 
     Args:
         op: the proposed op (without an id yet).
         src_pages: {filename: page_count} of the *source* cell folder.
         existing_ops: the session's current reorg_ops (for overlap checks).
+        src_contribution: the moved file's REAL current contribution to its
+            source cell (per_file_overrides | per_file | 1). When provided,
+            ``move_file``'s ``doc_count`` is bounded by it (F5) — you cannot move
+            more documents out of a file than it currently contributes. ``None``
+            (legacy callers) skips that bound.
     """
     errors: list[str] = []
     ot = op.get("op_type")
@@ -77,8 +88,8 @@ def validate_op(op: dict, *, src_pages: dict[str, int], existing_ops: list[dict]
             errors.append("doc_count no puede ser negativo")
         elif ot == "extract_pages" and pr is not None and dc > (pr[1] - pr[0] + 1):
             errors.append("doc_count excede las páginas del rango")
-        elif ot == "move_file" and dc > pages:
-            errors.append("doc_count excede las páginas del archivo")
+        elif ot == "move_file" and src_contribution is not None and dc > src_contribution:
+            errors.append("doc_count excede la contribución actual del archivo")
 
     return errors
 

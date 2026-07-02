@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.presence import is_agent
 from api.state import SessionManager, compute_cell_count, compute_worker_count
@@ -79,7 +79,7 @@ def patch_override(
 
 
 class PerFileOverrideRequest(BaseModel):
-    count: int
+    count: int = Field(ge=0)  # F5: a per-file override can never be negative
     participant_id: str | None = None
 
 

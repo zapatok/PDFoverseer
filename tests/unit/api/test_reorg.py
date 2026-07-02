@@ -66,6 +66,22 @@ def test_validate_rejects_overlapping_extract_same_file():
     )
 
 
+def test_validate_move_file_doc_count_exceeds_contribution():
+    # F5: move_file doc_count is bounded by the file's REAL cell contribution
+    # (not its page count). A file contributing 1 doc cannot move 5.
+    op = {
+        "op_type": "move_file",
+        "source": {"hospital": "HRB", "sigla": "art", "file": "art_crs.pdf"},
+        "dest": {"hospital": "HRB", "sigla": "odi"},
+        "doc_count": 5,
+    }
+    errors = validate_op(op, src_pages=_src_pages(), existing_ops=[], src_contribution=1)
+    assert any("contribución" in e for e in errors), errors
+    # within contribution → no error
+    ok = validate_op(op, src_pages=_src_pages(), existing_ops=[], src_contribution=5)
+    assert not any("contribución" in e for e in ok), ok
+
+
 def test_resolve_defaults_move_file_uses_per_file():
     op = {
         "op_type": "move_file",

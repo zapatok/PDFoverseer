@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.reorg import build_manifest, resolve_op_defaults, validate_op
 from api.state import SessionManager
@@ -43,8 +43,8 @@ class ReorgOpCreate(BaseModel):
     empresa: str | None = None
     preserve_date: bool = True
     rotation_deg: int = 0
-    doc_count: int | None = None
-    worker_count: int | None = None
+    doc_count: int | None = Field(default=None, ge=0)  # F5: never negative
+    worker_count: int | None = Field(default=None, ge=0)  # F5: never negative
     note: str | None = None
 
 
@@ -75,7 +75,18 @@ def create_reorg_op(
         raise HTTPException(404, f"Cell not found: {src['hospital']}/{src['sigla']}")
 
     src_pages = cell_page_counts(src_folder) if src_folder.exists() else {}
-    errors = validate_op(op, src_pages=src_pages, existing_ops=state.get("reorg_ops", []))
+    # F5: move_file doc_count is bounded by the file's real contribution to the
+    # source cell (per_file_overrides | per_file | 1), not its raw page count.
+    file = src["file"]
+    contribution = (src_cell.get("per_file_overrides") or {}).get(
+        file, (src_cell.get("per_file") or {}).get(file, 1)
+    )
+    errors = validate_op(
+        op,
+        src_pages=src_pages,
+        existing_ops=state.get("reorg_ops", []),
+        src_contribution=contribution,
+    )
     if errors:
         raise HTTPException(400, "; ".join(errors))
 

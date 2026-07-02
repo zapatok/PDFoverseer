@@ -60,6 +60,16 @@ def test_patch_per_file_override_writes_value(client_with_seeded):
     assert body["new_cell_count"] == 10
 
 
+def test_patch_per_file_override_rejects_negative_count(client_with_seeded):
+    # F5: a negative per-file override is rejected at the request boundary.
+    client, sid = client_with_seeded
+    r = client.patch(
+        f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/override",
+        json={"count": -1},
+    )
+    assert r.status_code in (400, 422), r.text
+
+
 def test_patch_per_file_override_404_unknown_cell(client_with_seeded):
     client, sid = client_with_seeded
     r = client.patch(
