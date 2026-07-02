@@ -708,20 +708,30 @@ export const useSessionStore = create((set, get) => ({
   // is reflected consistently (client merge would be error-prone here).
   addReorgOp: async (sessionId, hospital, sigla, opDraft) => {
     try {
-      await api.createReorgOp(sessionId, {
-        source: { hospital, sigla, ...opDraft.source },
-        dest: opDraft.dest,
-        op_type: opDraft.op_type,
-        empresa: opDraft.empresa,
-        preserve_date: opDraft.preserve_date,
-        rotation_deg: opDraft.rotation_deg,
-        doc_count: opDraft.doc_count,
-        worker_count: opDraft.worker_count,
-        note: opDraft.note,
-      });
+      await api.createReorgOp(
+        sessionId,
+        {
+          source: { hospital, sigla, ...opDraft.source },
+          dest: opDraft.dest,
+          op_type: opDraft.op_type,
+          empresa: opDraft.empresa,
+          preserve_date: opDraft.preserve_date,
+          rotation_deg: opDraft.rotation_deg,
+          doc_count: opDraft.doc_count,
+          worker_count: opDraft.worker_count,
+          note: opDraft.note,
+        },
+        getParticipantId(),
+      );
       const session = await api.getSession(sessionId);
       set({ session });
     } catch (error) {
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "otro participante";
+        toast.error(`Celda bloqueada por ${who}`);
+        get().refetchSession(sessionId);
+        return;
+      }
       toast.error(`No se pudo crear la operación: ${String(error)}`);
       throw error;
     }
@@ -729,10 +739,16 @@ export const useSessionStore = create((set, get) => ({
 
   deleteReorgOp: async (sessionId, opId) => {
     try {
-      await api.deleteReorgOp(sessionId, opId);
+      await api.deleteReorgOp(sessionId, opId, getParticipantId());
       const session = await api.getSession(sessionId);
       set({ session });
     } catch (error) {
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "otro participante";
+        toast.error(`Celda bloqueada por ${who}`);
+        get().refetchSession(sessionId);
+        return;
+      }
       toast.error(`No se pudo eliminar la operación: ${String(error)}`);
       throw error;
     }

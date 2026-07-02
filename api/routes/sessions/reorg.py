@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from api.presence import CellLockedError, is_agent
 from api.reorg import build_manifest, resolve_op_defaults, validate_op
 from api.state import SessionManager
 from core.orchestrator import _find_category_folder
@@ -47,6 +48,29 @@ class ReorgOpCreate(BaseModel):
     doc_count: int | None = Field(default=None, ge=0)  # F5: never negative
     worker_count: int | None = Field(default=None, ge=0)  # F5: never negative
     note: str | None = None
+    participant_id: str | None = None
+
+
+def _gate_reorg_cells(
+    mgr: SessionManager,
+    session_id: str,
+    participant_id: str | None,
+    cells: list[tuple[str, str]],
+) -> None:
+    """Gate a reorg op's affected cells on the M3 per-cell lock (F3).
+
+    Mirrors ``apply_ratio``'s dual-path gate: the Claude agent auto-claims each
+    free cell (409 only if a human holds it); a human/legacy caller checks the
+    lock (``participant_id=None`` is inert). Raising ``CellLockedError`` maps to
+    HTTP 409 via the ``main.py`` handler.
+    """
+    for hospital, sigla in cells:
+        if is_agent(participant_id):
+            holder = mgr.agent_claim_cell(session_id, hospital, sigla)
+            if holder is not None:
+                raise CellLockedError(hospital, sigla, holder)
+        else:
+            mgr.check_cell_lock(session_id, hospital, sigla, participant_id)
 
 
 @router.post("/sessions/{session_id}/reorg/ops")
@@ -93,6 +117,14 @@ def create_reorg_op(
         raise HTTPException(400, "; ".join(errors))
 
     op = resolve_op_defaults(op, src_cell=src_cell)
+    # F3: the op mutates both endpoints' effective counts (reorg deltas), so both
+    # must be free (or held by the caller) before it is recorded.
+    _gate_reorg_cells(
+        mgr,
+        session_id,
+        body.participant_id,
+        [(src["hospital"], src["sigla"]), (dst["hospital"], dst["sigla"])],
+    )
     created = mgr.add_reorg_op(session_id, op)
     refresh_reorg_deltas(mgr, session_id, check_applied=False)
     _broadcast_session_refresh(request, session_id)
@@ -105,14 +137,28 @@ def delete_reorg_op(
     request: Request,
     session_id: str,
     op_id: str,
+    participant_id: str | None = None,
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Delete a reorg op; recompute deltas."""
     _validate_session_id(session_id)
     try:
-        mgr.get_session_state(session_id)
+        state = mgr.get_session_state(session_id)
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
+    # Look up the op BEFORE deleting so we can gate on the cells it touches (F3).
+    op = next((o for o in state.get("reorg_ops", []) if o.get("id") == op_id), None)
+    if op is None:
+        raise HTTPException(404, f"Op not found: {op_id}")
+    _gate_reorg_cells(
+        mgr,
+        session_id,
+        participant_id,
+        [
+            (op["source"]["hospital"], op["source"]["sigla"]),
+            (op["dest"]["hospital"], op["dest"]["sigla"]),
+        ],
+    )
     if not mgr.delete_reorg_op(session_id, op_id):
         raise HTTPException(404, f"Op not found: {op_id}")
     refresh_reorg_deltas(mgr, session_id, check_applied=False)

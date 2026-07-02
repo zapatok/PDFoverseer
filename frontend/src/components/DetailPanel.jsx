@@ -490,6 +490,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
         ops={reorgOps}
         onDelete={(opId) => deleteReorgOp(sessionId, opId)}
         onExport={() => exportManifest(sessionId)}
+        locked={locked}
       />
 
       {/* Worker/checks counting module: documents_workers (charla/chintegral/dif_pts)

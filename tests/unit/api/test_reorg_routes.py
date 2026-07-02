@@ -331,6 +331,76 @@ def test_post_reorg_op_unknown_sigla(endpoint_client):
     assert r.status_code == 400
 
 
+# ── F3: reorg create/delete honor the M3 per-cell locks ───────────────────
+
+
+def _claim_cell(client, sid, participant, cell):
+    client.post(
+        f"/api/sessions/{sid}/presence/heartbeat",
+        json={"participant_id": participant, "name": participant.upper(), "color": "#a"},
+    )
+    client.post(
+        f"/api/sessions/{sid}/presence/focus",
+        json={"participant_id": participant, "cell": cell},
+    )
+
+
+def _move_op(participant_id=None):
+    op = {
+        "op_type": "move_file",
+        "source": {"hospital": "HPV", "sigla": "odi", "file": "2026-04-10_odi_TITAN.pdf"},
+        "dest": {"hospital": "HPV", "sigla": "reunion"},
+    }
+    if participant_id is not None:
+        op["participant_id"] = participant_id
+    return op
+
+
+def test_create_reorg_op_409_when_dest_held(endpoint_client):
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    _claim_cell(client, sid, "p1", "HPV|reunion")  # p1 holds the destination
+    r = client.post(f"/api/sessions/{sid}/reorg/ops", json=_move_op(participant_id="p2"))
+    assert r.status_code == 409, r.text
+    assert r.json()["lock_holder"]["participant_id"] == "p1"
+
+
+def test_create_reorg_op_409_when_source_held(endpoint_client):
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    _claim_cell(client, sid, "p1", "HPV|odi")  # p1 holds the source
+    r = client.post(f"/api/sessions/{sid}/reorg/ops", json=_move_op(participant_id="p2"))
+    assert r.status_code == 409, r.text
+
+
+def test_create_reorg_op_legacy_no_participant_is_inert(endpoint_client):
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    _claim_cell(client, sid, "p1", "HPV|odi")  # p1 holds the source
+    # no participant_id → legacy path, no lock enforcement
+    r = client.post(f"/api/sessions/{sid}/reorg/ops", json=_move_op())
+    assert r.status_code == 200, r.text
+
+
+def test_delete_reorg_op_409_when_cell_held(endpoint_client):
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    op_id = client.post(f"/api/sessions/{sid}/reorg/ops", json=_move_op()).json()["op"]["id"]
+    _claim_cell(client, sid, "p1", "HPV|reunion")  # p1 holds a cell the op touches
+    r = client.delete(f"/api/sessions/{sid}/reorg/ops/{op_id}?participant_id=p2")
+    assert r.status_code == 409, r.text
+    assert r.json()["lock_holder"]["participant_id"] == "p1"
+
+
+def test_delete_reorg_op_legacy_no_participant_is_inert(endpoint_client):
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    op_id = client.post(f"/api/sessions/{sid}/reorg/ops", json=_move_op()).json()["op"]["id"]
+    _claim_cell(client, sid, "p1", "HPV|reunion")
+    r = client.delete(f"/api/sessions/{sid}/reorg/ops/{op_id}")  # no participant_id
+    assert r.status_code == 200, r.text
+
+
 # ── Task 10: DELETE /reorg/ops/{op_id} ────────────────────────────────────
 
 

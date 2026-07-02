@@ -1,14 +1,29 @@
+// @vitest-environment jsdom
+//
 // Tests for ReorganizacionPanel pure helpers (outgoingOps, incomingOps,
-// netDocDelta, hasPendingOps). Vitest node environment — no DOM needed because
-// the logic is extracted into named exports, following the project pattern.
+// netDocDelta, hasPendingOps) + the F3 lock rendering (locked disables per-op
+// delete but keeps Export enabled). jsdom env so the render tests can mount;
+// the pure-helper tests are env-agnostic and still pass under it.
 
-import { describe, it, expect, vi } from "vitest";
-import {
+import { describe, it, expect, vi, afterEach } from "vitest";
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
+import ReorganizacionPanel, {
   outgoingOps,
   incomingOps,
   netDocDelta,
   hasPendingOps,
 } from "./ReorganizacionPanel";
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+function mount(ui) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  act(() => root.render(ui));
+  return { container, unmount: () => act(() => root.unmount()) };
+}
 
 const H = "HPV";
 const S = "odi";
@@ -151,5 +166,44 @@ describe("(e) onDelete fires with the correct op id", () => {
     const out = outgoingOps(ops, H, S);
     // The component calls onDelete(op.id) — verify the id is accessible
     expect(out[0].id).toBe("op-1");
+  });
+});
+
+// ── (f) F3: locked disables per-op delete, keeps Export enabled ──────────────
+describe("(f) locked rendering", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("disables the per-op delete button but leaves Export enabled when locked", () => {
+    const { container } = mount(
+      <ReorganizacionPanel
+        hospital={H}
+        sigla={S}
+        ops={[pendingOut]}
+        onDelete={() => {}}
+        onExport={() => {}}
+        locked
+      />,
+    );
+    const del = container.querySelector('[data-testid="eliminar-btn"]');
+    expect(del).toBeTruthy();
+    expect(del.disabled).toBe(true);
+    const exp = container.querySelector('[data-testid="export-btn"]');
+    expect(exp.disabled).toBe(false); // export is session-wide, stays enabled
+  });
+
+  it("delete is enabled when not locked", () => {
+    const { container } = mount(
+      <ReorganizacionPanel
+        hospital={H}
+        sigla={S}
+        ops={[pendingOut]}
+        onDelete={() => {}}
+        onExport={() => {}}
+      />,
+    );
+    const del = container.querySelector('[data-testid="eliminar-btn"]');
+    expect(del.disabled).toBe(false);
   });
 });

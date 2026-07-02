@@ -183,15 +183,21 @@ export const api = {
   },
 
   // Incr J — reorg ops + manifest export.
-  createReorgOp: (sessionId, op) =>
+  // F3: carry participant_id so the backend can 409 a cell another participant
+  // holds; jsonOrThrowStructured preserves the 409 body (lock_holder) for the store.
+  createReorgOp: (sessionId, op, participantId) =>
     fetch(`${BASE}/sessions/${sessionId}/reorg/ops`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(op),
-    }).then(jsonOrThrow),
+      body: JSON.stringify({ ...op, participant_id: participantId ?? null }),
+    }).then(jsonOrThrowStructured),
 
-  deleteReorgOp: (sessionId, opId) =>
-    fetch(`${BASE}/sessions/${sessionId}/reorg/ops/${opId}`, { method: "DELETE" }).then(jsonOrThrow),
+  deleteReorgOp: (sessionId, opId, participantId) =>
+    fetch(
+      `${BASE}/sessions/${sessionId}/reorg/ops/${opId}` +
+        (participantId ? `?participant_id=${encodeURIComponent(participantId)}` : ""),
+      { method: "DELETE" },
+    ).then(jsonOrThrowStructured),
 
   exportManifest: (sessionId) =>
     fetch(`${BASE}/sessions/${sessionId}/reorg/export`, { method: "POST" }).then(jsonOrThrow),

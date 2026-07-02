@@ -66,7 +66,7 @@ function formatDelta(n) {
   return "±0";
 }
 
-function OpRow({ op, isOutgoing, onDelete }) {
+function OpRow({ op, isOutgoing, onDelete, locked = false }) {
   const muted = op.status === "applied";
   const otherHospital = isOutgoing ? op.dest?.hospital : op.source?.hospital;
   const otherSigla   = isOutgoing ? op.dest?.sigla    : op.source?.sigla;
@@ -103,8 +103,14 @@ function OpRow({ op, isOutgoing, onDelete }) {
         <button
           type="button"
           aria-label="Eliminar operación"
-          onClick={() => onDelete(op.id)}
-          className="ml-auto shrink-0 text-po-text-muted hover:text-po-error transition"
+          disabled={locked}
+          onClick={locked ? undefined : () => onDelete(op.id)}
+          className={[
+            "ml-auto shrink-0 transition",
+            locked
+              ? "text-po-text-muted cursor-not-allowed opacity-50"
+              : "text-po-text-muted hover:text-po-error",
+          ].join(" ")}
           data-testid="eliminar-btn"
         >
           <Trash2 size={13} strokeWidth={1.75} />
@@ -123,8 +129,17 @@ function OpRow({ op, isOutgoing, onDelete }) {
  *   ops       {object[]} — full session reorg_ops array (all hospitals)
  *   onDelete  {fn(opId)} — called when the operator removes a pending op
  *   onExport  {fn()}     — called when the operator exports the manifest
+ *   locked    {boolean}  — another participant holds this cell (F3): disable the
+ *                          per-op delete buttons. Export stays enabled (session-wide).
  */
-export default function ReorganizacionPanel({ hospital, sigla, ops = [], onDelete, onExport }) {
+export default function ReorganizacionPanel({
+  hospital,
+  sigla,
+  ops = [],
+  onDelete,
+  onExport,
+  locked = false,
+}) {
   const outgoing = outgoingOps(ops, hospital, sigla);
   const incoming = incomingOps(ops, hospital, sigla);
 
@@ -154,10 +169,10 @@ export default function ReorganizacionPanel({ hospital, sigla, ops = [], onDelet
           </div>
           <ul className="divide-y divide-po-border">
             {outgoing.map((op) => (
-              <OpRow key={op.id} op={op} isOutgoing={true} onDelete={onDelete} />
+              <OpRow key={op.id} op={op} isOutgoing={true} onDelete={onDelete} locked={locked} />
             ))}
             {incoming.map((op) => (
-              <OpRow key={op.id} op={op} isOutgoing={false} onDelete={onDelete} />
+              <OpRow key={op.id} op={op} isOutgoing={false} onDelete={onDelete} locked={locked} />
             ))}
           </ul>
         </>
