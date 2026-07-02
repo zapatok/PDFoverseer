@@ -401,6 +401,73 @@ def test_delete_reorg_op_legacy_no_participant_is_inert(endpoint_client):
     assert r.status_code == 200, r.text
 
 
+# ── F3 follow-up: the agent claims only AFTER a successful write ────────────
+
+
+def _agent_presence(client, sid):
+    """The Claude agent's presence record for `sid`, or None if absent."""
+    snap = client.app.state.manager.presence_snapshot(sid)
+    return next((p for p in snap if p["participant_id"] == "claude"), None)
+
+
+def test_create_reorg_op_agent_409_dest_held_leaves_no_dangling_claim(endpoint_client):
+    # Regression: the old gate claimed source BEFORE discovering dest was held,
+    # leaving a false "Claude está editando" badge on source for the lease TTL.
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    _claim_cell(client, sid, "p1", "HPV|reunion")  # human holds the DEST
+    r = client.post(f"/api/sessions/{sid}/reorg/ops", json=_move_op(participant_id="claude"))
+    assert r.status_code == 409, r.text
+    assert _agent_presence(client, sid) is None  # agent holds NEITHER cell
+
+
+def test_create_reorg_op_agent_overlap_400_leaves_no_dangling_claim(endpoint_client):
+    # Any 400 on the create path must leave zero agent claims (claims happen
+    # only after a successful write).
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    extract = {
+        "op_type": "extract_pages",
+        "source": {
+            "hospital": "HPV",
+            "sigla": "odi",
+            "file": "2026-04-10_odi_TITAN.pdf",
+            "page_range": [1, 1],
+        },
+        "dest": {"hospital": "HPV", "sigla": "reunion"},
+    }
+    assert client.post(f"/api/sessions/{sid}/reorg/ops", json=extract).status_code == 200
+    r = client.post(
+        f"/api/sessions/{sid}/reorg/ops",
+        json={**extract, "participant_id": "claude"},  # overlapping range → 400
+    )
+    assert r.status_code == 400, r.text
+    assert _agent_presence(client, sid) is None
+
+
+def test_create_reorg_op_agent_success_claims_dest(endpoint_client):
+    # Success path: the agent claims the touched cells AFTER the write (single
+    # focused_cell per participant → it ends as editor of the last claimed, dest).
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    r = client.post(f"/api/sessions/{sid}/reorg/ops", json=_move_op(participant_id="claude"))
+    assert r.status_code == 200, r.text
+    agent = _agent_presence(client, sid)
+    assert agent is not None
+    assert agent["focused_cell"] == "HPV|reunion"
+    assert agent["mode"] == "editor"
+
+
+def test_delete_reorg_op_agent_409_leaves_no_dangling_claim(endpoint_client):
+    client = endpoint_client
+    sid = _open_and_scan(client)
+    op_id = client.post(f"/api/sessions/{sid}/reorg/ops", json=_move_op()).json()["op"]["id"]
+    _claim_cell(client, sid, "p1", "HPV|reunion")  # human holds the op's dest
+    r = client.delete(f"/api/sessions/{sid}/reorg/ops/{op_id}?participant_id=claude")
+    assert r.status_code == 409, r.text
+    assert _agent_presence(client, sid) is None
+
+
 # ── Task 10: DELETE /reorg/ops/{op_id} ────────────────────────────────────
 
 

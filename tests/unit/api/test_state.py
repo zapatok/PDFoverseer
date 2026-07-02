@@ -695,38 +695,45 @@ def test_reorg_recompute_and_validated_add_are_atomic_under_threads(tmp_path):
     import threading
 
     for i in range(20):
-        conn = open_connection(tmp_path / f"race_{i}.db")
-        init_schema(conn)
-        mgr = SessionManager(conn=conn)
-        mgr.open_session(year=2026, month=4, month_root=Path("A:/informe mensual/ABRIL"))
-        mgr.add_reorg_op("2026-04", _move_op("art", "odi", 1))  # op A (seed)
+        try:
+            conn = open_connection(tmp_path / f"race_{i}.db")
+            init_schema(conn)
+            mgr = SessionManager(conn=conn)
+            mgr.open_session(year=2026, month=4, month_root=Path("A:/informe mensual/ABRIL"))
+            mgr.add_reorg_op("2026-04", _move_op("art", "odi", 1))  # op A (seed)
 
-        errors: list[Exception] = []
+            errors: list[Exception] = []
+            barrier = threading.Barrier(2)  # both threads enter together → real contention
 
-        def t1(m=mgr, errs=errors):
-            try:
-                m.recompute_reorg_deltas("2026-04")
-            except Exception as exc:  # noqa: BLE001 — surface any thread failure
-                errs.append(exc)
+            def t1(m=mgr, errs=errors, b=barrier):
+                try:
+                    b.wait()
+                    m.recompute_reorg_deltas("2026-04")
+                except Exception as exc:  # noqa: BLE001 — surface any thread failure
+                    errs.append(exc)
 
-        def t2(m=mgr, errs=errors):
-            try:
-                m.add_reorg_op_validated("2026-04", _move_op("insgral", "bodega", 2))  # op B
-            except Exception as exc:  # noqa: BLE001
-                errs.append(exc)
+            def t2(m=mgr, errs=errors, b=barrier):
+                try:
+                    b.wait()
+                    m.add_reorg_op_validated("2026-04", _move_op("insgral", "bodega", 2))  # op B
+                except Exception as exc:  # noqa: BLE001
+                    errs.append(exc)
 
-        threads = [threading.Thread(target=t1), threading.Thread(target=t2)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+            threads = [threading.Thread(target=t1), threading.Thread(target=t2)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
 
-        assert not errors, f"iter {i}: {errors}"
-        state = mgr.get_session_state("2026-04")
-        assert len(state["reorg_ops"]) == 2, f"iter {i}: both ops must persist"
-        cells = state["cells"]
-        assert cells["HRB"]["art"]["reorg_doc_delta"] == -1, f"iter {i}"
-        assert cells["HRB"]["odi"]["reorg_doc_delta"] == 1, f"iter {i}"
-        assert cells["HRB"]["insgral"]["reorg_doc_delta"] == -2, f"iter {i}"
-        assert cells["HRB"]["bodega"]["reorg_doc_delta"] == 2, f"iter {i}"
-        close_all()
+            assert not errors, f"iter {i}: {errors}"
+            state = mgr.get_session_state("2026-04")
+            assert len(state["reorg_ops"]) == 2, f"iter {i}: both ops must persist"
+            cells = state["cells"]
+            assert cells["HRB"]["art"]["reorg_doc_delta"] == -1, f"iter {i}"
+            assert cells["HRB"]["odi"]["reorg_doc_delta"] == 1, f"iter {i}"
+            assert cells["HRB"]["insgral"]["reorg_doc_delta"] == -2, f"iter {i}"
+            assert cells["HRB"]["bodega"]["reorg_doc_delta"] == 2, f"iter {i}"
+        finally:
+            # Windows: an assert failure must not leak the sqlite connection
+            # (tmp_path cleanup would then fail on the open file handle).
+            close_all()

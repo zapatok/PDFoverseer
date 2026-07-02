@@ -727,8 +727,8 @@ export const useSessionStore = create((set, get) => ({
       set({ session });
     } catch (error) {
       if (error.status === 409) {
-        const who = error.body?.lock_holder?.name ?? "otro participante";
-        toast.error(`Celda bloqueada por ${who}`);
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        toast.error(`${who} está editando esta celda`);
         get().refetchSession(sessionId);
         return;
       }
@@ -744,8 +744,8 @@ export const useSessionStore = create((set, get) => ({
       set({ session });
     } catch (error) {
       if (error.status === 409) {
-        const who = error.body?.lock_holder?.name ?? "otro participante";
-        toast.error(`Celda bloqueada por ${who}`);
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        toast.error(`${who} está editando esta celda`);
         get().refetchSession(sessionId);
         return;
       }

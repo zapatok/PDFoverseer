@@ -337,12 +337,14 @@ def test_output_history_skips_phantom_sigla(client):
     mgr = client.app.dependency_overrides[get_manager]()
     state = mgr.get_session_state("2026-04")
     state["cells"].setdefault("HPV", {})["zzz"] = {"user_override": 3}
+    state["cells"]["BOGUS"] = {"odi": {"user_override": 7}}  # phantom hospital
     update_session_state(mgr._conn, "2026-04", state_json=_json.dumps(state))
 
     r = client.post("/api/sessions/2026-04/output", json={})
     assert r.status_code == 200, r.text
     rows = get_counts_for_month(mgr._conn, year=2026, month=4)
     assert all(row.sigla != "zzz" for row in rows)
+    assert all(row.hospital != "BOGUS" for row in rows)
     assert any(row.sigla in SIGLAS for row in rows)  # real cells still written
 
 

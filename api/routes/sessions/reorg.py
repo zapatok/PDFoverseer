@@ -8,12 +8,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from api.presence import CellLockedError, is_agent
-from api.reorg import build_manifest, resolve_op_defaults, validate_op
+from api.presence import is_agent
+from api.reorg import build_manifest, file_contribution, resolve_op_defaults, validate_op
 from api.state import SessionManager
 from core.orchestrator import _find_category_folder
 
 from ._common import (
+    _broadcast_presence,
     _broadcast_session_refresh,
     _informe_root,
     _validate_cell_coords,
@@ -56,20 +57,41 @@ def _gate_reorg_cells(
     participant_id: str | None,
     cells: list[tuple[str, str]],
 ) -> None:
-    """Gate a reorg op's affected cells on the M3 per-cell lock (F3).
+    """Gate a reorg op's affected cells on the M3 per-cell lock (F3). CHECK-ONLY.
 
-    Mirrors ``apply_ratio``'s dual-path gate: the Claude agent auto-claims each
-    free cell (409 only if a human holds it); a human/legacy caller checks the
-    lock (``participant_id=None`` is inert). Raising ``CellLockedError`` maps to
-    HTTP 409 via the ``main.py`` handler.
+    Raises ``CellLockedError`` (→ HTTP 409 via the ``main.py`` handler) if any
+    cell is held by a DIFFERENT participant; never claims. ``check_cell_lock``
+    excludes the caller, so one path serves humans, the Claude agent, and legacy
+    (``participant_id=None`` is inert). The agent claims only AFTER the write
+    succeeds (:func:`_claim_reorg_cells_for_agent`) — so a 409/400 can never
+    leave a dangling "Claude está editando" badge for an op that never existed.
     """
     for hospital, sigla in cells:
-        if is_agent(participant_id):
-            holder = mgr.agent_claim_cell(session_id, hospital, sigla)
-            if holder is not None:
-                raise CellLockedError(hospital, sigla, holder)
-        else:
-            mgr.check_cell_lock(session_id, hospital, sigla, participant_id)
+        mgr.check_cell_lock(session_id, hospital, sigla, participant_id)
+
+
+def _claim_reorg_cells_for_agent(
+    request: Request,
+    mgr: SessionManager,
+    session_id: str,
+    participant_id: str | None,
+    cells: list[tuple[str, str]],
+) -> None:
+    """M3b: after a SUCCESSFUL agent write, claim the touched cells (badge) and
+    broadcast the presence snapshot — mirrors the six write routes' agent path
+    (``if is_agent(...): _broadcast_presence(...)``).
+
+    The check→claim window this opens matches the codebase's accepted M3 model
+    (see ``check_cell_lock``'s docstring); ``agent_claim_cell`` never steals a
+    human-held cell, so its return value is deliberately ignored. Presence is
+    single-focus per participant → the agent ends as editor of the last claimed
+    cell (the op's dest).
+    """
+    if not is_agent(participant_id):
+        return
+    for hospital, sigla in cells:
+        mgr.agent_claim_cell(session_id, hospital, sigla)
+    _broadcast_presence(request, mgr, session_id)
 
 
 @router.post("/sessions/{session_id}/reorg/ops")
@@ -101,35 +123,29 @@ def create_reorg_op(
 
     src_pages = cell_page_counts(src_folder) if src_folder.exists() else {}
     # F5: move_file doc_count is bounded by the file's real contribution to the
-    # source cell (per_file_overrides | per_file | 1), not its raw page count.
-    file = src["file"]
-    contribution = (src_cell.get("per_file_overrides") or {}).get(
-        file, (src_cell.get("per_file") or {}).get(file, 1)
-    )
+    # source cell — same rule as the doc_count default (api.reorg.file_contribution).
     errors = validate_op(
         op,
         src_pages=src_pages,
         existing_ops=state.get("reorg_ops", []),
-        src_contribution=contribution,
+        src_contribution=file_contribution(src_cell, src["file"]),
     )
     if errors:
         raise HTTPException(400, "; ".join(errors))
 
     op = resolve_op_defaults(op, src_cell=src_cell)
+    cells = [(src["hospital"], src["sigla"]), (dst["hospital"], dst["sigla"])]
     # F3: the op mutates both endpoints' effective counts (reorg deltas), so both
-    # must be free (or held by the caller) before it is recorded.
-    _gate_reorg_cells(
-        mgr,
-        session_id,
-        body.participant_id,
-        [(src["hospital"], src["sigla"]), (dst["hospital"], dst["sigla"])],
-    )
+    # must be free (or held by the caller) before it is recorded. Check-only.
+    _gate_reorg_cells(mgr, session_id, body.participant_id, cells)
     # F4: append + delta recompute happen atomically under one lock (the overlap
     # re-check inside catches a race with a concurrent create).
     try:
         created = mgr.add_reorg_op_validated(session_id, op)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    # Agent claims only now — after the write succeeded (F3 follow-up).
+    _claim_reorg_cells_for_agent(request, mgr, session_id, body.participant_id, cells)
     _broadcast_session_refresh(request, session_id)
     state = mgr.get_session_state(session_id)
     return {"op": created, "cells": state["cells"]}
@@ -153,18 +169,16 @@ def delete_reorg_op(
     op = next((o for o in state.get("reorg_ops", []) if o.get("id") == op_id), None)
     if op is None:
         raise HTTPException(404, f"Op not found: {op_id}")
-    _gate_reorg_cells(
-        mgr,
-        session_id,
-        participant_id,
-        [
-            (op["source"]["hospital"], op["source"]["sigla"]),
-            (op["dest"]["hospital"], op["dest"]["sigla"]),
-        ],
-    )
+    cells = [
+        (op["source"]["hospital"], op["source"]["sigla"]),
+        (op["dest"]["hospital"], op["dest"]["sigla"]),
+    ]
+    _gate_reorg_cells(mgr, session_id, participant_id, cells)  # check-only
     # F4: delete + delta recompute run atomically under one lock.
     if not mgr.delete_reorg_op_and_refresh(session_id, op_id):
         raise HTTPException(404, f"Op not found: {op_id}")
+    # Agent claims only now — after the write succeeded (F3 follow-up).
+    _claim_reorg_cells_for_agent(request, mgr, session_id, participant_id, cells)
     _broadcast_session_refresh(request, session_id)
     state = mgr.get_session_state(session_id)
     return {"deleted": op_id, "cells": state["cells"]}

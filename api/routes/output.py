@@ -235,6 +235,8 @@ def generate(
     year, month = int(session_id[:4]), int(session_id[5:7])
     history_root = Path(state.get("month_root", ""))
     for hospital, hosp_cells in state.get("cells", {}).items():
+        if hospital not in HOSPITALS:
+            continue  # F13: never write a phantom hospital (symmetric with the sigla filter)
         for sigla, cell in hosp_cells.items():
             if sigla not in SIGLAS:
                 continue  # F13: never write a phantom sigla (e.g. a stale no_existe cell)

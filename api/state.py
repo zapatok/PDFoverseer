@@ -66,6 +66,23 @@ def _cell_has_work(cell: dict) -> bool:
     return any(m and m != "filename_glob" for m in per_file_method.values())
 
 
+def _apply_reorg_deltas(state: dict, deltas: dict[tuple[str, str], dict]) -> None:
+    """Zero every cell's reorg delta cache, then apply ``deltas`` in place.
+
+    Shared by ``set_reorg_state`` and ``recompute_reorg_deltas`` (identical
+    zero-all + apply loops — extracted so the two can't drift). Non-decorated:
+    pure state mutation, callers hold the RLock and persist.
+    """
+    for siglas in state.get("cells", {}).values():
+        for cell in siglas.values():
+            cell["reorg_doc_delta"] = 0
+            cell["reorg_worker_delta"] = 0
+    for (hosp, sigla), d in deltas.items():
+        cell = state.setdefault("cells", {}).setdefault(hosp, {}).setdefault(sigla, {})
+        cell["reorg_doc_delta"] = d.get("doc", 0)
+        cell["reorg_worker_delta"] = d.get("worker", 0)
+
+
 def _synchronized(method):
     """Serializa el método bajo ``self._lock`` (RLock): protege el
     read-modify-write del blob de sesión contra escrituras concurrentes (merge
@@ -699,14 +716,7 @@ class SessionManager:
         """
         state, _ = self._load_and_migrate(session_id)
         state["reorg_ops"] = ops
-        for siglas in state.get("cells", {}).values():
-            for cell in siglas.values():
-                cell["reorg_doc_delta"] = 0
-                cell["reorg_worker_delta"] = 0
-        for (hosp, sigla), d in deltas.items():
-            cell = state.setdefault("cells", {}).setdefault(hosp, {}).setdefault(sigla, {})
-            cell["reorg_doc_delta"] = d.get("doc", 0)
-            cell["reorg_worker_delta"] = d.get("worker", 0)
+        _apply_reorg_deltas(state, deltas)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     @_synchronized
@@ -760,14 +770,7 @@ class SessionManager:
             deltas[dst_key]["worker"] += wrk
 
         state["reorg_ops"] = ops
-        for siglas in state.get("cells", {}).values():
-            for cell in siglas.values():
-                cell["reorg_doc_delta"] = 0
-                cell["reorg_worker_delta"] = 0
-        for (hosp, sigla), d in deltas.items():
-            cell = state.setdefault("cells", {}).setdefault(hosp, {}).setdefault(sigla, {})
-            cell["reorg_doc_delta"] = d.get("doc", 0)
-            cell["reorg_worker_delta"] = d.get("worker", 0)
+        _apply_reorg_deltas(state, deltas)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     @_synchronized

@@ -17,6 +17,19 @@ def _ranges_overlap(a: list[int], b: list[int]) -> bool:
     return a[0] <= b[1] and b[0] <= a[1]
 
 
+def file_contribution(src_cell: dict, file: str) -> int:
+    """The file's current contribution to its cell's count
+    (``per_file_overrides`` | ``per_file`` | 1).
+
+    Single source of the rule — used both as the ``move_file`` ``doc_count``
+    default (:func:`resolve_op_defaults`) and as its F5 upper bound
+    (``src_contribution`` in the create route), so the two can never drift.
+    """
+    overrides = src_cell.get("per_file_overrides") or {}
+    per_file = src_cell.get("per_file") or {}
+    return overrides.get(file, per_file.get(file, 1))
+
+
 def overlap_errors(op: dict, existing_ops: list[dict]) -> list[str]:
     """Errors for an ``extract_pages`` op whose page range overlaps a pending
     ``extract_pages`` op on the same file ([] = no overlap).
@@ -138,9 +151,7 @@ def resolve_op_defaults(op: dict, *, src_cell: dict) -> dict:
             out[key] = value
 
     if ot == "move_file":
-        per_file = src_cell.get("per_file") or {}
-        overrides = src_cell.get("per_file_overrides") or {}
-        _set_if_none("doc_count", overrides.get(file, per_file.get(file, 1)))
+        _set_if_none("doc_count", file_contribution(src_cell, file))
         _set_if_none("worker_count", _marks_total(lambda m: True))
     elif ot == "extract_pages":
         _set_if_none("doc_count", 1)
