@@ -17,6 +17,37 @@ def _ranges_overlap(a: list[int], b: list[int]) -> bool:
     return a[0] <= b[1] and b[0] <= a[1]
 
 
+def overlap_errors(op: dict, existing_ops: list[dict]) -> list[str]:
+    """Errors for an ``extract_pages`` op whose page range overlaps a pending
+    ``extract_pages`` op on the same file ([] = no overlap).
+
+    Pure + free of filesystem inputs, so it is used both by ``validate_op`` (the
+    pre-create validation) and by the atomic in-lock re-check in
+    ``SessionManager.add_reorg_op_validated`` (F4) — the latter guards against a
+    second op being appended between validation and persistence.
+    """
+    if op.get("op_type") != "extract_pages":
+        return []
+    src = op.get("source") or {}
+    file = src.get("file")
+    pr = src.get("page_range")
+    if not pr:
+        return []
+    errors: list[str] = []
+    for other in existing_ops:
+        other_src = other.get("source") or {}
+        other_pr = other_src.get("page_range")
+        if (
+            other.get("op_type") == "extract_pages"
+            and other.get("status", "pending") == "pending"
+            and other_src.get("file") == file
+            and other_pr
+            and _ranges_overlap(pr, other_pr)
+        ):
+            errors.append(f"page_range solapa otra op del mismo archivo: {other_pr}")
+    return errors
+
+
 def validate_op(
     op: dict,
     *,
@@ -66,17 +97,7 @@ def validate_op(
             x, y = pr
             if not (1 <= x <= y <= pages):
                 errors.append(f"page_range fuera de límites: {pr} (páginas={pages})")
-            for other in existing_ops:
-                other_src = other.get("source") or {}
-                other_pr = other_src.get("page_range")
-                if (
-                    other.get("op_type") == "extract_pages"
-                    and other.get("status", "pending") == "pending"
-                    and other_src.get("file") == file
-                    and other_pr
-                    and _ranges_overlap(pr, other_pr)
-                ):
-                    errors.append(f"page_range solapa otra op del mismo archivo: {other_pr}")
+            errors.extend(overlap_errors(op, existing_ops))
 
     rot = op.get("rotation_deg", 0)
     if rot not in ROTATIONS:

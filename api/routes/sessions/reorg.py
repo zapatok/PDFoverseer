@@ -20,7 +20,6 @@ from ._common import (
     _validate_session_id,
     cell_page_counts,
     get_manager,
-    refresh_reorg_deltas,
 )
 
 router = APIRouter()
@@ -125,8 +124,12 @@ def create_reorg_op(
         body.participant_id,
         [(src["hospital"], src["sigla"]), (dst["hospital"], dst["sigla"])],
     )
-    created = mgr.add_reorg_op(session_id, op)
-    refresh_reorg_deltas(mgr, session_id, check_applied=False)
+    # F4: append + delta recompute happen atomically under one lock (the overlap
+    # re-check inside catches a race with a concurrent create).
+    try:
+        created = mgr.add_reorg_op_validated(session_id, op)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     _broadcast_session_refresh(request, session_id)
     state = mgr.get_session_state(session_id)
     return {"op": created, "cells": state["cells"]}
@@ -159,9 +162,9 @@ def delete_reorg_op(
             (op["dest"]["hospital"], op["dest"]["sigla"]),
         ],
     )
-    if not mgr.delete_reorg_op(session_id, op_id):
+    # F4: delete + delta recompute run atomically under one lock.
+    if not mgr.delete_reorg_op_and_refresh(session_id, op_id):
         raise HTTPException(404, f"Op not found: {op_id}")
-    refresh_reorg_deltas(mgr, session_id, check_applied=False)
     _broadcast_session_refresh(request, session_id)
     state = mgr.get_session_state(session_id)
     return {"deleted": op_id, "cells": state["cells"]}

@@ -14,6 +14,7 @@ from api.presence import (
     PresenceRegistry,
     is_agent,
 )
+from api.reorg import overlap_errors
 from core.cell_count import (  # noqa: F401  re-exported for api consumers
     _sum_marks,
     compute_cell_count,
@@ -26,6 +27,7 @@ from core.db.sessions_repo import (
     get_session,
     update_session_state,
 )
+from core.orchestrator import _find_category_folder
 from core.scanners.base import ScanResult
 from core.state.migrations import (
     migrate_state_v1_to_v2,
@@ -706,6 +708,106 @@ class SessionManager:
             cell["reorg_doc_delta"] = d.get("doc", 0)
             cell["reorg_worker_delta"] = d.get("worker", 0)
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    @_synchronized
+    def recompute_reorg_deltas(self, session_id: str, *, check_applied: bool = False) -> None:
+        """Atomically recompute every cell's reorg delta from ``state["reorg_ops"]``.
+
+        ONE ``_load_and_migrate`` → mutate ops/deltas → ONE ``update_session_state``,
+        all under the single RLock — so a concurrent ``add_reorg_op``/``delete`` can
+        never be lost to a get-then-set race (F4; the old two-call
+        ``get_session_state`` + ``set_reorg_state`` released the lock in between).
+
+        ``check_applied=True`` (pase-1 re-scan only) marks a pending op ``applied``
+        when its ``source.file`` is gone from disk. Uses only PDF *names*
+        (``folder.rglob`` name set) — never opens a PDF while holding the lock.
+
+        Args:
+            session_id: Target session identifier.
+            check_applied: When True, retire pending ops whose source file moved.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        ops = state.get("reorg_ops", [])
+        month_root = Path(state.get("month_root", ""))
+
+        if check_applied:
+            for op in ops:
+                if op.get("status") != "pending":
+                    continue
+                src = op["source"]
+                file = src.get("file")
+                if file is None:
+                    continue  # malformed op (validation requires a file); never auto-apply
+                folder = _find_category_folder(month_root / src["hospital"], src["sigla"])
+                # names only — no fitz.open inside the lock
+                present = {p.name for p in folder.rglob("*.pdf")} if folder.exists() else set()
+                if file not in present:
+                    op["status"] = "applied"
+
+        deltas: dict[tuple[str, str], dict] = {}
+        for op in ops:
+            if op.get("status") != "pending":
+                continue
+            src_key = (op["source"]["hospital"], op["source"]["sigla"])
+            dst_key = (op["dest"]["hospital"], op["dest"]["sigla"])
+            doc = op.get("doc_count") or 0
+            wrk = op.get("worker_count") or 0
+            for key in (src_key, dst_key):
+                deltas.setdefault(key, {"doc": 0, "worker": 0})
+            deltas[src_key]["doc"] -= doc
+            deltas[src_key]["worker"] -= wrk
+            deltas[dst_key]["doc"] += doc
+            deltas[dst_key]["worker"] += wrk
+
+        state["reorg_ops"] = ops
+        for siglas in state.get("cells", {}).values():
+            for cell in siglas.values():
+                cell["reorg_doc_delta"] = 0
+                cell["reorg_worker_delta"] = 0
+        for (hosp, sigla), d in deltas.items():
+            cell = state.setdefault("cells", {}).setdefault(hosp, {}).setdefault(sigla, {})
+            cell["reorg_doc_delta"] = d.get("doc", 0)
+            cell["reorg_worker_delta"] = d.get("worker", 0)
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    @_synchronized
+    def add_reorg_op_validated(self, session_id: str, op: dict) -> dict:
+        """Append a reorg op after an atomic overlap re-check, then recompute deltas.
+
+        The whole sequence — overlap check against fresh ``state["reorg_ops"]``,
+        id assignment + append, and the delta recompute — runs under one RLock
+        acquisition (F4), so two concurrent creates can't both pass a stale
+        overlap check nor lose each other's op.
+
+        Args:
+            session_id: Target session identifier.
+            op: The op dict (page-bounds already validated by the route via
+                ``validate_op``, which needs PDF page counts).
+
+        Returns:
+            The created op (with its assigned ``id``).
+
+        Raises:
+            ValueError: If the op overlaps an existing pending op on the same file.
+        """
+        state, _ = self._load_and_migrate(session_id)
+        errors = overlap_errors(op, state.get("reorg_ops", []))
+        if errors:
+            raise ValueError("; ".join(errors))
+        created = self.add_reorg_op(session_id, op)  # append + persist (re-entrant lock)
+        self.recompute_reorg_deltas(session_id)  # recompute + persist (same lock)
+        return created
+
+    @_synchronized
+    def delete_reorg_op_and_refresh(self, session_id: str, op_id: str) -> bool:
+        """Delete a reorg op and recompute deltas atomically (F4).
+
+        Both steps run under one RLock acquisition so no concurrent op edit is
+        lost between the delete and the refresh. Returns True iff an op was removed.
+        """
+        removed = self.delete_reorg_op(session_id, op_id)
+        self.recompute_reorg_deltas(session_id)
+        return removed
 
     @_synchronized
     def apply_cell_result(

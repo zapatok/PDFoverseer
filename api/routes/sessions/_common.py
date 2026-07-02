@@ -208,57 +208,19 @@ def refresh_reorg_deltas(
 ) -> None:
     """Recompute every cell's reorg delta from ``state["reorg_ops"]`` (session-wide).
 
-    Pattern of ``refresh_all_reliable`` (cache derived from the source, refreshed
-    after mutations), but session-scoped: it sweeps all cells. Call with
-    ``check_applied=True`` only on a pase-1 re-scan — the one moment a source file
-    could have moved physically: a ``pending`` op whose ``source.file`` is no longer
-    present in its origin folder is marked ``applied`` and stops contributing a delta
-    (the move is now physical reality; counting both would double-count).
-
-    Two-call pattern (get-then-set, like ``refresh_all_reliable``): safe here because
-    the only writer to ``reorg_ops`` is the same synchronous HTTP tier (scan + the
-    op-CRUD endpoints). The background OCR drain thread never touches ``reorg_ops``
-    (it only writes per-file/cell OCR fields), so no concurrent edit is lost.
+    Thin delegation to the atomic ``SessionManager.recompute_reorg_deltas`` (F4):
+    that does ONE load → mutate → ONE write under the single RLock, so a concurrent
+    ``add_reorg_op``/``delete`` can't be lost to a get-then-set race. (This wrapper
+    used to do the get-then-set itself — hence the race.) The pase-1 ``scan`` route
+    call site passes ``check_applied=True`` to retire ops whose source file moved.
 
     Args:
         mgr: The active SessionManager.
         session_id: Target session identifier.
-        check_applied: When True, inspect each pending op's source folder on disk
-            and mark it ``applied`` if the file is gone.
+        check_applied: When True, mark each pending op ``applied`` if its source
+            file is gone from disk.
     """
-    state = mgr.get_session_state(session_id)
-    ops = state.get("reorg_ops", [])
-    month_root = Path(state.get("month_root", ""))
-
-    if check_applied:
-        for op in ops:
-            if op.get("status") != "pending":
-                continue
-            src = op["source"]
-            file = src.get("file")
-            if file is None:
-                continue  # malformed op (validation requires a file); never auto-apply
-            folder = _find_category_folder(month_root / src["hospital"], src["sigla"])
-            present = set(cell_page_counts(folder)) if folder.exists() else set()
-            if file not in present:
-                op["status"] = "applied"
-
-    deltas: dict[tuple[str, str], dict] = {}
-    for op in ops:
-        if op.get("status") != "pending":
-            continue
-        src_key = (op["source"]["hospital"], op["source"]["sigla"])
-        dst_key = (op["dest"]["hospital"], op["dest"]["sigla"])
-        doc = op.get("doc_count") or 0
-        wrk = op.get("worker_count") or 0
-        for key in (src_key, dst_key):
-            deltas.setdefault(key, {"doc": 0, "worker": 0})
-        deltas[src_key]["doc"] -= doc
-        deltas[src_key]["worker"] -= wrk
-        deltas[dst_key]["doc"] += doc
-        deltas[dst_key]["worker"] += wrk
-
-    mgr.set_reorg_state(session_id, ops=ops, deltas=deltas)
+    mgr.recompute_reorg_deltas(session_id, check_applied=check_applied)
 
 
 def _is_capped_sigla(sigla: str) -> bool:
