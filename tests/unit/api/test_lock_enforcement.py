@@ -124,6 +124,19 @@ def test_apply_per_file_override_enforces_lock(tmp_path):
         mgr.apply_per_file_override("2026-04", "HRB", "odi", "doc.pdf", 2, "p1")
 
 
+def test_reconcile_worker_marks_enforces_lock(tmp_path):
+    # F1: the lock check is the first statement — it fires even before the
+    # unknown-from_file KeyError.
+    mgr = _make_manager(tmp_path)
+    mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
+    mgr.presence_heartbeat("2026-04", "p2", name="Carla", color="#b")
+    mgr.presence_focus("2026-04", "p2", "HRB|charla")
+    with pytest.raises(CellLockedError):
+        mgr.reconcile_worker_marks(
+            "2026-04", "HRB", "charla", action="discard", from_file="x.pdf", participant_id="p1"
+        )
+
+
 # ── Task 4: endpoint 409 ──────────────────────────────────────────────────────
 
 
@@ -142,6 +155,31 @@ def test_override_endpoint_409_when_locked_by_another():
             json={"value": 5, "participant_id": "p1"},
         )
         assert r.status_code == 409
+        assert r.json()["lock_holder"]["name"] == "Carla"
+
+
+def test_reconcile_worker_marks_endpoint_409_when_locked_by_another(tmp_path, monkeypatch):
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "recon.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "p2", "name": "Carla", "color": "#b"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/focus",
+            json={"participant_id": "p2", "cell": "HLL|charla"},
+        )
+        r = c.post(
+            f"/api/sessions/{sid}/cells/HLL/charla/worker-marks/reconcile",
+            json={"action": "discard", "from_file": "x.pdf", "participant_id": "p1"},
+        )
+        assert r.status_code == 409, r.text
         assert r.json()["lock_holder"]["name"] == "Carla"
 
 

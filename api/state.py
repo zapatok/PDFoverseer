@@ -606,6 +606,64 @@ class SessionManager:
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     @_synchronized
+    def reconcile_worker_marks(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        *,
+        action: str,
+        from_file: str,
+        to_file: str | None = None,
+        participant_id: str | None = None,
+    ) -> None:
+        """Reconcile orphan worker/check marks (F1): re-key them onto a present
+        file (``migrate``) or drop them (``discard``).
+
+        When a PDF is renamed or merged during a corpus reorganization its marks
+        become orphaned — ``_sum_marks`` filters them out of the present-filtered
+        total, so the counted work silently vanishes from the Excel. This makes
+        that recoverable instead of lost.
+
+        ``migrate`` appends ``from_file``'s marks to ``to_file``'s existing list
+        and removes the ``from_file`` key. The page numbers are kept verbatim:
+        after a merge they are historical evidence of the counted work, not live
+        viewer anchors, so re-numbering them would be meaningless. ``discard``
+        simply removes the ``from_file`` key.
+
+        Args:
+            session_id: Target session (``YYYY-MM``).
+            hospital: Hospital code (HLL/HLU/HRB/HPV).
+            sigla: The worker/checks sigla (charla/chintegral/dif_pts/maquinaria).
+            action: ``"migrate"`` or ``"discard"``.
+            from_file: The orphaned filename whose marks are moved/dropped.
+            to_file: Destination filename for ``"migrate"`` (ignored by discard).
+            participant_id: Caller's participant id for lock enforcement (M3a).
+                ``None`` disables enforcement (legacy / no-presence callers).
+
+        Raises:
+            CellLockedError: if the cell is held by a different participant.
+            KeyError: if ``from_file`` has no marks in the cell.
+        """
+        holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
+        if holder is not None:
+            raise CellLockedError(hospital, sigla, holder)
+        # M3b: agent auto-claim on write (see apply_user_override for full comment).
+        if is_agent(participant_id):
+            self._presence.agent_focus(session_id, f"{hospital}|{sigla}")
+        state, _ = self._load_and_migrate(session_id)
+        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+        marks = cell.get("worker_marks") or {}
+        if from_file not in marks:
+            raise KeyError(from_file)
+        if action == "migrate":
+            marks.setdefault(to_file, []).extend(marks.pop(from_file))
+        else:  # discard
+            marks.pop(from_file)
+        cell["worker_marks"] = marks
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    @_synchronized
     def apply_confirmed(
         self,
         session_id: str,

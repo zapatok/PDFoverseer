@@ -131,3 +131,61 @@ def test_get_session_enriches_worker_count_present_filtered(client, monkeypatch,
     assert charla["worker_count"] == 5  # gone.pdf orphan excluded, real.pdf counted
     # A document sigla (odi) is seeded by the v3→v4 reconcile but carries no worker_count.
     assert "worker_count" not in state["cells"]["HLL"]["odi"]
+
+
+def test_reconcile_worker_marks_migrate_returns_enriched(client, monkeypatch, tmp_path):
+    """F1/Task 2.3: migrate re-keys the orphan onto a present file, response is the
+    enriched cell (present-filtered worker_count included)."""
+    charla_dir = tmp_path / "ABRIL" / "HLL" / "4.-Charlas"
+    charla_dir.mkdir(parents=True)
+    (charla_dir / "new.pdf").write_bytes(b"%PDF-1.4\n")
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    client.patch(
+        "/api/sessions/2026-04/cells/HLL/charla/worker-count",
+        json={"marks": {"old.pdf": [{"page": 1, "count": 7}]}},
+    )
+    r = client.post(
+        "/api/sessions/2026-04/cells/HLL/charla/worker-marks/reconcile",
+        json={"action": "migrate", "from_file": "old.pdf", "to_file": "new.pdf"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "old.pdf" not in body["worker_marks"]
+    assert body["worker_marks"]["new.pdf"] == [{"page": 1, "count": 7}]
+    assert body["worker_count"] == 7  # migrated onto a present file → now counted
+
+
+def test_reconcile_migrate_without_to_file_400(client, monkeypatch):
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    r = client.post(
+        "/api/sessions/2026-04/cells/HLL/charla/worker-marks/reconcile",
+        json={"action": "migrate", "from_file": "old.pdf"},
+    )
+    assert r.status_code == 400
+
+
+def test_reconcile_bad_action_400(client, monkeypatch):
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    r = client.post(
+        "/api/sessions/2026-04/cells/HLL/charla/worker-marks/reconcile",
+        json={"action": "explode", "from_file": "old.pdf"},
+    )
+    assert r.status_code == 400
+
+
+def test_reconcile_unknown_from_file_404(client, monkeypatch, tmp_path):
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    client.patch(
+        "/api/sessions/2026-04/cells/HLL/charla/worker-count",
+        json={"marks": {"a.pdf": [{"page": 1, "count": 1}]}},
+    )
+    r = client.post(
+        "/api/sessions/2026-04/cells/HLL/charla/worker-marks/reconcile",
+        json={"action": "discard", "from_file": "nope.pdf"},
+    )
+    assert r.status_code == 404

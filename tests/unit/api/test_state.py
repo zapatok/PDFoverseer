@@ -601,6 +601,64 @@ def test_apply_worker_count_empty_marks_clears(manager):
     assert cell["worker_marks"] == {}
 
 
+def test_reconcile_worker_marks_migrate_appends_to_existing(manager):
+    # F1: migrate re-keys the orphan's marks onto the destination file, appending
+    # after any marks that file already has; the old key is removed.
+    manager.apply_worker_count(
+        "2026-04",
+        "HLL",
+        "charla",
+        marks={
+            "old.pdf": [{"page": 1, "count": 7}],
+            "new.pdf": [{"page": 2, "count": 3}],
+        },
+    )
+    manager.reconcile_worker_marks(
+        "2026-04", "HLL", "charla", action="migrate", from_file="old.pdf", to_file="new.pdf"
+    )
+    marks = manager.get_session_state("2026-04")["cells"]["HLL"]["charla"]["worker_marks"]
+    assert "old.pdf" not in marks
+    assert marks["new.pdf"] == [{"page": 2, "count": 3}, {"page": 1, "count": 7}]
+
+
+def test_reconcile_worker_marks_migrate_to_fresh_key(manager):
+    manager.apply_worker_count(
+        "2026-04", "HLL", "charla", marks={"old.pdf": [{"page": 1, "count": 7}]}
+    )
+    manager.reconcile_worker_marks(
+        "2026-04", "HLL", "charla", action="migrate", from_file="old.pdf", to_file="fresh.pdf"
+    )
+    marks = manager.get_session_state("2026-04")["cells"]["HLL"]["charla"]["worker_marks"]
+    assert marks == {"fresh.pdf": [{"page": 1, "count": 7}]}
+
+
+def test_reconcile_worker_marks_discard_removes_key(manager):
+    manager.apply_worker_count(
+        "2026-04",
+        "HLL",
+        "charla",
+        marks={
+            "gone.pdf": [{"page": 1, "count": 9}],
+            "keep.pdf": [{"page": 1, "count": 2}],
+        },
+    )
+    manager.reconcile_worker_marks(
+        "2026-04", "HLL", "charla", action="discard", from_file="gone.pdf"
+    )
+    marks = manager.get_session_state("2026-04")["cells"]["HLL"]["charla"]["worker_marks"]
+    assert marks == {"keep.pdf": [{"page": 1, "count": 2}]}
+
+
+def test_reconcile_worker_marks_unknown_from_file_raises_keyerror(manager):
+    manager.apply_worker_count(
+        "2026-04", "HLL", "charla", marks={"a.pdf": [{"page": 1, "count": 1}]}
+    )
+    with pytest.raises(KeyError):
+        manager.reconcile_worker_marks(
+            "2026-04", "HLL", "charla", action="discard", from_file="nope.pdf"
+        )
+
+
 def test_set_note_writes_text_and_status(manager):
     """set_note persists note + note_status; does not touch other cell fields."""
     manager.apply_filename_result("2026-04", "HPV", "odi", _filename_result(3))

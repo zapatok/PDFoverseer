@@ -25,6 +25,7 @@ from ._common import (
     _validate_cell_coords,
     _validate_session_id,
     cell_page_counts,
+    enrich_cell_worker_count,
     get_manager,
     present_file_names,
     refresh_all_reliable,
@@ -227,6 +228,61 @@ def patch_worker_count(
         "worker_cursor": cell.get("worker_cursor"),
         "worker_count": compute_worker_count(cell, present),
     }
+
+
+class ReconcileWorkerMarksBody(BaseModel):
+    """Body del POST worker-marks/reconcile (F1).
+
+    ``action`` se valida a mano (no vía ``Literal``) para devolver un 400 limpio
+    en una acción desconocida y en ``migrate`` sin ``to_file`` — dos reglas que
+    un ``Literal`` no expresa junto.
+    """
+
+    action: str
+    from_file: str
+    to_file: str | None = None
+    participant_id: str | None = None
+
+
+@router.post("/sessions/{session_id}/cells/{hospital}/{sigla}/worker-marks/reconcile")
+def reconcile_worker_marks(
+    request: Request,
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    body: ReconcileWorkerMarksBody,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Reconcile orphan worker/check marks: migrate them onto a present file, or
+    discard them (F1). Returns the enriched cell (canonical worker_count)."""
+    _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
+    if body.action not in ("migrate", "discard"):
+        raise HTTPException(400, "action must be 'migrate' or 'discard'")
+    if body.action == "migrate" and not body.to_file:
+        raise HTTPException(400, "migrate requires to_file")
+    try:
+        mgr.reconcile_worker_marks(
+            session_id,
+            hospital,
+            sigla,
+            action=body.action,
+            from_file=body.from_file,
+            to_file=body.to_file,
+            participant_id=body.participant_id,
+        )
+    except KeyError as exc:
+        # Unknown from_file (or missing session) → 404. The lock check runs first
+        # in the manager, so a contested cell 409s before reaching here.
+        raise HTTPException(404, f"Sin marcas para el archivo: {body.from_file}") from exc
+    state = mgr.get_session_state(session_id)
+    cell = state["cells"].get(hospital, {}).get(sigla, {})
+    month_root = Path(state.get("month_root", ""))
+    enriched = enrich_cell_worker_count(cell, month_root, hospital, sigla)
+    _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
+    if is_agent(body.participant_id):
+        _broadcast_presence(request, mgr, session_id)
+    return enriched
 
 
 class NotePatch(BaseModel):
