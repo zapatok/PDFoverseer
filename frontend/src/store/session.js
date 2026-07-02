@@ -246,6 +246,34 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
+  // F1 (Task 2.4) — reconcile orphan worker/check marks (migrate/discard). The
+  // route returns the enriched cell (canonical worker_count) → merge it in.
+  reconcileWorkerMarks: async (sessionId, hospital, sigla, payload) => {
+    const participantId = getParticipantId();
+    try {
+      const cell = await api.reconcileWorkerMarks(
+        sessionId, hospital, sigla, payload, participantId,
+      );
+      set((prev) => {
+        if (!prev.session) return {};
+        const cells = { ...prev.session.cells };
+        const hosp = { ...cells[hospital] };
+        hosp[sigla] = { ...hosp[sigla], ...cell };
+        cells[hospital] = hosp;
+        return { session: { ...prev.session, cells } };
+      });
+    } catch (error) {
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        toast.error(`${who} está editando esta celda`);
+        get().refetchSession(sessionId);
+        return;
+      }
+      set({ error: String(error) });
+      throw error; // re-throw so the panel shows a failure toast (don't claim success)
+    }
+  },
+
   saveOverride: async (sessionId, hospital, sigla, value, opts = {}) => {
     const key = `${hospital}|${sigla}`;
     const controller = new AbortController();

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2, Ratio } from "lucide-react";
 import NotePanel from "./NotePanel";
 import ReorganizacionPanel from "./ReorganizacionPanel";
+import OrphanMarksPanel from "./OrphanMarksPanel";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
 import Badge from "../ui/Badge";
@@ -220,6 +221,9 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const presence = useSessionStore((s) => s.presence);
   const [scanInfo, setScanInfo] = useState(null);
   const [totalPages, setTotalPages] = useState(null);
+  // Filenames present in the cell folder — one source, reused for the ≤pages cap
+  // AND the orphan-marks panel (F1). Fetched by the effect below (filesTick-keyed).
+  const [cellFileNames, setCellFileNames] = useState([]);
   const [ratioNOpen, setRatioNOpen] = useState(false);
   const [ratioNValue, setRatioNValue] = useState(2);
   // hasOverride(null) is falsy, so a null cell defaults to "files". These hooks
@@ -235,13 +239,16 @@ export default function DetailPanel({ hospital, sigla, cell }) {
     return () => { alive = false; };
   }, [sigla]);
 
-  // Incr 2 — compute totalPages for the ≤pages cap (lazy, re-fetches on tick).
+  // Incr 2 — totalPages for the ≤pages cap + the present filenames for the orphan
+  // panel (lazy, re-fetches on tick). One fetch, one source for both.
   useEffect(() => {
-    if (!sessionId || !hospital || !sigla) { setTotalPages(null); return; }
+    if (!sessionId || !hospital || !sigla) { setTotalPages(null); setCellFileNames([]); return; }
     let alive = true;
     api.getCellFiles(sessionId, hospital, sigla)
       .then((files) => {
-        if (alive) setTotalPages(files.reduce((sum, f) => sum + (f.page_count ?? 0), 0));
+        if (!alive) return;
+        setTotalPages(files.reduce((sum, f) => sum + (f.page_count ?? 0), 0));
+        setCellFileNames(files.map((f) => f.name));
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -499,7 +506,19 @@ export default function DetailPanel({ hospital, sigla, cell }) {
           and checks (maquinaria). dif_pts wired to N15 in Incr 3B. Keep above
           near-match suspects. */}
       {showsWorkerCounter(countType) && (
-        <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} countType={countType} locked={locked} />
+        <>
+          <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} countType={countType} locked={locked} />
+          {/* F1 — orphan marks (files no longer in the folder): migrate/discard.
+              Self-hides when there are no orphans. */}
+          <OrphanMarksPanel
+            hospital={hospital}
+            sigla={sigla}
+            cell={cell}
+            files={cellFileNames}
+            sessionId={sessionId}
+            locked={locked}
+          />
+        </>
       )}
 
       <NearMatchesSection

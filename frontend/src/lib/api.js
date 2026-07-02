@@ -102,6 +102,19 @@ export const api = {
     return jsonOrThrowStructured(r);
   },
 
+  // F1 (Task 2.3) — reconcile orphan worker/check marks. payload =
+  // { action: "migrate"|"discard", from_file, to_file? }. Returns the enriched
+  // cell; jsonOrThrowStructured preserves the 409 body (lock_holder) for the store.
+  reconcileWorkerMarks: (sessionId, hospital, sigla, payload, participantId) =>
+    fetch(
+      `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/worker-marks/reconcile`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, participant_id: participantId ?? null }),
+      },
+    ).then(jsonOrThrowStructured),
+
   patchNote: async (sessionId, hospital, sigla, patch, opts = {}) => {
     const body = { ...patch, participant_id: opts.participantId ?? null };
     const r = await fetch(
