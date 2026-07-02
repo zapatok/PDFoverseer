@@ -105,3 +105,29 @@ def test_patch_worker_count_unknown_sigla_400(client, monkeypatch):
         json={"status": "terminado"},
     )
     assert r.status_code == 400
+
+
+def test_get_session_enriches_worker_count_present_filtered(client, monkeypatch, tmp_path):
+    """F1/Task 2.1: GET session carries a canonical present-filtered ``worker_count``
+    on every worker/checks cell. Marks for files no longer on disk (orphans) are
+    excluded; document siglas carry NO ``worker_count`` key."""
+    charla_dir = tmp_path / "ABRIL" / "HLL" / "4.-Charlas"
+    charla_dir.mkdir(parents=True)
+    (charla_dir / "real.pdf").write_bytes(b"%PDF-1.4\n")
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    # real.pdf is present on disk (counted); gone.pdf is an orphan (excluded).
+    client.patch(
+        "/api/sessions/2026-04/cells/HLL/charla/worker-count",
+        json={
+            "marks": {
+                "real.pdf": [{"page": 1, "count": 5}],
+                "gone.pdf": [{"page": 1, "count": 9}],
+            }
+        },
+    )
+    state = client.get("/api/sessions/2026-04").json()
+    charla = state["cells"]["HLL"]["charla"]
+    assert charla["worker_count"] == 5  # gone.pdf orphan excluded, real.pdf counted
+    # A document sigla (odi) is seeded by the v3→v4 reconcile but carries no worker_count.
+    assert "worker_count" not in state["cells"]["HLL"]["odi"]

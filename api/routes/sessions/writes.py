@@ -26,6 +26,7 @@ from ._common import (
     _validate_session_id,
     cell_page_counts,
     get_manager,
+    present_file_names,
     refresh_all_reliable,
 )
 
@@ -210,7 +211,9 @@ def patch_worker_count(
     cell = state["cells"].get(hospital, {}).get(sigla, {})
     month_root = Path(state.get("month_root", ""))
     folder = _find_category_folder(month_root / hospital, sigla)
-    present = set(cell_page_counts(folder)) if folder.exists() else None
+    # F1: names-only present set (no PDF opens) — the same canonical filter GET +
+    # the cell_updated snapshot use, so the PATCH response can never disagree.
+    present = present_file_names(folder) if folder.exists() else None
     # checks cells (maquinaria) light green on worker_status=='terminado'; for
     # documents_workers this recomputes document settledness (no-op-ish). Closes
     # the gap that the worker PATCH didn't refresh all_reliable.

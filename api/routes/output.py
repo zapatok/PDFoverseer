@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import FileResponse
 
-from api.routes.sessions import cell_page_counts, get_manager
+from api.routes.sessions import cell_page_counts, get_manager, present_file_names
 from api.state import SessionManager, compute_cell_count, compute_worker_count
 from core.db.historical_repo import upsert_count
 from core.domain import HOSPITALS, SIGLAS
@@ -156,7 +156,10 @@ def _build_worker_values(state: dict) -> dict[str, int]:
             if "worker_marks" not in cell and "worker_status" not in cell:
                 continue  # nunca se contó — no emitir; el template queda en blanco
             folder = _find_category_folder(month_root / hosp, sigla)
-            present = set(cell_page_counts(folder)) if folder.exists() else None
+            # F1: canonical present-filtered set via names only (no PDF opens). The
+            # folder-missing branch keeps its legacy ``None`` filtering, unchanged by
+            # design (output-conservative — never flips an existing Excel value).
+            present = present_file_names(folder) if folder.exists() else None
             out[f"{hosp}_workers_{purpose}"] = compute_worker_count(cell, present)
 
     # dif_pts (Incr 3B): worker total → HH cell of its own row, scoped to HPV.
@@ -168,7 +171,8 @@ def _build_worker_values(state: dict) -> dict[str, int]:
         if cell is None:
             continue  # no dif_pts cell → N15 stays at the template's 0
         folder = _find_category_folder(month_root / hosp, "dif_pts")
-        present = set(cell_page_counts(folder)) if folder.exists() else None
+        # F1: names-only present set (see the charla/chintegral loop above).
+        present = present_file_names(folder) if folder.exists() else None
         out[f"{hosp}_workers_difpts"] = compute_worker_count(cell, present)
     return out
 

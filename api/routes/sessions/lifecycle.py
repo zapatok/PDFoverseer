@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from api.state import SessionManager
 
-from ._common import _resolve_month_dir, _validate_session_id, get_manager
+from ._common import (
+    _resolve_month_dir,
+    _validate_session_id,
+    enrich_cell_worker_count,
+    get_manager,
+)
 
 router = APIRouter()
 
@@ -30,9 +37,25 @@ def get(
     session_id: str,
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
-    """Return the persisted state dict for a session."""
+    """Return the persisted state dict for a session.
+
+    Every worker/checks cell is enriched with the canonical present-filtered
+    ``worker_count`` in the RESPONSE copy only (F1) — the field is never persisted
+    into state (its single producer is this derivation).
+    """
     _validate_session_id(session_id)
     try:
-        return mgr.get_session_state(session_id)
+        state = mgr.get_session_state(session_id)
     except KeyError as exc:
         raise HTTPException(404, f"Session not found: {session_id}") from exc
+    month_root = Path(state.get("month_root", ""))
+    return {
+        **state,
+        "cells": {
+            hosp: {
+                sigla: enrich_cell_worker_count(cell, month_root, hosp, sigla)
+                for sigla, cell in cell_map.items()
+            }
+            for hosp, cell_map in state.get("cells", {}).items()
+        },
+    }

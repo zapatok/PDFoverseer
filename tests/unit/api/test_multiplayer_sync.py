@@ -56,6 +56,20 @@ def test_cell_updated_event_missing_cell_returns_none(app) -> None:
         assert _cell_updated_event(mgr, "2026-04", "HPV", "nope") is None
 
 
+def test_cell_updated_event_carries_worker_count(app, tmp_path) -> None:
+    """F1/Task 2.1: a cell_updated event for a worker sigla carries a canonical,
+    present-filtered ``worker_count`` (folder empty → orphan marks excluded → 0)."""
+    with TestClient(app) as client:  # noqa: F841
+        mgr = app.state.manager
+        mgr.open_session(year=2026, month=4, month_root=tmp_path)
+        mgr.apply_worker_count(
+            "2026-04", "HLL", "charla", marks={"gone.pdf": [{"page": 1, "count": 9}]}
+        )
+        event = _cell_updated_event(mgr, "2026-04", "HLL", "charla")
+        assert "worker_count" in event["cell"]
+        assert event["cell"]["worker_count"] == 0  # gone.pdf not present → excluded
+
+
 def _open_session(client: TestClient) -> None:
     """Abre la sesión 2026-04 vía API (usa el corpus real montado en el repo)."""
     r = client.post("/api/sessions", json={"year": 2026, "month": 4})

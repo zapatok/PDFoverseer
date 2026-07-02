@@ -19,7 +19,7 @@ import fitz
 from fastapi import HTTPException, Request
 
 from api.routes.ws import _emit
-from api.state import SessionManager
+from api.state import SessionManager, compute_worker_count
 from core.domain import HOSPITALS, SIGLAS
 from core.orchestrator import _find_category_folder
 from core.scanners.patterns import count_type_for
@@ -141,6 +141,33 @@ def cell_page_counts(folder: Path) -> dict[str, int]:
     return out
 
 
+def present_file_names(folder: Path) -> set[str]:
+    """Names of the PDFs currently in a cell folder (no opens — cheap).
+
+    The canonical present-file set for worker/checks mark filtering (F1). Unlike
+    ``cell_page_counts`` this never opens a PDF, so it is safe to call on every
+    cell payload.
+    """
+    if not folder.exists():
+        return set()
+    return {p.name for p in folder.rglob("*.pdf")}
+
+
+def enrich_cell_worker_count(cell: dict, month_root: Path, hospital: str, sigla: str) -> dict:
+    """Return a copy of ``cell`` with the canonical present-filtered worker_count.
+
+    The frontend must never derive this total (bug #2, F1): one producer, one
+    filter. Only worker/checks siglas get the field; document siglas untouched.
+    Unknown/phantom siglas (e.g. a stale ``no_existe``) default to ``"documents"``
+    via ``count_type_for`` and are therefore skipped without crashing.
+    """
+    if count_type_for(sigla) not in ("documents_workers", "checks"):
+        return cell
+    folder = _find_category_folder(month_root / hospital, sigla)
+    present = present_file_names(folder)
+    return {**cell, "worker_count": compute_worker_count(cell, present)}
+
+
 def compute_settled(
     cell: dict, folder: Path, pages: dict[str, int] | None = None, count_type: str | None = None
 ) -> bool:
@@ -247,9 +274,14 @@ def _cell_updated_event(
     existe (nunca revienta el camino de escritura).
     """
     try:
-        cell = mgr.get_session_state(session_id)["cells"][hospital][sigla]
+        state = mgr.get_session_state(session_id)
+        cell = state["cells"][hospital][sigla]
     except KeyError:
         return None
+    # F1: carry the canonical present-filtered worker_count so remote clients never
+    # re-derive it (worker/checks siglas only; enrich is a no-op for document cells).
+    month_root = Path(state.get("month_root", ""))
+    cell = enrich_cell_worker_count(cell, month_root, hospital, sigla)
     return {
         "type": "cell_updated",
         "hospital": hospital,
