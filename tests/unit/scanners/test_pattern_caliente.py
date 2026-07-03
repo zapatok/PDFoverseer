@@ -1,4 +1,5 @@
-"""Smoke tests for the caliente anchor pattern (Task 5.10).
+"""Smoke tests for the caliente pagination pattern (Task 5.10; migrated
+from AnchorsScanner in Fase 7 test hardening — E8/E9).
 
 These tests run Tesseract against real fixture PDFs.  When the fixture is
 absent (gitignored), the test is skipped — not failed.  This keeps CI green.
@@ -17,8 +18,8 @@ pytesseract.pytesseract.tesseract_cmd = os.getenv(
     "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 )
 
-from core.scanners.anchors_scanner import AnchorsScanner  # noqa: E402
 from core.scanners.cancellation import CancellationToken  # noqa: E402
+from core.scanners.pagination_scanner import PaginationScanner  # noqa: E402
 
 _FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "caliente"
 _PDF = _FIXTURE_DIR / "caliente_chequeos.pdf"
@@ -30,17 +31,15 @@ def _load_gt() -> dict:
 
 
 def test_caliente_count_ocr_smoke():
-    """AnchorsScanner returns the expected cover count for the caliente fixture."""
+    """PaginationScanner returns the expected cover count for the caliente fixture."""
     if not _PDF.exists():
         pytest.skip("caliente fixture PDF not present (gitignored)")
 
     gt = _load_gt()
-    scanner = AnchorsScanner(sigla="caliente")
+    scanner = PaginationScanner(sigla="caliente")
     result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
 
-    assert result.method == "header_band_anchors", (
-        f"Expected method 'header_band_anchors', got {result.method!r}"
-    )
+    assert result.method == "pagination", f"Expected method 'pagination', got {result.method!r}"
     assert result.count == gt["covers_expected"], (
         f"caliente cover count mismatch: got {result.count}, expected {gt['covers_expected']}. "
         f"per_file={result.per_file!r}  errors={result.errors!r}"
@@ -52,7 +51,7 @@ def test_caliente_count_ocr_per_file_breakdown():
     if not _PDF.exists():
         pytest.skip("caliente fixture PDF not present (gitignored)")
 
-    scanner = AnchorsScanner(sigla="caliente")
+    scanner = PaginationScanner(sigla="caliente")
     result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
 
     assert _PDF.name in result.per_file, (

@@ -1,23 +1,22 @@
-"""Smoke tests for the herramientas_elec anchor patterns (Task 5.11).
+"""Smoke tests for the herramientas_elec pagination patterns (Task 5.11;
+migrated from AnchorsScanner in Fase 7 test hardening — E8/E9).
 
 Three OCR-verified flavors:
-  f_lch_xx  — CRS standard template (F-CRS-LCH family).  Standalone covers
-               recognised by 'constructora region sur' + 'pagina 1 de'.
-               Anti-anchors reject EPP checklists (F-CRS-LCH-02) misfiled here.
-  f_hll_17  — HLL proprietary form REG-SSO-HLL-17.  Recognised by
-               'reg sso hll 17' + 'chequeo de herramientas'.
+  f_lch_xx  — CRS standard template (F-CRS-LCH family).  Standalone covers.
+  f_hll_17  — HLL proprietary form REG-SSO-HLL-17.  Standalone covers.
   f_titan   — TITAN contractor proprietary template (TN-SGSSO-RG family).
-               Recognised by 'titan' + at least one of 'sistema de gestion de
-               seguridad y salud' / 'tn sgsso rg' / 'inspeccion' / 'herramienta'.
 
-Anti-anchor shadow: a 2-page EPP checklist (F-CRS-LCH-02) misfiled in the
-herramientas_elec folder.  Both pages carry 'constructora region sur' + 'pagina
-1 de' (would fire f_lch_xx without protection), but 'chequeo de elementos'
-fires on both → anti-anchor rejects them → 0 covers.  Decision A7 does NOT
-fire (2 pages), so the anchor/anti-anchor logic is genuinely exercised.
-
-Note: standalone 1-page EPP PDFs are A7-locked (always 1 doc, no OCR).
-Anti-anchors only apply to multi-page PDFs where OCR is actually run.
+Shadow-fixture caveat: f_lch_xx_shadow_epp is a 2-page EPP checklist
+(F-CRS-LCH-02) misfiled in the herramientas_elec folder. Under AnchorsScanner
+this yielded 0 covers because an anti-anchor ('chequeo de elementos')
+rejected both pages. PaginationScanner has no anti-anchor / content-matching
+mechanism — cover_code is its only sigla discriminator, and herramientas_elec
+has no cover_code — so it counts purely from the pagination text in the page
+corner, regardless of which sigla's folder the PDF sits in. If this fixture's
+pages carry real 'Página N de M' markers, the migrated assertion below may
+FAIL; that would be a genuine product finding (misfiled documents are no
+longer rejected for pagination-migrated siglas), not a broken test — see the
+Fase 7 plan's NUANCES for Task 7.1.
 
 Fixtures (gitignored): tests/fixtures/scanners/herramientas_elec/*.pdf
 Ground truth (committed): tests/fixtures/scanners/herramientas_elec/ground_truth.json
@@ -36,8 +35,8 @@ pytesseract.pytesseract.tesseract_cmd = os.getenv(
     "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 )
 
-from core.scanners.anchors_scanner import AnchorsScanner  # noqa: E402
 from core.scanners.cancellation import CancellationToken  # noqa: E402
+from core.scanners.pagination_scanner import PaginationScanner  # noqa: E402
 
 _DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "herramientas_elec"
 _GT = _DIR / "ground_truth.json"
@@ -66,16 +65,14 @@ def _fixture_covers(filename: str) -> int:
 
 
 def test_herramientas_elec_lch_xx_smoke():
-    """f_lch_xx fixture: scanner uses method 'header_band_anchors'."""
+    """f_lch_xx fixture: scanner uses method 'pagination'."""
     if not _LCH_PDF.exists():
         pytest.skip("herramientas_elec f_lch_xx fixture not present (gitignored)")
 
-    scanner = AnchorsScanner(sigla="herramientas_elec")
+    scanner = PaginationScanner(sigla="herramientas_elec")
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
-    assert result.method == "header_band_anchors", (
-        f"Expected method 'header_band_anchors', got {result.method!r}"
-    )
+    assert result.method == "pagination", f"Expected method 'pagination', got {result.method!r}"
 
 
 def test_herramientas_elec_lch_xx_count():
@@ -84,7 +81,7 @@ def test_herramientas_elec_lch_xx_count():
         pytest.skip("herramientas_elec f_lch_xx fixture not present (gitignored)")
 
     expected = _fixture_covers(_LCH_PDF.name)
-    scanner = AnchorsScanner(sigla="herramientas_elec")
+    scanner = PaginationScanner(sigla="herramientas_elec")
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     assert _LCH_PDF.name in result.per_file, (
@@ -107,7 +104,7 @@ def test_herramientas_elec_hll17_count():
         pytest.skip("herramientas_elec f_hll_17 fixture not present (gitignored)")
 
     expected = _fixture_covers(_HLL_PDF.name)
-    scanner = AnchorsScanner(sigla="herramientas_elec")
+    scanner = PaginationScanner(sigla="herramientas_elec")
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     assert _HLL_PDF.name in result.per_file, (
@@ -124,20 +121,13 @@ def test_herramientas_elec_hll17_count():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(
-    reason="Fixture engineered against the truncated anchor set "
-    "(pre anchor-truncation postmortem 2026-05-22); awaiting fixture rebuild "
-    "aligned to spec-verbatim anchors. Fase A calibration on the real ABRIL "
-    "corpus is the active validation. See "
-    "docs/superpowers/reports/2026-05-22-anchor-truncation-postmortem.md."
-)
 def test_herramientas_elec_titan_count():
     """f_titan fixture reports 2 covers (TITAN TN-SGSSO-RG proprietary form)."""
     if not _TITAN_PDF.exists():
         pytest.skip("herramientas_elec f_titan fixture not present (gitignored)")
 
     expected = _fixture_covers(_TITAN_PDF.name)
-    scanner = AnchorsScanner(sigla="herramientas_elec")
+    scanner = PaginationScanner(sigla="herramientas_elec")
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     assert _TITAN_PDF.name in result.per_file, (
@@ -150,28 +140,26 @@ def test_herramientas_elec_titan_count():
 
 
 # ---------------------------------------------------------------------------
-# Anti-anchor shadow (EPP misfiled) — anti-anchor must genuinely fire
+# Shadow fixture (EPP misfiled) — see module docstring caveat
 # ---------------------------------------------------------------------------
 
 
 def test_herramientas_elec_shadow_epp_anti_anchor_rejects():
-    """EPP misfiled in herramientas_elec folder: anti-anchor fires → 0 covers.
+    """EPP misfiled in herramientas_elec folder: GT says 0 covers.
 
-    The shadow fixture is a 2-page PDF so Decision A7 does NOT fire.
-    Both pages carry 'constructora region sur' + 'pagina 1 de' (would match
-    f_lch_xx without protection), but 'chequeo de elementos' fires on both
-    pages → anti-anchor rejects them → 0 covers.  This verifies the
-    anti-anchor is genuinely exercised, not bypassed by the A7 1-page lock.
+    Under AnchorsScanner this was enforced by an anti-anchor. PaginationScanner
+    has no equivalent mechanism (see module docstring) — a FAILURE here signals
+    a real product gap, not a stale test.
     """
     if not _SHADOW_PDF.exists():
         pytest.skip("herramientas_elec EPP shadow fixture not present (gitignored)")
 
-    scanner = AnchorsScanner(sigla="herramientas_elec")
+    scanner = PaginationScanner(sigla="herramientas_elec")
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     got = result.per_file.get(_SHADOW_PDF.name, -1)
     assert got == 0, (
-        f"Anti-anchor must reject EPP pages → 0 covers, got {got}. "
+        f"Anti-anchor semantics must reject EPP pages → 0 covers, got {got}. "
         f"per_file={result.per_file!r}  errors={result.errors!r}"
     )
 
@@ -181,13 +169,6 @@ def test_herramientas_elec_shadow_epp_anti_anchor_rejects():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(
-    reason="Fixture engineered against the truncated anchor set "
-    "(pre anchor-truncation postmortem 2026-05-22); awaiting fixture rebuild "
-    "aligned to spec-verbatim anchors. Fase A calibration on the real ABRIL "
-    "corpus is the active validation. See "
-    "docs/superpowers/reports/2026-05-22-anchor-truncation-postmortem.md."
-)
 def test_herramientas_elec_total_count():
     """Total across all 4 fixtures: 3 + 2 + 2 + 0 = 7 covers."""
     all_present = (
@@ -196,7 +177,7 @@ def test_herramientas_elec_total_count():
     if not all_present:
         pytest.skip("one or more herramientas_elec fixtures not present (gitignored)")
 
-    scanner = AnchorsScanner(sigla="herramientas_elec")
+    scanner = PaginationScanner(sigla="herramientas_elec")
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     gt = _load_gt()

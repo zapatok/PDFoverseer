@@ -1,4 +1,5 @@
-"""Smoke tests for the bodega anchor pattern (Task 5.4).
+"""Smoke tests for the bodega pagination pattern (Task 5.4; migrated from
+AnchorsScanner in Fase 7 test hardening — E8/E9).
 
 These tests run Tesseract against real fixture PDFs.  When the fixture is
 absent (gitignored), the test is skipped — not failed.  This keeps CI green.
@@ -21,8 +22,8 @@ pytesseract.pytesseract.tesseract_cmd = os.getenv(
     "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 )
 
-from core.scanners.anchors_scanner import AnchorsScanner  # noqa: E402
 from core.scanners.cancellation import CancellationToken  # noqa: E402
+from core.scanners.pagination_scanner import PaginationScanner  # noqa: E402
 
 _FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "bodega"
 _PDF = _FIXTURE_DIR / "f_pets_07_03_p1_chequeo.pdf"
@@ -34,22 +35,19 @@ def _load_gt() -> dict:
 
 
 def test_bodega_count_ocr_smoke():
-    """AnchorsScanner returns 4 covers for the 4-page bodega compilation fixture.
+    """PaginationScanner returns 4 covers for the 4-page bodega compilation fixture.
 
-    Each page of the fixture is a separate 1-page Chequeo Bodega document.
-    All 4 pages match min_match=3 anchors in the top band:
-    'chequeo bodega' + 'f-pets-crs-07-03' + 'bodega suspel'.
+    Each page of the fixture is a separate 1-page Chequeo Bodega document,
+    each reading 'Pagina 1 de 1' in the top-right corner.
     """
     if not _PDF.exists():
         pytest.skip("Bodega fixture PDF not present (gitignored)")
 
     gt = _load_gt()
-    scanner = AnchorsScanner(sigla="bodega")
+    scanner = PaginationScanner(sigla="bodega")
     result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
 
-    assert result.method == "header_band_anchors", (
-        f"Expected method 'header_band_anchors', got {result.method!r}"
-    )
+    assert result.method == "pagination", f"Expected method 'pagination', got {result.method!r}"
     assert result.count == gt["covers_expected"], (
         f"Bodega cover count mismatch: got {result.count}, expected {gt['covers_expected']}. "
         f"per_file={result.per_file!r}  errors={result.errors!r}"
@@ -63,7 +61,7 @@ def test_bodega_count_ocr_per_file_breakdown():
         pytest.skip("Bodega fixture PDF not present (gitignored)")
 
     gt = _load_gt()
-    scanner = AnchorsScanner(sigla="bodega")
+    scanner = PaginationScanner(sigla="bodega")
     result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
 
     assert _PDF.name in result.per_file, (

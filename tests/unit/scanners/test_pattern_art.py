@@ -1,4 +1,5 @@
-"""Smoke tests for the ART anchor pattern (Task 4.1).
+"""Smoke tests for the ART pagination pattern (Task 4.1; migrated to
+PaginationScanner in Fase 7 test hardening — E8/E9).
 
 These tests run Tesseract against real fixture PDFs.  When the fixture is
 absent (gitignored), the test is skipped — not failed.  This keeps CI green.
@@ -17,8 +18,8 @@ pytesseract.pytesseract.tesseract_cmd = os.getenv(
     "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 )
 
-from core.scanners.anchors_scanner import AnchorsScanner  # noqa: E402
 from core.scanners.cancellation import CancellationToken  # noqa: E402
+from core.scanners.pagination_scanner import PaginationScanner  # noqa: E402
 
 _FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "art"
 _PDF = _FIXTURE_DIR / "f_art_01_p1_crs_andamios.pdf"
@@ -29,25 +30,16 @@ def _load_gt() -> dict:
     return json.loads(_GT.read_text())
 
 
-@pytest.mark.skip(
-    reason="Fixture engineered against the truncated anchor set "
-    "(pre anchor-truncation postmortem 2026-05-22); awaiting fixture rebuild "
-    "aligned to spec-verbatim anchors. Fase A calibration on the real ABRIL "
-    "corpus is the active validation. See "
-    "docs/superpowers/reports/2026-05-22-anchor-truncation-postmortem.md."
-)
 def test_art_count_ocr_smoke():
-    """AnchorsScanner returns the expected cover count for the ART fixture."""
+    """PaginationScanner returns the expected cover count for the ART fixture."""
     if not _PDF.exists():
         pytest.skip("ART fixture PDF not present (gitignored)")
 
     gt = _load_gt()
-    scanner = AnchorsScanner(sigla="art")
+    scanner = PaginationScanner(sigla="art")
     result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
 
-    assert result.method == "header_band_anchors", (
-        f"Expected method 'header_band_anchors', got {result.method!r}"
-    )
+    assert result.method == "pagination", f"Expected method 'pagination', got {result.method!r}"
     assert result.count == gt["covers_expected"], (
         f"ART cover count mismatch: got {result.count}, expected {gt['covers_expected']}. "
         f"per_file={result.per_file!r}  errors={result.errors!r}"
@@ -55,19 +47,12 @@ def test_art_count_ocr_smoke():
     assert result.confidence.value == "high", f"Expected HIGH confidence, got {result.confidence}"
 
 
-@pytest.mark.skip(
-    reason="Fixture engineered against the truncated anchor set "
-    "(pre anchor-truncation postmortem 2026-05-22); awaiting fixture rebuild "
-    "aligned to spec-verbatim anchors. Fase A calibration on the real ABRIL "
-    "corpus is the active validation. See "
-    "docs/superpowers/reports/2026-05-22-anchor-truncation-postmortem.md."
-)
 def test_art_count_ocr_per_file_breakdown():
     """per_file entry exists for the fixture PDF."""
     if not _PDF.exists():
         pytest.skip("ART fixture PDF not present (gitignored)")
 
-    scanner = AnchorsScanner(sigla="art")
+    scanner = PaginationScanner(sigla="art")
     result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
 
     assert _PDF.name in result.per_file, (
