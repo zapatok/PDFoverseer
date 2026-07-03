@@ -15,7 +15,7 @@ def get_scan_info(sigla: str) -> dict:
     """Return the per-sigla scan-info dict (kind + distinctive anchors).
 
     Args:
-        sigla: one of the 18 category keys.
+        sigla: one of the 20 category keys.
 
     Returns:
         ``{"sigla", "kind", "looks_for"?}`` (see ``scan_info_for``).

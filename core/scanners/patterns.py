@@ -3,7 +3,8 @@
 Each entry declares how a sigla counts when pase-1 filename matching is not
 enough (pase-1 itself lives in core.scanners.utils.filename_glob — this
 registry does not drive its matching; see D8).
-The 18 SIGLAS from core.domain MUST each have an entry here.
+The 20 SIGLAS from core.domain MUST each have an entry here (enforced by the
+completeness gate, tests/unit/scanners/test_patterns_registry.py).
 
 See:
     docs/superpowers/specs/2026-05-18-ocr-per-sigla-refinement-design.md
@@ -869,7 +870,7 @@ CountType = Literal["documents", "documents_workers", "checks"]
 #                        Excel + trabajadores (contador por teclado) a otra (HH).
 #   checks             — maquinaria: chequeos = columnas de fecha marcadas (no
 #                        documentos; puede superar las páginas por diseño).
-# El gate de completitud (tests/unit/scanners/test_count_type.py) exige las 18.
+# El gate de completitud (tests/unit/scanners/test_count_type.py) exige las 20.
 COUNT_TYPE_BY_SIGLA: dict[str, CountType] = {
     "reunion": "documents",
     "art": "documents",
@@ -898,6 +899,6 @@ def count_type_for(sigla: str) -> CountType:
     """Tipo de conteo de la sigla (documents/documents_workers/checks).
 
     Default ``"documents"`` para una sigla desconocida (no debería ocurrir: el
-    gate de completitud exige las 18 en ``COUNT_TYPE_BY_SIGLA``).
+    gate de completitud exige las 20 en ``COUNT_TYPE_BY_SIGLA``).
     """
     return COUNT_TYPE_BY_SIGLA.get(sigla, "documents")

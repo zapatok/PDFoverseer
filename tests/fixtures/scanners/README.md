@@ -70,6 +70,23 @@ Multiple fixtures (one entry per flavor / shadow):
 count in that PDF — established by visually inspecting every page, never
 assumed. It must be honest: a 2-cover compilation has `covers_expected: 2`.
 
+The "shadow page" `notes` wording above ("anti-anchors must reject it") is
+`AnchorsScanner`-specific. Two pagination-migrated siglas (`andamios`,
+`herramientas_elec`) still carry a shadow fixture from their anchors days —
+`PaginationScanner` has no anti-anchor / content-matching mechanism, so a
+`covers_expected: 0` shadow only holds because the misfiled PDF's pagination
+text happens not to read as a cover; a future corpus PDF could break that
+assumption. See the module docstring in `test_pattern_andamios.py` (and its
+`herramientas_elec` counterpart) for the full caveat — a failure there is a
+genuine product finding (misfiled documents are no longer rejected for
+pagination-migrated siglas), not a stale test.
+
+For a from-scratch example of the per-sigla test idiom, `test_pattern_altura.py`
+(and `insgral`'s) use the `ConfidenceLevel` enum + a GT-driven fixture path
+helper (`_fixture_pdf()` reading `ground_truth.json["fixture"]` directly) —
+a slightly different idiom than the `_fixture_covers()`-helper style used by
+`andamios`/others. Both are valid; not yet unified.
+
 ## Running the smoke tests
 
 ```bash
@@ -77,8 +94,14 @@ pytest tests/unit/scanners/test_pattern_<sigla>.py -v   # one sigla
 pytest tests/unit/scanners/ -q                          # all scanner tests
 ```
 
-The anchor smokes run real Tesseract OCR; the `insgral` / `altura` smokes
-run the full V4 pipeline. Expect tens of seconds per multi-page fixture.
+Every per-sigla smoke runs real Tesseract OCR against its fixture PDF(s) — the
+6 `anchors` siglas (charla, chintegral, dif_pts, senal, chps, maquinaria) via
+`AnchorsScanner`, the other 11 (of the 12 `pagination` siglas — `espacios` has
+no fixture test file yet) via `PaginationScanner`, including `insgral`/`altura`,
+which ran the heavy V4 pipeline before the 2026-06-21 pagination migration but
+do not anymore — V4 is a deferred fallback, wired to nothing; see
+`core/CLAUDE.md`. (`reunion`/`revdocmaq` are `scan_strategy: "none"` — filename
+glob only, nothing to OCR-smoke.) Expect tens of seconds per multi-page fixture.
 
 ## A13 — adding a new flavor when an unexpected PDF appears
 

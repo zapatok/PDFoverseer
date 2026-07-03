@@ -1,7 +1,7 @@
 """Pure helpers for reorg ops: validation, default resolution, manifest build.
 
 No I/O, no FastAPI — unit-testable in isolation. The endpoints in
-``api/routes/sessions.py`` gather the filesystem/state inputs and call these.
+``api/routes/sessions/reorg.py`` gather the filesystem/state inputs and call these.
 """
 
 from __future__ import annotations

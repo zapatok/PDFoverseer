@@ -10,12 +10,34 @@ PDFoverseer counts documents per (hospital, sigla) in two passes, dispatched by
 - **Pase 2 — OCR** (`AnchorsScanner` / `PaginationScanner`): the implicit
   compilations. See **Scanner Architecture** at the end for the triad.
 
-The **V4 pipeline** documented immediately below is **no longer a standalone
-scanner** — it is an internal engine reached **only** through `PaginationScanner`
-(via `utils/v4_count.py`). The V4 / inference sections describe that engine's
-internals; the active, current design is the scanner triad.
+Pase-1 filename matching has two per-sigla escape hatches (Fase 5, F14/F6/F14a
+— `core/scanners/patterns.py:SiglaPattern` + `core/scanners/utils/filename_glob.py`),
+both needed because a few real-corpus files don't carry a clean sigla token:
 
-## V4 Pipeline (pipeline.py — internal engine, reached via PaginationScanner)
+- **`count_scope: "folder"`** (default `"token"`) — the resolved category
+  folder itself is the classifier; every PDF inside counts, no filename token
+  required. Only `chps` uses this today: its real files are unnamed by
+  convention (`crs.pdf`, `titan.pdf`).
+- **`_SIGLA_TOKEN_ALIASES`** (`filename_glob.py`) — extra filename tokens that
+  resolve to a sigla beyond its literal name: `chps` also matches the real
+  corpus's `"cphs"` spelling, and `revdocmaq` (which has no `"revdocmaq"` token
+  anywhere in the corpus) matches the phrase `"revision_documentacion"`.
+
+The **V4 pipeline** documented immediately below is **quarantined**: a
+**deferred fallback** (spec decision D10), wired to **nothing**. It is not
+reached through `PaginationScanner` or any other scanner — `PaginationScanner`
+counts via a separate, much lighter engine, `utils/pagination_count.py` (see
+**PaginationScanner + the pagination engine** below), which does its own OCR +
+recovery and never imports `pipeline.py`/`inference.py`/`ocr.py`. A second,
+unrelated adapter, `utils/v4_count.py`, bridges V4's `analyze_pdf` into a
+`ScanResult` shape but is itself unwired — its only importer is its own test
+(`tests/unit/scanners/utils/test_v4_count.py`). `core/__init__.py` deliberately
+does not eagerly import the V4 cluster either (see its module docstring) so a
+plain `import core.*` no longer probes cv2/torch. The V4 / inference sections
+below describe that quarantined engine's internals, kept importable for
+tests/tools only; the active, current design is the scanner triad.
+
+## V4 Pipeline (pipeline.py — deferred fallback, wired to nothing)
 
 **Tess-SR only** (EasyOCR removed 2026-03-26, see postmortem):
 1. **Producers** (6 parallel workers): PyMuPDF rendering + Tesseract (Tier 1 direct + Tier 2 w/ 4x SR GPU bicubic)
@@ -104,8 +126,9 @@ Method chars: `d`=direct, `s`=super_resolution, `e`=easyocr (legacy DB records o
 ## Scanner Architecture (ocr-per-sigla, `v1-ocr-per-sigla`)
 
 The pase-2 OCR counting layer lives in `core/scanners/` and is **data-driven**:
-`patterns.py` is the single source of truth — one entry per sigla for all 18
-SIGLAS (enforced by a completeness-gate test).
+`patterns.py` is the single source of truth — one entry per sigla for all 20
+SIGLAS (enforced by a completeness-gate test,
+`tests/unit/scanners/test_patterns_registry.py`).
 
 ### The scanner triad
 
@@ -118,10 +141,12 @@ SIGLAS (enforced by a completeness-gate test).
 | `anchors` | `AnchorsScanner` | OCR the header band, match flavor anchors |
 | `pagination` | `PaginationScanner` | count documents via the pagination engine ("Página N de M" corner OCR + lite recovery) |
 
-Distribution today (v4-pagination migration, 2026-06-21): 1 `none` (reunion),
-6 `anchors` (charla, chintegral, dif_pts — RCH "1 de 2" bug; senal — landscape;
-chps; maquinaria — `count_type=checks`), 11 `pagination` (art, irl [`cover_code`],
-odi, insgral, bodega, caliente, exc, ext, altura, herramientas_elec, andamios).
+Distribution today (20 siglas, after the 2026-06-23 revdocmaq/espacios
+additions): 2 `none` (reunion, revdocmaq — the latter has no OCR samples yet,
+provisional), 6 `anchors` (charla, chintegral, dif_pts — RCH "1 de 2" bug;
+senal — landscape; chps; maquinaria — `count_type=checks`), 12 `pagination`
+(art, irl [`cover_code`], odi, insgral, bodega, caliente, exc, ext, altura,
+herramientas_elec, andamios, espacios).
 
 ### OcrScannerBase (shared harness)
 
@@ -144,6 +169,14 @@ a flavor may declare **anti_anchors** that reject a page even when anchors
 match (kills cross-category misfiles and shadow covers). Anchors are structural
 text — titles, field labels, pagination — never raw form codes (decision A12).
 
+**F8 (honest confidence):** a multi-page PDF for which the engine finds
+**zero** covers is low-trust — a genuine multi-page compilation almost never
+has 0 covers, so a silent 0 is far more likely a missed/renamed anchor than an
+empty cell (live case: senal showed 0/18 with no error, read as "listo"). The
+count itself stays 0 (still the honest number); confidence drops to LOW (the
+`anchors_low_confidence` flag) so the operator reviews it via the keyboard
+counter.
+
 ### PaginationScanner + the pagination engine
 
 `PaginationScanner` counts documents by their "Página N de M" pagination via
@@ -156,7 +189,14 @@ starts at every `curr == 1`; `cover_code` (IRL) restricts that to covers whose
 form code matches (so appendix page-1s inside an induction packet don't count).
 A7 still applies (1-page = 1 doc, no OCR). A count that needed heavy recovery
 (>30% of pages), had any unresolved failed read, or hit the cover_code-with-recovery
-edge downgrades the cell to LOW confidence for review (keyboard counter).
+edge downgrades the cell to LOW confidence for review (keyboard counter). **F7**
+adds a 4th trigger: without a `cover_code`, *any* recovered document-start
+(a recovered `curr==1`) also downgrades to LOW, even a single one far under the
+30% heavy-recovery threshold — a recovered `curr==1` is a plausible fabricated
+start in a mixed-length compilation, so it can't be trusted silently. (With
+`cover_code` set this edge doesn't need its own check: `count_starts` requires
+a code match, so a recovered `curr==1` is never counted in the first place —
+the cover_code-with-recovery trigger above already covers that case.)
 
 Validated by a real-corpus benchmark (`docs/research/2026-06-21-pagination-benchmark-results.md`):
 pagination wins or ties anchors on every paginated sigla (clean ART anchors 0/5 →

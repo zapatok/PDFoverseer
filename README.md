@@ -45,7 +45,7 @@ ruff check .                           # must be 0 violations
 ```
 
 Open the month folder under `A:\informe mensual\<MES>\`; the app enumerates 4 hospitals ×
-18 categories, counts pase 1 (filename glob), and lets you run pase 2 (OCR) per cell. Export
+20 categories, counts pase 1 (filename glob), and lets you run pase 2 (OCR) per cell. Export
 writes the RESUMEN Excel atomically to `data/outputs/` (override via `OVERSEER_OUTPUT_DIR`).
 
 ## Requirements

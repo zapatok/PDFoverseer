@@ -52,10 +52,10 @@ def test_flavor_anti_anchors_optional():
     assert flavor["anti_anchors"] == ["X"]
 
 
-def test_all_18_siglas_have_a_pattern():
-    """Completeness gate — patterns.py must cover exactly the 18 SIGLAS."""
+def test_all_siglas_have_a_pattern():
+    """Completeness gate — patterns.py must cover exactly the 20 SIGLAS."""
     assert set(PATTERNS) == set(SIGLAS), (
-        "patterns.py must cover exactly the 18 SIGLAS; "
+        "patterns.py must cover exactly the 20 SIGLAS; "
         f"missing={sorted(set(SIGLAS) - set(PATTERNS))} "
         f"extra={sorted(set(PATTERNS) - set(SIGLAS))}"
     )

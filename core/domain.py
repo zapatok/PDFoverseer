@@ -10,7 +10,7 @@ import re
 
 HOSPITALS: tuple[str, ...] = ("HPV", "HRB", "HLU", "HLL")
 
-# 18 canonical siglas (order matches the 18 prevention categories)
+# 20 canonical siglas (order matches the 20 prevention categories)
 SIGLAS: tuple[str, ...] = (
     "reunion",
     "irl",
@@ -101,7 +101,7 @@ def folder_to_sigla(folder_name: str) -> str | None:
         '14.-Excavaciones y Vanos' -> 'exc'   (renumbered)
         '20.-CPHS' -> 'chps'                  (alias spelling)
         '7.-ART 934' -> 'art'
-        '13.-Revision Documentacion Maquinaria' -> None  (unmodeled)
+        '99.-Categoria Inventada' -> None     (unmodeled)
     """
     text = _folder_text(folder_name)
     for sigla in CATEGORY_FOLDERS:

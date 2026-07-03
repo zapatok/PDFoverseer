@@ -60,7 +60,14 @@ from core.scanners.simple_factory import SimpleFilenameScanner  # noqa: E402
 def _build_scanner_for_sigla(sigla: str) -> Scanner:
     """Pick the Scanner class based on patterns.py scan_strategy."""
     if sigla not in PATTERNS:
-        # Not in registry yet (WIP) — fall back to SimpleFilenameScanner
+        # No patterns.py entry. The completeness gate
+        # (tests/unit/scanners/test_patterns_registry.py) keeps core.domain.SIGLAS
+        # and PATTERNS in lock-step, so this branch should never run in practice —
+        # and even this SimpleFilenameScanner fallback isn't a quiet no-op: pase-1
+        # matching (core.scanners.utils.filename_glob._matches, F14) calls
+        # get_pattern() for the sigla's count_scope and raises KeyError for an
+        # unregistered one the first time the cell is counted. A WIP sigla with no
+        # registry entry fails loud, not silently.
         return SimpleFilenameScanner(sigla=sigla)
     strategy = PATTERNS[sigla]["scan_strategy"]
     if strategy == "anchors":

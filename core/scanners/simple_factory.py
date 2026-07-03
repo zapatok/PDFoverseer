@@ -1,6 +1,6 @@
 """Factory for trivial filename-glob scanners.
 
-All 18 siglas use this scanner for pase 1 (filename glob). For pase 2, the
+All 20 siglas use this scanner for pase 1 (filename glob). For pase 2, the
 implicit-compilation siglas dispatch to AnchorsScanner or PaginationScanner
 (see core.scanners.patterns); the rest stay filename-glob only.
 

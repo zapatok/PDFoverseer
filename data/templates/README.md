@@ -82,6 +82,6 @@ When the layout changes in a breaking way (cells move, new sigla added, etc.):
 
 ### Known limitations of v1
 
-- Orphan rows (22, 26) inherited from sample — could be removed in v2 if Daniel confirms they're not needed
-- CHPS row at 31 is below the workforce rows (29-30) — visually unusual. v2 could reorder so all 18 siglas come before workforce
+- Orphan rows (22, 26) inherited from sample — mapped to `revdocmaq`/`espacios` in Incr B (2026-06-23); no longer orphaned
+- CHPS row at 31 is below the workforce rows (29-30) — visually unusual. v2 could reorder so all 20 siglas come before workforce
 - Header labels still in cp1252 with accent encoding artifacts from the original — purely cosmetic, opening in Excel renders correctly

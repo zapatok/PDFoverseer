@@ -80,7 +80,7 @@ def get_month(session_id: str) -> dict:
 
     Returns:
         Dict with the resolved month root, hospitals present/missing, and
-        the per-hospital list of 18 :class:`CellInventory` entries.
+        the per-hospital list of 20 :class:`CellInventory` entries.
     """
     m = _SESSION_ID_RE.match(session_id)
     if not m:
