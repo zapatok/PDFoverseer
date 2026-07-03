@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2, Ratio } from "lucide-react";
+import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2, Ratio, Copy } from "lucide-react";
 import NotePanel from "./NotePanel";
 import ReorganizacionPanel from "./ReorganizacionPanel";
 import OrphanMarksPanel from "./OrphanMarksPanel";
@@ -280,6 +280,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const isChecks = countType === "checks";
 
   const isCompilationSuspect = cell.flags?.includes("compilation_suspect");
+  const hasDuplicateBasenames = cell.flags?.includes("duplicate_basenames");
   const filesCount = computeFilesCount(cell);
   const total = computeCellCount(cell, countType);
   const label = SIGLA_LABELS[sigla];
@@ -421,6 +422,11 @@ export default function DetailPanel({ hospital, sigla, cell }) {
         {isCompilationSuspect && (
           <Tooltip content="Probable compilación (PDF con >5× páginas esperadas)">
             <span><Badge variant="state-suspect" icon={FileStack}>Compilación</Badge></span>
+          </Tooltip>
+        )}
+        {hasDuplicateBasenames && (
+          <Tooltip content="Nombres de archivo duplicados en subcarpetas — los conteos por archivo pueden solaparse">
+            <span><Badge variant="state-suspect" icon={Copy}>Duplicados</Badge></span>
           </Tooltip>
         )}
         {hasOverride(cell) && <Badge variant="state-override" icon={PenLine}>Manual</Badge>}

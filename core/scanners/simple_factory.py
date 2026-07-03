@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.scanners.base import ConfidenceLevel, Scanner, ScanResult
+from core.scanners.utils.cell_enumeration import find_duplicate_basenames
 from core.scanners.utils.filename_glob import (
     GlobCountResult,
     _matches,
@@ -45,6 +46,12 @@ class SimpleFilenameScanner:
         glob_result = count_pdfs_by_sigla(folder, sigla=self.sigla)
         breakdown = per_empresa_breakdown(folder)
         flags = list(glob_result.flags)
+
+        # F10: per-file models are keyed by basename, not full path — flag
+        # when a folder reuses the same name across subfolders (the second
+        # scanned would silently overwrite the first's per_file entry).
+        if find_duplicate_basenames(folder):
+            flags.append("duplicate_basenames")
 
         if "folder_missing" in flags:
             return self._result(

@@ -54,3 +54,26 @@ def test_simple_scanner_chps_folder_scope(tmp_path):
 
     assert result.count == 2
     assert set(result.per_file) == {"crs.pdf", "titan.pdf"}
+
+
+# F10 — duplicate-basename detection.
+def test_simple_scanner_flags_duplicate_basenames(tmp_path):
+    (tmp_path / "AGUASAN").mkdir()
+    (tmp_path / "AGUASAN" / "2026-04-15_art_x.pdf").write_bytes(b"%PDF\n%%EOF")
+    (tmp_path / "TITAN").mkdir()
+    (tmp_path / "TITAN" / "2026-04-15_art_x.pdf").write_bytes(b"%PDF\n%%EOF")
+
+    scanner = get("art")
+    result = scanner.count(tmp_path)
+
+    assert "duplicate_basenames" in result.flags
+
+
+def test_simple_scanner_no_duplicate_flag_in_flat_folder(tmp_path):
+    (tmp_path / "2026-04-15_art_a.pdf").write_bytes(b"%PDF\n%%EOF")
+    (tmp_path / "2026-04-15_art_b.pdf").write_bytes(b"%PDF\n%%EOF")
+
+    scanner = get("art")
+    result = scanner.count(tmp_path)
+
+    assert "duplicate_basenames" not in result.flags

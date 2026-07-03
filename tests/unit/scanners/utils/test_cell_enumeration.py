@@ -8,7 +8,7 @@ the work actually done.
 
 from pathlib import Path
 
-from core.scanners.utils.cell_enumeration import enumerate_cell_pdfs
+from core.scanners.utils.cell_enumeration import enumerate_cell_pdfs, find_duplicate_basenames
 
 
 def _touch(p: Path) -> None:
@@ -42,3 +42,30 @@ def test_matches_scanner_iteration_set(tmp_path):
     _touch(tmp_path / "a.pdf")
     _touch(tmp_path / "sub" / "b.pdf")
     assert enumerate_cell_pdfs(tmp_path) == sorted(tmp_path.rglob("*.pdf"))
+
+
+# F10 — duplicate-basename detection. per_file (and per_file_method,
+# per_file_overrides, near_matches lookups) are keyed by basename, not full
+# path, so the same filename reused across two contractor subfolders can
+# silently overlap in that model.
+def test_find_duplicate_basenames_across_subfolders(tmp_path):
+    _touch(tmp_path / "A" / "x.pdf")
+    _touch(tmp_path / "B" / "x.pdf")
+    assert find_duplicate_basenames(tmp_path) == {"x.pdf": 2}
+
+
+def test_find_duplicate_basenames_flat_folder_has_none(tmp_path):
+    _touch(tmp_path / "a.pdf")
+    _touch(tmp_path / "b.pdf")
+    assert find_duplicate_basenames(tmp_path) == {}
+
+
+def test_find_duplicate_basenames_missing_folder(tmp_path):
+    assert find_duplicate_basenames(tmp_path / "nope") == {}
+
+
+def test_find_duplicate_basenames_three_way(tmp_path):
+    _touch(tmp_path / "A" / "x.pdf")
+    _touch(tmp_path / "B" / "x.pdf")
+    _touch(tmp_path / "C" / "x.pdf")
+    assert find_duplicate_basenames(tmp_path) == {"x.pdf": 3}
