@@ -125,6 +125,68 @@ def test_anchors_scanner_count_ocr_invokes_count_covers(tmp_path: Path, monkeypa
     assert result.confidence == ConfidenceLevel.HIGH
 
 
+def test_anchors_scanner_zero_covers_multipage_is_low_trust(tmp_path: Path, monkeypatch):
+    """F8: a multi-page PDF with 0 covers from the anchors engine is honest-low-trust
+    (not a silent 'listo' 0) — the count stays 0 (an honest number), but confidence
+    drops to LOW with the anchors_low_confidence flag so the operator reviews it
+    (live case: senal 0/18)."""
+    pdf = tmp_path / "2026-04_andamios.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n" + b"%fake-multipage\n")
+
+    import core.scanners.anchors_scanner as _mod
+    from core.scanners.utils import header_band_anchors as hba
+
+    fake_result = hba.AnchorCountResult(
+        count=0,
+        pages_total=18,
+        matches_per_flavor={},
+        near_matches=[],
+    )
+
+    monkeypatch.setattr(_mod, "PATTERNS", {"andamios": _FAKE_PATTERN})
+    monkeypatch.setattr(_mod, "get_page_count", lambda _: 18)
+    monkeypatch.setattr(
+        "core.scanners.anchors_scanner.count_covers_by_anchors",
+        lambda *args, **kw: fake_result,
+    )
+
+    scanner = AnchorsScanner(sigla="andamios")
+    result = scanner.count_ocr(tmp_path, cancel=CancellationToken())
+    assert result.count == 0
+    assert result.confidence == ConfidenceLevel.LOW
+    assert "anchors_low_confidence" in result.flags
+
+
+def test_anchors_scanner_nonzero_covers_multipage_stays_high(tmp_path: Path, monkeypatch):
+    """Boundary companion to the zero-covers test above: covers > 0 on a
+    multi-page PDF stays HIGH (absent other low-trust conditions)."""
+    pdf = tmp_path / "2026-04_andamios.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n" + b"%fake-multipage\n")
+
+    import core.scanners.anchors_scanner as _mod
+    from core.scanners.utils import header_band_anchors as hba
+
+    fake_result = hba.AnchorCountResult(
+        count=3,
+        pages_total=18,
+        matches_per_flavor={"f_lch_05": 3},
+        near_matches=[],
+    )
+
+    monkeypatch.setattr(_mod, "PATTERNS", {"andamios": _FAKE_PATTERN})
+    monkeypatch.setattr(_mod, "get_page_count", lambda _: 18)
+    monkeypatch.setattr(
+        "core.scanners.anchors_scanner.count_covers_by_anchors",
+        lambda *args, **kw: fake_result,
+    )
+
+    scanner = AnchorsScanner(sigla="andamios")
+    result = scanner.count_ocr(tmp_path, cancel=CancellationToken())
+    assert result.count == 3
+    assert result.confidence == ConfidenceLevel.HIGH
+    assert "anchors_low_confidence" not in result.flags
+
+
 def test_anchors_scanner_a7_one_page_pdfs_counted_as_one(tmp_path: Path, monkeypatch):
     """A7: PDFs of 1 page contribute count=1 without OCR (locked at R1)."""
     one_pager_a = tmp_path / "2026-04-01_andamios_aguasan.pdf"

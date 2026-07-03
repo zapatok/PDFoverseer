@@ -34,10 +34,17 @@ class AnchorsScanner(OcrScannerBase):
     scanned by ``count_covers_by_anchors`` using the flavors declared in
     ``PATTERNS[sigla]``. ``method`` is ``"header_band_anchors"`` (or
     ``"filename_glob"`` when no flavors are configured / the folder is missing).
+
+    F8: a multi-page PDF for which the engine finds **zero** covers is low-trust
+    — a genuine multi-page compilation almost never has 0 covers, so a silent 0
+    is far more likely a missed/renamed anchor than an empty cell (live case:
+    senal showed 0/18 with no error, read as "listo"). The count itself stays 0
+    (still the honest number); confidence drops to LOW and the
+    ``anchors_low_confidence`` flag is appended so the operator reviews it.
     """
 
     METHOD = "header_band_anchors"
-    LOW_CONF_FLAG = None
+    LOW_CONF_FLAG = "anchors_low_confidence"
 
     def _precheck(
         self,
@@ -117,4 +124,7 @@ class AnchorsScanner(OcrScannerBase):
             }
             for nm in ocr.near_matches
         ]
-        return _PdfOutcome(ocr.count, "header_band_anchors", nms, False, False, None)
+        # F8: a multi-page PDF with 0 covers is never right at face value — flag
+        # it low-trust so the cell drops to LOW instead of a silent "listo" 0.
+        low_trust = ocr.count == 0
+        return _PdfOutcome(ocr.count, "header_band_anchors", nms, low_trust, False, None)
