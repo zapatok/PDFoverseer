@@ -3,9 +3,10 @@
 Vision-Language Model evaluation module. Benchmarks VLM accuracy on OCR-failed pages
 and sweeps preprocessing parameters.
 
-**Status:** Benchmark infrastructure complete. VLM resolver (post-inference selective
-re-inference using VLM reads) is designed but not yet implemented.
-See: `docs/superpowers/specs/2026-03-25-vlm-resolver-design.md`
+**Status:** Benchmark infrastructure complete. A VLM pre-inference tier was
+attempted and reverted (2026-03-30) — the s2t-helena Tesseract baseline was
+restored; VLM stays out of the counting pipeline.
+See: `docs/superpowers/reports/2026-03-29-vlm-integration-postmortem.md`
 
 ## Usage
 

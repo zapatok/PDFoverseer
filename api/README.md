@@ -1,38 +1,16 @@
 # api/
 
-Backend layer: session state, WebSocket, database I/O, background worker, and HTTP routes.
+FastAPI backend: session state, SQLite-backed persistence, the pase-2 OCR batch
+orchestrator, WebSocket broadcasts, and multiplayer presence/locks.
 
-## Modules
+## Files
 
-### state.py
-`SessionState` + `SessionManager`. One `SessionState` per client session — holds scan progress,
-document counts, issue list, OCR metrics, pause/cancel events. `SessionManager` manages the
-session map with TTL-based eviction (`SESSION_TTL` env var, default 3600s). `get_session()`
-is a FastAPI dependency that validates UUID4 format before returning the session.
+- `main.py` — app factory + lifespan
+- `state.py` — `SessionManager`, the bridge between requests and the DB (single `RLock`)
+- `presence.py` — in-memory multiplayer presence registry (M2/M3a/M3b) — ephemeral, never persisted
+- `reorg.py` — pure reorg-op validation/manifest helpers (no I/O, no FastAPI)
+- `batch.py` — pase-2 OCR batch lifecycle (`BatchHandle`, cooperative cancellation)
+- `routes/` — one router module per concern: `months`, `siglas`, `output`, `history`, `presence`, `ws`
+- `routes/sessions/` — session lifecycle + editing, split into `lifecycle`/`scan`/`writes`/`files`/`reorg` sub-routers over a shared `_common` kernel
 
-### database.py
-SQLite read/write for the `page_reads` table. Functions: `save_reads()`, `has_reads()`,
-`get_reads()`, `clear_session()`. Database path: `data/sessions.db`.
-
-### websocket.py
-WebSocket connection manager + `_emit()` helper. `_emit()` is the single point of contact
-for pushing real-time events to the frontend. All log messages, progress updates, and issue
-notifications go through `_emit()`.
-
-### worker.py
-Background scan thread. `run_scan()` iterates the session's `pdf_list`, calls `analyze_pdf()`
-per file, and uses callbacks to feed results back via `_emit()`. `_recalculate_metrics()`
-rebuilds aggregate counts from raw `page_reads` after corrections.
-
-## routes/
-
-### routes/pipeline.py
-`/api/start`, `/api/stop`, `/api/state` — scan lifecycle control.
-
-### routes/files.py
-`/api/browse`, `/api/add_folder`, `/api/add_files`, `/api/preview` — file discovery and
-PDF preview. All paths validated against `PDF_ROOT` env var to prevent directory traversal.
-
-### routes/sessions.py
-`/api/sessions`, `/api/reset`, `/api/correct`, `/api/exclude`, `/api/restore` — session
-management and manual correction of document boundaries.
+**Architecture and conventions live in `api/CLAUDE.md`** — this file intentionally defers to it.

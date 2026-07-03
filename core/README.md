@@ -1,116 +1,21 @@
 # PDFoverseer Core
 
-Este directorio contiene el motor principal de análisis, inferencia y orquestación de procesamiento de PDFs para PDFoverseer. 
+Motor de conteo: glob de nombre/token (pase 1) + escáneres OCR (pase 2), resolución
+de conteo por celda, la capa SQLite, y el escritor de Excel. También retiene el
+pipeline OCR+inferencia V4 original como *fallback* diferido, en cuarentena
+(no conectado a nada).
 
-## Arquitectura y Modularización (v1)
+## Archivos
 
-Anteriormente estructurado como un monolito gigante (`core/analyzer.py` de ~1200 líneas), el núcleo ha sido refactorizado en cinco submódulos especializados para lograr una mejor mantenibilidad, encapsulación de dependencias (para GPU y modelos) y desacoplamiento de estado.
+- `domain.py` — hospitales, siglas, constantes de carpetas de categoría (fuente única)
+- `cell_count.py` — `compute_cell_count`/`compute_worker_count`, el único lugar donde convergen UI/Excel/historial
+- `utils.py` — constantes del pipeline/inferencia, dataclasses compartidas, regex
+- `image.py` / `ocr.py` / `pipeline.py` / `inference.py` — el motor V4 diferido
+- `scanners/` — la tríada de escáneres de pase 2 (`SimpleFilenameScanner`/`AnchorsScanner`/`PaginationScanner`) + el registro `patterns.py`
+- `orchestrator/` — enumeración de meses, despacho de pase 1/pase 2
+- `excel/` — plantilla RESUMEN + escritor
+- `db/` — conexión SQLite, migraciones, repos de sesión + histórico
+- `state/` — migraciones del esquema de estado de sesión
 
-A continuación se detalla la responsabilidad exacta y el contenido de cada archivo tras la modularización:
-
-### 1. `utils.py` (Fundamentos Compartidos)
-Contiene las estructuras de datos y definiciones estáticas transversales.
-*   **Dataclasses:** `Document` y `_PageRead`.
-*   **Constantes de Negocio:** Lógica compartida (`ANOMALY_DROPOUT`, `MIN_CONF_FOR_NEW_DOC`, métricas por defecto).
-*   **Expresiones Regulares:** Compilaciones pre-hechas como `RX_PAGE` y `RX_ROMAN`.
-*   **Pequeños Parsers:** Utilidades puras enfocadas a texto como `_to_int(s)` y `_parse(text)`.
-
-### 2. `image.py` (Procesamiento Visual)
-Aísla las dependencias que manejan OpenCV y la manipulación de imágenes a nivel gráfico.
-*   **Renderizado:** `_render_clip()` intercepta las páginas de de los archivos extraídos por `fitz` (PyMuPDF) convirtiéndolas en buffers de imagen.
-*   **Modelos de Súper Resolución:** Setup perezoso y manejo de resoluciones visuales como el EDSR `_setup_sr()` y el `_upsample_4x()`.
-
-### 3. `ocr.py` (Motor de Reconocimiento)
-Gestiona exclusivamente los llamados a los intérpretes de reconocimiento óptico de caracteres y restringe el cargado de la GPU.
-*   **Preprocesamiento Tier 1/2 (`_tess_ocr`):** Blue ink removal (HSV mask + inpainting) → grayscale (luminance) → unsharp mask (sigma=1.0, strength=0.3) → Tesseract LSTM. No se aplica binarización externa — el LSTM usa gradientes en bordes de caracteres que Otsu destruye (Tesseract issue #1780). Parámetros validados por OCR preprocessing sweep (tag `POST-OTSU`): 149/697 rescates, 42/200 regresiones vs 83/200 de producción anterior.
-*   **Fases del OCR:** Tier 1 (Tesseract directo) y Tier 2 (Tesseract + Super Resolución 4x GPU bicubic) encapsulados en `_process_page()`.
-*   **EasyOCR (Tier 3): eliminado** — benchmark en ART_670 mostró 1% accuracy en GT pages, sin beneficio de velocidad (producer-consumer era concurrente; Tesseract+SR era el bottleneck real). Ver postmortem: `docs/superpowers/reports/2026-03-25-easyocr-paddle-postmortem.md`.
-
-### 4. `inference.py` (Inteligencia Lógica sin Estado)
-Corazón de las deducciones, totalmente purificado para prescindir de estado mutacional, garantizando que el diseño de *Human-In-The-Loop* nunca se entrelace con estados sucios.
-*   **Versión:** `s2t-helena` — parámetros optimizados vía sweep2 sobre 40 fixtures (21 reales + 13 sintéticos + 6 degradados). Nombrado por *Muraena helena* (morena mediterránea).
-*   **Teoría de Dempster-Shafer:** `_ds_combine()` ejecuta la fusión algorítmica.
-*   **Detecciones Cíclicas:** `_detect_period()` revisa la recurrencia algorítmica de los números curr.
-*   **Gap Solver Bidireccional:** Fases 1-2 generan hipótesis forward/backward para páginas fallidas; tie-breaker prefiere hipótesis que crean fronteras de documento (reversibles) sobre continuaciones (irreversibles).
-*   **Fases 0-6 + 5b:** Phase 0 (anomaly dropout), Phase 1-2 (gap solver), Phase 1b (orphan marking), Phase 3 (cross-validation), Phase 4 (fallback, conf=0.15), Phase 5 (D-S post-validation), Phase 5b (period-contradiction, ratio≥0.95), Phase 6 (orphan suppression, conf≥0.55).
-*   **Generador y Ensamblador:** `_infer_missing()`, `_build_documents()`, `classify_doc()`.
-
-### 5. `pipeline.py` (Orquestación del Productor-Consumidor)
-Implementa los procesos multihilos, la coordinación de operaciones largas asíncronas de I/O y la telemetría en tiempo real.
-*   **Entrypoints Directos:** `analyze_pdf()` y el actualizador condicional `re_infer_documents()`.
-*   **Productores paralelos:** `ProcessPoolExecutor` con `PARALLEL_WORKERS=6` para Tesseract (Tier 1 + Tier 2). El Tier 2 usa GPU bicubic inline en cada worker. No hay consumer thread separado (EasyOCR eliminado — ver postmortem).
-*   **Logs y Métricas:** Emisión de eventos progresivos (`on_log`, `on_issue`) y emisor de rastros AI `[MOD:v6-tess-sr]`.
-
-### Punto de Acceso (`__init__.py`)
-A nivel de aplicación superior (como en `server.py` o los scripts bajo `eval/`), la topología modular es **completamente transparente**. Toda importación fluye a través de `core/__init__.py`, que exporta únicamente la superficie del contrato público existente:
-```python
-# API principal mantenida de cara a la lógica externa:
-from core import (
-    analyze_pdf, re_infer_documents, 
-    Document, _PageRead, _build_documents, 
-    classify_doc, _CORE_HASH, INFERENCE_ENGINE_VERSION
-)
-```
-
----
-
-## Changelog de Versiones (MOD Tags)
-
-### `[MOD:v6-tess-sr]` (2026-03-26)
-
-**Cambio:** Eliminación definitiva de EasyOCR (Tier 3) del pipeline.
-
-**Motivación:** Benchmark exhaustivo en ART_670 (2719 páginas):
-- EasyOCR: 1% accuracy en 796 páginas GT; 2 hits en producción real causaron ruido en inferencia
-- PaddleOCR PP-OCRv5: 0% accuracy — peor que EasyOCR
-- Sin beneficio de velocidad: el consumer GPU era concurrente pero el bottleneck siempre fue Tesseract + SR
-
-**Resultado producción (sin EasyOCR):** COM 606/667 (91%) vs 603/667 (90%) con EasyOCR — 3 documentos más completos.
-
-**Cambios aplicados:**
-- `core/ocr.py`: removidos `_easyocr_reader`, `_easyocr_lock`, `_init_easyocr()`, `EASYOCR_DPI`
-- `core/pipeline.py`: removido GPU consumer thread y queue; telemetría simplificada a `W6`
-- `requirements-gpu.txt`: removido `easyocr==1.7.2`; torch se mantiene para SR GPU
-
-**Ver:** `docs/superpowers/reports/2026-03-25-easyocr-paddle-postmortem.md`
-
-### `[MOD:v5-max-total]` (2026-03-25)
-
-**Problema:** Regresión de OCR ghost-zero — Tesseract appends stray `0` to single-digit totals (e.g., `total=4` → `total=40`), causando que `_parse()` acepte lecturas corruptas. En ART_670 esto generó 124/139 errores (89% de los fallos), creando 21 documentos fantasma de `40p` y bajando COM de 90% (613) a 74% (484).
-
-**Fix:** Validación `max_total=10` en `_parse()` (`core/utils.py:55`):
-```python
-if 0 < c <= tot <= 10:  # was: tot <= 99
-```
-Justificación: los 21 fixtures reales tienen `max_total ≤ 5`. El límite de 10 deja margen amplio sin permitir ghost-zeros.
-
-**Resultados (ART_670, 796 páginas):**
-
-| Métrica | v4-post-otsu | v5-max-total | Delta |
-|---------|-------------|-------------|-------|
-| COM (documentos completos) | 484 (74%) | 603 (90%) | +119 |
-| Distribución | 4p×646, **40p×21** | 4p×665, 2p×1, 5p×1 | limpio |
-| D-S confianza | 83% | 85% | +2pp |
-| OCR: direct | 434 | 305 | -129 |
-| OCR: super_resolution | 169 | 278 | +109 |
-| OCR: easyocr | 0 | 20 | +20 |
-| OCR: failed | 193 | 193 | = |
-
-**Recuperación:** 119/129 documentos perdidos = 92.2%.
-
-**Gap residual:** 603 vs 613 (pre-regresión). 10 docs short, atribuido a cambios en el mix de tiers OCR por el preprocesamiento post-Otsu, no al fix de max_total.
-
-**Tests:** `tests/test_max_total.py` — 7 tests unitarios para validación de max_total.
-
-### `[MOD:v4-post-otsu]` (2026-03-24)
-
-Eliminación de binarización Otsu externa en `_tess_ocr()`. Tesseract LSTM usa gradientes internos; Otsu destruye bordes de caracteres (Tesseract issue #1780). Preprocesamiento: blue ink removal (HSV) → grayscale → unsharp mask (sigma=1.0, strength=0.3).
-
-### `[MOD:v3.1-fix]` — `[MOD:v1]`
-
-Versiones anteriores del pipeline. Ver historial git para detalles.
-
----
-
-**Nota para los Desarrolladores:**
-No se debe volver a reintroducir `fitz` ni `cv2` dentro de `inference.py`; del mismo modo, mantengan los bloques mutables fuera de este último. Todas las optimizaciones deben respetar este nuevo _sandbox_ establecido.
+**La arquitectura y convenciones viven en `core/CLAUDE.md`** — este archivo
+intencionalmente delega a ese documento.
