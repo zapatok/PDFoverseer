@@ -46,6 +46,25 @@ def test_extract_sigla(filename, expected):
     assert extract_sigla(filename) == expected
 
 
+# F6/F14a — per-sigla filename token aliases (Fase 5). The live corpus grew
+# real files that never carry a sigla's own literal token: revdocmaq's real
+# files use "revision"+"documentacion" instead of "revdocmaq", and one ABRIL
+# chps file is spelled "cphs" (the real Comité Paritario acronym) instead of
+# the canonical (transposed) "chps".
+@pytest.mark.parametrize(
+    "filename,expected",
+    [
+        ("REVISION_DOCUMENTACION_MAQUINARIA_AGUASAN.pdf", "revdocmaq"),
+        ("2026-06-01_revision_documentacion_titan.pdf", "revdocmaq"),
+        ("2026-04-30_cphs_acta_reunion.pdf", "chps"),  # real ABRIL file (F14 alias half)
+        ("maquinaria_inspeccion_04.pdf", "maquinaria"),  # no regression
+        ("2026-04_chps_acta_reunion.pdf", "chps"),  # earliest-match still holds
+    ],
+)
+def test_extract_sigla_aliases(filename, expected):
+    assert extract_sigla(filename) == expected
+
+
 def test_count_art_in_hpv():
     folder = ABRIL_ROOT / "HPV" / "7.-ART"
     result = count_pdfs_by_sigla(folder, sigla="art")

@@ -837,10 +837,12 @@ PATTERNS: dict[str, SiglaPattern] = {
         "cover_flavors": _ANDAMIOS_ANCHORS,
     },
     "revdocmaq": {
-        # Incr B: "Revisión de Documentación de Maquinaria" (folder 13). No sample
-        # PDFs exist anywhere in the corpus yet → filename glob (1 PDF = 1 doc);
-        # the token requires revision/documentacion so it never collides with the
-        # OCR file-discovery of maquinaria. Provisional; revisit when files appear.
+        # Incr B: "Revisión de Documentación de Maquinaria" (folder 13). Provisional
+        # (1 PDF = 1 doc). Fase 5 (F6): the deep audit found real corpus files that
+        # carry no "revdocmaq" token at all (e.g. REVISION_DOCUMENTACION_MAQUINARIA_
+        # AGUASAN.pdf) — matching now happens via a "revision"+"documentacion" phrase
+        # alias in core.scanners.utils.filename_glob (_SIGLA_TOKEN_ALIASES), NOT via
+        # this field (see D8/Task 5.4 — filename_glob here is otherwise unused).
         "filename_glob": r"^.*(revision|documentacion).*\.pdf$",
         "scan_strategy": "none",
         "recursive_glob": True,

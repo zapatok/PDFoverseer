@@ -21,10 +21,29 @@ from core.domain import SIGLAS
 _TOKEN_SEP = r"(?:^|(?<=[_\-.]))"  # zero-width: start-of-string OR after a separator
 _TOKEN_END = r"(?:$|(?=[_\-.]))"  # zero-width: end-of-string OR before a separator
 
-# Compiled per-sigla patterns keyed by sigla string.
-_SIGLA_PATTERNS: dict[str, re.Pattern[str]] = {
-    s: re.compile(_TOKEN_SEP + re.escape(s) + _TOKEN_END) for s in SIGLAS
+# Extra filename tokens that resolve to a sigla, beyond its literal name
+# (F6/F14a — Fase 5 corpus matching). Phrases use [_\-.\s]+ between words so
+# both "revision_documentacion" and "revision documentacion" match. Values
+# are raw regex fragments (NOT re.escape'd — revdocmaq's alias is a real
+# pattern), mirroring core.domain._SIGLA_FOLDER_ALIASES in spirit.
+_SIGLA_TOKEN_ALIASES: dict[str, tuple[str, ...]] = {
+    "chps": (r"cphs",),  # real ABRIL file spells the Comité Paritario acronym correctly
+    "revdocmaq": (r"revision[_\-.\s]+documentacion",),  # real files carry no "revdocmaq" token
 }
+
+
+def _compile_sigla_patterns() -> dict[str, list[re.Pattern[str]]]:
+    """Build {sigla: [literal-token pattern, *alias patterns]}."""
+    compiled: dict[str, list[re.Pattern[str]]] = {}
+    for sigla in SIGLAS:
+        raw_tokens = [re.escape(sigla), *_SIGLA_TOKEN_ALIASES.get(sigla, ())]
+        compiled[sigla] = [re.compile(_TOKEN_SEP + tok + _TOKEN_END) for tok in raw_tokens]
+    return compiled
+
+
+# Compiled per-sigla patterns keyed by sigla string. Each sigla maps to a
+# list: its literal token pattern first, then any alias patterns (F6/F14a).
+_SIGLA_PATTERNS: dict[str, list[re.Pattern[str]]] = _compile_sigla_patterns()
 
 
 @dataclass(frozen=True)
@@ -37,15 +56,28 @@ class GlobCountResult:
 
 
 def extract_sigla(filename: str) -> str | None:
-    """Extract the sigla from a filename via lax matching (A10).
+    """Extract the sigla from a filename via lax matching (A10) + per-sigla
+    token aliases (F6/F14a).
 
-    Lax: the sigla name may appear anywhere in the filename stem, bounded by
-    token separators (``^``, ``$``, ``_``, ``-``, ``.``).  Returns the sigla
-    whose token-boundary match starts earliest (left-most); ties broken by
-    longest (most specific) sigla.  Case-insensitive.
+    Lax: the sigla name — or one of its aliases, see ``_SIGLA_TOKEN_ALIASES``
+    — may appear anywhere in the filename stem, bounded by token separators
+    (``^``, ``$``, ``_``, ``-``, ``.``). For each sigla, the earliest match
+    across its own patterns (literal token + aliases) is taken as that
+    sigla's candidate. Returns the sigla whose candidate match starts
+    earliest (left-most) overall; ties broken by the longest matched text
+    (not the sigla name's length — a phrase alias like revdocmaq's
+    "revision_documentacion" must win a tie over a shorter literal token).
+    Case-insensitive.
 
     Handles substring overlaps: ``2026-04_chps_acta_reunion.pdf`` resolves to
     ``chps`` (appears before ``reunion``), not ``reunion``.
+
+    Aliases let a sigla match filenames that never carry its own name:
+    ``2026-04-30_cphs_acta_reunion.pdf`` resolves to ``chps`` (the real-corpus
+    "cphs" spelling is aliased, and still starts before "reunion"), and
+    ``REVISION_DOCUMENTACION_MAQUINARIA_AGUASAN.pdf`` resolves to
+    ``revdocmaq`` (its real-corpus files carry no "revdocmaq" token at all —
+    only the "revision"+"documentacion" phrase).
 
     No date-prefix requirement — captures HLL mega-compilation files like
     ``2026-04_andamios.pdf`` (no day component) and arbitrary-casing files
@@ -56,17 +88,23 @@ def extract_sigla(filename: str) -> str | None:
         return None
     # Strip the .pdf extension so end-of-string anchors work on the stem.
     stem = fn_lower[: -len(".pdf")]
-    candidates: list[tuple[int, str]] = []  # (match_start, sigla)
-    for sigla, pattern in _SIGLA_PATTERNS.items():
-        m = pattern.search(stem)
-        if m is None:
-            continue
-        candidates.append((m.start(), sigla))
+    candidates: list[tuple[int, int, str]] = []  # (match_start, -match_length, sigla)
+    for sigla, patterns in _SIGLA_PATTERNS.items():
+        best: tuple[int, int] | None = None  # (match_start, -match_length)
+        for pattern in patterns:
+            m = pattern.search(stem)
+            if m is None:
+                continue
+            key = (m.start(), -(m.end() - m.start()))
+            if best is None or key < best:
+                best = key
+        if best is not None:
+            candidates.append((*best, sigla))
     if not candidates:
         return None
-    # Earliest position wins; ties broken by longest sigla (most specific).
-    candidates.sort(key=lambda t: (t[0], -len(t[1])))
-    return candidates[0][1]
+    # Earliest position wins; ties broken by longest matched text (most specific).
+    candidates.sort(key=lambda t: (t[0], t[1]))
+    return candidates[0][2]
 
 
 def count_pdfs_by_sigla(folder: Path, *, sigla: str) -> GlobCountResult:

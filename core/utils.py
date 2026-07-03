@@ -60,7 +60,11 @@ SCANNER_PATTERNS_VERSION = (
     #     herramientas_elec/art/andamios + irl(cover_code) anchors→pagination.
     #     Anchor flavors kept on migrated siglas for one-line reversibility.
     # v5: + revdocmaq (none) + espacios (pagination, F-PETS-CRS-08-01) → 20 siglas.
-    "v5-new-categories"
+    # v6: Fase 5 corpus matching — per-sigla filename token aliases (chps
+    #     "cphs" + revdocmaq "revision"+"documentacion" phrase, F6/F14a); chps
+    #     counts by folder membership instead of by token (F14); duplicate
+    #     PDF basename detection surfaced as a flag (F10).
+    "v6-token-aliases"
 )
 
 # Tipos de conteo válidos por sigla (Decisión 4 / grupo F del triage). La
