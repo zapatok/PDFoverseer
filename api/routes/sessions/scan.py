@@ -607,8 +607,29 @@ def scan_file_ocr(
             pass
 
     def on_progress(event: dict) -> None:
-        _safe_bc(event)
         if event.get("type") == "file_scan_done":
+            # F12: re-check the M3 lock at merge time. The entry gate (above) ran
+            # before the scan started; a lease can expire (45s) or another
+            # participant can claim the cell while OCR is in flight — a stale
+            # merge would clobber their edit. This check + the merge below are
+            # NOT atomic (accepted check→write TOCTOU, mirrors apply_ratio's
+            # check_cell_lock model — see its docstring), but it closes the much
+            # larger entry-only gap.
+            try:
+                mgr.check_cell_lock(session_id, hospital, sigla, participant_id)
+            except CellLockedError as exc:
+                _safe_bc(
+                    {
+                        "type": "file_scan_error",
+                        "hospital": hospital,
+                        "sigla": sigla,
+                        "filename": filename,
+                        "error": "cell_locked",
+                        "lock_holder": exc.holder,
+                    }
+                )
+                return
+            _safe_bc(event)
             r = event["result"]
             mgr.apply_per_file_ocr_result(
                 session_id,
@@ -623,6 +644,8 @@ def scan_file_ocr(
             cu = _cell_updated_event(mgr, session_id, hospital, sigla)
             if cu is not None:
                 _safe_bc(cu)
+            return
+        _safe_bc(event)
 
     cancel_token = CancellationToken.from_event(handle.cancel_event)
 

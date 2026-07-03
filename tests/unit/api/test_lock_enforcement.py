@@ -414,3 +414,149 @@ def test_scan_file_ocr_cancel_stops_the_run_and_frees_the_slot(tmp_path, monkeyp
         assert r2.status_code == 200, r2.text
         c.post(f"/api/sessions/{sid}/cancel")
         _await_batch_slot_free(app, sid)
+
+
+# ── F12: merge-time lock re-check for scan_file_ocr ────────────────────────────
+
+
+def test_scan_file_ocr_merge_time_lock_recheck_blocks_stale_merge(tmp_path, monkeypatch):
+    """F12: the entry gate (check_cell_lock at route entry) can pass, then the
+    lock changes hands (lease expiry or a new focus claim) WHILE the OCR is in
+    flight — before file_scan_done fires. The merge-time re-check must reject
+    the stale merge (per_file stays untouched) and broadcast
+    file_scan_error{error: cell_locked} instead of merging."""
+    import json
+
+    from core.scanners.base import ConfidenceLevel, ScanResult
+    from core.scanners.pagination_scanner import PaginationScanner
+
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "f12.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "a.pdf", 3)
+
+        # p1 holds HRB|odi at the entry gate.
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "p1", "name": "Daniel", "color": "#a"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "p2", "name": "Carla", "color": "#b"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/focus",
+            json={"participant_id": "p1", "cell": "HRB|odi"},
+        )
+
+        def fake_count_ocr(
+            self, folder, *, cancel, on_pdf=None, only=None, skip=None, on_page=None
+        ):
+            # Simulate the hand-off happening while OCR is "in flight": p1 leaves,
+            # p2 claims the cell — mirrors a lease expiry / a new focus claim
+            # landing between the entry gate and the file_scan_done merge.
+            mgr.presence_leave(sid, "p1")
+            mgr.presence_focus(sid, "p2", "HRB|odi")
+            return ScanResult(
+                count=1,
+                confidence=ConfidenceLevel.HIGH,
+                method="pagination",
+                breakdown=None,
+                flags=[],
+                errors=[],
+                duration_ms=1,
+                files_scanned=1,
+                per_file={"a.pdf": 1},
+            )
+
+        monkeypatch.setattr(PaginationScanner, "count_ocr", fake_count_ocr)
+
+        with c.websocket_connect(f"/ws/sessions/{sid}") as ws:
+            r = c.post(
+                f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr",
+                json={"participant_id": "p1"},
+            )
+            assert r.status_code == 200, r.text
+
+            seen_types = []
+            found_error = None
+            for _ in range(10):
+                evt = json.loads(ws.receive_text())
+                seen_types.append(evt.get("type"))
+                if evt.get("type") == "file_scan_error":
+                    found_error = evt
+                    break
+                if evt.get("type") == "file_scan_done":
+                    break
+
+        assert found_error is not None, f"expected file_scan_error, saw {seen_types}"
+        assert found_error["error"] == "cell_locked"
+        assert found_error["lock_holder"]["name"] == "Carla"
+
+        _await_batch_slot_free(app, sid)
+        state = mgr.get_session_state(sid)
+        cell = state["cells"].get("HRB", {}).get("odi", {})
+        assert "a.pdf" not in (cell.get("per_file") or {}), "the stale merge must NOT be applied"
+
+
+def test_scan_file_ocr_merge_time_lock_recheck_allows_editor(tmp_path, monkeypatch):
+    """The editor's own merge still succeeds (no regression): check_cell_lock
+    passes for the participant who still holds the cell at merge time."""
+    from core.scanners.base import ConfidenceLevel, ScanResult
+    from core.scanners.pagination_scanner import PaginationScanner
+
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "f12b.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "a.pdf", 3)
+
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "p1", "name": "Daniel", "color": "#a"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/focus",
+            json={"participant_id": "p1", "cell": "HRB|odi"},
+        )
+
+        def fake_count_ocr(
+            self, folder, *, cancel, on_pdf=None, only=None, skip=None, on_page=None
+        ):
+            return ScanResult(
+                count=1,
+                confidence=ConfidenceLevel.HIGH,
+                method="pagination",
+                breakdown=None,
+                flags=[],
+                errors=[],
+                duration_ms=1,
+                files_scanned=1,
+                per_file={"a.pdf": 1},
+            )
+
+        monkeypatch.setattr(PaginationScanner, "count_ocr", fake_count_ocr)
+
+        r = c.post(
+            f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr",
+            json={"participant_id": "p1"},
+        )
+        assert r.status_code == 200, r.text
+        _await_batch_slot_free(app, sid)
+
+        state = mgr.get_session_state(sid)
+        cell = state["cells"].get("HRB", {}).get("odi", {})
+        assert cell.get("per_file", {}).get("a.pdf") == 1

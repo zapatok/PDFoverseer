@@ -1062,6 +1062,26 @@ export const useSessionStore = create((set, get) => ({
           );
           break;
         }
+        // F12: the merge-time lock re-check rejected a stale merge (another
+        // participant claimed the cell while the OCR was in flight). Same
+        // "<name> está editando esta celda" toast + re-sync as the other lock
+        // conflicts (e.g. savePerFileOverride's 409) — nothing broke, so this
+        // skips the sticky global error banner too.
+        if (event.error === "cell_locked") {
+          const who = event.lock_holder?.name ?? "Otro usuario";
+          const tickKey = `${event.hospital}|${event.sigla}`;
+          toast.error(`${who} está editando esta celda`);
+          set((s) => ({
+            fileScan: s.fileScan ? { ...s.fileScan, terminal: "cancelled" } : null,
+            filesTick: { ...s.filesTick, [tickKey]: (s.filesTick[tickKey] ?? 0) + 1 },
+          }));
+          setTimeout(
+            () => set((s) => (s.fileScan?.terminal === "cancelled" ? { fileScan: null } : s)),
+            2000,
+          );
+          if (state.session?.session_id) get().refetchSession(state.session.session_id);
+          break;
+        }
         set((s) => ({
           fileScan: s.fileScan ? { ...s.fileScan, terminal: "error" } : null,
           error: event.error ?? "Error al escanear el archivo",
