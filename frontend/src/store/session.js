@@ -63,6 +63,14 @@ export const useSessionStore = create((set, get) => ({
   openMonth: async (sessionId, year, month) => {
     set({ loading: true, error: null });
     try {
+      // U10: switching to a DIFFERENT session leaves no trace on the old one
+      // otherwise — the server only learns via the 45s presence lease TTL
+      // (ghost presence in the meantime). leavePresence() reads the still-open
+      // old session from state, so it must run before it's torn down below.
+      const prevSessionId = get().session?.session_id;
+      if (prevSessionId && prevSessionId !== sessionId) {
+        get().leavePresence();
+      }
       await api.createSession(year, month);
       const session = await api.getSession(sessionId);
       // Tear down any prior WS, vis handler, heartbeat, and unload handler,

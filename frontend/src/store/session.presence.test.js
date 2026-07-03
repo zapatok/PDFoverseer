@@ -174,6 +174,67 @@ describe("presence: re-openMonth clears previous interval", () => {
   });
 });
 
+describe("presence: leave the old session on month switch (U10)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setIdentity({ name: "TestUser", color: "#ef4444" });
+    vi.clearAllMocks();
+    // The store is a module-level singleton — earlier describe blocks' opened
+    // sessions would otherwise leak in here. Start each test from a clean
+    // "no session open yet" state.
+    useSessionStore.setState({ session: null });
+  });
+
+  afterEach(() => {
+    const h = getState()._visHandler;
+    if (h) document.removeEventListener("visibilitychange", h);
+    const hb = getState()._heartbeat;
+    if (hb) clearInterval(hb);
+    const uh = getState()._unloadHandler;
+    if (uh) window.removeEventListener("pagehide", uh);
+  });
+
+  it("sends a leave for the old session before opening a different one", async () => {
+    api.presenceHeartbeat.mockResolvedValue({ participants: [] });
+
+    await useSessionStore.getState().openMonth("2026-04", 2026, 4);
+    await Promise.resolve();
+
+    api.presenceLeave.mockClear();
+
+    await useSessionStore.getState().openMonth("2026-05", 2026, 5);
+    await Promise.resolve();
+
+    expect(api.presenceLeave).toHaveBeenCalledTimes(1);
+    const [sid, body] = api.presenceLeave.mock.calls[0];
+    expect(sid).toBe("2026-04");
+    expect(body.participant_id).toBeTruthy();
+  });
+
+  it("does not leave presence when re-opening the same session", async () => {
+    api.presenceHeartbeat.mockResolvedValue({ participants: [] });
+
+    await useSessionStore.getState().openMonth("2026-04", 2026, 4);
+    await Promise.resolve();
+
+    api.presenceLeave.mockClear();
+
+    await useSessionStore.getState().openMonth("2026-04", 2026, 4);
+    await Promise.resolve();
+
+    expect(api.presenceLeave).not.toHaveBeenCalled();
+  });
+
+  it("does not leave presence on the very first openMonth (no prior session)", async () => {
+    api.presenceHeartbeat.mockResolvedValue({ participants: [] });
+
+    await useSessionStore.getState().openMonth("2026-04", 2026, 4);
+    await Promise.resolve();
+
+    expect(api.presenceLeave).not.toHaveBeenCalled();
+  });
+});
+
 describe("presence: identity-null guard", () => {
   beforeEach(() => {
     localStorage.clear(); // no identity set
