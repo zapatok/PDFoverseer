@@ -177,6 +177,9 @@ def test_count_documents_landscape(tmp_path, make_pagination_pdf):
 
 
 def test_count_documents_on_page_callback(tmp_path, make_pagination_pdf):
+    """U7: on_page is 0-based, called BEFORE each page — the same contract as
+    the anchors engine (header_band_anchors.py) — so a single-file viewer never
+    renders "página N+1 de N"."""
     from core.scanners.cancellation import CancellationToken
     from core.scanners.utils.pagination_count import count_documents_by_pagination
 
@@ -185,7 +188,7 @@ def test_count_documents_on_page_callback(tmp_path, make_pagination_pdf):
     count_documents_by_pagination(
         pdf, cancel=CancellationToken(), on_page=lambda d, t: seen.append((d, t))
     )
-    assert seen == [(1, 2), (2, 2)]
+    assert seen == [(0, 2), (1, 2)]
 
 
 def test_recover_gap_before_boundary_no_spurious_start():

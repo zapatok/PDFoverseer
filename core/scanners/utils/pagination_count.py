@@ -188,7 +188,13 @@ def count_documents_by_pagination(
     cover_code: str | None = None,
     on_page: Callable[[int, int], None] | None = None,
 ) -> PaginationCountResult:
-    """Count documents in a compilation by their "Página N de M" pagination."""
+    """Count documents in a compilation by their "Página N de M" pagination.
+
+    ``on_page`` (U7), when given, is called with 0-based ``(page_idx, total)``
+    BEFORE each page is OCR'd — the same contract as the anchors engine
+    (``header_band_anchors.count_covers_by_anchors``) — so callers can share one
+    "page N of M" rendering regardless of which engine ran.
+    """
     cancel.check()
     parsed: list[tuple[int | None, int | None, str | None]] = []
     codes: Counter[str] = Counter()
@@ -196,14 +202,14 @@ def count_documents_by_pagination(
         n = doc.page_count
         for pi in range(n):
             cancel.check()
+            if on_page is not None:
+                on_page(pi, n)
             raw = _corner_text(doc[pi])
             curr, total = parse_pagination(raw)
             code = extract_code(raw)
             if code:
                 codes[code] += 1
             parsed.append((curr, total, code))
-            if on_page is not None:
-                on_page(pi + 1, n)
     dom = dominant_total(parsed)
     reads = recover_sequence(parsed, dom)
     recovered = sum(1 for r in reads if r.status == "recovered")

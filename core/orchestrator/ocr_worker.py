@@ -134,12 +134,31 @@ def _ocr_worker(
                 pdf_cb(pdf.name, pf.get(pdf.name, 0), "filename_glob", [])
         return _finish(result)
 
+    # U9: track filenames already ticked across retry attempts. A retry
+    # re-scans the WHOLE cell (count_ocr has no partial-resume concept), so a
+    # transient failure after some files already succeeded would otherwise
+    # re-emit on_pdf for them on the next attempt — inflating pdf_progress
+    # `done` past `total` (display-clamped, so the bar stalls at 100% early)
+    # and re-merging a file_result that already merged with an identical value.
+    # Wraps whichever pdf_cb was resolved above (direct on_pdf in the sync
+    # path, or the queue-backed closure in the multi-worker path) — both route
+    # through this single call site into `fn`, so one wrapper covers both.
+    ticked: set[str] = set()
+    retry_pdf_cb = pdf_cb
+    if pdf_cb is not None:
+
+        def retry_pdf_cb(name: str, count: int | None, method: str, nm: list[dict]) -> None:
+            if name in ticked:
+                return
+            ticked.add(name)
+            pdf_cb(name, count, method, nm)
+
     last_err: str | None = None
     for attempt in range(OCR_RETRY_COUNT + 1):
         if token.cancelled:
             return (hosp, sigla, None, "cancelled")
         try:
-            result = fn(folder, cancel=token, on_pdf=pdf_cb, skip=skip)
+            result = fn(folder, cancel=token, on_pdf=retry_pdf_cb, skip=skip)
             return _finish(result)
         except CancelledError:
             return (hosp, sigla, None, "cancelled")

@@ -65,6 +65,43 @@ def test_scan_one_file_ocr_emits_file_events(tmp_path, monkeypatch):
     assert done["result"]["method"] == "header_band_anchors"
 
 
+def test_scan_one_file_ocr_pagination_page_progress_never_overshoots(tmp_path, make_pagination_pdf):
+    """U7: end-to-end through scan_one_file_ocr's adapter (``page_idx + 1``) — a
+    5-page pagination-strategy PDF must render pages 1..5, never 6. Uses the
+    REAL PaginationScanner + a synthetic pagination PDF (no personal data), not
+    a monkeypatched engine, so the whole 0-based-before-page contract is
+    exercised end-to-end (pagination_count.py -> ocr_scanner_base -> the
+    adapter's file_page_progress event)."""
+    import core.scanners as scanner_registry
+    from core.scanners.pagination_scanner import PaginationScanner
+
+    folder = tmp_path / "3.-ODI Visitas"
+    folder.mkdir()
+    make_pagination_pdf(folder / "a.pdf", docs=[(5, "F-CRS-ODI-03")])
+
+    scanner_registry.clear()
+    scanner_registry.register(PaginationScanner(sigla="odi"))
+    try:
+        events: list[dict] = []
+        scan_one_file_ocr(
+            "HRB",
+            "odi",
+            folder,
+            "a.pdf",
+            on_progress=events.append,
+            cancel=CancellationToken(),
+        )
+    finally:
+        scanner_registry.clear()
+        scanner_registry.register_defaults()
+
+    pp = [e for e in events if e["type"] == "file_page_progress"]
+    assert [e["page"] for e in pp] == [1, 2, 3, 4, 5]
+    assert all(e["pages_total"] == 5 for e in pp)
+    done = next(e for e in events if e["type"] == "file_scan_done")
+    assert done["result"]["per_file"] == {"a.pdf": 1}
+
+
 def test_scan_one_file_ocr_emits_clean_cancelled_error(tmp_path, monkeypatch):
     """U6: a CancelledError from the scanner surfaces as ``file_scan_error`` with
     a clean ``error: "cancelled"`` message — not the exception's blank ``str()``

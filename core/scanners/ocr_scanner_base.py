@@ -104,7 +104,12 @@ class OcrScannerBase:
                 incremental merge. ``count=None`` → unreadable (not merged).
             only: Scope the scan to a single filename (per-file re-scan).
             skip: Filenames to NOT scan — already reliable (R1/manual/prior OCR).
-            on_page: Optional per-page callback forwarded to the engine.
+            on_page: Optional per-page callback forwarded to the engine. Contract
+                (U7, unified across both engines): ``on_page(idx_0based, total)``,
+                called BEFORE each page is processed — matches
+                ``header_band_anchors.count_covers_by_anchors`` and
+                ``pagination_count.count_documents_by_pagination``. A caller
+                rendering "page N of M" should use ``idx_0based + 1``.
 
         Returns:
             A ``ScanResult`` summing the per-PDF counts, with method
