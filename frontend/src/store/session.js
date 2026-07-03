@@ -1154,7 +1154,13 @@ export const useSessionStore = create((set, get) => ({
     const { session } = get();
     if (typeof localStorage === "undefined") return;
     const id = getIdentity();
-    if (id && session) api.presenceFocus(session.session_id, { participant_id: id.participant_id, cell });
+    if (id && session) {
+      // Fire-and-forget: a dead/unreachable backend must not surface as an
+      // unhandled promise rejection (Fase-3 follow-up).
+      api
+        .presenceFocus(session.session_id, { participant_id: id.participant_id, cell })
+        .catch(() => {});
+    }
   },
 
   /**
@@ -1167,7 +1173,11 @@ export const useSessionStore = create((set, get) => ({
     if (_heartbeat) clearInterval(_heartbeat);
     if (typeof localStorage !== "undefined") {
       const id = getIdentity();
-      if (id && session) api.presenceLeave(session.session_id, { participant_id: id.participant_id });
+      // Fire-and-forget: a dead/unreachable backend must not surface as an
+      // unhandled promise rejection (Fase-3 follow-up).
+      if (id && session) {
+        api.presenceLeave(session.session_id, { participant_id: id.participant_id }).catch(() => {});
+      }
     }
     set({ _heartbeat: null, presence: [] });
   },

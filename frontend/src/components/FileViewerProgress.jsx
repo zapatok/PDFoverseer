@@ -1,4 +1,5 @@
 import { Loader2, X } from "lucide-react";
+import Button from "../ui/Button";
 
 // Per-page progress bar for a single-file OCR scan (rev-2 #1). When the page
 // total is unknown (pagination siglas have no per-page hook) the bar is
@@ -22,14 +23,9 @@ export default function FileViewerProgress({ page, pagesTotal, onCancel }) {
             </span>
           )}
           {onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="inline-flex items-center gap-1 text-xs text-po-error hover:underline"
-            >
-              <X size={12} strokeWidth={1.75} />
+            <Button variant="destructive" size="sm" icon={X} onClick={onCancel}>
               Cancelar
-            </button>
+            </Button>
           )}
         </div>
       </div>
