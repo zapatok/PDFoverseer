@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from api.batch import make_handle
+from api.batch import register_batch_handle
 from api.presence import AGENT_PARTICIPANT_ID, CellLockedError, is_agent
 from api.routes.ws import _emit, broadcast
 from api.state import SessionManager
@@ -448,11 +448,7 @@ def scan_ocr(
         for (h, s, f) in cells_with_paths
     )
 
-    # Atomic check-then-set: setdefault returns the value already in the dict if
-    # it existed, otherwise installs and returns the new one.
-    handle = make_handle(session_id=session_id, total=len(cells_with_paths))
-    if app.state.batches.setdefault(session_id, handle) is not handle:
-        raise HTTPException(409, "another batch is already running for this session")
+    handle = register_batch_handle(app, session_id, len(cells_with_paths))
     loop = app.state.loop
 
     # M3b: per-scan context for the agent lock-skip policy (mutated by
@@ -591,9 +587,7 @@ def scan_file_ocr(
     app = request.app
     # U6: same atomic check-then-set dedup as scan_ocr — mutually excludes a
     # concurrent batch (or another single-file scan) on this session.
-    handle = make_handle(session_id=session_id, total=1)
-    if app.state.batches.setdefault(session_id, handle) is not handle:
-        raise HTTPException(409, "another batch is already running for this session")
+    handle = register_batch_handle(app, session_id, 1)
     loop = app.state.loop
 
     def _safe_bc(event: dict) -> None:

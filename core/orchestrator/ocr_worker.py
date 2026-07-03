@@ -143,6 +143,9 @@ def _ocr_worker(
     # Wraps whichever pdf_cb was resolved above (direct on_pdf in the sync
     # path, or the queue-backed closure in the multi-worker path) — both route
     # through this single call site into `fn`, so one wrapper covers both.
+    # Keyed by filename: assumes each PDF's name is a stable identity across
+    # retry attempts (the folder isn't mutated mid-scan) — a rename/replace
+    # between attempts would dedup against the wrong file.
     ticked: set[str] = set()
     retry_pdf_cb = pdf_cb
     if pdf_cb is not None:

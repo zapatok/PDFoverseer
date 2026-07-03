@@ -133,6 +133,16 @@ def scan_cells_ocr(
 ) -> dict[tuple[str, str], ScanResult]:
     """Pase 2 — OCR scan a subset of cells with progress events.
 
+    Multi-worker path (``max_workers > 1``): worker subprocesses push
+    ``cell_started``/``pdf_done`` onto an ``mp.Queue``; a daemon drain thread
+    on the main process forwards them as ``cell_scanning``/``pdf_progress``.
+    ``on_progress`` is safe to call from both that drain thread and the
+    ``as_completed`` consume loop below: it only schedules a coroutine
+    (``run_coroutine_threadsafe``) and mutates session state on
+    ``cell_done``, which the drain thread emits exclusively (from the
+    worker's ``cell_meta``, after every one of that cell's ``file_result``s
+    has been merged) — the consume loop never emits it itself.
+
     Args:
         cells: ``[(hospital, sigla, folder_path), ...]`` to scan.
         on_progress: Invoked on the orchestrator thread with event dicts.
@@ -256,16 +266,12 @@ def scan_cells_ocr(
         return results
 
     # Multi-worker path — real ProcessPoolExecutor with an IPC progress queue.
+    # See the docstring above for the drain-thread/queue architecture.
     event = getattr(cancel, "_event", None)
     scanned = 0
     errors = 0
     cancelled = 0
 
-    # Workers (subprocesses) push cell_started / pdf_done onto this queue; a
-    # daemon drain thread on the main process forwards them as cell_scanning /
-    # pdf_progress. on_progress is safe to call from both this thread and the
-    # as_completed loop: it only schedules a coroutine (run_coroutine_threadsafe)
-    # and mutates session state on cell_done, which is emitted solely here.
     progress_q = mp.Queue()
     _DRAIN_STOP = "__drain_stop__"
 
