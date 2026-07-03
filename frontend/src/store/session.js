@@ -415,6 +415,10 @@ export const useSessionStore = create((set, get) => ({
             [filename]: count,
           },
           count: result.new_cell_count,
+          // Backend recomputes all_reliable after the override (resolving the
+          // last unreliable file flips the green dot); merge it because the F15
+          // guard drops this write's own cell_updated echo (saveNote pattern).
+          all_reliable: result.all_reliable,
         };
         cells[hospital] = hosp;
         const cleanedPending = new Map(prev._pendingSave);
@@ -611,6 +615,10 @@ export const useSessionStore = create((set, get) => ({
           worker_status: result.worker_status,
           worker_cursor: result.worker_cursor,
           worker_count: result.worker_count,
+          // Backend recomputes all_reliable after the worker PATCH (checks cells
+          // light green on 'terminado'); merge it because the F15 guard drops
+          // this write's own cell_updated echo (saveNote pattern).
+          all_reliable: result.all_reliable,
         };
         cells[hospital] = hosp;
         const cleanedPending = new Map(prev._pendingSave);

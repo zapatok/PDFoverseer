@@ -136,6 +136,11 @@ def patch_per_file_override(
         "filename": filename,
         "count": body.count,
         "new_cell_count": compute_cell_count(cell, count_type_for(sigla)),
+        # F15 follow-up: the pending-save guard drops this write's own
+        # cell_updated echo, so the response must carry the recomputed
+        # all_reliable itself (the patch_note pattern) — an override that
+        # resolves the last unreliable file flips the green dot.
+        "all_reliable": cell.get("all_reliable"),
     }
 
 
@@ -208,13 +213,15 @@ def patch_worker_count(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Sesión {session_id} no encontrada") from exc
     state = mgr.get_session_state(session_id)
-    cell = state["cells"].get(hospital, {}).get(sigla, {})
     month_root = Path(state.get("month_root", ""))
     folder = _find_category_folder(month_root / hospital, sigla)
     # checks cells (maquinaria) light green on worker_status=='terminado'; for
     # documents_workers this recomputes document settledness (no-op-ish). Closes
     # the gap that the worker PATCH didn't refresh all_reliable.
     refresh_all_reliable(mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla))
+    # Re-read AFTER the refresh (the patch_note pattern) — the pre-refresh cell
+    # dict would carry a stale all_reliable in the response below.
+    cell = mgr.get_session_state(session_id)["cells"].get(hospital, {}).get(sigla, {})
     # F1: the shared enrichment helper is the ONE producer of worker_count (same
     # folder-missing legacy fallback as GET / the WS snapshot / the Excel builders).
     # Doc siglas are skipped by the helper → their response worker_count is None.
@@ -227,6 +234,10 @@ def patch_worker_count(
         "worker_status": cell.get("worker_status"),
         "worker_cursor": cell.get("worker_cursor"),
         "worker_count": enriched.get("worker_count"),
+        # F15 follow-up: the pending-save guard drops this write's own
+        # cell_updated echo, so the response carries the recomputed
+        # all_reliable (checks cells light green on 'terminado').
+        "all_reliable": cell.get("all_reliable"),
     }
 
 
