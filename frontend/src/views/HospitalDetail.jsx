@@ -11,7 +11,8 @@ import { computeCellCount } from "../lib/cellCount";
 import { countTypeFor } from "../lib/sigla-info";
 
 export default function HospitalDetail({ hospital, onBack }) {
-  const { session } = useSessionStore();
+  // PF4: one selector per field — never a bare useSessionStore() destructure.
+  const session = useSessionStore((s) => s.session);
   const hospitalMode = useSessionStore((s) => s.hospitalMode);
   const focusSigla = useSessionStore((s) => s.focusSigla);
   const [selected, setSelected] = useState(null);

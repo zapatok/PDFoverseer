@@ -8,6 +8,7 @@ import { SIGLAS } from "../lib/sigla-labels";
 import { dotVariantFor, hospitalWorkerStatus } from "../lib/cell-status";
 import { useSessionStore } from "../store/session";
 import { countTypeFor } from "../lib/sigla-info";
+import { computeCellCount } from "../lib/cellCount";
 
 export default function HospitalCard({ hospital, total, cells, status, onClick }) {
   const selectHospital = useSessionStore((s) => s.selectHospital);
@@ -61,7 +62,7 @@ export default function HospitalCard({ hospital, total, cells, status, onClick }
       <p className="text-xs text-po-text-muted mt-0.5">documentos detectados</p>
       <div className="flex gap-0.5 mt-4" aria-label={`${SIGLAS.length} categorías`}>
         {SIGLAS.map((s) => (
-          <Tooltip key={s} content={`${s}: ${cells?.[s]?.user_override ?? cells?.[s]?.ocr_count ?? cells?.[s]?.filename_count ?? 0}`}>
+          <Tooltip key={s} content={`${s}: ${computeCellCount(cells?.[s], countTypeFor(s))}`}>
             <span><Dot variant={dotVariantFor(cells?.[s], { countType: countTypeFor(s) })} /></span>
           </Tooltip>
         ))}

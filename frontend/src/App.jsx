@@ -9,7 +9,11 @@ import IdentityDialog from "./components/IdentityDialog";
 import PresenceRoster from "./components/PresenceRoster";
 
 export default function App() {
-  const { view, hospital, setView } = useSessionStore();
+  // PF4: one selector per field, primitives/stable actions only — never a
+  // bare useSessionStore() object destructure (re-renders on ANY store change).
+  const view = useSessionStore((s) => s.view);
+  const hospital = useSessionStore((s) => s.hospital);
+  const setView = useSessionStore((s) => s.setView);
 
   return (
     <Tooltip.Provider delayDuration={300}>

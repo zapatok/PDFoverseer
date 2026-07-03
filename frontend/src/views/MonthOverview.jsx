@@ -14,12 +14,22 @@ import { useHistory } from "../lib/useHistoryStore";
 const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
 
 export default function MonthOverview() {
-  const {
-    months, session, loading, error,
-    loadMonths, openMonth, selectHospital, runScan, generateOutput,
-    historyView, setHistoryView,
-    historyDrawer, openHistoryDrawer, closeHistoryDrawer,
-  } = useSessionStore();
+  // PF4: one selector per field, primitives/stable actions only — never a
+  // bare useSessionStore() object destructure (re-renders on ANY store change).
+  const months = useSessionStore((s) => s.months);
+  const session = useSessionStore((s) => s.session);
+  const loading = useSessionStore((s) => s.loading);
+  const error = useSessionStore((s) => s.error);
+  const loadMonths = useSessionStore((s) => s.loadMonths);
+  const openMonth = useSessionStore((s) => s.openMonth);
+  const selectHospital = useSessionStore((s) => s.selectHospital);
+  const runScan = useSessionStore((s) => s.runScan);
+  const generateOutput = useSessionStore((s) => s.generateOutput);
+  const historyView = useSessionStore((s) => s.historyView);
+  const setHistoryView = useSessionStore((s) => s.setHistoryView);
+  const historyDrawer = useSessionStore((s) => s.historyDrawer);
+  const openHistoryDrawer = useSessionStore((s) => s.openHistoryDrawer);
+  const closeHistoryDrawer = useSessionStore((s) => s.closeHistoryDrawer);
 
   const sessionId = session?.session_id;
   const { data: history } = useHistory(historyView ? sessionId : null);

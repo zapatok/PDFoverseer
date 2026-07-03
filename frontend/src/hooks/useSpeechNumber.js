@@ -60,6 +60,9 @@ export function useSpeechNumber({ enabled, onNumber }) {
     return () => {
       stopped = true;
       rec.onend = null;
+      // U12: a final result can arrive asynchronously after stop() — null it
+      // out too so a post-unmount/disabled callback never fires onNumber.
+      rec.onresult = null;
       rec.stop();
       setStatus(SR ? "paused" : "unsupported");
     };
