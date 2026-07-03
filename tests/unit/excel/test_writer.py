@@ -138,7 +138,8 @@ def test_writer_uses_priority_in_generate_resumen(tmp_path):
 def test_generate_resumen_raises_output_locked_on_permission_error(tmp_path, monkeypatch):
     """U8: a destination held open by Excel makes Path.rename raise PermissionError
     (Windows). The writer must surface a typed, catchable OutputLockedError instead
-    of letting the raw PermissionError traceback bubble up to the route."""
+    of letting the raw PermissionError traceback bubble up to the route. With no
+    ``filename`` on the OS error, the message falls back to naming the output."""
     from core.excel.writer import OutputLockedError
 
     output = tmp_path / "RESUMEN_LOCKED.xlsx"
@@ -149,7 +150,32 @@ def test_generate_resumen_raises_output_locked_on_permission_error(tmp_path, mon
 
     monkeypatch.setattr(Path, "rename", _raise)
 
-    with pytest.raises(OutputLockedError):
+    with pytest.raises(OutputLockedError, match="RESUMEN_LOCKED.xlsx"):
+        generate_resumen(
+            cell_values={"HPV_art_count": 1},
+            output_path=output,
+            template_path=DEFAULT_TEMPLATE,
+        )
+
+
+def test_output_locked_error_names_the_actual_locked_file(tmp_path, monkeypatch):
+    """U8 polish: when the OS error identifies the file (``exc.filename``), the
+    OutputLockedError names THAT file — e.g. a locked ``.bak`` must not be
+    misreported as the output xlsx."""
+    from core.excel.writer import OutputLockedError
+
+    output = tmp_path / "RESUMEN_BAKLOCK.xlsx"
+    shutil.copy(DEFAULT_TEMPLATE, output)
+    bak = output.with_suffix(output.suffix + ".bak")
+    shutil.copy(DEFAULT_TEMPLATE, bak)  # pre-existing .bak → unlink() runs first
+
+    def _raise_unlink(self, *args, **kwargs):
+        # 3-arg PermissionError sets .filename — like a real WinError 32 does.
+        raise PermissionError(13, "The process cannot access the file", str(self))
+
+    monkeypatch.setattr(Path, "unlink", _raise_unlink)
+
+    with pytest.raises(OutputLockedError, match="RESUMEN_BAKLOCK.xlsx.bak"):
         generate_resumen(
             cell_values={"HPV_art_count": 1},
             output_path=output,

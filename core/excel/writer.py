@@ -103,7 +103,11 @@ def generate_resumen(
         # U8: Windows keeps an exclusive lock while Excel has the file open —
         # rename/unlink raises PermissionError. Surface it as a typed error the
         # route can map to a friendly message instead of a raw 500 traceback.
-        raise OutputLockedError(f"{output_path.name} is locked (likely open in Excel)") from exc
+        # Name the file the OS actually reported (this try spans the .bak
+        # unlink + both renames — a locked .bak must not be misreported as the
+        # output); fall back to the output when the error carries no filename.
+        locked_name = Path(exc.filename).name if exc.filename else output_path.name
+        raise OutputLockedError(f"{locked_name} is locked (likely open in Excel)") from exc
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     return ExcelGenerationResult(

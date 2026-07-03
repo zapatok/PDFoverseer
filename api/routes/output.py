@@ -233,13 +233,16 @@ def generate(
             cell_values=cell_values,
             output_path=output_path,
         )
-    except OutputLockedError:
+    except OutputLockedError as exc:
         # U8: the RESUMEN is open in Excel (Windows file lock) — a friendly,
-        # actionable 409 instead of a raw 500 traceback.
+        # actionable 409 instead of a raw 500 traceback. Caught locally rather
+        # than via a main.py exception_handler (the CellLockedError precedent):
+        # single call site, and the bare-FastAPI test fixtures that mount this
+        # router without create_app() would never exercise a global handler.
         raise HTTPException(
             409,
             "El archivo RESUMEN está abierto en Excel — ciérralo y vuelve a generar",
-        ) from None
+        ) from exc
 
     # Persist to historical_counts (UPSERT). Idempotent — regenerating the
     # same month overwrites with the same values. Excluded cells (FASE 1
