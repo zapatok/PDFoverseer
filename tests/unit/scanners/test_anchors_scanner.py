@@ -90,7 +90,6 @@ def _one_page_pdf() -> bytes:
 
 _FAKE_FLAVOR = {"name": "f_andamios_test", "anchors": ["andamios"], "min_match": 1}
 _FAKE_PATTERN = {
-    "filename_glob": r"^.*andamios.*\.pdf$",
     "scan_strategy": "anchors",
     "cover_flavors": [_FAKE_FLAVOR],
 }

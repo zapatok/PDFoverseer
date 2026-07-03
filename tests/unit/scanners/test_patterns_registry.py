@@ -21,17 +21,6 @@ def test_pattern_for_reunion_has_strategy_none():
     assert pattern["scan_strategy"] == "none"
 
 
-def test_pattern_for_reunion_filename_glob_is_lax():
-    """A10: lax pattern captures HLL mega `2026-04_reunion.pdf` AND
-    canonical `2026-04-15_reunion_supervisor.pdf`."""
-    pattern = get_pattern("reunion")
-    rx = re.compile(pattern["filename_glob"], re.IGNORECASE)
-    assert rx.match("2026-04-15_reunion_supervisor.pdf")
-    assert rx.match("2026-04_reunion.pdf")  # mega HLL, sin día
-    assert rx.match("REUNION_OLD.PDF")  # case-insensitive
-    assert not rx.match("notice.pdf")  # debe rechazar
-
-
 def test_get_pattern_unknown_raises_keyerror():
     with pytest.raises(KeyError, match="unknown_sigla"):
         get_pattern("unknown_sigla")

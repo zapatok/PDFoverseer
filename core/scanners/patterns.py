@@ -1,6 +1,8 @@
 """Central registry of patterns per sigla — see A1, A9, A10, A11 in the spec.
 
-Each entry declares how a sigla counts when filename_glob is not enough.
+Each entry declares how a sigla counts when pase-1 filename matching is not
+enough (pase-1 itself lives in core.scanners.utils.filename_glob — this
+registry does not drive its matching; see D8).
 The 18 SIGLAS from core.domain MUST each have an entry here.
 
 See:
@@ -37,7 +39,6 @@ class Flavor(TypedDict):
 class SiglaPattern(TypedDict):
     """Per-sigla declarative pattern entry. See A6, A10.
 
-    `filename_glob`: lax full-match regex (A10) — the ^.* prefix allows arbitrary prefixes; matched via re.match.
     `scan_strategy`: "anchors" | "pagination" | "none".
     `cover_flavors`: required if strategy="anchors".
     `top_fraction`: optional — default 0.25 (A2).
@@ -57,7 +58,6 @@ class SiglaPattern(TypedDict):
         ``filename_glob._matches`` so the two stay in lock-step.
     """
 
-    filename_glob: str
     scan_strategy: ScanStrategy
     cover_flavors: NotRequired[list[Flavor]]
     top_fraction: NotRequired[float]
@@ -711,11 +711,9 @@ _DIF_PTS_ANCHORS: list[Flavor] = [
 
 PATTERNS: dict[str, SiglaPattern] = {
     "reunion": {
-        "filename_glob": r"^.*reunion.*\.pdf$",
         "scan_strategy": "none",
     },
     "art": {
-        "filename_glob": r"^.*art.*\.pdf$",
         "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         # top_fraction defaults to 0.25 per spec §7 ("top_fraction=1/4 default,
         # no override"). recursive_glob=True per spec §7 ("Nota de enumeración"):
@@ -724,18 +722,15 @@ PATTERNS: dict[str, SiglaPattern] = {
         "cover_flavors": _ART_ANCHORS,
     },
     "irl": {
-        "filename_glob": r"^.*irl.*\.pdf$",
         "scan_strategy": "pagination",  # v4: migrated — packet covers via cover_code
         "cover_code": "F-CRS-ODI-01",  # count only IRL form covers, not appendix page-1s
         "cover_flavors": _IRL_ANCHORS,
     },
     "odi": {
-        "filename_glob": r"^.*odi.*\.pdf$",
         "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "cover_flavors": _ODI_ANCHORS,
     },
     "charla": {
-        "filename_glob": r"^.*charla.*\.pdf$",
         "scan_strategy": "anchors",
         # recursive_glob: True per Fase B audit 2026-05-22. Spec §4 didn't
         # mandate recursive enumeration but the real corpus shows both HPV
@@ -759,29 +754,24 @@ PATTERNS: dict[str, SiglaPattern] = {
         "cover_flavors": _CHARLA_ANCHORS,
     },
     "insgral": {
-        "filename_glob": r"^.*insgral.*\.pdf$",
         "scan_strategy": "pagination",
         "recursive_glob": True,
     },
     "bodega": {
-        "filename_glob": r"^.*bodega.*\.pdf$",
         "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "cover_flavors": _BODEGA_ANCHORS,
     },
     "caliente": {
-        "filename_glob": r"^.*caliente.*\.pdf$",
         "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "recursive_glob": True,
         "cover_flavors": _CALIENTE_ANCHORS,
     },
     "exc": {
-        "filename_glob": r"^.*exc.*\.pdf$",
         "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "recursive_glob": True,
         "cover_flavors": _EXC_ANCHORS,
     },
     "senal": {
-        "filename_glob": r"^.*senal.*\.pdf$",
         "scan_strategy": "anchors",
         "recursive_glob": True,
         # top_fraction defaults to 0.25 per spec §12 (no override). Earlier
@@ -790,24 +780,20 @@ PATTERNS: dict[str, SiglaPattern] = {
         "cover_flavors": _SENAL_ANCHORS,
     },
     "ext": {
-        "filename_glob": r"^.*ext.*\.pdf$",
         "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "recursive_glob": True,
         "cover_flavors": _EXT_ANCHORS,
     },
     "maquinaria": {
-        "filename_glob": r"^.*maquinaria.*\.pdf$",
         "scan_strategy": "anchors",  # KEEP: count_type=checks (not documents) — not migrated
         "recursive_glob": True,
         "cover_flavors": _MAQUINARIA_ANCHORS,
     },
     "altura": {
-        "filename_glob": r"^.*altura.*\.pdf$",
         "scan_strategy": "pagination",
         "recursive_glob": True,
     },
     "chps": {
-        "filename_glob": r"^.*chps.*\.pdf$",
         "scan_strategy": "anchors",
         "cover_flavors": _CHPS_ANCHORS,
         # F14: real chps files carry no reliable token (ABRIL: the real
@@ -816,7 +802,6 @@ PATTERNS: dict[str, SiglaPattern] = {
         "count_scope": "folder",
     },
     "chintegral": {
-        "filename_glob": r"^.*chintegral.*\.pdf$",
         "scan_strategy": "anchors",
         "recursive_glob": True,
         # Same OCR-band rationale as charla above — chintegral shares the
@@ -828,14 +813,12 @@ PATTERNS: dict[str, SiglaPattern] = {
         "cover_flavors": _CHINTEGRAL_ANCHORS,
     },
     "dif_pts": {
-        "filename_glob": r"^.*dif_pts.*\.pdf$",
         "scan_strategy": "anchors",
         "recursive_glob": True,
         "top_fraction": 1 / 3,
         "cover_flavors": _DIF_PTS_ANCHORS,
     },
     "herramientas_elec": {
-        "filename_glob": r"^.*herramientas_elec.*\.pdf$",
         "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "recursive_glob": True,
         # top_fraction defaults to 0.25 per spec §16 line 2204 (explicit
@@ -845,7 +828,6 @@ PATTERNS: dict[str, SiglaPattern] = {
         "cover_flavors": _HERRAMIENTAS_ELEC_ANCHORS,
     },
     "andamios": {
-        "filename_glob": r"^.*andamios.*\.pdf$",
         "scan_strategy": "pagination",  # v4: migrated from anchors (benchmark 2026-06-21)
         "recursive_glob": True,
         "cover_flavors": _ANDAMIOS_ANCHORS,
@@ -854,10 +836,8 @@ PATTERNS: dict[str, SiglaPattern] = {
         # Incr B: "Revisión de Documentación de Maquinaria" (folder 13). Provisional
         # (1 PDF = 1 doc). Fase 5 (F6): the deep audit found real corpus files that
         # carry no "revdocmaq" token at all (e.g. REVISION_DOCUMENTACION_MAQUINARIA_
-        # AGUASAN.pdf) — matching now happens via a "revision"+"documentacion" phrase
-        # alias in core.scanners.utils.filename_glob (_SIGLA_TOKEN_ALIASES), NOT via
-        # this field (see D8/Task 5.4 — filename_glob here is otherwise unused).
-        "filename_glob": r"^.*(revision|documentacion).*\.pdf$",
+        # AGUASAN.pdf) — matching happens via a "revision"+"documentacion" phrase
+        # alias in core.scanners.utils.filename_glob (_SIGLA_TOKEN_ALIASES).
         "scan_strategy": "none",
         "recursive_glob": True,
     },
@@ -866,7 +846,6 @@ PATTERNS: dict[str, SiglaPattern] = {
         # compilation of 2-page "Página N de 2" inspection forms (F-PETS-CRS-08-01)
         # → pagination counts the inspections; cover_code restricts doc-starts to
         # that form's covers. count_type=documents.
-        "filename_glob": r"^.*espacios.*\.pdf$",
         "scan_strategy": "pagination",
         "cover_code": "F-PETS-CRS-08-01",
         "recursive_glob": True,
