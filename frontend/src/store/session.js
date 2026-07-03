@@ -248,6 +248,9 @@ export const useSessionStore = create((set, get) => ({
 
   // F1 (Task 2.4) — reconcile orphan worker/check marks (migrate/discard). The
   // route returns the enriched cell (canonical worker_count) → merge it in.
+  // Returns the enriched cell on success and NULL on a handled 409 (the lock
+  // toast already fired here) so the panel only claims success on a truthy
+  // result; any other error re-throws for the panel's failure toast.
   reconcileWorkerMarks: async (sessionId, hospital, sigla, payload) => {
     const participantId = getParticipantId();
     try {
@@ -262,12 +265,13 @@ export const useSessionStore = create((set, get) => ({
         cells[hospital] = hosp;
         return { session: { ...prev.session, cells } };
       });
+      return cell;
     } catch (error) {
       if (error.status === 409) {
         const who = error.body?.lock_holder?.name ?? "Otro usuario";
         toast.error(`${who} está editando esta celda`);
         get().refetchSession(sessionId);
-        return;
+        return null; // handled: the panel must NOT toast success on top
       }
       set({ error: String(error) });
       throw error; // re-throw so the panel shows a failure toast (don't claim success)

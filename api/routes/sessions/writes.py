@@ -12,7 +12,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.presence import is_agent
-from api.state import SessionManager, compute_cell_count, compute_worker_count
+from api.state import SessionManager, compute_cell_count
 from core.orchestrator import _find_category_folder
 from core.scanners.patterns import count_type_for
 
@@ -27,7 +27,6 @@ from ._common import (
     cell_page_counts,
     enrich_cell_worker_count,
     get_manager,
-    present_file_names,
     refresh_all_reliable,
 )
 
@@ -212,13 +211,14 @@ def patch_worker_count(
     cell = state["cells"].get(hospital, {}).get(sigla, {})
     month_root = Path(state.get("month_root", ""))
     folder = _find_category_folder(month_root / hospital, sigla)
-    # F1: names-only present set (no PDF opens) — the same canonical filter GET +
-    # the cell_updated snapshot use, so the PATCH response can never disagree.
-    present = present_file_names(folder) if folder.exists() else None
     # checks cells (maquinaria) light green on worker_status=='terminado'; for
     # documents_workers this recomputes document settledness (no-op-ish). Closes
     # the gap that the worker PATCH didn't refresh all_reliable.
     refresh_all_reliable(mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla))
+    # F1: the shared enrichment helper is the ONE producer of worker_count (same
+    # folder-missing legacy fallback as GET / the WS snapshot / the Excel builders).
+    # Doc siglas are skipped by the helper → their response worker_count is None.
+    enriched = enrich_cell_worker_count(cell, month_root, hospital, sigla, folder)
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     if is_agent(body.participant_id):
         _broadcast_presence(request, mgr, session_id)
@@ -226,7 +226,7 @@ def patch_worker_count(
         "worker_marks": cell.get("worker_marks"),
         "worker_status": cell.get("worker_status"),
         "worker_cursor": cell.get("worker_cursor"),
-        "worker_count": compute_worker_count(cell, present),
+        "worker_count": enriched.get("worker_count"),
     }
 
 

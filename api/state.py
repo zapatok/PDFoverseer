@@ -628,8 +628,11 @@ class SessionManager:
         ``migrate`` appends ``from_file``'s marks to ``to_file``'s existing list
         and removes the ``from_file`` key. The page numbers are kept verbatim:
         after a merge they are historical evidence of the counted work, not live
-        viewer anchors, so re-numbering them would be meaningless. ``discard``
-        simply removes the ``from_file`` key.
+        viewer anchors, so re-numbering them would be meaningless. Note that the
+        migrated marks may carry duplicate or out-of-range page numbers on the
+        dest file — all of them SUM into the total, but not all are reachable in
+        the viewer (its ``markFor`` finds only the first mark per page); accepted
+        as pages-as-evidence. ``discard`` simply removes the ``from_file`` key.
 
         Args:
             session_id: Target session (``YYYY-MM``).

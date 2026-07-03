@@ -7,12 +7,14 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from api.state import SessionManager
+from core.scanners.patterns import count_type_for
 
 from ._common import (
     _resolve_month_dir,
     _validate_session_id,
     enrich_cell_worker_count,
     get_manager,
+    hospital_category_folders,
 )
 
 router = APIRouter()
@@ -49,13 +51,19 @@ def get(
     except KeyError as exc:
         raise HTTPException(404, f"Session not found: {session_id}") from exc
     month_root = Path(state.get("month_root", ""))
-    return {
-        **state,
-        "cells": {
-            hosp: {
-                sigla: enrich_cell_worker_count(cell, month_root, hosp, sigla)
-                for sigla, cell in cell_map.items()
-            }
-            for hosp, cell_map in state.get("cells", {}).items()
-        },
-    }
+    enriched_cells: dict = {}
+    for hosp, cell_map in state.get("cells", {}).items():
+        # One directory listing per hospital (not one per worker sigla): resolve
+        # every worker/checks folder up front, then enrich with the pre-resolved
+        # paths. Request-scoped only.
+        # Phantom/unknown siglas can't slip in: count_type_for defaults them to
+        # "documents", so only canonical worker/checks siglas reach the resolver.
+        worker_siglas = [
+            s for s in cell_map if count_type_for(s) in ("documents_workers", "checks")
+        ]
+        folders = hospital_category_folders(month_root / hosp, worker_siglas)
+        enriched_cells[hosp] = {
+            sigla: enrich_cell_worker_count(cell, month_root, hosp, sigla, folders.get(sigla))
+            for sigla, cell in cell_map.items()
+        }
+    return {**state, "cells": enriched_cells}

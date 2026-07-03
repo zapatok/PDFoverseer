@@ -56,18 +56,35 @@ def test_cell_updated_event_missing_cell_returns_none(app) -> None:
         assert _cell_updated_event(mgr, "2026-04", "HPV", "nope") is None
 
 
-def test_cell_updated_event_carries_worker_count(app, tmp_path) -> None:
-    """F1/Task 2.1: a cell_updated event for a worker sigla carries a canonical,
-    present-filtered ``worker_count`` (folder empty → orphan marks excluded → 0)."""
+def test_cell_updated_event_carries_worker_count_missing_folder_legacy(app, tmp_path) -> None:
+    """F1 review fix: a MISSING category folder falls back to the legacy ``None``
+    filter (per_file keys; empty per_file → sum all marks) — the same conditional
+    every other producer uses. The old assertion pinned 0 (empty-set filter),
+    which diverged from ``patch_worker_count``/Excel on this edge."""
     with TestClient(app) as client:  # noqa: F841
         mgr = app.state.manager
+        # tmp_path has no HLL/4.-Charlas → folder missing → legacy sum-all = 9.
         mgr.open_session(year=2026, month=4, month_root=tmp_path)
         mgr.apply_worker_count(
             "2026-04", "HLL", "charla", marks={"gone.pdf": [{"page": 1, "count": 9}]}
         )
         event = _cell_updated_event(mgr, "2026-04", "HLL", "charla")
         assert "worker_count" in event["cell"]
-        assert event["cell"]["worker_count"] == 0  # gone.pdf not present → excluded
+        assert event["cell"]["worker_count"] == 9  # legacy: per_file empty → all marks
+
+
+def test_cell_updated_event_worker_count_empty_existing_folder_filters(app, tmp_path) -> None:
+    """An EMPTY-but-EXISTING folder still present-filters (no files → no countable
+    marks): that is correct filtering, not the missing-folder edge."""
+    with TestClient(app) as client:  # noqa: F841
+        mgr = app.state.manager
+        (tmp_path / "HLL" / "4.-Charlas").mkdir(parents=True)
+        mgr.open_session(year=2026, month=4, month_root=tmp_path)
+        mgr.apply_worker_count(
+            "2026-04", "HLL", "charla", marks={"gone.pdf": [{"page": 1, "count": 9}]}
+        )
+        event = _cell_updated_event(mgr, "2026-04", "HLL", "charla")
+        assert event["cell"]["worker_count"] == 0  # folder exists, gone.pdf not in it
 
 
 def _open_session(client: TestClient) -> None:

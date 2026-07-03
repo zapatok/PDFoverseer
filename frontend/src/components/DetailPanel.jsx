@@ -157,12 +157,12 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId, locked = false }
 function WorkerCountModule({ hospital, sigla, cell, countType = "documents_workers", locked = false }) {
   const openWorkerCount = useSessionStore((s) => s.openWorkerCount);
   const status = cell.worker_status;
-  // F1: the backend-authoritative worker_count is the single producer of this
-  // total (present-filtered on disk; now carried by GET + the cell_updated
-  // snapshot + every write response). The fallback runs only before the first
-  // payload lands in the store — and it is now FAITHFUL: cellWorkerCount(cell,
-  // null) mirrors Python's _sum_marks(cell, None) legacy filter (by per_file
-  // keys), so it can no longer show orphan marks the Excel would export as 0.
+  // F1: the backend worker_count is authoritative (present-filtered on disk;
+  // carried by GET + the cell_updated snapshot + every write response). The
+  // fallback only covers the instant before the first payload lands in the
+  // store, and is legacy-filtered: cellWorkerCount(cell, null) mirrors Python's
+  // _sum_marks(cell, None) — it filters by per_file keys when per_file is
+  // non-empty, but still sums ALL marks when per_file is empty.
   const total =
     cell.worker_count != null
       ? cell.worker_count

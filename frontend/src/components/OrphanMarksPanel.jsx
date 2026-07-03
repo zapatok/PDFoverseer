@@ -53,12 +53,14 @@ export default function OrphanMarksPanel({
     const to = destFor(orphan);
     if (!to) return;
     try {
-      await reconcileWorkerMarks(sessionId, hospital, sigla, {
+      // The store returns the enriched cell on success and null on a handled
+      // 409 (it already toasted the lock holder) — never claim success on null.
+      const result = await reconcileWorkerMarks(sessionId, hospital, sigla, {
         action: "migrate",
         from_file: orphan,
         to_file: to,
       });
-      toast.success(`Marcas de ${orphan} migradas a ${to}`);
+      if (result) toast.success(`Marcas de ${orphan} migradas a ${to}`);
     } catch {
       toast.error("No se pudieron migrar las marcas");
     }
@@ -66,11 +68,12 @@ export default function OrphanMarksPanel({
 
   async function handleDiscard(orphan) {
     try {
-      await reconcileWorkerMarks(sessionId, hospital, sigla, {
+      // Same success/409 contract as handleMigrate (null = handled lock 409).
+      const result = await reconcileWorkerMarks(sessionId, hospital, sigla, {
         action: "discard",
         from_file: orphan,
       });
-      toast.success(`Marcas de ${orphan} descartadas`);
+      if (result) toast.success(`Marcas de ${orphan} descartadas`);
     } catch {
       toast.error("No se pudieron descartar las marcas");
     } finally {

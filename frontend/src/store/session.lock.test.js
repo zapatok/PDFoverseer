@@ -15,6 +15,7 @@ vi.mock("../lib/api", () => ({
     patchNote: vi.fn(async () => ({ note: "", note_status: "resuelto", all_reliable: true })),
     patchConfirm: vi.fn(async () => ({ confirmed: true })),
     applyRatio: vi.fn(async () => ({ count: 3 })),
+    reconcileWorkerMarks: vi.fn(async () => ({ worker_marks: {}, worker_count: 0 })),
     clearNearMatches: vi.fn(async () => ({})),
     presenceHeartbeat: vi.fn(async () => ({ participants: [] })),
     presenceFocus: vi.fn(async () => ({})),
@@ -178,6 +179,43 @@ describe("Task 7b: savePerFileOverride handles 409", () => {
     expect(getState().pendingSaves[key]).toBeUndefined();
     expect(getState()._pendingSave.has(key)).toBe(false);
     expect(getState().filesTick[tickKey]).toBe(before + 1);
+  });
+});
+
+describe("F1 review fix: reconcileWorkerMarks distinguishes success from a handled 409", () => {
+  it("returns the enriched cell on success (truthy → the panel may toast success)", async () => {
+    const enriched = { worker_marks: { "a.pdf": [{ page: 1, count: 3 }] }, worker_count: 3 };
+    api.reconcileWorkerMarks.mockResolvedValueOnce(enriched);
+    const result = await getState().reconcileWorkerMarks("2026-04", "HRB", "odi", {
+      action: "discard",
+      from_file: "gone.pdf",
+    });
+    expect(result).toEqual(enriched);
+  });
+
+  it("returns NULL on 409 (falsy → the panel must NOT toast success), toasts the holder, refetches", async () => {
+    api.reconcileWorkerMarks.mockRejectedValueOnce(make409("Carla"));
+    const result = await getState().reconcileWorkerMarks("2026-04", "HRB", "odi", {
+      action: "discard",
+      from_file: "gone.pdf",
+    });
+    expect(result).toBeNull();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.error.mock.calls[0][0]).toContain("Carla");
+    expect(api.getSession).toHaveBeenCalledWith("2026-04");
+    expect(getState().error).toBeNull();
+  });
+
+  it("re-throws non-409 errors (the panel shows its failure toast)", async () => {
+    const boom = new Error("500");
+    boom.status = 500;
+    api.reconcileWorkerMarks.mockRejectedValueOnce(boom);
+    await expect(
+      getState().reconcileWorkerMarks("2026-04", "HRB", "odi", {
+        action: "discard",
+        from_file: "gone.pdf",
+      }),
+    ).rejects.toBe(boom);
   });
 });
 

@@ -20,7 +20,7 @@ from fastapi import HTTPException, Request
 
 from api.routes.ws import _emit
 from api.state import SessionManager, compute_worker_count
-from core.domain import HOSPITALS, SIGLAS
+from core.domain import CATEGORY_FOLDERS, HOSPITALS, SIGLAS, folder_to_sigla
 from core.orchestrator import _find_category_folder
 from core.scanners.patterns import count_type_for
 
@@ -153,19 +153,69 @@ def present_file_names(folder: Path) -> set[str]:
     return {p.name for p in folder.rglob("*.pdf")}
 
 
-def enrich_cell_worker_count(cell: dict, month_root: Path, hospital: str, sigla: str) -> dict:
+def enrich_cell_worker_count(
+    cell: dict, month_root: Path, hospital: str, sigla: str, folder: Path | None = None
+) -> dict:
     """Return a copy of ``cell`` with the canonical present-filtered worker_count.
 
     The frontend must never derive this total (bug #2, F1): one producer, one
     filter. Only worker/checks siglas get the field; document siglas untouched.
     Unknown/phantom siglas (e.g. a stale ``no_existe``) default to ``"documents"``
     via ``count_type_for`` and are therefore skipped without crashing.
+
+    A MISSING folder falls back to the legacy ``None`` filter (by ``per_file``
+    keys) — the exact conditional ``patch_worker_count`` and the Excel worker
+    builders use, so every producer agrees on that edge. An EMPTY-but-EXISTING
+    folder still filters with an empty set (correct present-filtering: no files
+    on disk → no countable marks, only the reorg delta remains).
+
+    Args:
+        cell: the persisted state dict of one cell.
+        month_root: the session's month root directory.
+        hospital: hospital code.
+        sigla: category code.
+        folder: pre-resolved category folder — pass it when the caller already
+            resolved it (e.g. the batched GET-session path); ``None`` resolves
+            via ``_find_category_folder``.
     """
     if count_type_for(sigla) not in ("documents_workers", "checks"):
         return cell
-    folder = _find_category_folder(month_root / hospital, sigla)
-    present = present_file_names(folder)
+    if folder is None:
+        folder = _find_category_folder(month_root / hospital, sigla)
+    present = present_file_names(folder) if folder.exists() else None
     return {**cell, "worker_count": compute_worker_count(cell, present)}
+
+
+def hospital_category_folders(hosp_dir: Path, siglas: list[str]) -> dict[str, Path]:
+    """Resolve several siglas' category folders under ONE hospital with a single
+    directory listing (the GET-session hot path — one ``iterdir`` instead of one
+    per sigla).
+
+    Resolution rule per sigla is identical to ``_find_category_folder``: the
+    canonical ``CATEGORY_FOLDERS`` name if it exists on disk, else the first
+    subdirectory whose name maps back to the sigla (renumber-tolerant via
+    ``folder_to_sigla``), else the nominal canonical path (absent). Request-scoped
+    only — no caching across requests.
+
+    Args:
+        hosp_dir: the hospital directory (``month_root / hospital``).
+        siglas: the sigla codes to resolve (must exist in ``CATEGORY_FOLDERS``).
+
+    Returns:
+        ``{sigla: folder_path}`` for every requested sigla.
+    """
+    mapped: dict[str, Path] = {}
+    if hosp_dir.exists():
+        for sub in hosp_dir.iterdir():
+            if sub.is_dir():
+                s = folder_to_sigla(sub.name)
+                if s is not None and s not in mapped:
+                    mapped[s] = sub
+    out: dict[str, Path] = {}
+    for sigla in siglas:
+        direct = hosp_dir / CATEGORY_FOLDERS[sigla]
+        out[sigla] = direct if direct.exists() else mapped.get(sigla, direct)
+    return out
 
 
 def compute_settled(

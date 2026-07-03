@@ -3,13 +3,15 @@
 // F1 (Task 2.4): the orphan worker-marks panel surfaces marks that belong to
 // files no longer in the cell folder, offering migrate/discard. Follows the
 // react-dom/client + act mount pattern (no testing-library in this project).
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+import { toast } from "sonner";
 import OrphanMarksPanel from "./OrphanMarksPanel";
+import { useSessionStore } from "../store/session";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -20,6 +22,10 @@ function mount(ui) {
   act(() => root.render(ui));
   return { container, unmount: () => act(() => root.unmount()) };
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -61,5 +67,54 @@ describe("OrphanMarksPanel", () => {
       />,
     );
     expect(container.textContent).toBe("");
+  });
+
+  it("does NOT toast success when the store reports a handled 409 (returns null)", async () => {
+    // F1 review fix: the store's 409 branch toasts the lock holder and returns
+    // null; the panel must not fire toast.success on top of it.
+    const reconcileMock = vi.fn(async () => null);
+    useSessionStore.setState({ reconcileWorkerMarks: reconcileMock });
+    const cell = { worker_marks: { "gone.pdf": [{ page: 1, count: 7 }] } };
+    const { container } = mount(
+      <OrphanMarksPanel
+        hospital="HLL"
+        sigla="charla"
+        cell={cell}
+        files={["real.pdf"]}
+        sessionId="2026-04"
+      />,
+    );
+    const migrar = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent.trim() === "Migrar",
+    );
+    expect(migrar).toBeTruthy();
+    await act(async () => {
+      migrar.click();
+    });
+    expect(reconcileMock).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled(); // the store already toasted; the panel adds nothing
+  });
+
+  it("toasts success when the store returns the enriched cell (truthy)", async () => {
+    const reconcileMock = vi.fn(async () => ({ worker_marks: {}, worker_count: 0 }));
+    useSessionStore.setState({ reconcileWorkerMarks: reconcileMock });
+    const cell = { worker_marks: { "gone.pdf": [{ page: 1, count: 7 }] } };
+    const { container } = mount(
+      <OrphanMarksPanel
+        hospital="HLL"
+        sigla="charla"
+        cell={cell}
+        files={["real.pdf"]}
+        sessionId="2026-04"
+      />,
+    );
+    const migrar = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent.trim() === "Migrar",
+    );
+    await act(async () => {
+      migrar.click();
+    });
+    expect(toast.success).toHaveBeenCalledTimes(1);
   });
 });

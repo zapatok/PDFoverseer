@@ -133,6 +133,45 @@ def test_get_session_enriches_worker_count_present_filtered(client, monkeypatch,
     assert "worker_count" not in state["cells"]["HLL"]["odi"]
 
 
+def test_get_session_worker_count_missing_folder_uses_legacy_filter(client, monkeypatch, tmp_path):
+    """F1 review fix: when the category folder is MISSING, GET's enrichment falls
+    back to the legacy ``None`` filter (per_file keys; empty per_file → sum all) —
+    the exact conditional patch_worker_count and the Excel builders use, so the
+    UI can never diverge from the Excel on this edge."""
+    (tmp_path / "ABRIL").mkdir()  # month exists; HLL/4.-Charlas does NOT
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    client.patch(
+        "/api/sessions/2026-04/cells/HLL/charla/worker-count",
+        json={"marks": {"gone.pdf": [{"page": 1, "count": 9}]}},
+    )
+    state = client.get("/api/sessions/2026-04").json()
+    # Missing folder → legacy sum-all (9), NOT the empty-set collapse to 0.
+    assert state["cells"]["HLL"]["charla"]["worker_count"] == 9
+
+
+def test_hospital_category_folders_matches_find_category_folder(tmp_path):
+    """The batched per-hospital resolver (one iterdir) must resolve exactly like
+    ``_find_category_folder`` per sigla: canonical direct hit, renumbered folder,
+    and missing folder (nominal path)."""
+    from api.routes.sessions import hospital_category_folders
+    from core.orchestrator import _find_category_folder
+
+    hosp = tmp_path / "HRB"
+    (hosp / "4.-Charlas").mkdir(parents=True)  # canonical direct hit
+    (hosp / "7.-Charla Integral").mkdir()  # renumbered (canonical is 5.-)
+    # maquinaria: no folder at all → nominal canonical path
+    siglas = ["charla", "chintegral", "maquinaria", "dif_pts"]
+    batched = hospital_category_folders(hosp, siglas)
+    for sigla in siglas:
+        assert batched[sigla] == _find_category_folder(hosp, sigla), sigla
+    # And on a missing hospital dir entirely:
+    ghost = tmp_path / "HLL"
+    batched_ghost = hospital_category_folders(ghost, siglas)
+    for sigla in siglas:
+        assert batched_ghost[sigla] == _find_category_folder(ghost, sigla), sigla
+
+
 def test_reconcile_worker_marks_migrate_returns_enriched(client, monkeypatch, tmp_path):
     """F1/Task 2.3: migrate re-keys the orphan onto a present file, response is the
     enriched cell (present-filtered worker_count included)."""
