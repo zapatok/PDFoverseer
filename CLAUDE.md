@@ -1,6 +1,6 @@
 # PDFoverseer
 
-**PDF document analyzer** that counts internal documents in lecture PDFs (CRS) using an OCR + AI inference engine.
+**PDF document analyzer** that counts internal documents inside monthly prevention PDFs per (hospital, category) — pase-1 filename/token glob for the ~90% filename-trivial cells, pase-2 pagination-first OCR (with header-anchor matching for the few template siglas where pagination would over-count) for the ~10% implicit compilations. The original V4 OCR+inference engine is retained as a quarantined deferred fallback, wired to nothing.
 
 ## Quick Start
 
@@ -28,23 +28,23 @@ pip install -r requirements-gpu.txt
 
 ## Tech Stack
 
-- **Backend:** Python 3.10+ with CUDA GPU, FastAPI, PyMuPDF, Tesseract
-- **Frontend:** React + Vite, react-zoom-pan-pinch
-- **OCR Pipeline:** V4 (6 parallel Tesseract workers, Tier 1 direct + Tier 2 SR-GPU)
-- **Inference:** 5-phase engine with Dempster-Shafer post-validation
-- **VLM Module:** Vision-Language Model benchmark/sweep for OCR comparison
+- **Backend:** Python 3.10+, FastAPI, PyMuPDF, Tesseract — single process (collaboration state is in-memory; never run with `--workers N`)
+- **Counting pipeline:** pase-1 filename/token glob (`SimpleFilenameScanner`) + pase-2 pagination-first OCR (`PaginationScanner`, the primary engine since 2026-06-21) with header-anchor matching (`AnchorsScanner`) for the siglas whose template repeats its pagination on continuations
+- **Frontend:** React + Vite + Zustand, `pdfjs-dist` viewer, Radix UI primitives, Tailwind (`po-*` design tokens), sonner toasts
+- **Persistence:** SQLite (`overseer.db`) — session state + `historical_counts`
+- **Deferred:** the original V4 OCR+inference engine (`core/pipeline.py`/`core/inference.py`/`core/ocr.py` — 6 parallel Tesseract workers, 5-phase Dempster-Shafer inference; the only consumer of the optional CUDA GPU install) is a quarantined fallback wired to nothing (spec D10); `vlm/` (Vision-Language Model benchmark module) is kept for research, reverted from the pipeline (see Links)
 
 ## Project Structure
 
 ```
-├── core/           # OCR pipeline, inference engine, constants (see core/CLAUDE.md)
-├── api/            # FastAPI routes, sessions, WebSocket (see api/CLAUDE.md)
-├── vlm/            # VLM benchmark + sweep module (see vlm/CLAUDE.md)
+├── core/           # counting engine: pase-1/2 scanners, cell-count resolution, DB, Excel writer (see core/CLAUDE.md)
+├── api/            # FastAPI routes, sessions, presence, WebSocket (see api/CLAUDE.md)
+├── vlm/            # VLM benchmark + sweep module — research, not wired into the pipeline (see vlm/CLAUDE.md)
 ├── eval/           # Evaluation harness: sweeps, fixtures, tests (see eval/CLAUDE.md)
-├── tools/          # Standalone utilities (capture, pattern eval, regex test)
+├── tools/          # Standalone utilities (capture, pattern eval, corpus audits, dump_counts)
 ├── frontend/       # React UI (components, hooks, store)
 ├── tests/          # Integration + unit tests
-├── models/         # Super-resolution models (FSRCNN_x4.pb, EDSR_x4.pb)
+├── models/         # Super-resolution model (FSRCNN_x4.pb) — used only by the deferred V4 fallback
 ├── data/samples/   # 22 source PDFs for scan + fixture extraction
 ├── docs/           # Active research notes + referenced plans/postmortems
 ├── server.py       # FastAPI entry point
@@ -79,6 +79,8 @@ pip install -r requirements-gpu.txt
 |---------|---------|
 | `python server.py` | Start FastAPI backend + WebSocket |
 | `cd frontend && npm run dev` | Start React dev server |
+| `cd frontend && npm run build` | Production frontend build |
+| `cd frontend && npm test` | Run the vitest suite |
 | `pytest` | Run test suite |
 | `ruff check .` | Lint (must be 0 violations before commit) |
 
@@ -146,7 +148,7 @@ When compacting, preserve:
 ## Links
 
 - **VLM integration postmortem:** `docs/superpowers/reports/2026-03-29-vlm-integration-postmortem.md`
-- **Pixel density README:** `eval/pixel_density/README.md`
+- **Pixel density research:** deleted from `eval/` in the 2026-06-21 cleanup (recoverable from git history / the `research/pixel-density` branch); see `eval/CLAUDE.md`'s "Removed 2026-06-21" note
 - **Eval README:** `eval/README.md`
 - **Core README:** `core/README.md`
 
@@ -164,9 +166,36 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 
 ## Pending Work
 
-- **INS_31:** ~~Last-page inference gap~~ FIXED (2026-03-26). Tray UX improvements still pending.
-- **VLM integration:** ~~Attempted~~ REVERTED (2026-03-30). See postmortem in Links.
-- **Browse UX:** `/api/browse` uses server-side tkinter chooser — only works with local display
+Verified open as of the Fase 8 docs sweep (2026-07-03) — see the newest
+**Project history** entry below and
+`docs/superpowers/plans/2026-07-02-deep-audit-remediation.md` for the full
+audit trail:
+
+- **`api/state.py` god-file** — `SessionManager` lives in a single ~900-line
+  file; the 2026-06-22 structural round split `core/orchestrator/` and
+  `api/routes/sessions/` into packages but left `state.py` out of scope
+  (a perf pass + a mixin-split were also declined as marginal/negative ROI).
+- **`senal` landscape OCR** — both `AnchorsScanner` and `PaginationScanner`
+  read 0/18 on its corner; open, unresolved.
+- **Incr-J's paso-1 manifest consumer** — the reorg manifest this app exports
+  is meant to be consumed by the sibling normalization pipeline; that
+  consumer is a cross-project follow-up, not tracked in this repo.
+- **Toast-vs-sticky-error asymmetry** — `savePerFileOverride`'s generic-error
+  path (toast + `filesTick` bump, no sticky banner) never got backported to
+  the other 4 single-cell write actions: `saveOverride`, `confirmCell`,
+  `saveWorkerCount`, `saveNote` all still set the old sticky `error` field on
+  a non-409 failure.
+- **`@pytest.mark`-style corpus-skip markers** reimplemented per-file instead
+  of centralized (`test_filename_glob.py`, `test_routes_sessions.py`,
+  `test_routes_output.py` each redefine their own
+  `skipif(not <root>.exists(), ...)`).
+- **Misfiled-document guard** — the pagination-migrated siglas have no
+  anti-anchor mechanism (unlike `AnchorsScanner`), so a misfiled PDF carrying
+  real pagination markers would still count; open product question (see
+  `tests/fixtures/scanners/README.md`).
+- **Per-sigla fixture test idiom** not yet unified — `ConfidenceLevel` enum +
+  a GT-driven fixture-path helper in some files, a `_fixture_covers()`-helper
+  style in others.
 
 ## Consolidación de `po_overhaul` — rama única, sincronizada con origin (2026-06-03)
 
