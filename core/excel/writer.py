@@ -12,6 +12,13 @@ from core.cell_count import compute_cell_count
 from core.excel.template import DEFAULT_TEMPLATE, get_range_cell
 
 
+class OutputLockedError(Exception):
+    """The destination .xlsx couldn't be replaced because another process has
+    it open (typically Excel) — Windows raises PermissionError for a rename
+    onto/of a locked file. Callers (the API route) map this to a friendly
+    error instead of letting the raw PermissionError traceback surface (U8)."""
+
+
 def resolve_cell_value(
     cell: dict, count_type: str = "documents", present_files: set[str] | None = None
 ) -> int | None:
@@ -86,11 +93,17 @@ def generate_resumen(
     wb.save(tmp_path)
 
     bak_path = output_path.with_suffix(output_path.suffix + ".bak")
-    if output_path.exists():
-        if bak_path.exists():
-            bak_path.unlink()
-        output_path.rename(bak_path)
-    tmp_path.rename(output_path)
+    try:
+        if output_path.exists():
+            if bak_path.exists():
+                bak_path.unlink()
+            output_path.rename(bak_path)
+        tmp_path.rename(output_path)
+    except PermissionError as exc:
+        # U8: Windows keeps an exclusive lock while Excel has the file open —
+        # rename/unlink raises PermissionError. Surface it as a typed error the
+        # route can map to a friendly message instead of a raw 500 traceback.
+        raise OutputLockedError(f"{output_path.name} is locked (likely open in Excel)") from exc
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     return ExcelGenerationResult(

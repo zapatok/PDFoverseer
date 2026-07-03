@@ -2,6 +2,7 @@ import shutil
 from pathlib import Path
 
 import openpyxl
+import pytest
 
 from core.excel.template import DEFAULT_TEMPLATE
 from core.excel.writer import ExcelGenerationResult, generate_resumen
@@ -132,3 +133,25 @@ def test_writer_uses_priority_in_generate_resumen(tmp_path):
     result = generate_resumen(cell_values=cell_values, output_path=out)
     assert result.cells_written == 2
     assert out.exists()
+
+
+def test_generate_resumen_raises_output_locked_on_permission_error(tmp_path, monkeypatch):
+    """U8: a destination held open by Excel makes Path.rename raise PermissionError
+    (Windows). The writer must surface a typed, catchable OutputLockedError instead
+    of letting the raw PermissionError traceback bubble up to the route."""
+    from core.excel.writer import OutputLockedError
+
+    output = tmp_path / "RESUMEN_LOCKED.xlsx"
+    shutil.copy(DEFAULT_TEMPLATE, output)  # pre-existing file, as if already generated once
+
+    def _raise(self, *args, **kwargs):
+        raise PermissionError("[WinError 32] The process cannot access the file")
+
+    monkeypatch.setattr(Path, "rename", _raise)
+
+    with pytest.raises(OutputLockedError):
+        generate_resumen(
+            cell_values={"HPV_art_count": 1},
+            output_path=output,
+            template_path=DEFAULT_TEMPLATE,
+        )

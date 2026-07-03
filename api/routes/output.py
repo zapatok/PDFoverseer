@@ -14,7 +14,7 @@ from api.routes.sessions import cell_page_counts, get_manager, present_file_name
 from api.state import SessionManager, compute_cell_count, compute_worker_count
 from core.db.historical_repo import upsert_count
 from core.domain import HOSPITALS, SIGLAS
-from core.excel.writer import generate_resumen
+from core.excel.writer import OutputLockedError, generate_resumen
 from core.orchestrator import _find_category_folder
 from core.scanners.patterns import count_type_for
 
@@ -228,10 +228,18 @@ def generate(
     output_dir = _output_dir()
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"RESUMEN_{session_id}.xlsx"
-    result = generate_resumen(
-        cell_values=cell_values,
-        output_path=output_path,
-    )
+    try:
+        result = generate_resumen(
+            cell_values=cell_values,
+            output_path=output_path,
+        )
+    except OutputLockedError:
+        # U8: the RESUMEN is open in Excel (Windows file lock) — a friendly,
+        # actionable 409 instead of a raw 500 traceback.
+        raise HTTPException(
+            409,
+            "El archivo RESUMEN está abierto en Excel — ciérralo y vuelve a generar",
+        ) from None
 
     # Persist to historical_counts (UPSERT). Idempotent — regenerating the
     # same month overwrites with the same values. Excluded cells (FASE 1

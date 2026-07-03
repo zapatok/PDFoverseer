@@ -41,11 +41,14 @@ export const api = {
       body: JSON.stringify({ scope }),
     }).then(jsonOrThrow),
   generateOutput: (sessionId) =>
+    // U8: jsonOrThrowStructured (not jsonOrThrow) so a friendly 409 detail
+    // (e.g. "el archivo está abierto en Excel") becomes err.message instead
+    // of the raw JSON error body embedded in a generic "409 Conflict: {...}".
     fetch(`${BASE}/sessions/${sessionId}/output`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
-    }).then(jsonOrThrow),
+    }).then(jsonOrThrowStructured),
 
   scanOcr: (sessionId, cells) =>
     fetch(`${BASE}/sessions/${sessionId}/scan-ocr`, {

@@ -368,6 +368,25 @@ def test_output_history_never_counted_is_low_confidence(client):
     assert hrb_odi.confidence == "low"
 
 
+def test_generate_route_returns_409_when_output_locked(client, tmp_path, monkeypatch):
+    """U8: PermissionError during the writer's rename dance (the RESUMEN is open
+    in Excel) must surface as a friendly 409, not a raw 500 traceback."""
+    client.post("/api/sessions", json={"year": 2026, "month": 4})
+    first = client.post("/api/sessions/2026-04/output", json={})
+    assert first.status_code == 200  # as if the file was already generated once
+
+    def _raise(self, *args, **kwargs):
+        raise PermissionError("[WinError 32] The process cannot access the file")
+
+    monkeypatch.setattr(Path, "rename", _raise)
+
+    response = client.post("/api/sessions/2026-04/output", json={})
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "El archivo RESUMEN está abierto en Excel — ciérralo y vuelve a generar"
+    )
+
+
 def test_document_excel_value_independent_of_folder_resolution(tmp_path):
     # A document cell's Excel value comes from stored state, not folder
     # resolution — so the renumber fix cannot move it. month_root is bogus
