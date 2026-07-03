@@ -136,6 +136,24 @@ loss is derivational, not storage) and the frontend subagent (FE-12).
   cancelled += 1; continue` (report a real `scan_cancelled`); move the drain-stop sentinel
   + `drain_thread.join` into a `try/finally` around the pool block.
 
+> **Corrección 2026-07-03:** the failure mode above (a mislabeled `scan_complete
+> {errors: N}` from an unhandled `CancelledError`) was itself superseded during Fase 3
+> implementation. Empirical testing against this project's exact Python 3.10.11 venv
+> showed the real behavior is subtler and worse: `pool.shutdown(cancel_futures=True)`
+> cancels queued futures via bare `Future.cancel()`, which never routes through
+> `set_running_or_notify_cancel()` — so `as_completed()`'s internal waiter is never
+> notified for a discarded future, and the loop **hangs forever** instead of raising.
+> Not a crash; a silent, indefinite hang. Verified against CPython's
+> `concurrent.futures` source, and empirically: the pre-fix reproduction test timed out
+> (2 min, SIGTERM) rather than raising `CancelledError` as the original finding assumed.
+> Living proof of the bug this whole time: 6 `verify_*` scripts from the morning of
+> 2026-07-02 sat hung in exactly this state for ~24h until killed. Fixed in commit
+> `d86157c` — inside the `as_completed` loop, a still-pending future is resolved
+> directly via `Future.result()` (which checks state immediately rather than blocking)
+> once cancellation is noticed, so the batch correctly ends as `scan_cancelled`; the
+> drain-stop sentinel + thread join moved into a `finally` so a raise out of the pool
+> block can never leak the drain thread + its `mp.Queue`.
+
 ### F3 — Reorg create/delete endpoints bypass the M3 per-cell locks (source AND dest)
 - Severity: **high** · Category: race/bug · **VERIFY**
 - Files: `api/routes/sessions/reorg.py:51,90` · `frontend/src/lib/api.js` (no
