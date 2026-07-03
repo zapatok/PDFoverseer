@@ -918,6 +918,19 @@ export const useSessionStore = create((set, get) => ({
       case "cell_updated": {
         const session = state.session;
         if (!session) break;
+        const key = cellKey(event.hospital, event.sigla);
+        // F15: an in-flight local save (saveOverride/savePerFileOverride/etc.)
+        // owns this cell right now — a wholesale replace here would clobber
+        // the operator's optimistic edit mid-flight. Keys are `hospital|sigla`
+        // (cell-level saves) or `hospital|sigla|<field>` (per-file/note/etc.),
+        // so match the exact key or that prefix — NOT a bare startsWith(key),
+        // which would also match an unrelated sigla like `HPV|odiXYZ`. Once
+        // the save resolves (its own handler applies the server value and
+        // clears _pendingSave), a later cell_updated reconciles normally.
+        const hasPending = [...state._pendingSave.keys()].some(
+          (k) => k === key || k.startsWith(`${key}|`),
+        );
+        if (hasPending) break;
         const cells = { ...session.cells };
         const hosp = { ...(cells[event.hospital] || {}) };
         // Reemplazo de celda COMPLETA (§4). En el flujo de escaneo llega DESPUÉS de
@@ -925,10 +938,9 @@ export const useSessionStore = create((set, get) => ({
         // cell_done solo escribe un subconjunto de campos sobre datos ya frescos).
         hosp[event.sigla] = event.cell;
         cells[event.hospital] = hosp;
-        const tickKey = cellKey(event.hospital, event.sigla);
         const filesTick = {
           ...state.filesTick,
-          [tickKey]: (state.filesTick[tickKey] ?? 0) + 1,
+          [key]: (state.filesTick[key] ?? 0) + 1,
         };
         set({ session: { ...session, cells }, filesTick });
         break;
