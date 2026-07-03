@@ -140,8 +140,16 @@ def test_reconcile_worker_marks_enforces_lock(tmp_path):
 # ── Task 4: endpoint 409 ──────────────────────────────────────────────────────
 
 
-def test_override_endpoint_409_when_locked_by_another():
-    with TestClient(create_app()) as c:
+def test_override_endpoint_409_when_locked_by_another(tmp_path, monkeypatch):
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "override_409.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        from pathlib import Path
+
+        # 2026-07 isolation fix: the override endpoint 404s unless the session
+        # already exists — open it explicitly (the real DB used to have it
+        # pre-opened from prior usage, which this test was silently relying on).
+        app.state.manager.open_session(year=2026, month=4, month_root=Path(tmp_path))
         c.post(
             "/api/sessions/2026-04/presence/heartbeat",
             json={"participant_id": "p2", "name": "Carla", "color": "#b"},

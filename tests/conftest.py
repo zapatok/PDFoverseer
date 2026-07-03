@@ -93,3 +93,30 @@ def _write_guard(monkeypatch):
     monkeypatch.setattr(os, "rename", _guard_rename)
     monkeypatch.setattr(os, "replace", _guard_replace)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _db_path_isolation(tmp_path, monkeypatch):
+    """Default OVERSEER_DB_PATH to a per-test tmp file for every test.
+
+    2026-07 incident: several tests called ``api.main.create_app()`` without
+    setting ``OVERSEER_DB_PATH`` (``api/main.py::_db_path()`` falls back to
+    the real ``data/overseer.db``), so they opened the PRODUCTION database
+    and wrote to it on every fast-suite run — confirmed writer:
+    ``test_agent_broadcast.py::test_agent_override_endpoint_200_on_free_cell``
+    PATCHed the real 2026-04 HRB|odi cell with ``user_override=3``.
+
+    Only sets the default when the variable is not already present — this
+    respects an explicit opt-in (e.g. an outer/higher-scoped fixture, or a
+    manual ``OVERSEER_DB_PATH=... pytest ...`` invocation). A previous test's
+    ``monkeypatch.setenv`` is always undone at teardown before this fixture
+    runs again, so a plain absence-check is sufficient — no leakage between
+    tests. A test's OWN ``monkeypatch.setenv("OVERSEER_DB_PATH", ...)`` inside
+    its body or a sibling fixture still wins: this autouse fixture only sets
+    the value at setup time, and (being autouse) it always runs before
+    same-scope non-autouse fixtures / the test body, so a later explicit
+    ``setenv`` simply overwrites this default via the same monkeypatch stack.
+    """
+    if os.environ.get("OVERSEER_DB_PATH") is None:
+        monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test_overseer.db"))
+    yield

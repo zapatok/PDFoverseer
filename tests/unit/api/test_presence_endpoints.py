@@ -16,7 +16,8 @@ def _client():
     return TestClient(create_app())
 
 
-def test_heartbeat_returns_snapshot():
+def test_heartbeat_returns_snapshot(tmp_path, monkeypatch):
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "presence_heartbeat.db"))
     with _client() as c:
         r = c.post(
             "/api/sessions/2026-04/presence/heartbeat",
@@ -28,7 +29,8 @@ def test_heartbeat_returns_snapshot():
         assert body["participants"][0]["participant_id"] == "p1"
 
 
-def test_focus_then_heartbeat_reflects_cell():
+def test_focus_then_heartbeat_reflects_cell(tmp_path, monkeypatch):
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "presence_focus.db"))
     with _client() as c:
         c.post(
             "/api/sessions/2026-04/presence/heartbeat",
@@ -46,7 +48,8 @@ def test_focus_then_heartbeat_reflects_cell():
         assert me["focused_cell"] == "HRB|odi"
 
 
-def test_leave_removes_participant():
+def test_leave_removes_participant(tmp_path, monkeypatch):
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "presence_leave.db"))
     with _client() as c:
         c.post(
             "/api/sessions/2026-04/presence/heartbeat",
@@ -63,7 +66,8 @@ def test_leave_removes_participant():
         assert {p["participant_id"] for p in r.json()["participants"]} == {"p2"}
 
 
-def test_bad_session_id_400():
+def test_bad_session_id_400(tmp_path, monkeypatch):
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "presence_bad_id.db"))
     with _client() as c:
         r = c.post(
             "/api/sessions/not-a-month/presence/heartbeat",

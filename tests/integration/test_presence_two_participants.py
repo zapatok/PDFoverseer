@@ -7,12 +7,15 @@ Also covers the M3a write-lock cycle: focus → 409 → release → 2xx.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from api.main import create_app
 
 
-def test_two_participants_see_each_other():
+def test_two_participants_see_each_other(tmp_path, monkeypatch):
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "presence_two.db"))
     with TestClient(create_app()) as c:
         c.post(
             "/api/sessions/2026-04/presence/heartbeat",
@@ -46,9 +49,18 @@ def test_two_participants_see_each_other():
         assert {p["participant_id"] for p in r.json()["participants"]} == {"p1"}
 
 
-def test_lock_409_and_release(tmp_path):
+def test_lock_409_and_release(tmp_path, monkeypatch):
     """M3a: p1 focuses HRB|odi (editor); p2 write → 409; p1 leaves → p2 write → 2xx."""
-    with TestClient(create_app()) as c:
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "presence_lock.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        # 2026-07 isolation fix: "odi" is a capped sigla, so the override route
+        # looks up the session (for the pages cap check) even before the lock
+        # check runs — open the session explicitly (the real DB used to have
+        # it pre-opened from prior usage, which this test was silently relying
+        # on).
+        app.state.manager.open_session(year=2026, month=4, month_root=Path(tmp_path))
+
         # Both participants join.
         c.post(
             "/api/sessions/2026-04/presence/heartbeat",
