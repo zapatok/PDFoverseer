@@ -88,6 +88,40 @@ def test_count_zero_when_folder_missing(tmp_path):
     assert "folder_missing" in result.flags
 
 
+def test_count_pdfs_by_sigla_folder_scope_chps(tmp_path):
+    """F14 — chps counts by folder membership: its real files (crs.pdf,
+    titan.pdf, the "cphs"-spelled file) carry no reliable chps token, so
+    every PDF in the resolved category folder belongs, with no unmatched-file
+    flag (the folder itself is the classifier)."""
+    (tmp_path / "crs.pdf").write_bytes(b"%PDF\n%%EOF")
+    (tmp_path / "titan.pdf").write_bytes(b"%PDF\n%%EOF")
+    (tmp_path / "2026-04-30_cphs_acta_reunion.pdf").write_bytes(b"%PDF\n%%EOF")
+
+    result = count_pdfs_by_sigla(tmp_path, sigla="chps")
+
+    assert result.count == 3
+    assert set(result.matched_filenames) == {
+        "crs.pdf",
+        "titan.pdf",
+        "2026-04-30_cphs_acta_reunion.pdf",
+    }
+    assert "some_files_unrecognized" not in result.flags
+    assert "no_matching_sigla_in_folder" not in result.flags
+
+
+def test_count_pdfs_by_sigla_token_scope_unchanged(tmp_path):
+    """F14 — a token-scoped sigla (charla) is unaffected: unrecognized files
+    in the same folder are still excluded and still flagged."""
+    (tmp_path / "2026-04-15_charla_supervisor.pdf").write_bytes(b"%PDF\n%%EOF")
+    (tmp_path / "unrelated.pdf").write_bytes(b"%PDF\n%%EOF")
+
+    result = count_pdfs_by_sigla(tmp_path, sigla="charla")
+
+    assert result.count == 1
+    assert result.matched_filenames == ["2026-04-15_charla_supervisor.pdf"]
+    assert "some_files_unrecognized" in result.flags
+
+
 def test_per_empresa_breakdown_for_hpv_art():
     folder = ABRIL_ROOT / "HPV" / "7.-ART"
     breakdown = per_empresa_breakdown(folder)

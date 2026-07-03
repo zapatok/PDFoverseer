@@ -20,8 +20,8 @@ from pathlib import Path
 from core.scanners.base import ConfidenceLevel, Scanner, ScanResult
 from core.scanners.utils.filename_glob import (
     GlobCountResult,
+    _matches,
     count_pdfs_by_sigla,
-    extract_sigla,
     per_empresa_breakdown,
 )
 from core.scanners.utils.page_count_heuristic import (
@@ -61,9 +61,9 @@ class SimpleFilenameScanner:
         # Matched basenames may live in empresa subfolders (count_pdfs_by_sigla
         # globs recursively but returns basenames). Resolve each to its on-disk
         # path so _page_count opens the right file; open each matched PDF once.
-        path_by_name = {
-            p.name: p for p in folder.rglob("*.pdf") if extract_sigla(p.name) == self.sigla
-        }
+        # _matches honors count_scope (F14) so this stays in lock-step with
+        # count_pdfs_by_sigla's own matching (e.g. chps: folder-scope).
+        path_by_name = {p.name: p for p in folder.rglob("*.pdf") if _matches(self.sigla, p.name)}
         pages = {
             fn: _page_count(path_by_name[fn])
             for fn in glob_result.matched_filenames

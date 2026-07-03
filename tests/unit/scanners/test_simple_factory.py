@@ -41,3 +41,16 @@ def test_simple_scanner_flags_compilation_in_hrb_odi():
 def test_factory_builds_independently():
     scanner = make_simple_scanner("art")
     assert scanner.sigla == "art"
+
+
+def test_simple_scanner_chps_folder_scope(tmp_path):
+    """F14 — chps's SimpleFilenameScanner resolves per-file paths for every
+    PDF in the folder (folder count_scope), not just token-matching ones."""
+    (tmp_path / "crs.pdf").write_bytes(b"%PDF\n%%EOF")
+    (tmp_path / "titan.pdf").write_bytes(b"%PDF\n%%EOF")
+
+    scanner = get("chps")
+    result = scanner.count(tmp_path)
+
+    assert result.count == 2
+    assert set(result.per_file) == {"crs.pdf", "titan.pdf"}

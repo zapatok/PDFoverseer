@@ -46,6 +46,15 @@ class SiglaPattern(TypedDict):
     `cover_code`: pagination only — count only covers whose form code contains
         this substring (e.g. ``"F-CRS-ODI-01"`` for IRL). When absent, every
         ``curr==1`` page counts as a document start.
+    `count_scope`: optional — default ``"token"`` (pase-1 counts only PDFs
+        whose filename resolves to this sigla via ``extract_sigla``).
+        ``"folder"`` (F14) counts every PDF in the resolved category folder,
+        no token required — for siglas whose real files carry no reliable
+        filename token at all (chps: real files like ``crs.pdf``/``titan.pdf``
+        are unnamed by convention; the folder itself is the classifier).
+        Honored by ``count_pdfs_by_sigla`` and ``SimpleFilenameScanner``'s
+        per-file path resolution — both delegate to
+        ``filename_glob._matches`` so the two stay in lock-step.
     """
 
     filename_glob: str
@@ -54,6 +63,7 @@ class SiglaPattern(TypedDict):
     top_fraction: NotRequired[float]
     recursive_glob: NotRequired[bool]
     cover_code: NotRequired[str]
+    count_scope: NotRequired[Literal["token", "folder"]]
 
 
 # Defaults documented as source of truth.
@@ -800,6 +810,10 @@ PATTERNS: dict[str, SiglaPattern] = {
         "filename_glob": r"^.*chps.*\.pdf$",
         "scan_strategy": "anchors",
         "cover_flavors": _CHPS_ANCHORS,
+        # F14: real chps files carry no reliable token (ABRIL: the real
+        # Comité Paritario spelling "cphs"; MAYO: unnamed crs.pdf/titan.pdf).
+        # The folder is the only reliable classifier — count every PDF in it.
+        "count_scope": "folder",
     },
     "chintegral": {
         "filename_glob": r"^.*chintegral.*\.pdf$",

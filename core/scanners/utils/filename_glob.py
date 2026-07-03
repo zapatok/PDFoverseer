@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from core.domain import SIGLAS
+from core.scanners.patterns import PATTERNS
 
 # Token-boundary pattern for lax sigla extraction (A10).
 #
@@ -107,8 +108,28 @@ def extract_sigla(filename: str) -> str | None:
     return candidates[0][2]
 
 
+def _matches(sigla: str, filename: str) -> bool:
+    """True if ``filename`` belongs to ``sigla``, honoring ``count_scope`` (F14).
+
+    scope ``"token"`` (default): the filename must ``extract_sigla`` to this
+    sigla. scope ``"folder"``: every PDF belongs — the resolved category
+    folder is itself the classifier (chps: its real files carry no reliable
+    sigla token). Shared by ``count_pdfs_by_sigla`` (pase 1) and
+    ``SimpleFilenameScanner``'s per-file path resolution so the two stay in
+    lock-step.
+    """
+    if PATTERNS.get(sigla, {}).get("count_scope") == "folder":
+        return filename.lower().endswith(".pdf")
+    return extract_sigla(filename) == sigla
+
+
 def count_pdfs_by_sigla(folder: Path, *, sigla: str) -> GlobCountResult:
-    """Count PDFs (recursively) where filename contains the given sigla token.
+    """Count PDFs (recursively) matching the given sigla (A8, F14).
+
+    Matching honors the sigla's ``count_scope`` (see ``patterns.SiglaPattern``):
+    ``"token"`` (default) matches by filename token via ``extract_sigla``;
+    ``"folder"`` counts every PDF in ``folder`` — the folder itself is the
+    classifier, for siglas whose real files carry no reliable token.
 
     A8: if ``folder`` does not exist, returns count=0 with flag
     ``'folder_missing'``; no exception raised.
@@ -129,7 +150,7 @@ def count_pdfs_by_sigla(folder: Path, *, sigla: str) -> GlobCountResult:
             matched_filenames=[],
         )
     pdfs = list(folder.rglob("*.pdf"))
-    matched = [p for p in pdfs if extract_sigla(p.name) == sigla]
+    matched = [p for p in pdfs if _matches(sigla, p.name)]
     flags: list[str] = []
     if pdfs and not matched:
         flags.append("no_matching_sigla_in_folder")
