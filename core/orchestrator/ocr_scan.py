@@ -135,6 +135,7 @@ def scan_cells_ocr(
         errored or were cancelled are absent from the dict — their state is
         reported only via events.
     """
+    import concurrent.futures as futures  # noqa: E402
     import multiprocessing as mp  # noqa: E402
     import queue as _queue  # noqa: E402
     import threading  # noqa: E402
@@ -307,54 +308,89 @@ def scan_cells_ocr(
     drain_thread = threading.Thread(target=_drain, daemon=True)
     drain_thread.start()
 
-    with ProcessPoolExecutor(
-        max_workers=max_workers,
-        initializer=_init_ocr_worker,
-        initargs=(event, progress_q),
-    ) as pool:
-        future_to_cell = {pool.submit(_ocr_worker, ct): ct for ct in cell_tuples}
-        for fut in as_completed(future_to_cell):
-            # Cancel-fast: if the user pressed Cancel mid-batch, do NOT wait for
-            # every in-flight future to drain. Workers observe the event and
-            # return err="cancelled" at their next checkpoint (≤ a few seconds);
-            # we just stop processing results and break out. The `with` block
-            # exits and waits for the pool to settle.
-            if cancel.cancelled and cancelled == 0:
-                # First time we notice — request the pool to discard queued
-                # futures (Python 3.9+). In-flight will still need to wind
-                # down at their own next checkpoint.
-                pool.shutdown(wait=False, cancel_futures=True)
-            h, s, result, err = fut.result()
-            # cell_scanning is emitted by the drain (worker's cell_started) when
-            # the cell actually starts — not here after the result (audit #1b).
-            if err == "cancelled":
-                cancelled += 1
-            elif err:
-                errors += 1
-                on_progress({"type": "cell_error", "hospital": h, "sigla": s, "error": err})
-            else:
-                # cell_done lo emite el hilo de drain (desde el cell_meta del worker)
-                # DESPUÉS de fusionar cada file_result de esta celda, así
-                # finalize_cell_ocr ve un per_file completo. Aquí solo guardamos el
-                # ScanResult para el valor de retorno de scan_cells_ocr.
-                results[(h, s)] = result  # type: ignore[assignment]
-            scanned += 1
-            on_progress({"type": "scan_progress", "done": scanned, "total": total})
+    try:
+        with ProcessPoolExecutor(
+            max_workers=max_workers,
+            initializer=_init_ocr_worker,
+            initargs=(event, progress_q),
+        ) as pool:
+            future_to_cell = {pool.submit(_ocr_worker, ct): ct for ct in cell_tuples}
+            pending_futs = set(future_to_cell)
 
-    # All workers have finished -> no more queue puts. The sentinel lets the
-    # drain flush whatever's still buffered and stop cleanly (Queue.empty() is
-    # racy across processes, so we don't rely on it).
-    progress_q.put({"type": _DRAIN_STOP})
-    drain_thread.join(timeout=5.0)
-    if drain_thread.is_alive():
-        # No debería pasar: tras cerrar el pool y encolar el sentinel, el drain
-        # vacía unos pocos eventos y sale. Si sigue vivo, un on_progress se trabó
-        # (p. ej. contención de DB) — lo dejamos como daemon, pero avisamos: en ese
-        # caso un cell_done tardío podría escribir tras el cierre de la DB (review #4).
-        logger.warning(
-            "drain thread no terminó en 5 s; un cell_done tardío podría perderse "
-            "o escribir tras el cierre de la DB"
-        )
+            def _consume(fut: futures.Future) -> None:
+                nonlocal scanned, errors, cancelled
+                pending_futs.discard(fut)
+                try:
+                    h, s, result, err = fut.result()
+                except futures.CancelledError:
+                    # F2: a queued future discarded by pool.shutdown(cancel_futures=
+                    # True) below — it never ran, so there is no cell_error to report.
+                    cancelled += 1
+                    scanned += 1
+                    on_progress({"type": "scan_progress", "done": scanned, "total": total})
+                    return
+                # cell_scanning is emitted by the drain (worker's cell_started) when
+                # the cell actually starts — not here after the result (audit #1b).
+                if err == "cancelled":
+                    cancelled += 1
+                elif err:
+                    errors += 1
+                    on_progress({"type": "cell_error", "hospital": h, "sigla": s, "error": err})
+                else:
+                    # cell_done lo emite el hilo de drain (desde el cell_meta del worker)
+                    # DESPUÉS de fusionar cada file_result de esta celda, así
+                    # finalize_cell_ocr ve un per_file completo. Aquí solo guardamos el
+                    # ScanResult para el valor de retorno de scan_cells_ocr.
+                    results[(h, s)] = result  # type: ignore[assignment]
+                scanned += 1
+                on_progress({"type": "scan_progress", "done": scanned, "total": total})
+
+            shutdown_requested = False
+            for fut in as_completed(future_to_cell):
+                # Cancel-fast: if the user pressed Cancel mid-batch, do NOT wait for
+                # every in-flight future to drain. Workers observe the event and
+                # return err="cancelled" at their next checkpoint (≤ a few seconds);
+                # queued (not-yet-dispatched) futures are discarded outright below.
+                if cancel.cancelled and not shutdown_requested:
+                    shutdown_requested = True
+                    # F2: cancel_futures=True cancels every queued future via a bare
+                    # Future.cancel() (see concurrent.futures.thread/process
+                    # shutdown()), which never routes through
+                    # set_running_or_notify_cancel() — so as_completed()'s waiter is
+                    # never notified for a discarded future and would wait for it
+                    # forever (verified empirically: a cancelled-but-unnotified
+                    # future is invisible to as_completed()/wait(), not just
+                    # "raises CancelledError" — it silently hangs the batch instead
+                    # of crashing it). So: stop trusting as_completed() for anything
+                    # still pending the instant we request the shutdown, and resolve
+                    # the rest directly below — Future.result() checks state
+                    # immediately regardless of notification, so it raises
+                    # CancelledError for a discarded future without blocking, and
+                    # still correctly awaits any future that is genuinely in flight.
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    _consume(fut)
+                    break
+                _consume(fut)
+
+            for fut in list(pending_futs):
+                _consume(fut)
+    finally:
+        # All workers have finished (or been discarded) -> no more queue puts. The
+        # sentinel lets the drain flush whatever's still buffered and stop cleanly
+        # (Queue.empty() is racy across processes, so we don't rely on it). In a
+        # `finally` so any raise out of the pool block can never leak this thread +
+        # its mp.Queue (F2).
+        progress_q.put({"type": _DRAIN_STOP})
+        drain_thread.join(timeout=5.0)
+        if drain_thread.is_alive():
+            # No debería pasar: tras cerrar el pool y encolar el sentinel, el drain
+            # vacía unos pocos eventos y sale. Si sigue vivo, un on_progress se trabó
+            # (p. ej. contención de DB) — lo dejamos como daemon, pero avisamos: en ese
+            # caso un cell_done tardío podría escribir tras el cierre de la DB (review #4).
+            logger.warning(
+                "drain thread no terminó en 5 s; un cell_done tardío podría perderse "
+                "o escribir tras el cierre de la DB"
+            )
 
     if cancelled > 0:
         on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})
