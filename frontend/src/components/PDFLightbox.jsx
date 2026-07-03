@@ -151,6 +151,7 @@ export default function PDFLightbox() {
   const session = useSessionStore((s) => s.session);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
   const scanFileOcr = useSessionStore((s) => s.scanFileOcr);
+  const cancelScan = useSessionStore((s) => s.cancelScan);
   const addReorgOp = useSessionStore((s) => s.addReorgOp);
   const fileScan = useSessionStore((s) => s.fileScan);
   const presence = useSessionStore((s) => s.presence);
@@ -300,7 +301,11 @@ export default function PDFLightbox() {
             <aside className="w-80 border-l border-po-border p-4 overflow-y-auto">
               <FileSummary file={files?.[lightbox.fileIndex]} />
               {scanningThisFile ? (
-                <FileViewerProgress page={fileScan.page} pagesTotal={fileScan.pagesTotal} />
+                <FileViewerProgress
+                  page={fileScan.page}
+                  pagesTotal={fileScan.pagesTotal}
+                  onCancel={() => cancelScan(session.session_id)}
+                />
               ) : (
                 <Button
                   variant="primary"

@@ -65,6 +65,45 @@ def test_scan_one_file_ocr_emits_file_events(tmp_path, monkeypatch):
     assert done["result"]["method"] == "header_band_anchors"
 
 
+def test_scan_one_file_ocr_emits_clean_cancelled_error(tmp_path, monkeypatch):
+    """U6: a CancelledError from the scanner surfaces as ``file_scan_error`` with
+    a clean ``error: "cancelled"`` message — not the exception's blank ``str()``
+    (a bare ``CancelledError()`` stringifies to ``""``, which used to leak into
+    the generic ``except Exception`` branch and show an empty error to the UI)."""
+    import core.scanners as scanner_registry
+    from core.scanners.anchors_scanner import AnchorsScanner
+    from core.scanners.cancellation import CancelledError
+
+    folder = tmp_path / "3.-ODI Visitas"
+    folder.mkdir()
+    (folder / "a.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+    monkeypatch.setattr("core.scanners.utils.pdf_render.get_page_count", lambda _: 2)
+
+    def fake_count_ocr(self, folder, *, cancel, on_pdf=None, only=None, on_page=None):
+        raise CancelledError()
+
+    monkeypatch.setattr(AnchorsScanner, "count_ocr", fake_count_ocr)
+    scanner_registry.clear()
+    scanner_registry.register(AnchorsScanner(sigla="odi"))
+    try:
+        events: list[dict] = []
+        scan_one_file_ocr(
+            "HRB",
+            "odi",
+            folder,
+            "a.pdf",
+            on_progress=events.append,
+            cancel=CancellationToken(),
+        )
+    finally:
+        scanner_registry.clear()
+        scanner_registry.register_defaults()
+
+    err = next(e for e in events if e["type"] == "file_scan_error")
+    assert err["error"] == "cancelled"
+    assert not any(e["type"] == "file_scan_done" for e in events)
+
+
 def test_scan_cells_ocr_emits_pdf_progress(tmp_path, monkeypatch):
     folder = tmp_path / "3.-ODI Visitas"
     folder.mkdir()

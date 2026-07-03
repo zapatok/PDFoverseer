@@ -15,6 +15,7 @@ from core.orchestrator.ocr_worker import (
     _ocr_worker,
     _serialize_near_matches,
 )
+from core.scanners.cancellation import CancelledError
 
 if TYPE_CHECKING:
     from core.scanners.base import ScanResult
@@ -81,6 +82,19 @@ def scan_one_file_ocr(
 
     try:
         result = scanner.count_ocr(folder, cancel=cancel, only=filename, on_page=_on_page)
+    except CancelledError:
+        # U6: a bare CancelledError() stringifies to "" — report a clean,
+        # user-facing message instead of falling through to the generic branch.
+        on_progress(
+            {
+                "type": "file_scan_error",
+                "hospital": hospital,
+                "sigla": sigla,
+                "filename": filename,
+                "error": "cancelled",
+            }
+        )
+        return
     except Exception as exc:  # noqa: BLE001 — surface any scan failure to the UI
         on_progress(
             {

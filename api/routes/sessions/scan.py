@@ -565,6 +565,13 @@ def scan_file_ocr(
     Resolves the cell folder like ``get_cell_files``, validates the file exists,
     then runs ``scan_one_file_ocr`` on the dispatch pool — broadcasting ``file_*``
     events over the session WS and merging the result on ``file_scan_done``.
+
+    U6: registers the same ``app.state.batches[session_id]`` slot a multi-cell
+    batch uses (``total=1``) — a single-file scan and a batch scan for the same
+    session mutually exclude each other (409 "another batch is already
+    running"), and the existing ``POST /cancel`` endpoint cancels this scan too.
+    The handle is popped once the scan ends (success, error, or cancelled), so a
+    later scan (single-file or batch) is free to start.
     """
     _validate_session_id(session_id)
     _validate_cell_coords(hospital, sigla)
@@ -582,6 +589,11 @@ def scan_file_ocr(
     mgr.check_cell_lock(session_id, hospital, sigla, participant_id)
 
     app = request.app
+    # U6: same atomic check-then-set dedup as scan_ocr — mutually excludes a
+    # concurrent batch (or another single-file scan) on this session.
+    handle = make_handle(session_id=session_id, total=1)
+    if app.state.batches.setdefault(session_id, handle) is not handle:
+        raise HTTPException(409, "another batch is already running for this session")
     loop = app.state.loop
 
     def _safe_bc(event: dict) -> None:
@@ -612,7 +624,7 @@ def scan_file_ocr(
             if cu is not None:
                 _safe_bc(cu)
 
-    cancel_token = CancellationToken()
+    cancel_token = CancellationToken.from_event(handle.cancel_event)
 
     def _run() -> None:
         try:
@@ -626,6 +638,8 @@ def scan_file_ocr(
             )
         except Exception:
             logger.exception("scan_one_file_ocr crashed for %s/%s/%s", hospital, sigla, filename)
+        finally:
+            app.state.batches.pop(session_id, None)
 
-    _DISPATCH_POOL.submit(_run)
+    handle.future = _DISPATCH_POOL.submit(_run)
     return {"accepted": True, "filename": filename}

@@ -270,6 +270,147 @@ def test_scan_file_ocr_endpoint_allows_editor_and_legacy(tmp_path, monkeypatch):
             json={"participant_id": "p1"},
         )
         assert ed.status_code == 200, ed.text
+        # U6: the scan now occupies the batch registry slot for this session —
+        # wait for it to finish (and free the slot) before firing the second
+        # scan, since the two are no longer free to run concurrently.
+        _await_batch_slot_free(app, sid)
         # legacy no-body → 200 (unenforced)
         legacy = c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr")
         assert legacy.status_code == 200, legacy.text
+        _await_batch_slot_free(app, sid)
+
+
+def _await_batch_slot_free(app, session_id, timeout=5) -> None:
+    """U6: block until the background single-file/batch scan for *session_id*
+    finishes and pops its ``app.state.batches`` slot (or return immediately if
+    it already has)."""
+    handle = app.state.batches.get(session_id)
+    if handle is not None and handle.future is not None:
+        handle.future.result(timeout=timeout)
+
+
+def test_scan_file_ocr_excludes_concurrent_batch_scan(tmp_path, monkeypatch):
+    """U6: a running single-file OCR occupies the same batch registry slot a
+    multi-cell batch uses — a concurrent POST /scan-ocr 409s while it's in
+    flight, and the slot frees once it ends."""
+    import threading
+    from pathlib import Path
+
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "u6a.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "a.pdf", 1)
+
+        started = threading.Event()
+        release = threading.Event()
+
+        def fake_scan_one_file_ocr(hosp, sig, fld, fname, *, on_progress, cancel):
+            started.set()
+            release.wait(timeout=5)
+
+        import api.routes.sessions.scan as scan_mod
+
+        monkeypatch.setattr(scan_mod, "scan_one_file_ocr", fake_scan_one_file_ocr)
+
+        r1 = c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr")
+        assert r1.status_code == 200, r1.text
+        assert started.wait(timeout=5), "single-file scan never started"
+
+        r2 = c.post(f"/api/sessions/{sid}/scan-ocr", json={"cells": [["HRB", "odi"]]})
+        assert r2.status_code == 409, r2.text
+
+        release.set()
+        _await_batch_slot_free(app, sid)
+
+        # slot freed → a batch scan is now accepted.
+        r3 = c.post(f"/api/sessions/{sid}/scan-ocr", json={"cells": [["HRB", "odi"]]})
+        assert r3.status_code == 200, r3.text
+        c.post(f"/api/sessions/{sid}/cancel")  # avoid a real OCR run finishing async
+        _await_batch_slot_free(app, sid)
+
+
+def test_scan_file_ocr_cancel_stops_the_run_and_frees_the_slot(tmp_path, monkeypatch):
+    """U6: POST /cancel cancels an in-flight single-file OCR — the merge never
+    happens, and the batch registry slot frees for the next scan."""
+    import threading
+    import time
+    from pathlib import Path
+
+    from core.scanners.base import ConfidenceLevel, ScanResult
+    from core.scanners.cancellation import CancelledError
+    from core.scanners.pagination_scanner import PaginationScanner
+
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "u6b.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        mgr = app.state.manager
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "a.pdf", 1)
+
+        started = threading.Event()
+        finished = threading.Event()
+
+        def blocking_count_ocr(
+            self, folder, *, cancel, on_pdf=None, only=None, skip=None, on_page=None
+        ):
+            started.set()
+            try:
+                for _ in range(200):  # up to 2s, polling every 10ms
+                    if cancel.cancelled:
+                        raise CancelledError()
+                    time.sleep(0.01)
+                # /cancel never reached this run (e.g. the token isn't wired to
+                # the handle the route registered) — complete normally instead
+                # of self-cancelling, so a broken wiring makes the assertions
+                # below fail loudly instead of passing by accident.
+                return ScanResult(
+                    count=1,
+                    confidence=ConfidenceLevel.HIGH,
+                    method="pagination",
+                    breakdown=None,
+                    flags=[],
+                    errors=[],
+                    duration_ms=1,
+                    files_scanned=1,
+                    per_file={only: 1},
+                )
+            finally:
+                finished.set()
+
+        monkeypatch.setattr(PaginationScanner, "count_ocr", blocking_count_ocr)
+
+        r1 = c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr")
+        assert r1.status_code == 200, r1.text
+        assert started.wait(timeout=5), "single-file scan never started"
+
+        cr = c.post(f"/api/sessions/{sid}/cancel")
+        assert cr.status_code == 200
+
+        # Wait for the fake's own completion signal (not the registry slot —
+        # pre-fix, scan_file_ocr never registers a handle at all, so waiting on
+        # the slot would return immediately and check state before the run
+        # actually concluded). A short buffer lets the synchronous
+        # on_progress/merge continuation land right after count_ocr returns.
+        assert finished.wait(timeout=5), "the scan never finished"
+        time.sleep(0.2)
+
+        # never merged: the cell has no per_file entry for a.pdf.
+        state = mgr.get_session_state(sid)
+        cell = state["cells"].get("HRB", {}).get("odi", {})
+        assert "a.pdf" not in (cell.get("per_file") or {})
+
+        _await_batch_slot_free(app, sid)
+
+        # slot freed → a subsequent single-file scan is accepted, not 409.
+        r2 = c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr")
+        assert r2.status_code == 200, r2.text
+        c.post(f"/api/sessions/{sid}/cancel")
+        _await_batch_slot_free(app, sid)

@@ -1040,6 +1040,20 @@ export const useSessionStore = create((set, get) => ({
         break;
       }
       case "file_scan_error":
+        // U6: a Cancelar click ends here too (error: "cancelled") — that's an
+        // intentional stop, not a failure, so a neutral toast replaces the
+        // sticky global error banner the generic branch below sets.
+        if (event.error === "cancelled") {
+          toast("Escaneo cancelado");
+          set((s) => ({
+            fileScan: s.fileScan ? { ...s.fileScan, terminal: "cancelled" } : null,
+          }));
+          setTimeout(
+            () => set((s) => (s.fileScan?.terminal === "cancelled" ? { fileScan: null } : s)),
+            2000,
+          );
+          break;
+        }
         set((s) => ({
           fileScan: s.fileScan ? { ...s.fileScan, terminal: "error" } : null,
           error: event.error ?? "Error al escanear el archivo",
