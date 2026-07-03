@@ -97,6 +97,7 @@ def patch_per_file_override(
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Persist per-file count override. Spec §5.2 + §7.2."""
+    _validate_session_id(session_id)
     _validate_cell_coords(hospital, sigla)
     try:
         state = mgr.get_session_state(session_id)
@@ -127,7 +128,11 @@ def patch_per_file_override(
         refresh_all_reliable(
             mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla)
         )
-    state, _ = mgr._load_and_migrate(session_id)
+    # Re-read AFTER the refresh (the patch_note/patch_worker_count pattern) — go
+    # through the public, lock-guarded getter rather than the private helper; both
+    # perform an identical fresh DB read + migration (no caching layer either way),
+    # so this is freshness-neutral (D6).
+    state = mgr.get_session_state(session_id)
     cell = state["cells"][hospital][sigla]
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     if is_agent(body.participant_id):
@@ -368,7 +373,7 @@ def patch_confirm(
 ) -> dict:
     """Marca/desmarca una celda como 'lista' a mano (flag confirmed).
 
-    El flag se preserva entre escaneos (apply_filename_result / apply_ocr_result
+    El flag se preserva entre escaneos (apply_filename_result / finalize_cell_ocr
     lo re-afirman con setdefault), así que confirmar una celda sobrevive a un
     re-escaneo de pase 1 u OCR.
     """

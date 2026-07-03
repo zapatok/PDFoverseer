@@ -1,4 +1,4 @@
-"""apply_filename_result and apply_ocr_result persist per_file from ScanResult."""
+"""apply_filename_result persists per_file from ScanResult."""
 
 from pathlib import Path
 
@@ -41,36 +41,3 @@ def test_apply_filename_result_persists_per_file(mgr_session):
     assert cell["per_file"] == {"a.pdf": 1, "b.pdf": 1}
     assert cell["per_file_overrides"] == {}
     assert cell["manual_entry"] is False
-
-
-def test_apply_ocr_result_persists_per_file(mgr_session):
-    mgr, sid = mgr_session
-    base = ScanResult(
-        count=1,
-        confidence=ConfidenceLevel.HIGH,
-        method="filename_glob",
-        breakdown=None,
-        flags=[],
-        errors=[],
-        duration_ms=5,
-        files_scanned=1,
-        per_file={"compilacion.pdf": 1},
-    )
-    mgr.apply_filename_result(sid, "HRB", "odi", base)
-
-    ocr_result = ScanResult(
-        count=24,
-        confidence=ConfidenceLevel.HIGH,
-        method="header_detect",
-        breakdown=None,
-        flags=[],
-        errors=[],
-        duration_ms=8000,
-        files_scanned=1,
-        per_file={"compilacion.pdf": 24},
-    )
-    mgr.apply_ocr_result(sid, "HRB", "odi", ocr_result)
-
-    state, _ = mgr._load_and_migrate(sid)
-    cell = state["cells"]["HRB"]["odi"]
-    assert cell["per_file"] == {"compilacion.pdf": 24}

@@ -23,7 +23,6 @@ from core.cell_count import (  # noqa: F401  re-exported for api consumers
 from core.db.sessions_repo import (
     SessionRecord,
     create_session,
-    finalize_session,
     get_session,
     update_session_state,
 )
@@ -237,67 +236,6 @@ class SessionManager:
         cell.setdefault("per_file_overrides", {})
         cell.setdefault("manual_entry", False)
         cell.setdefault("ocr_count", None)
-        cell.setdefault("user_override", None)
-        cell.setdefault("excluded", False)
-        # Preserve a manual "marcar listo" across re-scans (never clear it here).
-        cell.setdefault("confirmed", False)
-        update_session_state(self._conn, session_id, state_json=json.dumps(state))
-
-    @_synchronized
-    def apply_ocr_result(
-        self, session_id: str, hospital: str, sigla: str, result: ScanResult
-    ) -> None:
-        """Persist an OCR scanner result (whole-cell ``per_file`` replacement).
-
-        .. deprecated:: Incr. 1A — el OCR de celda fusiona por archivo
-            (:meth:`apply_per_file_ocr_result`) + :meth:`finalize_cell_ocr` para la
-            metadata. Se mantiene para compat de tests legacy (migrar en Task 9).
-
-        Touches ocr_count, method,
-        confidence, flags, errors, breakdown, duration_ms_ocr. method =
-        ``result.method`` (header_detect, corner_count, page_count_pure, or
-        filename_glob when the OCR scanner fell back internally).
-
-        flags/errors/breakdown are written unconditionally — an empty list/dict
-        means "no flags this run" (NOT "preserve previous"). Stale data from
-        a previous OCR run is overwritten, which is the correct semantic for
-        a fresh scan.
-
-        A14: near_matches from result.telemetry are persisted so the UI can
-        surface them in the DetailPanel "Casi-matches" section.
-        """
-        state, _ = self._load_and_migrate(session_id)
-        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
-        cell["ocr_count"] = result.count
-        cell["confidence"] = result.confidence.value
-        cell["method"] = result.method
-        cell["breakdown"] = result.breakdown
-        cell["flags"] = list(result.flags)
-        cell["errors"] = list(result.errors)
-        cell["duration_ms_ocr"] = result.duration_ms
-        cell["per_file"] = result.per_file
-        # Each file carries how it was counted (rev-2 §3); for a full-cell OCR run
-        # that is this run's OCR method for every scanned file.
-        cell["per_file_method"] = {f: result.method for f in (result.per_file or {})}
-        # A14: persist near-match telemetry so the UI can surface candidates.
-        telemetry = result.telemetry
-        cell["near_matches"] = (
-            [
-                {
-                    "pdf_name": nm.pdf_name,
-                    "page_index": nm.page_index,
-                    "flavor_name": nm.flavor_name,
-                    "matched_anchors": list(nm.matched_anchors),
-                    "missing_anchors": list(nm.missing_anchors),
-                }
-                for nm in telemetry.near_matches
-            ]
-            if telemetry
-            else []
-        )
-        cell.setdefault("per_file_overrides", {})
-        cell.setdefault("manual_entry", False)
-        cell.setdefault("filename_count", None)
         cell.setdefault("user_override", None)
         cell.setdefault("excluded", False)
         # Preserve a manual "marcar listo" across re-scans (never clear it here).
@@ -679,7 +617,7 @@ class SessionManager:
         """Set the manual 'confirmed' (marcar listo) flag on a cell.
 
         The flag is preserved across re-scans: both apply_filename_result and
-        apply_ocr_result re-assert it via ``setdefault``, so confirming a cell
+        finalize_cell_ocr re-assert it via ``setdefault``, so confirming a cell
         survives a later pase-1 or OCR scan.
 
         Args:
@@ -883,15 +821,6 @@ class SessionManager:
     ) -> None:
         """Deprecated. Use apply_filename_result for pase 1 results."""
         self.apply_filename_result(session_id, hospital, sigla, result)
-
-    @_synchronized
-    def finalize(self, session_id: str) -> None:
-        """Mark a session as finalized.
-
-        Args:
-            session_id: Target session identifier.
-        """
-        finalize_session(self._conn, session_id)
 
     # ── Presence (M2) — ephemeral, shares this manager's RLock (spec §6.1) ──
 

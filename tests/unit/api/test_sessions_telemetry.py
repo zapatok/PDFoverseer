@@ -1,9 +1,10 @@
 """A14: near-match telemetry survives the OCR result → cell-state → GET path.
 
 Tests that:
-1. apply_ocr_result persists NearMatchEntry data into the cell state dict.
+1. apply_per_file_ocr_result persists near-match dicts into the cell state.
 2. get_session_state returns near_matches in the cell payload.
-3. apply_ocr_result with no telemetry yields an empty near_matches list.
+3. apply_per_file_ocr_result with an empty near_matches list yields an empty
+   list (not absent).
 """
 
 from __future__ import annotations
@@ -13,12 +14,6 @@ import pytest
 from api.state import SessionManager
 from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
-from core.scanners.base import (
-    ConfidenceLevel,
-    NearMatchEntry,
-    ScanResult,
-    ScanTelemetry,
-)
 
 
 @pytest.fixture
@@ -35,32 +30,27 @@ def _open_session(mgr: SessionManager, tmp_path) -> str:
     return state["session_id"]
 
 
-def _make_result_with_near_match() -> ScanResult:
-    entry = NearMatchEntry(
-        pdf_name="ejemplo.pdf",
-        page_index=3,
-        flavor_name="f_lch_05",
-        matched_anchors=["LISTA DE CHEQUEO", "Empresa"],
-        missing_anchors=["Código"],
-    )
-    return ScanResult(
-        count=2,
-        confidence=ConfidenceLevel.HIGH,
-        method="header_band_anchors",
-        breakdown=None,
-        flags=[],
-        errors=[],
-        duration_ms=120,
-        files_scanned=3,
-        telemetry=ScanTelemetry(near_matches=[entry]),
-    )
+_NEAR_MATCH = {
+    "pdf_name": "ejemplo.pdf",
+    "page_index": 3,
+    "flavor_name": "f_lch_05",
+    "matched_anchors": ["LISTA DE CHEQUEO", "Empresa"],
+    "missing_anchors": ["Código"],
+}
 
 
-def test_apply_ocr_result_persists_near_matches(mgr, tmp_path):
-    """near_matches from telemetry land in the cell state after apply_ocr_result."""
+def test_apply_per_file_ocr_result_persists_near_matches(mgr, tmp_path):
+    """near_matches from a per-file OCR merge land in the cell state."""
     sid = _open_session(mgr, tmp_path)
-    result = _make_result_with_near_match()
-    mgr.apply_ocr_result(sid, "HPV", "odi", result)
+    mgr.apply_per_file_ocr_result(
+        sid,
+        "HPV",
+        "odi",
+        "ejemplo.pdf",
+        count=2,
+        method="header_band_anchors",
+        near_matches=[_NEAR_MATCH],
+    )
 
     state = mgr.get_session_state(sid)
     cell = state["cells"]["HPV"]["odi"]
@@ -75,21 +65,18 @@ def test_apply_ocr_result_persists_near_matches(mgr, tmp_path):
     assert nm["missing_anchors"] == ["Código"]
 
 
-def test_apply_ocr_result_no_telemetry_yields_empty_list(mgr, tmp_path):
-    """When result.telemetry is None, near_matches is an empty list (not absent)."""
+def test_apply_per_file_ocr_result_no_near_matches_yields_empty_list(mgr, tmp_path):
+    """An empty near_matches list persists as an empty list (not absent)."""
     sid = _open_session(mgr, tmp_path)
-    result = ScanResult(
+    mgr.apply_per_file_ocr_result(
+        sid,
+        "HRB",
+        "charla",
+        "a.pdf",
         count=1,
-        confidence=ConfidenceLevel.MEDIUM,
         method="header_band_anchors",
-        breakdown=None,
-        flags=[],
-        errors=[],
-        duration_ms=50,
-        files_scanned=1,
-        telemetry=None,
+        near_matches=[],
     )
-    mgr.apply_ocr_result(sid, "HRB", "charla", result)
 
     state = mgr.get_session_state(sid)
     cell = state["cells"]["HRB"]["charla"]
@@ -99,8 +86,15 @@ def test_apply_ocr_result_no_telemetry_yields_empty_list(mgr, tmp_path):
 def test_get_session_state_includes_near_matches(mgr, tmp_path):
     """get_session_state returns near_matches in the cell (round-trip through DB)."""
     sid = _open_session(mgr, tmp_path)
-    result = _make_result_with_near_match()
-    mgr.apply_ocr_result(sid, "HLL", "odi", result)
+    mgr.apply_per_file_ocr_result(
+        sid,
+        "HLL",
+        "odi",
+        "ejemplo.pdf",
+        count=2,
+        method="header_band_anchors",
+        near_matches=[_NEAR_MATCH],
+    )
 
     # Reload from DB to verify persistence is real, not just in-memory.
     state = mgr.get_session_state(sid)

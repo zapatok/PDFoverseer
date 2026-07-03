@@ -2,7 +2,7 @@
 
 The 'confirmed' flag is the manual "marcar listo" escape hatch (conteo-confiable
 spec, Tema A2). It must survive a later re-scan (apply_filename_result and
-apply_ocr_result re-assert it via setdefault).
+finalize_cell_ocr re-assert it via setdefault).
 """
 
 from __future__ import annotations

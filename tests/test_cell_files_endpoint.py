@@ -44,22 +44,12 @@ def client_with_pdfs(tmp_path, monkeypatch):
         _make_pdf(folder / "a.pdf", 5)
         _make_pdf(folder / "b.pdf", 3)
 
-        # Apply an OCR result so per_file is populated on the cell.
-        mgr.apply_ocr_result(
-            sid,
-            "HRB",
-            "odi",
-            ScanResult(
-                count=8,
-                confidence=ConfidenceLevel.HIGH,
-                method="header_detect",
-                breakdown=None,
-                flags=[],
-                errors=[],
-                duration_ms=8000,
-                files_scanned=2,
-                per_file={"a.pdf": 5, "b.pdf": 3},
-            ),
+        # Apply per-file OCR results (Incr 1A merge) so per_file is populated.
+        mgr.apply_per_file_ocr_result(
+            sid, "HRB", "odi", "a.pdf", count=5, method="header_detect", near_matches=[]
+        )
+        mgr.apply_per_file_ocr_result(
+            sid, "HRB", "odi", "b.pdf", count=3, method="header_detect", near_matches=[]
         )
         # Apply a manual override on a.pdf only.
         mgr.apply_per_file_override(sid, "HRB", "odi", "a.pdf", 7)
@@ -232,21 +222,8 @@ def test_origin_ocr_and_count_after_scan(tmp_path, monkeypatch):
         folder.mkdir(parents=True)
         _make_pdf(folder / "x.pdf", 4)  # multipage, OCR found 3 documents
 
-        mgr.apply_ocr_result(
-            sid,
-            "HRB",
-            "odi",
-            ScanResult(
-                count=3,
-                confidence=ConfidenceLevel.HIGH,
-                method="header_band_anchors",
-                breakdown=None,
-                flags=[],
-                errors=[],
-                duration_ms=5000,
-                files_scanned=1,
-                per_file={"x.pdf": 3},
-            ),
+        mgr.apply_per_file_ocr_result(
+            sid, "HRB", "odi", "x.pdf", count=3, method="header_band_anchors", near_matches=[]
         )
 
         rows = {r["name"]: r for r in c.get(f"/api/sessions/{sid}/cells/HRB/odi/files").json()}
@@ -272,21 +249,11 @@ def test_origin_revisar_when_ocr_finds_zero(tmp_path, monkeypatch):
         _make_pdf(folder / "good.pdf", 4)
         _make_pdf(folder / "bad.pdf", 4)  # readable, but OCR found nothing
 
-        mgr.apply_ocr_result(
-            sid,
-            "HRB",
-            "odi",
-            ScanResult(
-                count=2,
-                confidence=ConfidenceLevel.LOW,
-                method="header_band_anchors",
-                breakdown=None,
-                flags=[],
-                errors=[],
-                duration_ms=1,
-                files_scanned=2,
-                per_file={"good.pdf": 2, "bad.pdf": 0},
-            ),
+        mgr.apply_per_file_ocr_result(
+            sid, "HRB", "odi", "good.pdf", count=2, method="header_band_anchors", near_matches=[]
+        )
+        mgr.apply_per_file_ocr_result(
+            sid, "HRB", "odi", "bad.pdf", count=0, method="header_band_anchors", near_matches=[]
         )
 
         rows = {r["name"]: r for r in c.get(f"/api/sessions/{sid}/cells/HRB/odi/files").json()}

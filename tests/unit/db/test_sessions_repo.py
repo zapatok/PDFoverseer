@@ -7,7 +7,6 @@ from core.db.migrations import init_schema
 from core.db.sessions_repo import (
     SessionRecord,
     create_session,
-    finalize_session,
     get_session,
     update_session_state,
 )
@@ -38,13 +37,6 @@ def test_update_state_changes_last_modified(conn):
     update_session_state(conn, "2026-04", state_json='{"v":2}')
     rec = get_session(conn, "2026-04")
     assert json.loads(rec.state_json) == {"v": 2}
-
-
-def test_finalize_session_changes_status(conn):
-    create_session(conn, year=2026, month=4, state_json='{"v":1}')
-    finalize_session(conn, "2026-04")
-    rec = get_session(conn, "2026-04")
-    assert rec.status == "finalized"
 
 
 def test_create_session_existing_active_returns_same(conn):

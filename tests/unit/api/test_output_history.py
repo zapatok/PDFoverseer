@@ -80,11 +80,21 @@ def test_output_history_method_reflects_ocr_when_present(client) -> None:
     sid = r.json()["session_id"]
     test_client.post(f"/api/sessions/{sid}/scan")
 
-    # Simulate an OCR result by hitting the same setter the orchestrator uses.
+    # Simulate an OCR result by hitting the same setters the orchestrator uses
+    # (Incr 1A: per-file merge + finalize for cell-level metadata).
     from core.scanners.base import ConfidenceLevel, ScanResult
 
     mgr = test_client.app.state.manager
-    mgr.apply_ocr_result(
+    mgr.apply_per_file_ocr_result(
+        sid,
+        "HPV",
+        "odi",
+        "2026-04-10_odi_TITAN.pdf",
+        count=17,
+        method="header_detect",
+        near_matches=[],
+    )
+    mgr.finalize_cell_ocr(
         sid,
         "HPV",
         "odi",

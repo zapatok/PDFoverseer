@@ -98,16 +98,3 @@ def update_session_state(
         "UPDATE sessions SET state_json = ?, last_modified = ? WHERE session_id = ?",
         (state_json, _now_iso(), session_id),
     )
-
-
-def finalize_session(conn: sqlite3.Connection, session_id: str) -> None:
-    """Mark a session as finalized.
-
-    Args:
-        conn: Open SQLite connection.
-        session_id: Target session identifier.
-    """
-    conn.execute(
-        "UPDATE sessions SET status = 'finalized', last_modified = ? WHERE session_id = ?",
-        (_now_iso(), session_id),
-    )

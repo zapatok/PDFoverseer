@@ -112,9 +112,12 @@ def test_apply_filename_result_sets_filename_count_only(manager):
     assert cell.get("duration_ms_ocr") is None
 
 
-def test_apply_ocr_result_sets_ocr_count_and_method_without_touching_filename(manager):
+def test_finalize_cell_ocr_sets_ocr_count_and_method_without_touching_filename(manager):
     manager.apply_filename_result("2026-04", "HRB", "odi", _filename_result(1))
-    manager.apply_ocr_result("2026-04", "HRB", "odi", _ocr_result(17, "header_detect"))
+    manager.apply_per_file_ocr_result(
+        "2026-04", "HRB", "odi", "f.pdf", count=17, method="header_detect", near_matches=[]
+    )
+    manager.finalize_cell_ocr("2026-04", "HRB", "odi", _ocr_result(17, "header_detect"))
     cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
     assert cell["filename_count"] == 1
     assert cell["ocr_count"] == 17
@@ -122,11 +125,14 @@ def test_apply_ocr_result_sets_ocr_count_and_method_without_touching_filename(ma
     assert cell["duration_ms_ocr"] == 23000
 
 
-def test_apply_ocr_result_with_filename_glob_fallback_method(manager):
+def test_finalize_cell_ocr_with_filename_glob_fallback_method(manager):
     # OCR scanner failed internally, fell back to filename_glob
     manager.apply_filename_result("2026-04", "HRB", "odi", _filename_result(1))
+    manager.apply_per_file_ocr_result(
+        "2026-04", "HRB", "odi", "f.pdf", count=1, method="filename_glob", near_matches=[]
+    )
     fallback = _ocr_result(1, "filename_glob")
-    manager.apply_ocr_result("2026-04", "HRB", "odi", fallback)
+    manager.finalize_cell_ocr("2026-04", "HRB", "odi", fallback)
     cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
     assert cell["ocr_count"] == 1
     assert cell["method"] == "filename_glob"
@@ -177,36 +183,23 @@ def test_filename_rescan_preserves_near_matches_for_ocr_cell(manager):
     so its near-matches stay consistent with that per_file and must be preserved
     too. A fresh per_file (and fresh near-matches) only land on an intentional
     re-OCR of the cell, not on the bulk "add a hospital" pass."""
-    from core.scanners.base import (
-        ConfidenceLevel,
-        NearMatchEntry,
-        ScanResult,
-        ScanTelemetry,
-    )
-
-    ocr = ScanResult(
+    manager.apply_per_file_ocr_result(
+        "2026-04",
+        "HRB",
+        "odi",
+        "old.pdf",
         count=1,
-        confidence=ConfidenceLevel.LOW,
         method="header_band_anchors",
-        breakdown={},
-        flags=[],
-        errors=[],
-        files_scanned=1,
-        duration_ms=1,
-        per_file={"old.pdf": 1},
-        telemetry=ScanTelemetry(
-            near_matches=[
-                NearMatchEntry(
-                    pdf_name="old.pdf",
-                    page_index=0,
-                    flavor_name="f",
-                    matched_anchors=["a"],
-                    missing_anchors=["b"],
-                )
-            ]
-        ),
+        near_matches=[
+            {
+                "pdf_name": "old.pdf",
+                "page_index": 0,
+                "flavor_name": "f",
+                "matched_anchors": ["a"],
+                "missing_anchors": ["b"],
+            }
+        ],
     )
-    manager.apply_ocr_result("2026-04", "HRB", "odi", ocr)
     cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
     assert cell["near_matches"]  # the OCR run populated it
 
@@ -238,18 +231,12 @@ def test_apply_results_write_per_file_method(manager):
         "b.pdf": "filename_glob",
     }
 
-    orr = ScanResult(
-        count=3,
-        confidence=ConfidenceLevel.HIGH,
-        method="header_band_anchors",
-        breakdown={},
-        flags=[],
-        errors=[],
-        files_scanned=2,
-        duration_ms=1,
-        per_file={"a.pdf": 3, "b.pdf": 0},
+    manager.apply_per_file_ocr_result(
+        "2026-04", "HRB", "odi", "a.pdf", count=3, method="header_band_anchors", near_matches=[]
     )
-    manager.apply_ocr_result("2026-04", "HRB", "odi", orr)
+    manager.apply_per_file_ocr_result(
+        "2026-04", "HRB", "odi", "b.pdf", count=0, method="header_band_anchors", near_matches=[]
+    )
     cell = manager.get_session_state("2026-04")["cells"]["HRB"]["odi"]
     assert cell["per_file_method"] == {
         "a.pdf": "header_band_anchors",
@@ -266,18 +253,27 @@ def test_filename_rescan_preserves_full_cell_ocr_count(manager):
     from api.state import compute_cell_count
     from core.scanners.base import ConfidenceLevel, ScanResult
 
-    ocr = ScanResult(
-        count=3,
-        confidence=ConfidenceLevel.HIGH,
-        method="header_band_anchors",
-        breakdown={},
-        flags=[],
-        errors=[],
-        files_scanned=2,
-        duration_ms=1,
-        per_file={"big.pdf": 2, "small.pdf": 1},
+    manager.apply_per_file_ocr_result(
+        "2026-04", "HRB", "art", "big.pdf", count=2, method="header_band_anchors", near_matches=[]
     )
-    manager.apply_ocr_result("2026-04", "HRB", "art", ocr)
+    manager.apply_per_file_ocr_result(
+        "2026-04", "HRB", "art", "small.pdf", count=1, method="header_band_anchors", near_matches=[]
+    )
+    manager.finalize_cell_ocr(
+        "2026-04",
+        "HRB",
+        "art",
+        ScanResult(
+            count=3,
+            confidence=ConfidenceLevel.HIGH,
+            method="header_band_anchors",
+            breakdown={},
+            flags=[],
+            errors=[],
+            files_scanned=2,
+            duration_ms=1,
+        ),
+    )
     assert compute_cell_count(manager.get_session_state("2026-04")["cells"]["HRB"]["art"]) == 3
 
     # A later bulk pase-1 re-scan sees the same 2 files → 1 doc each by name.
@@ -446,20 +442,12 @@ def test_filename_rescan_preserves_worker_counted_cell(manager):
 def test_apply_per_file_ocr_result_merges_one_file(manager):
     """rev-2 #1: a single-file OCR merge touches only that file's count, method
     and near-matches; everything else in the cell is preserved."""
-    from core.scanners.base import ConfidenceLevel, ScanResult
-
-    seed = ScanResult(
-        count=5,
-        confidence=ConfidenceLevel.HIGH,
-        method="header_band_anchors",
-        breakdown={},
-        flags=[],
-        errors=[],
-        files_scanned=2,
-        duration_ms=1,
-        per_file={"a.pdf": 3, "b.pdf": 2},
+    manager.apply_per_file_ocr_result(
+        "2026-04", "HRB", "odi", "a.pdf", count=3, method="header_band_anchors", near_matches=[]
     )
-    manager.apply_ocr_result("2026-04", "HRB", "odi", seed)
+    manager.apply_per_file_ocr_result(
+        "2026-04", "HRB", "odi", "b.pdf", count=2, method="header_band_anchors", near_matches=[]
+    )
 
     manager.apply_per_file_ocr_result(
         "2026-04",
