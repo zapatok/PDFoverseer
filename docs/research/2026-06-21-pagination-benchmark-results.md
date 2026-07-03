@@ -67,3 +67,23 @@ auto-upgrade from the heavy V4 to the lite engine (validated: exact, no regressi
 - The merged monsters exaggerate difficulty; in Daniel's future *divided* workflow most of these
   cells are filename-trivial again, and the persistent regime-2 cases (insgral, altura, per-empresa
   ART/odi/irl bundles) are exactly the ones pagination now handles.
+
+## Addendum 2026-07-03 — F7/F8 honest-confidence gate (audit remediation, Fase 4)
+
+Re-ran the 16 real-corpus samples through the production scanners (`_build_scanner_for_sigla`
+→ `count_ocr`, same path as `benchmark.py` part (a), plus confidence/flags capture) **before**
+(`709bb2b`) and **after** the F7 (`3f87f30`) + F8 (`7768161`) commits.
+
+**Gate result: PASSED.** All 16 counts and `per_file` maps are **identical**. Exactly 3
+confidence flips, all `high → low`, all on the intended shapes — no LOW→HIGH, no method change:
+
+| # | sigla | count | flip | new flag | cause |
+|---|-------|-------|------|----------|-------|
+| 7 | caliente | 60 | high → low | `pagination_low_confidence` | recovered document-starts (F7) |
+| 9 | insgral (merged compilation) | 48 | high → low | `pagination_low_confidence` | recovered document-starts (F7) |
+| 16 | senal (merged, landscape) | 0 | high → low | `anchors_low_confidence` | 0 covers on a multi-page PDF (F8) |
+
+senal 0/18 finally stops reading as a confident "listo" — it now routes to the keyboard
+counter, which was the point of F8. caliente/insgral keep their exact counts; the recovery
+that produced them is now surfaced instead of silently trusted (F7's mixed-totals overcount
+edge cannot hide behind HIGH anymore).
