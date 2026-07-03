@@ -10,6 +10,7 @@ import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { wheelToPageStep } from "../lib/viewer-nav";
 import { cellLockHolder } from "../lib/presence";
 import { getParticipantId } from "../lib/identity";
+import { isCappedCountType } from "../lib/cell-status";
 import OriginChip from "./OriginChip";
 import InlineEditCount from "./InlineEditCount";
 import FileViewerProgress from "./FileViewerProgress";
@@ -345,6 +346,8 @@ export default function PDFLightbox() {
                 <span className="text-sm text-po-text">Documentos:</span>
                 <InlineEditCount
                   value={files?.[lightbox.fileIndex]?.effective_count ?? 1}
+                  disabled={isLocked}
+                  max={isCappedCountType(scanInfo?.count_type) ? (currentFile?.page_count ?? null) : null}
                   onCommit={(newCount) => {
                     const name = files?.[lightbox.fileIndex]?.name;
                     if (!name) return;

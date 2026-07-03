@@ -65,6 +65,15 @@ export function isCellReady(cell, countType = "documents") {
   return cell?.all_reliable ?? allFilesReliable(cell);
 }
 
+// U3: whether a file row's per-file count is editable. checks (maquinaria)
+// derives its number from worker_marks tallies (_sum_marks), not per_file —
+// a per-file override there is persisted but silently ignored by
+// compute_cell_count, so the editor is inert and misleading. documents and
+// documents_workers keep the editor: their cell number IS the document count.
+export function perFileCountEditable(countType) {
+  return countType !== "checks";
+}
+
 // Incr 3B: which DetailPanel counting module a cell's count_type implies.
 // The worker/checks counter shows for documents_workers (charla/chintegral/dif_pts)
 // and checks (maquinaria); plain documents siglas show only the document controls.

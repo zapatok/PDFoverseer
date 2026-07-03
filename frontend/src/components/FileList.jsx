@@ -10,7 +10,7 @@ import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
 import PresenceBadge from "./PresenceBadge";
 import { fileCountDisplay } from "../lib/file-origin";
-import { hasOverride, isCappedCountType } from "../lib/cell-status";
+import { hasOverride, isCappedCountType, perFileCountEditable } from "../lib/cell-status";
 import { SIGLAS } from "../lib/sigla-labels";
 import { cellLockHolder } from "../lib/presence";
 import { getParticipantId } from "../lib/identity";
@@ -352,10 +352,20 @@ export default function FileList({ hospital, sigla }) {
               <span />
             )}
             {/* count — editable, stops propagation. Pendiente shows "—" (not
-                counted yet), Revisar shows its real 0; both stay editable. */}
+                counted yet), Revisar shows its real 0; both stay editable.
+                checks (maquinaria) is the exception (U3): its tally comes from
+                worker_marks, a per-file override there is persisted-but-ignored,
+                so it renders plain text instead of an inert editor. */}
             <div onClick={(e) => e.stopPropagation()}>
               {(() => {
                 const { value, placeholder } = fileCountDisplay(f.origin, f.effective_count);
+                if (!perFileCountEditable(scanInfo?.count_type)) {
+                  return (
+                    <span className="font-mono tabular-nums text-sm w-14 text-right inline-block text-po-text-muted">
+                      {value != null ? value.toLocaleString() : (placeholder ?? "—")}
+                    </span>
+                  );
+                }
                 return (
                   <InlineEditCount
                     value={value}

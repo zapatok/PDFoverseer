@@ -465,6 +465,10 @@ export const useSessionStore = create((set, get) => ({
         get().refetchSession(sessionId);
         return;
       }
+      // U2: a generic (non-409) failure reverts visibly instead of leaving a
+      // sticky global error banner — toast it + bump filesTick so FileList/the
+      // lightbox re-fetch and drop the optimistic value that never saved.
+      const tickKey = `${hospital}|${sigla}`;
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
         if (cleanedPending.get(key)?.controller === controller) {
@@ -473,9 +477,10 @@ export const useSessionStore = create((set, get) => ({
         return {
           _pendingSave: cleanedPending,
           pendingSaves: { ...prev.pendingSaves, [key]: "error" },
-          error: String(error),
+          filesTick: { ...prev.filesTick, [tickKey]: (prev.filesTick[tickKey] ?? 0) + 1 },
         };
       });
+      toast.error(`No se pudo guardar el conteo del archivo: ${String(error)}`);
     }
   },
 

@@ -182,6 +182,18 @@ describe("Task 7b: savePerFileOverride handles 409", () => {
   });
 });
 
+describe("U2: savePerFileOverride handles a generic (non-409) error", () => {
+  it("toasts and bumps filesTick (re-sync to server truth) instead of a sticky global error", async () => {
+    const tickKey = "HRB|odi";
+    const before = getState().filesTick?.[tickKey] ?? 0;
+    api.patchPerFileOverride.mockRejectedValueOnce(new Error("network down"));
+    await getState().savePerFileOverride("2026-04", "HRB", "odi", "a.pdf", 3);
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(getState().error).toBeNull();
+    expect(getState().filesTick[tickKey]).toBe(before + 1);
+  });
+});
+
 describe("F1 review fix: reconcileWorkerMarks distinguishes success from a handled 409", () => {
   it("returns the enriched cell on success (truthy → the panel may toast success)", async () => {
     const enriched = { worker_marks: { "a.pdf": [{ page: 1, count: 3 }] }, worker_count: 3 };

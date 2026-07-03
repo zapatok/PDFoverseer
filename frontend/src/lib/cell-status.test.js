@@ -7,6 +7,7 @@ import {
   hasOverride,
   hospitalWorkerStatus,
   isCellReady,
+  perFileCountEditable,
   showsWorkerCounter,
 } from "./cell-status";
 
@@ -286,5 +287,20 @@ describe("OCR_METHODS — pagination chip (Task 12)", () => {
     expect(
       dotVariantFor({ confidence: "high", per_file_method: { "a.pdf": "pagination" } }),
     ).toBe("confidence-low");
+  });
+});
+
+describe("perFileCountEditable (U3)", () => {
+  it("checks (maquinaria) is read-only — the tally comes from marks, not per-file", () => {
+    expect(perFileCountEditable("checks")).toBe(false);
+  });
+  it("documents stays editable", () => {
+    expect(perFileCountEditable("documents")).toBe(true);
+  });
+  it("documents_workers stays editable — its cell number IS the document count", () => {
+    expect(perFileCountEditable("documents_workers")).toBe(true);
+  });
+  it("unknown/undefined count_type defaults editable", () => {
+    expect(perFileCountEditable(undefined)).toBe(true);
   });
 });
