@@ -10,7 +10,7 @@ assembly. That harness lives here. Each subclass implements only:
 - ``_precheck(...)`` — an optional short-circuit (``AnchorsScanner`` uses it for
   the "no flavors configured" case; default returns ``None``).
 - class attrs ``METHOD`` (result-level method name) and ``LOW_CONF_FLAG`` (the
-  flag appended when any PDF is low-trust; ``None`` for anchors).
+  flag appended when any PDF is low-trust; each subclass sets its own).
 
 **Why the per-PDF I/O stays in the subclass module, not here:** the scanner unit
 tests monkeypatch ``get_page_count`` and the engine on the *concrete scanner
@@ -68,7 +68,8 @@ class OcrScannerBase:
 
     #: Result-level ``ScanResult.method`` for a successful OCR scan (subclass override).
     METHOD: ClassVar[str] = ""
-    #: Flag appended when any PDF is low-trust (``None`` → no flag, e.g. anchors).
+    #: Flag appended when any PDF is low-trust (``None`` → no flag; every current
+    #: subclass overrides it, e.g. ``anchors_low_confidence``).
     LOW_CONF_FLAG: ClassVar[str | None] = None
 
     def count(self, folder: Path, *, override_method: str | None = None) -> ScanResult:
