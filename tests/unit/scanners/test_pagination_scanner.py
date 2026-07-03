@@ -25,6 +25,7 @@ def _pag(
     recovered: int = 0,
     failed: int = 0,
     cover_code_recovery: bool = False,
+    recovered_start_count: int = 0,
 ) -> PaginationCountResult:
     """Build a PaginationCountResult with sensible defaults for unit tests."""
     if direct is None:
@@ -38,6 +39,7 @@ def _pag(
         dominant_total=pages if pages else None,
         codes={},
         cover_code_recovery=cover_code_recovery,
+        recovered_start_count=recovered_start_count,
     )
 
 
@@ -159,6 +161,55 @@ def test_pagination_scanner_low_confidence_cover_code_recovery(tmp_path: Path, m
     r = scanner.count_ocr(tmp_path, cancel=CancellationToken())
     assert r.confidence == ConfidenceLevel.LOW
     assert "pagination_low_confidence" in r.flags
+
+
+def test_pagination_scanner_recovered_start_forces_low_confidence(tmp_path: Path, monkeypatch):
+    """F7: a recovered document-start forces LOW even when failed_reads=0 and
+    the recovery ratio is under the 30% threshold — the mixed-totals overcount
+    edge. No cover_code configured for insgral."""
+    pdf = tmp_path / "2026-04_insgral.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda _: 20)
+    # 1/20 = 5% recovered — well under RECOVERY_LOW_CONF_RATIO (0.30).
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_documents_by_pagination",
+        lambda *a, **k: _pag(5, pages=20, direct=19, recovered=1, recovered_start_count=1),
+    )
+
+    scanner = PaginationScanner(sigla="insgral")
+    r = scanner.count_ocr(tmp_path, cancel=CancellationToken())
+    assert r.confidence == ConfidenceLevel.LOW
+    assert "pagination_low_confidence" in r.flags
+
+
+def test_pagination_scanner_recovered_start_with_cover_code_not_low_trust_alone(
+    tmp_path: Path, monkeypatch
+):
+    """F7 edge: with cover_code configured (irl), recovered_start_count alone must
+    NOT force low-trust — a recovered curr==1 page carries code=None and is never
+    counted under cover_code (count_starts), and cover_code_recovery already
+    covers the real missed-cover risk."""
+    pdf = tmp_path / "2026-04_irl.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda _: 20)
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_documents_by_pagination",
+        lambda *a, **k: _pag(
+            2,
+            pages=20,
+            direct=19,
+            recovered=1,
+            recovered_start_count=1,
+            cover_code_recovery=False,
+        ),
+    )
+
+    scanner = PaginationScanner(sigla="irl")
+    r = scanner.count_ocr(tmp_path, cancel=CancellationToken())
+    assert r.confidence == ConfidenceLevel.HIGH
+    assert "pagination_low_confidence" not in r.flags
 
 
 def test_pagination_scanner_engine_failure_falls_back(tmp_path: Path, monkeypatch):

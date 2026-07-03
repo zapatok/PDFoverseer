@@ -81,11 +81,16 @@ class PaginationScanner(OcrScannerBase):
 
         # A degenerate count of 0 for a multi-page PDF is never right — fall back to 1.
         pdf_count = pag.count if pag.count > 0 else 1
-        # Low-trust per-PDF rule: any failed read, heavy recovery, or cover_code
-        # with recovered reads (possible missed cover) → LOW.
+        # Low-trust per-PDF rule: any failed read, heavy recovery, cover_code with
+        # recovered reads (possible missed cover), or — without cover_code — any
+        # recovered document-start (F7: a recovered curr==1 can fabricate a start in
+        # a mixed-length compilation; with cover_code set, a recovered curr==1 is
+        # never counted anyway — count_starts requires a code match — so
+        # cover_code_recovery alone covers that edge) → LOW.
         low_trust = (
             pag.failed_reads > 0
             or pag.recovered_reads / max(1, pag.pages_total) > RECOVERY_LOW_CONF_RATIO
             or pag.cover_code_recovery
+            or (cover_code is None and pag.recovered_start_count > 0)
         )
         return _PdfOutcome(pdf_count, "pagination", [], bool(low_trust), False, None)

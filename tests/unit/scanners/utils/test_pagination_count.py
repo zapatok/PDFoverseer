@@ -2,6 +2,7 @@ import pytest
 
 from core.scanners.utils.pagination_count import (
     PageRead,
+    count_recovered_starts,
     count_starts,
     dominant_total,
     extract_code,
@@ -213,3 +214,51 @@ def test_recover_two_leading_gaps_documented_limitation():
 def test_dominant_total_tie_prefers_smaller():
     parsed = [(1, 2, "A"), (1, 4, "A")]  # totals 2 and 4 equally frequent
     assert dominant_total(parsed) == 2
+
+
+# --- F7: recovered document-starts (Task 4.1) ---
+
+
+def test_count_recovered_starts_counts_recovered_curr_one():
+    # dom=2; index1 recovers via left=2%2+1=1 → a recovered curr==1 (fabricated-start risk).
+    parsed = [(2, 2, None), (None, None, None), (1, 2, None)]
+    reads = recover_sequence(parsed)
+    assert count_recovered_starts(reads) == 1
+
+
+def test_count_recovered_starts_zero_when_no_recovered_reads():
+    parsed = [(1, 4, "A"), (2, 4, "A"), (3, 4, "A"), (4, 4, "A")]
+    reads = recover_sequence(parsed)
+    assert count_recovered_starts(reads) == 0
+
+
+def test_count_recovered_starts_zero_when_recovered_page_is_not_a_start():
+    # Recovered page lands mid-cycle (curr==3), not a start — must not count.
+    parsed = [(2, 4, "A"), (None, None, None), (4, 4, "A"), (1, 4, "A")]
+    reads = recover_sequence(parsed)
+    assert count_recovered_starts(reads) == 0
+
+
+def test_count_documents_exposes_recovered_start_count(tmp_path, make_pagination_pdf, monkeypatch):
+    """F7: the engine result exposes recovered_start_count — mirrors the pure
+    recover_sequence case above, through the real OCR orchestrator (corner-text
+    mocked for determinism)."""
+    from core.scanners.cancellation import CancellationToken
+    from core.scanners.utils import pagination_count as pc
+
+    pdf = make_pagination_pdf(tmp_path / "mix.pdf", docs=[(2, "A"), (1, "B")])
+    texts = iter(["Pagina 2 de 2", "", "Pagina 1 de 2"])
+    monkeypatch.setattr(pc, "_corner_text", lambda page: next(texts))
+
+    r = pc.count_documents_by_pagination(pdf, cancel=CancellationToken())
+    assert r.recovered_start_count == 1
+
+
+def test_count_documents_recovered_start_count_zero_when_clean(tmp_path, make_pagination_pdf):
+    """No recovered starts on a clean, fully-readable compilation."""
+    from core.scanners.cancellation import CancellationToken
+    from core.scanners.utils.pagination_count import count_documents_by_pagination
+
+    pdf = make_pagination_pdf(tmp_path / "clean.pdf", docs=[(4, "F-CRS-ART-01")] * 3)
+    r = count_documents_by_pagination(pdf, cancel=CancellationToken())
+    assert r.recovered_start_count == 0

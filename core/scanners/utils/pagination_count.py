@@ -136,6 +136,19 @@ def recover_sequence(
     return out
 
 
+def count_recovered_starts(reads: list[PageRead]) -> int:
+    """Count *recovered* document starts (curr == 1 among status=='recovered').
+
+    F7: a recovered curr==1 is a possible fabricated start — in a mixed-length
+    compilation, recovery can land on curr==1 when the left neighbor happens to
+    complete a dominant cycle inside a *longer* document (over-count risk). This
+    is a raw, cover_code-agnostic count (unlike ``count_starts``): the scanner
+    decides how to weigh it against a configured ``cover_code`` (Task 11's
+    ``cover_code_recovery`` already covers the missed-cover edge for that case).
+    """
+    return sum(1 for r in reads if r.curr == 1 and r.status == "recovered")
+
+
 def count_starts(reads: list[PageRead], cover_code: str | None) -> int:
     """Count document starts (curr == 1).
 
@@ -163,6 +176,7 @@ class PaginationCountResult:
     dominant_total: int | None
     codes: dict[str, int]
     cover_code_recovery: bool  # cover_code set AND >=1 recovered read → caller forces LOW
+    recovered_start_count: int  # recovered curr==1 reads (F7) — fabricated-start risk signal
 
 
 def _corner_text(page: fitz.Page) -> str:
@@ -222,4 +236,5 @@ def count_documents_by_pagination(
         dominant_total=dom,
         codes=dict(codes),
         cover_code_recovery=bool(cover_code) and recovered > 0,
+        recovered_start_count=count_recovered_starts(reads),
     )
