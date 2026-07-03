@@ -11,6 +11,16 @@ from api.state import SessionManager
 from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
 
+# Tests below that use the `client` fixture WITHOUT overriding INFORME_MENSUAL_ROOT
+# resolve month_root against the real corpus (the fixture's default) — the output
+# route's _build_cell_values/_build_worker_values conditionally walk that folder
+# tree (checks/charla/chintegral/dif_pts cells). Guard those with @pytestmark_corpus.
+# Tests that redirect INFORME_MENSUAL_ROOT to tmp_path, or never touch the client
+# at all (pure _build_* helpers on a synthetic state dict), are corpus-independent
+# and are left unguarded — see QA-3 audit.
+ABRIL = Path("A:/informe mensual/ABRIL")
+pytestmark_corpus = pytest.mark.skipif(not ABRIL.exists(), reason="live corpus not present")
+
 
 def _scan_result(per_file: dict):
     """ScanResult de filename_glob con per_file poblado."""
@@ -43,6 +53,7 @@ def client(tmp_path, monkeypatch):
     close_all()
 
 
+@pytestmark_corpus
 def test_generate_output_creates_xlsx(client, tmp_path):
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     client.post("/api/sessions/2026-04/scan", json={"scope": "all"})
@@ -53,6 +64,7 @@ def test_generate_output_creates_xlsx(client, tmp_path):
     assert data["output_path"].endswith(".xlsx")
 
 
+@pytestmark_corpus
 def test_output_uses_v2_priority(client, tmp_path):
     """V2 cells with user_override get the override in the Excel."""
     import openpyxl
@@ -97,6 +109,7 @@ def test_output_emits_worker_totals(client, tmp_path, monkeypatch):
     assert wb[nc_sheet][nc_coord].value is None
 
 
+@pytestmark_corpus
 def test_worker_warnings_flag_incomplete_cell(client, tmp_path):
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     mgr = client.app.dependency_overrides[get_manager]()
@@ -107,6 +120,7 @@ def test_worker_warnings_flag_incomplete_cell(client, tmp_path):
     assert ("HLL", "charla") in warned
 
 
+@pytestmark_corpus
 def test_worker_warnings_silent_when_terminado(client, tmp_path):
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     mgr = client.app.dependency_overrides[get_manager]()
@@ -117,6 +131,7 @@ def test_worker_warnings_silent_when_terminado(client, tmp_path):
     assert ("HLL", "charla") not in warned
 
 
+@pytestmark_corpus
 def test_worker_warnings_flag_en_progreso_cell(client, tmp_path):
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     mgr = client.app.dependency_overrides[get_manager]()
@@ -141,6 +156,7 @@ def test_build_report_title_uses_session_month():
     assert "DICIEMBRE 2027" in _build_report_title(2027, 12)
 
 
+@pytestmark_corpus
 def test_output_writes_dynamic_month_title(client, tmp_path):
     """End-to-end: the generated RESUMEN's title cell shows the session month."""
     import openpyxl
@@ -197,6 +213,7 @@ def test_build_cell_values_honors_per_file_overrides():
     assert _build_cell_values(state)["HLL_charla_count"] == 486
 
 
+@pytestmark_corpus
 def test_worker_warnings_silent_when_no_pdfs(client, tmp_path):
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     mgr = client.app.dependency_overrides[get_manager]()
@@ -324,6 +341,7 @@ def test_output_writes_difpts_total_to_n15(client, tmp_path, monkeypatch):
     assert wb[sheet][coord].value == 12
 
 
+@pytestmark_corpus
 def test_output_history_skips_phantom_sigla(client):
     # F13: a phantom cell (unknown sigla, e.g. the `no_existe` already in the
     # production DB) must NOT produce a historical_counts row.
@@ -348,6 +366,7 @@ def test_output_history_skips_phantom_sigla(client):
     assert any(row.sigla in SIGLAS for row in rows)  # real cells still written
 
 
+@pytestmark_corpus
 def test_output_history_never_counted_is_low_confidence(client):
     # D5: a cell with no confidence field (never really counted) is written to
     # history as honest "low", not a fabricated "high".
@@ -368,6 +387,7 @@ def test_output_history_never_counted_is_low_confidence(client):
     assert hrb_odi.confidence == "low"
 
 
+@pytestmark_corpus
 def test_generate_route_returns_409_when_output_locked(client, tmp_path, monkeypatch):
     """U8: PermissionError during the writer's rename dance (the RESUMEN is open
     in Excel) must surface as a friendly 409, not a raw 500 traceback."""

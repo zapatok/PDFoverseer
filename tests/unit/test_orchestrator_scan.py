@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from core.orchestrator import enumerate_month, scan_cell, scan_month
 from core.scanners.base import ConfidenceLevel  # noqa: F401 (used by callers)
 
 ABRIL = Path("A:/informe mensual/ABRIL")
+pytestmark_corpus = pytest.mark.skipif(not ABRIL.exists(), reason="live corpus not present")
 
 
+@pytestmark_corpus
 def test_scan_cell_hpv_art_returns_count():
     inv = enumerate_month(ABRIL)
     cell = next(c for c in inv.cells["HPV"] if c.sigla == "art")
@@ -18,6 +22,7 @@ def test_scan_cell_hpv_art_returns_count():
     assert result.method == "filename_glob"
 
 
+@pytestmark_corpus
 def test_scan_month_returns_result_per_cell():
     inv = enumerate_month(ABRIL)
     results = scan_month(inv)
@@ -28,6 +33,7 @@ def test_scan_month_returns_result_per_cell():
         assert r.count >= 0
 
 
+@pytestmark_corpus
 def test_scan_month_flags_known_compilations():
     inv = enumerate_month(ABRIL)
     results = scan_month(inv)

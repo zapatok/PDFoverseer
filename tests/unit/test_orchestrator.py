@@ -1,16 +1,21 @@
 from pathlib import Path
 
+import pytest
+
 from core.orchestrator import enumerate_month
 
 ABRIL = Path("A:/informe mensual/ABRIL")
+pytestmark_corpus = pytest.mark.skipif(not ABRIL.exists(), reason="live corpus not present")
 
 
+@pytestmark_corpus
 def test_enumerate_month_returns_4_hospitals():
     inv = enumerate_month(ABRIL)
     assert sorted(inv.hospitals_present) == ["HLL", "HLU", "HPV", "HRB"]
     assert not inv.hospitals_missing
 
 
+@pytestmark_corpus
 def test_enumerate_month_populates_20_categories_per_hospital():
     inv = enumerate_month(ABRIL)
     for hosp in ("HPV", "HRB", "HLU", "HLL"):

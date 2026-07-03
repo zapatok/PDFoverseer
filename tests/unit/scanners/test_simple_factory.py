@@ -1,11 +1,14 @@
 from pathlib import Path
 
+import pytest
+
 from core.domain import SIGLAS
 from core.scanners import all_siglas, get
 from core.scanners.base import ConfidenceLevel
 from core.scanners.simple_factory import make_simple_scanner
 
 ABRIL = Path("A:/informe mensual/ABRIL")
+pytestmark_corpus = pytest.mark.skipif(not ABRIL.exists(), reason="live corpus not present")
 
 
 def test_all_18_siglas_registered():
@@ -13,6 +16,7 @@ def test_all_18_siglas_registered():
     assert set(SIGLAS) <= registered
 
 
+@pytestmark_corpus
 def test_simple_scanner_counts_correctly_in_hpv_art():
     scanner = get("art")
     result = scanner.count(ABRIL / "HPV" / "7.-ART")
@@ -31,6 +35,7 @@ def test_simple_scanner_handles_missing_folder(tmp_path):
     assert "folder_missing" in result.flags
 
 
+@pytestmark_corpus
 def test_simple_scanner_flags_compilation_in_hrb_odi():
     scanner = get("odi")
     result = scanner.count(ABRIL / "HRB" / "3.-ODI Visitas")

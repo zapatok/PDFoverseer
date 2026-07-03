@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -6,6 +8,13 @@ from api.routes.sessions import get_manager, router
 from api.state import SessionManager
 from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
+
+# Only test_scan_session_populates_cells performs a real scan against the
+# corpus; every other test below either doesn't need a real path at all
+# (open_session just stores month_root as a string) or already uses a
+# tmp_path-based synthetic root.
+ABRIL = Path("A:/informe mensual/ABRIL")
+pytestmark_corpus = pytest.mark.skipif(not ABRIL.exists(), reason="live corpus not present")
 
 
 @pytest.fixture
@@ -19,22 +28,29 @@ def client(tmp_path):
     close_all()
 
 
-def test_create_session(client, monkeypatch):
-    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+def test_create_session(client, monkeypatch, tmp_path):
+    # _resolve_month_dir requires INFORME_MENSUAL_ROOT to exist and contain a
+    # month-named subfolder; open_session itself only stores month_root as a
+    # string (no disk read), so a synthetic ABRIL dir is equivalent to the
+    # real corpus here — see QA-3 audit.
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     response = client.post("/api/sessions", json={"year": 2026, "month": 4})
     assert response.status_code in (200, 201)
     data = response.json()
     assert data["session_id"] == "2026-04"
 
 
-def test_get_session(client, monkeypatch):
-    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+def test_get_session(client, monkeypatch, tmp_path):
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     response = client.get("/api/sessions/2026-04")
     assert response.status_code == 200
     assert response.json()["session_id"] == "2026-04"
 
 
+@pytestmark_corpus
 def test_scan_session_populates_cells(client, monkeypatch):
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
     client.post("/api/sessions", json={"year": 2026, "month": 4})
@@ -65,8 +81,9 @@ def test_patch_worker_count_persists(client, monkeypatch, tmp_path):
     assert body["worker_count"] == 12
 
 
-def test_patch_worker_count_rejects_bad_status(client, monkeypatch):
-    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+def test_patch_worker_count_rejects_bad_status(client, monkeypatch, tmp_path):
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     r = client.patch(
         "/api/sessions/2026-04/cells/HLL/charla/worker-count",
@@ -84,10 +101,11 @@ def test_patch_worker_count_session_404(client):
     assert r.status_code == 404
 
 
-def test_patch_override_unknown_hospital_400(client, monkeypatch):
+def test_patch_override_unknown_hospital_400(client, monkeypatch, tmp_path):
     # F13: an unknown hospital coordinate is a clean 400 (bad request), never a
     # phantom cell. Prevents the `no_existe`-in-DB hole at the route boundary.
-    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     r = client.patch(
         "/api/sessions/2026-04/cells/BOGUS/odi/override",
@@ -96,9 +114,10 @@ def test_patch_override_unknown_hospital_400(client, monkeypatch):
     assert r.status_code == 400
 
 
-def test_patch_worker_count_unknown_sigla_400(client, monkeypatch):
+def test_patch_worker_count_unknown_sigla_400(client, monkeypatch, tmp_path):
     # F13: an unknown sigla coordinate is rejected with 400 before any state write.
-    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     r = client.patch(
         "/api/sessions/2026-04/cells/HPV/FAKE/worker-count",
@@ -195,8 +214,9 @@ def test_reconcile_worker_marks_migrate_returns_enriched(client, monkeypatch, tm
     assert body["worker_count"] == 7  # migrated onto a present file → now counted
 
 
-def test_reconcile_migrate_without_to_file_400(client, monkeypatch):
-    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+def test_reconcile_migrate_without_to_file_400(client, monkeypatch, tmp_path):
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     r = client.post(
         "/api/sessions/2026-04/cells/HLL/charla/worker-marks/reconcile",
@@ -205,8 +225,9 @@ def test_reconcile_migrate_without_to_file_400(client, monkeypatch):
     assert r.status_code == 400
 
 
-def test_reconcile_bad_action_400(client, monkeypatch):
-    monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
+def test_reconcile_bad_action_400(client, monkeypatch, tmp_path):
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     client.post("/api/sessions", json={"year": 2026, "month": 4})
     r = client.post(
         "/api/sessions/2026-04/cells/HLL/charla/worker-marks/reconcile",

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -14,10 +13,12 @@ from core.db.migrations import init_schema
 
 @pytest.fixture
 def manager(tmp_path):
+    # open_session only stores month_root as a string (no disk read), so a
+    # synthetic path is equivalent to the real corpus here — see QA-3 audit.
     conn = open_connection(tmp_path / "clear_nm.db")
     init_schema(conn)
     mgr = SessionManager(conn=conn)
-    mgr.open_session(year=2026, month=4, month_root=Path("A:/informe mensual/ABRIL"))
+    mgr.open_session(year=2026, month=4, month_root=tmp_path / "ABRIL")
     yield mgr
     close_all()
 

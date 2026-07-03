@@ -1,8 +1,15 @@
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.routes.months import router
+
+# Both tests here list real folders under the corpus root (ABRIL's presence,
+# hospitals_present count) — the whole file depends on the live corpus.
+ABRIL = Path("A:/informe mensual/ABRIL")
+pytestmark = pytest.mark.skipif(not ABRIL.exists(), reason="live corpus not present")
 
 
 @pytest.fixture

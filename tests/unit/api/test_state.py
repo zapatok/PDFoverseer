@@ -17,25 +17,29 @@ def conn(tmp_path):
     close_all()
 
 
-def test_open_session_creates_new_if_not_exists(conn):
+def test_open_session_creates_new_if_not_exists(conn, tmp_path):
+    # open_session only stores month_root as a string (no disk read), so a
+    # synthetic path is equivalent to the real corpus here — see QA-3 audit.
+    month_root = tmp_path / "ABRIL"
     mgr = SessionManager(conn=conn)
-    state = mgr.open_session(year=2026, month=4, month_root=Path("A:/informe mensual/ABRIL"))
+    state = mgr.open_session(year=2026, month=4, month_root=month_root)
     assert state["session_id"] == "2026-04"
-    assert state["month_root"] == "A:/informe mensual/ABRIL"
+    assert state["month_root"] == month_root.as_posix()
 
 
-def test_open_session_returns_existing(conn):
+def test_open_session_returns_existing(conn, tmp_path):
+    month_root = tmp_path / "ABRIL"
     mgr = SessionManager(conn=conn)
-    s1 = mgr.open_session(year=2026, month=4, month_root=Path("A:/informe mensual/ABRIL"))
-    s2 = mgr.open_session(year=2026, month=4, month_root=Path("A:/informe mensual/ABRIL"))
+    s1 = mgr.open_session(year=2026, month=4, month_root=month_root)
+    s2 = mgr.open_session(year=2026, month=4, month_root=month_root)
     assert s1["session_id"] == s2["session_id"]
 
 
-def test_apply_cell_result_persists(conn):
+def test_apply_cell_result_persists(conn, tmp_path):
     from core.scanners.base import ConfidenceLevel, ScanResult
 
     mgr = SessionManager(conn=conn)
-    mgr.open_session(year=2026, month=4, month_root=Path("A:/informe mensual/ABRIL"))
+    mgr.open_session(year=2026, month=4, month_root=tmp_path / "ABRIL")
     result = ScanResult(
         count=767,
         confidence=ConfidenceLevel.HIGH,
@@ -757,7 +761,7 @@ def test_reorg_recompute_and_validated_add_are_atomic_under_threads(tmp_path):
             conn = open_connection(tmp_path / f"race_{i}.db")
             init_schema(conn)
             mgr = SessionManager(conn=conn)
-            mgr.open_session(year=2026, month=4, month_root=Path("A:/informe mensual/ABRIL"))
+            mgr.open_session(year=2026, month=4, month_root=tmp_path / "ABRIL")
             mgr.add_reorg_op("2026-04", _move_op("art", "odi", 1))  # op A (seed)
 
             errors: list[Exception] = []
