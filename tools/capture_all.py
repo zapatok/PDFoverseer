@@ -7,7 +7,6 @@ and saves it as a PNG, along with OCR text from each tier in a CSV index.
 Usage:
     python tools/capture_all.py data/samples/CH_39.pdf
     python tools/capture_all.py data/samples/              # all PDFs in dir
-    python tools/capture_all.py data/samples/ --easyocr    # include Tier 3
 
 Output: data/ocr_all/{pdf_nickname}/p001.png ... + data/ocr_all/all_index.csv
 """
@@ -19,8 +18,14 @@ from pathlib import Path
 
 OUTPUT_ROOT = Path("data/ocr_all")
 CSV_COLUMNS = [
-    "pdf_nickname", "page_num", "tier1_parsed", "tier2_parsed",
-    "tier1_text", "tier2_text", "tier3_text", "image_path",
+    "pdf_nickname",
+    "page_num",
+    "tier1_parsed",
+    "tier2_parsed",
+    "tier1_text",
+    "tier2_text",
+    "tier3_text",
+    "image_path",
 ]
 
 
@@ -34,7 +39,6 @@ def _parsed_str(curr, total) -> str:
 def capture_pdf(
     pdf_path: Path | str,
     out_dir: Path | str = OUTPUT_ROOT,
-    include_easyocr: bool = False,
 ) -> list[dict]:
     """
     Render and save the page-number strip for every page in a PDF.
@@ -49,20 +53,13 @@ def capture_pdf(
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
 
-    import core.ocr as ocr_mod  # for _easyocr_reader access after init
+    # EASYOCR_DPI / _init_easyocr were removed from core.ocr alongside the rest
+    # of the codebase's EasyOCR removal (2026-03-26, see core/README.md).
     from core.image import _deskew, _render_clip
-    from core.ocr import (
-        EASYOCR_DPI,
-        _init_easyocr,
-        _setup_sr,
-        _tess_ocr,
-        _upsample_4x,
-    )
+    from core.ocr import _setup_sr, _tess_ocr, _upsample_4x
     from core.utils import DPI, _parse
 
     _setup_sr(print)
-    if include_easyocr:
-        _init_easyocr(print)
 
     pdf_path = Path(pdf_path)
     out_dir = Path(out_dir)
@@ -109,14 +106,10 @@ def capture_pdf(
                 text2 = _tess_ocr(bgr_sr)
                 c2, t2 = _parse(text2)
 
-            # Tier 3: EasyOCR (optional)
+            # Tier 3 (EasyOCR) was removed from the codebase 2026-03-26 (see
+            # core/README.md); tier3_text is kept as an always-empty CSV
+            # column for schema stability with any prior all_index.csv.
             text3 = ""
-            if include_easyocr and c1 is None and c2 is None:
-                reader = ocr_mod._easyocr_reader
-                if reader is not None:
-                    bgr_hires = _render_clip(page, dpi=EASYOCR_DPI)
-                    results = reader.readtext(bgr_hires, detail=0)
-                    text3 = " ".join(results)
 
             rel_path = f"{nickname}/{filename}"
             status = "T1" if c1 else ("T2" if c2 else "FAIL")
@@ -134,8 +127,10 @@ def capture_pdf(
             writer.writerow(row)
             rows.append(row)
 
-            print(f"  [{status:4s}] page {page_num:3d}"
-                  + (f"  {c1}/{t1}" if c1 else f"  {c2}/{t2}" if c2 else ""))
+            print(
+                f"  [{status:4s}] page {page_num:3d}"
+                + (f"  {c1}/{t1}" if c1 else f"  {c2}/{t2}" if c2 else "")
+            )
 
         doc.close()
 
@@ -148,20 +143,15 @@ def capture_pdf(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Save OCR image strips for ALL pages in PDFs."
-    )
+    parser = argparse.ArgumentParser(description="Save OCR image strips for ALL pages in PDFs.")
     parser.add_argument(
         "path",
         help="Path to a PDF file, or a directory to scan all PDFs inside it.",
     )
     parser.add_argument(
-        "--out", default=str(OUTPUT_ROOT),
+        "--out",
+        default=str(OUTPUT_ROOT),
         help=f"Output directory (default: {OUTPUT_ROOT})",
-    )
-    parser.add_argument(
-        "--easyocr", action="store_true",
-        help="Also run EasyOCR Tier 3 on pages where Tier 1+2 fail.",
     )
     args = parser.parse_args()
 
@@ -191,7 +181,7 @@ def main() -> None:
     print(f"[capture_all] {len(pdfs)} PDFs -> {out_dir}/")
     total_rows = 0
     for pdf in pdfs:
-        rows = capture_pdf(pdf, out_dir=out_dir, include_easyocr=args.easyocr)
+        rows = capture_pdf(pdf, out_dir=out_dir)
         total_rows += len(rows)
 
     print(f"\n[capture_all] Total: {total_rows} pages captured -> {out_dir}/all_index.csv")
