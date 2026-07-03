@@ -65,6 +65,46 @@ def test_extract_sigla_aliases(filename, expected):
     assert extract_sigla(filename) == expected
 
 
+# Phrase-alias BOUNDARY pins (Fase 5 review, Fix 1). The alias's internal
+# connector `[_\-.\s]+` tolerates space between the words, but the phrase's
+# OUTER boundaries are _TOKEN_SEP/_TOKEN_END, which only match start/end of
+# the filename stem or [_\-.] — NOT space. So a space-adjacent phrase matches
+# only at a stem edge. Real corpus revdocmaq names are underscore-separated;
+# embedded space-tolerance is intentionally not provided (widening
+# _TOKEN_SEP/_TOKEN_END would be a 20-sigla shared-infrastructure change,
+# explicitly declined). These pins make the limitation a conscious contract:
+# if a future change flips any of them, that must be a deliberate decision.
+@pytest.mark.parametrize(
+    "filename,expected",
+    [
+        # Phrase followed by " maquinaria": TOKEN_END rejects the space after
+        # "documentacion" (alias dead), and TOKEN_SEP rejects the space before
+        # "maquinaria" (literal token dead too) → no sigla at all.
+        ("revision documentacion maquinaria.pdf", None),
+        # DOCUMENTED LIMITATION (silent wrong-sigla, the worst failure mode):
+        # "xxx " kills the alias at its space-preceded start, but the
+        # underscore before "maquinaria" lets that literal token match — the
+        # file silently falls through to maquinaria instead of revdocmaq.
+        # NOT desired behavior; pinned so a regression or a "fix" is explicit.
+        ("xxx revision documentacion_maquinaria.pdf", "maquinaria"),
+        # At stem edges (^ start, $ end) the boundaries hold even with an
+        # internal space → the alias works.
+        ("revision documentacion.pdf", "revdocmaq"),
+    ],
+)
+def test_extract_sigla_phrase_alias_boundaries(filename, expected):
+    assert extract_sigla(filename) == expected
+
+
+def test_count_pdfs_by_sigla_unknown_sigla_fails_loud(tmp_path):
+    """Fase 5 review Fix 3: an unregistered sigla must raise (get_pattern's
+    KeyError), not silently behave as an empty token-scope that matches
+    nothing — consistent with the registry family (scanners.get, get_pattern)."""
+    (tmp_path / "whatever.pdf").write_bytes(b"%PDF\n%%EOF")
+    with pytest.raises(KeyError, match="unknown_sigla"):
+        count_pdfs_by_sigla(tmp_path, sigla="not_a_real_sigla")
+
+
 def test_count_art_in_hpv():
     folder = ABRIL_ROOT / "HPV" / "7.-ART"
     result = count_pdfs_by_sigla(folder, sigla="art")

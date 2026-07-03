@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from core.domain import SIGLAS
-from core.scanners.patterns import PATTERNS
+from core.scanners.patterns import get_pattern
 
 # Token-boundary pattern for lax sigla extraction (A10).
 #
@@ -23,10 +23,20 @@ _TOKEN_SEP = r"(?:^|(?<=[_\-.]))"  # zero-width: start-of-string OR after a sepa
 _TOKEN_END = r"(?:$|(?=[_\-.]))"  # zero-width: end-of-string OR before a separator
 
 # Extra filename tokens that resolve to a sigla, beyond its literal name
-# (F6/F14a — Fase 5 corpus matching). Phrases use [_\-.\s]+ between words so
-# both "revision_documentacion" and "revision documentacion" match. Values
-# are raw regex fragments (NOT re.escape'd — revdocmaq's alias is a real
-# pattern), mirroring core.domain._SIGLA_FOLDER_ALIASES in spirit.
+# (F6/F14a — Fase 5 corpus matching). Values are raw regex fragments (NOT
+# re.escape'd — revdocmaq's alias is a real pattern), mirroring
+# core.domain._SIGLA_FOLDER_ALIASES in spirit.
+#
+# Phrase-boundary contract (pinned by test_extract_sigla_phrase_alias_
+# boundaries): the INTERNAL connector [_\-.\s]+ tolerates `_ - . space`
+# between the phrase's words, but the phrase's OUTER boundaries are
+# _TOKEN_SEP/_TOKEN_END, which match only start/end-of-stem or [_\-.] —
+# NOT space. So "revision documentacion.pdf" matches (stem edges), while
+# "xxx revision documentacion_maquinaria.pdf" does not — it silently falls
+# through to the literal "maquinaria" token (documented limitation). Real
+# corpus revdocmaq names are underscore-separated; embedded space-tolerance
+# is intentionally not provided (widening _TOKEN_SEP/_TOKEN_END would change
+# token boundaries for all 20 siglas — explicitly declined).
 _SIGLA_TOKEN_ALIASES: dict[str, tuple[str, ...]] = {
     "chps": (r"cphs",),  # real ABRIL file spells the Comité Paritario acronym correctly
     "revdocmaq": (r"revision[_\-.\s]+documentacion",),  # real files carry no "revdocmaq" token
@@ -117,8 +127,12 @@ def _matches(sigla: str, filename: str) -> bool:
     sigla token). Shared by ``count_pdfs_by_sigla`` (pase 1) and
     ``SimpleFilenameScanner``'s per-file path resolution so the two stay in
     lock-step.
+
+    Raises KeyError (via ``get_pattern``) for an unregistered sigla — fail
+    loud like the rest of the registry family, instead of silently treating
+    a typo as a token scope that matches nothing.
     """
-    if PATTERNS.get(sigla, {}).get("count_scope") == "folder":
+    if get_pattern(sigla).get("count_scope") == "folder":
         return filename.lower().endswith(".pdf")
     return extract_sigla(filename) == sigla
 
@@ -152,6 +166,8 @@ def count_pdfs_by_sigla(folder: Path, *, sigla: str) -> GlobCountResult:
     pdfs = list(folder.rglob("*.pdf"))
     matched = [p for p in pdfs if _matches(sigla, p.name)]
     flags: list[str] = []
+    # Both flags below are structurally unreachable for count_scope="folder"
+    # siglas (chps): _matches accepts every PDF there, so matched == pdfs.
     if pdfs and not matched:
         flags.append("no_matching_sigla_in_folder")
     if len(matched) < len(pdfs):

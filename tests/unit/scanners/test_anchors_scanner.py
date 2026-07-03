@@ -20,22 +20,28 @@ def test_anchors_scanner_falls_through_to_filename_glob_for_pase1(tmp_path: Path
     assert result.count == 1
 
 
-def test_anchors_scanner_count_ocr_returns_base_for_unknown_sigla(tmp_path: Path, monkeypatch):
-    """A sigla absent from PATTERNS has no flavors, so count_ocr returns the
-    filename_glob base result unchanged (defensive early return).
+def test_anchors_scanner_count_ocr_returns_base_when_no_flavors(tmp_path: Path, monkeypatch):
+    """A sigla whose PATTERNS entry has no cover_flavors → count_ocr returns
+    the filename_glob base result unchanged (_precheck's defensive early
+    return). This does NOT reach the A7 one-page branch — the precheck
+    short-circuits before any per-PDF work.
 
-    All 18 SIGLAS are now populated in PATTERNS, so the test removes one
-    entry to exercise the fallback path. This does NOT reach the A7 one-page
-    branch — the function returns as soon as it finds no pattern.
+    Historical note (Fase 5 review Fix 3): this test used to DELETE the
+    andamios entry to exercise the `pattern is None` half of the same guard.
+    That variant is no longer reachable through count_ocr — pase-1's
+    _matches now fails loud (get_pattern KeyError) for an unregistered
+    sigla, by design (pinned in test_filename_glob.py::
+    test_count_pdfs_by_sigla_unknown_sigla_fails_loud) — so the test now
+    exercises the flavors==[] half, which is the same early return.
     """
     from core.scanners.patterns import PATTERNS
 
-    monkeypatch.delitem(PATTERNS, "andamios", raising=False)
+    monkeypatch.setitem(PATTERNS, "andamios", {"scan_strategy": "anchors"})
     pdf = tmp_path / "2026-04-15_andamios_chequeo.pdf"
     pdf.write_bytes(_one_page_pdf())
     scanner = AnchorsScanner(sigla="andamios")
     result = scanner.count_ocr(tmp_path, cancel=CancellationToken())
-    assert result.method == "filename_glob"  # no pattern → base returned
+    assert result.method == "filename_glob"  # no flavors → base returned
 
 
 def test_anchors_scanner_a7_only_one_page_pdfs(tmp_path: Path, monkeypatch):

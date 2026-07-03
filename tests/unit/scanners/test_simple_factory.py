@@ -77,3 +77,39 @@ def test_simple_scanner_no_duplicate_flag_in_flat_folder(tmp_path):
     result = scanner.count(tmp_path)
 
     assert "duplicate_basenames" not in result.flags
+
+
+def _make_pdf(path, n_pages):
+    """Real n-page PDF (same fabrication pattern as test_compute_settled)."""
+    import fitz
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = fitz.open()
+    for _ in range(n_pages):
+        doc.new_page()
+    doc.save(str(path))
+    doc.close()
+
+
+def test_duplicate_basenames_corrupt_fixed_page_count(tmp_path):
+    """F10 blast radius on a FIXED_PAGE_SIGLA (bodega): count = sum of the
+    basename-keyed `pages` dict, so two same-named PDFs collapse to ONE entry
+    and the HEADLINE count is corrupted — 3pp A/x + 5pp B/x yields count=5
+    (the last rglob'd path wins the dict), not the true 8. THIS undercount is
+    exactly what the duplicate_basenames flag warns about; flag-only (no
+    auto-correction) is the accepted design, and this pin makes the blast
+    radius visible to whoever touches the name-keyed model next. (On a
+    variable sigla like art, only the per_file display loses an entry — the
+    headline count stays len(matched); fixed-page is the worst case.)"""
+    _make_pdf(tmp_path / "A" / "2026-04_bodega_chequeo.pdf", 3)
+    _make_pdf(tmp_path / "B" / "2026-04_bodega_chequeo.pdf", 5)
+
+    scanner = get("bodega")
+    result = scanner.count(tmp_path)
+
+    assert "duplicate_basenames" in result.flags
+    assert result.files_scanned == 2
+    # Pinned CORRUPTED value (true total is 8): the pages dict holds one
+    # entry per basename, and B/'s 5-page file overwrote A/'s 3-page one.
+    assert result.count == 5
+    assert result.per_file == {"2026-04_bodega_chequeo.pdf": 5}
