@@ -71,6 +71,15 @@
     "expected": 0
   },
   {
+    "name": "ocr_count_zero_is_information_not_absence",
+    "cell": {
+      "ocr_count": 0,
+      "filename_count": 5,
+      "per_file": {}
+    },
+    "expected": 0
+  },
+  {
     "name": "checks_tally_filtered",
     "cell": {
       "worker_marks": {

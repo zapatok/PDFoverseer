@@ -21,18 +21,14 @@ def resolve_cell_value(
     Excel always matches the UI (user_override > per_file_overrides ∪ per_file >
     ocr_count > filename_count). For ``count_type == "checks"`` (maquinaria) the
     value is the manual check tally (``present_files`` discards orphan marks).
-    Adds the Excel-only concerns: an excluded cell returns None (caller skips
-    writing), and a legacy un-migrated cell that only carries a flat ``count``
-    falls back to it.
+    Adds the Excel-only concern: an excluded cell returns None (caller skips
+    writing).
 
     Returns None if the cell is excluded — caller skips writing.
     """
     if cell.get("excluded"):
         return None
-    value = compute_cell_count(cell, count_type, present_files)
-    if value == 0 and cell.get("count") is not None:
-        return cell["count"]
-    return value
+    return compute_cell_count(cell, count_type, present_files)
 
 
 @dataclass(frozen=True)

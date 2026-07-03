@@ -69,7 +69,15 @@ def _base_count(
         all_files = set(per_file) | set(per_file_overrides)
         return sum(per_file_overrides.get(f, per_file.get(f, 0)) for f in all_files)
 
-    return cell.get("ocr_count") or cell.get("filename_count") or 0
+    # F9: ocr_count=0 is information (a real scan that found zero documents),
+    # not absence — mirror the JS `??` cascade (frontend/src/lib/cellCount.js)
+    # instead of Python's `or`, which would incorrectly fall through to
+    # filename_count whenever ocr_count is exactly 0.
+    if cell.get("ocr_count") is not None:
+        return cell["ocr_count"]
+    if cell.get("filename_count") is not None:
+        return cell["filename_count"]
+    return 0
 
 
 def compute_cell_count(

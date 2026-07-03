@@ -75,10 +75,17 @@ def test_writer_priority_override_over_ocr_over_filename(tmp_path):
     )
     # Excluded → None signals "do not write"
     assert resolve_cell_value({"user_override": 5, "excluded": True}) is None
-    # Legacy count field (un-migrated) → still works
-    assert resolve_cell_value({"count": 42}) == 42
+    # Legacy flat `count` field is no longer honored (F9/D4): the v1->v2
+    # migration pops `count` before any state reaches the writer, so the old
+    # "value == 0 falls back to count" branch was dead code on real data.
+    assert resolve_cell_value({"count": 42}) == 0
     # Override of 0 is meaningful (explicit zero), wins over ocr_count
     assert resolve_cell_value({"user_override": 0, "ocr_count": 16, "filename_count": 1}) == 0
+    # An explicit override of 0 must not be clobbered by a stray legacy
+    # `count` field either (regression: the dead branch used to re-derive
+    # from `count` whenever the resolved value was 0, even for an explicit
+    # override of 0).
+    assert resolve_cell_value({"user_override": 0, "count": 7}) == 0
 
 
 def test_resolve_cell_value_honors_per_file_overrides():
