@@ -10,7 +10,7 @@ import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { wheelToPageStep } from "../lib/viewer-nav";
 import { cellLockHolder } from "../lib/presence";
 import { getParticipantId } from "../lib/identity";
-import { isCappedCountType } from "../lib/cell-status";
+import { isCappedCountType, perFileCountEditable } from "../lib/cell-status";
 import OriginChip from "./OriginChip";
 import InlineEditCount from "./InlineEditCount";
 import FileViewerProgress from "./FileViewerProgress";
@@ -344,23 +344,33 @@ export default function PDFLightbox() {
               <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Ajuste manual del archivo</h4>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-po-text">Documentos:</span>
-                <InlineEditCount
-                  value={files?.[lightbox.fileIndex]?.effective_count ?? 1}
-                  disabled={isLocked}
-                  max={isCappedCountType(scanInfo?.count_type) ? (currentFile?.page_count ?? null) : null}
-                  onCommit={(newCount) => {
-                    const name = files?.[lightbox.fileIndex]?.name;
-                    if (!name) return;
-                    setFiles((prev) =>
-                      prev?.map((row, idx) =>
-                        idx === lightbox.fileIndex
-                          ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
-                          : row,
-                      ),
-                    );
-                    savePerFileOverride(session.session_id, lightbox.hospital, lightbox.sigla, name, newCount);
-                  }}
-                />
+                {/* U3 follow-through: checks cells (maquinaria) derive their
+                    number from worker marks — a per-file override here is
+                    persisted-but-ignored, so render plain text (mirrors
+                    FileList's gate). */}
+                {perFileCountEditable(scanInfo?.count_type) ? (
+                  <InlineEditCount
+                    value={files?.[lightbox.fileIndex]?.effective_count ?? 1}
+                    disabled={isLocked}
+                    max={isCappedCountType(scanInfo?.count_type) ? (currentFile?.page_count ?? null) : null}
+                    onCommit={(newCount) => {
+                      const name = files?.[lightbox.fileIndex]?.name;
+                      if (!name) return;
+                      setFiles((prev) =>
+                        prev?.map((row, idx) =>
+                          idx === lightbox.fileIndex
+                            ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
+                            : row,
+                        ),
+                      );
+                      savePerFileOverride(session.session_id, lightbox.hospital, lightbox.sigla, name, newCount);
+                    }}
+                  />
+                ) : (
+                  <span className="font-mono tabular-nums text-sm w-14 text-right inline-block text-po-text-muted">
+                    {(files?.[lightbox.fileIndex]?.effective_count ?? 1).toLocaleString()}
+                  </span>
+                )}
               </div>
             </aside>
           </>
