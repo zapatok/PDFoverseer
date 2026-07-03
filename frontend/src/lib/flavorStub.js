@@ -4,6 +4,10 @@
  * desarrollador lo pegue directamente en patterns.py.
  *
  * El stub sigue la convención de nombres A9 y la estructura de anchors A12.
+ *
+ * Not dead code: copyFlavorStub is wired to DetailPanel's "Copiar stub"
+ * action (A13 maintenance protocol, step 3 — extend or create a flavor when
+ * a near-match candidate surfaces). Audited 2026-07-03 (Fase 8, D9).
  */
 
 /**

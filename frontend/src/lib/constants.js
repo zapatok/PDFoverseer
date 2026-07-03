@@ -1,7 +1,3 @@
-// Reenviados desde config.js (fuente canónica del host). En código nuevo, importa
-// API_BASE/WS_BASE directo desde ./config.
-export { API_BASE, WS_BASE } from "./config";
-
 export const CTA_LLENAR_MANUAL = "Llenar manualmente →";
 
 // Cost guard for pase-2 OCR (audit finding #2). Single-user/LAN app, so these
