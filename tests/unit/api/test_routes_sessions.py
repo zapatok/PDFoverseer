@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -10,11 +8,9 @@ from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
 
 # Only test_scan_session_populates_cells performs a real scan against the
-# corpus; every other test below either doesn't need a real path at all
-# (open_session just stores month_root as a string) or already uses a
-# tmp_path-based synthetic root.
-ABRIL = Path("A:/informe mensual/ABRIL")
-pytestmark_corpus = pytest.mark.skipif(not ABRIL.exists(), reason="live corpus not present")
+# corpus (marked @pytest.mark.corpus); every other test below either doesn't
+# need a real path at all (open_session just stores month_root as a string)
+# or already uses a tmp_path-based synthetic root.
 
 
 @pytest.fixture
@@ -50,7 +46,7 @@ def test_get_session(client, monkeypatch, tmp_path):
     assert response.json()["session_id"] == "2026-04"
 
 
-@pytestmark_corpus
+@pytest.mark.corpus
 def test_scan_session_populates_cells(client, monkeypatch):
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", "A:/informe mensual")
     client.post("/api/sessions", json={"year": 2026, "month": 4})

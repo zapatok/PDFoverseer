@@ -10,7 +10,6 @@ from core.scanners.utils.filename_glob import (
 
 # Real fixtures from ABRIL HPV
 ABRIL_ROOT = Path("A:/informe mensual/ABRIL")
-pytestmark_corpus = pytest.mark.skipif(not ABRIL_ROOT.exists(), reason="live corpus not present")
 
 
 # Regression tests for extract_sigla — these reproduce 17 of 54 cells the
@@ -106,7 +105,7 @@ def test_count_pdfs_by_sigla_unknown_sigla_fails_loud(tmp_path):
         count_pdfs_by_sigla(tmp_path, sigla="not_a_real_sigla")
 
 
-@pytestmark_corpus
+@pytest.mark.corpus
 def test_count_art_in_hpv():
     folder = ABRIL_ROOT / "HPV" / "7.-ART"
     result = count_pdfs_by_sigla(folder, sigla="art")
@@ -164,7 +163,7 @@ def test_count_pdfs_by_sigla_token_scope_unchanged(tmp_path):
     assert "some_files_unrecognized" in result.flags
 
 
-@pytestmark_corpus
+@pytest.mark.corpus
 def test_per_empresa_breakdown_for_hpv_art():
     folder = ABRIL_ROOT / "HPV" / "7.-ART"
     breakdown = per_empresa_breakdown(folder)

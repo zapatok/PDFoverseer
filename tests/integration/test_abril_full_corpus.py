@@ -11,6 +11,10 @@ from core.scanners.base import ConfidenceLevel
 
 ABRIL = Path("A:/informe mensual/ABRIL")
 
+# Slow suite assumes the corpus; the marker makes that explicit (auto-skip on
+# a corpus-less machine instead of erroring).
+pytestmark = pytest.mark.corpus
+
 
 @pytest.mark.slow
 def test_abril_full_corpus_yields_80_cells():

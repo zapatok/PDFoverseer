@@ -35,4 +35,5 @@ pythonpath = ["."]
 testpaths = ["tests", "eval/tests"]
 markers = [
     "slow: tests that read the real corpus or run scanners over many PDFs (deselect with '-m \"not slow\"')",
+    "corpus: needs the live read-only corpus at A:/informe mensual (auto-skipped by tests/conftest.py when absent)",
 ]

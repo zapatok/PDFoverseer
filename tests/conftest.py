@@ -16,6 +16,21 @@ _FORBIDDEN_ROOTS = (
     Path("A:/estadistica mensual").resolve(),
 )
 
+# Single source of truth for "is the live read-only corpus available?" —
+# tests declare the dependency with @pytest.mark.corpus (registered in
+# pyproject.toml) instead of re-defining per-file skipif guards.
+_CORPUS_ABRIL = Path("A:/informe mensual/ABRIL")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-skip ``corpus``-marked tests when the live corpus is absent."""
+    if _CORPUS_ABRIL.exists():
+        return
+    skip = pytest.mark.skip(reason="live corpus not present")
+    for item in items:
+        if "corpus" in item.keywords:
+            item.add_marker(skip)
+
 
 def _is_forbidden(target):
     try:
