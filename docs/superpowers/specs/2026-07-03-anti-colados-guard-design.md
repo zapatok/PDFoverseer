@@ -78,7 +78,8 @@ ART se delata solo.
     operador elige el destino en el formulario de la op).
 - Sugerencia: `move_file` con `dest = {mismo hospital, suggested_sigla}`;
   `doc_count`/`worker_count` por los defaults Incr-J existentes
-  (`resolve_op_defaults`).
+  (`resolve_op_defaults`), **modulados por la regla de pre-llenado de §6**
+  (default solo si `counted`; `0` si no).
 
 **Dónde corre:** dentro del scan de pase-1 (el pase de ~4 s), como parte del
 resultado por celda — el cómputo es una función pura
@@ -346,7 +347,9 @@ dependiente-de-datos.
   host con `cover_code` (sin inicio contado) → false** (y su op pre-llenada
   lleva `doc_count=0`); corrida que cubre el `counted_start_page` de su
   segmento → true; **move_file `counted` con contribución 3 → prefill
-  `doc_count=3`** (default Incr-J, nunca un 1 plano).
+  `doc_count=3`** (default Incr-J, nunca un 1 plano); gemelo por kind:
+  sospechoso `filename` en celda por token (`counted=false`) → prefill
+  `doc_count=0`.
 - **Lifecycle:** evicción por evidencia — archivo desaparece de la carpeta →
   el próximo refresh (de cualquier kind) elimina sus sospechosos de AMBOS
   kinds; op `pending` suprime por la tabla §5, op `applied` no participa (el
