@@ -6,7 +6,7 @@
 - `routes/sessions/` — session lifecycle and editing. A **package**, not a single file:
   - `lifecycle.py` — `POST /api/sessions` (open/return a session), `GET /api/sessions/{id}` (persisted state).
   - `scan.py` — `POST /api/sessions/{id}/scan` (pase 1), `POST /api/sessions/{id}/scan-ocr` (pase 2 batch; returns `{accepted, total, total_pdfs}` and streams progress over the WS), `POST /api/sessions/{id}/cancel`, single-file OCR, `POST .../apply-ratio` (RN).
-  - `writes.py` — single-cell edit endpoints: override, per-file override, near-match clear, worker-count, note, confirm. Each enforces the M3 per-cell lock via `participant_id`.
+  - `writes.py` — single-cell edit endpoints: override, per-file override, near-match clear, worker-count, note, confirm, **colado-suspect dismiss** (`POST .../colado-suspects/{id}/dismiss` — anti-colados; 404 on unknown id). Each enforces the M3 per-cell lock via `participant_id`.
   - `files.py` — per-cell file listing + serving one PDF.
   - `reorg.py` — reorg-op create/delete + manifest export (Incr J).
   - `_common.py` — shared kernel (DI, session-id/cell-coord validation, broadcast helpers) the sub-routers import from.

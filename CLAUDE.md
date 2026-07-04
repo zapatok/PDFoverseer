@@ -169,10 +169,17 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 State as of the "a punto" round kickoff (2026-07-03; scope set by Daniel):
 
 **In flight (this round):**
-- **Misfiled-document guard (anti-colados)** — IN DESIGN/BUILD: spec
-  `docs/superpowers/specs/2026-07-03-anti-colados-guard-design.md` (2
-  vertientes: pase-1 filename + pase-2 form-code, opt-in per sigla; counts
-  never change, suggestions feed the Incr-J reorg ops).
+- **Misfiled-document guard (anti-colados)** — spec
+  `docs/superpowers/specs/2026-07-03-anti-colados-guard-design.md`, plan
+  `docs/superpowers/plans/2026-07-04-anti-colados-guard.md`. **Vertiente 1
+  (filename, all 20 siglas) SHIPPED** (Chunk 1: `colado_guard.py` +
+  `siglas_suggested_by_filename` + `ScanTelemetry.colado_suspects` +
+  `apply_filename_result` persistence + `all_reliable` gate at the single
+  `refresh_all_reliable` chokepoint + open-filter at every serialization +
+  dismiss endpoint + reorg-op green-restore + `PosiblesColadosPanel`). Counts
+  never change (detection only). **Vertiente 2 (form-code, pagination opt-in)
+  is GATED** on the §7 deep code survey (Chunk 2, controller talks to Daniel
+  before Chunk 3).
 - **`api/state.py` god-file split** — committed to this round (Daniel's call,
   2026-07-03); the 2026-06-22 structural round had left it out of scope.
 - ~~Cleanup batch~~ **DONE 2026-07-04** (5 items, one commit each): U2 toast

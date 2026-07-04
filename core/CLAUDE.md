@@ -213,6 +213,35 @@ pagination 5/5; degraded merged ART −11 → +1 via recovery; herramientas_elec
 > anchors — its template repeats "Página 1 de 2" on continuations (the bug), so
 > pagination would over-count.
 
+### Anti-colados guard (misfiled-document detection)
+
+`core/scanners/utils/colado_guard.py` (pure, no PDF I/O) detects **colados** —
+documents sitting in the wrong `(hospital, sigla)` cell — and surfaces each as
+a suspect carrying a prefilled Incr-J reorg-op suggestion. **Detection never
+changes a count** (`OUTPUT GUARD` byte-identical); the suspect only drops the
+cell to amber (via `all_reliable`) and populates the DetailPanel's *Posibles
+colados* panel, where the operator creates the reorg op or dismisses it. Design:
+`docs/superpowers/specs/2026-07-03-anti-colados-guard-design.md`.
+
+- **Vertiente 1 (filename, all 20 siglas, V1 — shipped):** a file whose NAME
+  suggests a foreign sigla and not the host → suspect. Uses
+  `filename_glob.siglas_suggested_by_filename` (token/alias matching, ignoring
+  `count_scope` — distinct from `_matches`, which would make every file
+  "suggest" chps). Computed in `SimpleFilenameScanner` (the single pase-1 path),
+  carried in `ScanTelemetry.colado_suspects`, persisted by
+  `apply_filename_result`.
+- **Vertiente 2 (form code, pagination siglas, opt-in — gated on the §7 survey,
+  not yet shipped):** a page-run inside a compilation whose OCR'd corner code
+  matches another sigla's `expected_codes` → suspect. Positive-foreign-evidence
+  only; unknown/illegible/host codes are silence.
+- **Lifecycle** (`merge_suspects` / `open_suspects` / `has_open_counted_suspects`):
+  per-kind surgical refresh + evidence eviction (a file that leaves the folder
+  drops its suspect) + filename-over-code precedence; a pending reorg op on the
+  same `(cell, file)` suppresses the suspect (derived, not persisted — deleting
+  the op un-suppresses). Only an open **counted** suspect blocks green, via the
+  single `refresh_all_reliable` chokepoint + both `apply_filename_result`
+  branches.
+
 ### Uniform behaviors
 
 - **A7** — a 1-page PDF counts as 1 document, locked, without OCR.
