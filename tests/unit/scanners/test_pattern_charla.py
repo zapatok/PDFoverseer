@@ -10,27 +10,18 @@ session.  Expected cover count = 2.
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-
-import pytesseract
 import pytest
 
-pytesseract.pytesseract.tesseract_cmd = os.getenv(
-    "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+from core.scanners.anchors_scanner import AnchorsScanner
+from core.scanners.cancellation import CancellationToken
+from tests.unit.scanners.fixture_gt import (
+    fixture_dir,
+    fixture_pdf,
+    load_gt,
+    skip_unless_present,
 )
 
-from core.scanners.anchors_scanner import AnchorsScanner  # noqa: E402
-from core.scanners.cancellation import CancellationToken  # noqa: E402
-
-_FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "charla"
-_PDF = _FIXTURE_DIR / "f_rch_p1.pdf"
-_GT = _FIXTURE_DIR / "ground_truth.json"
-
-
-def _load_gt() -> dict:
-    return json.loads(_GT.read_text())
+_SIGLA = "charla"
 
 
 @pytest.mark.skip(
@@ -47,12 +38,11 @@ def test_charla_count_ocr_smoke():
     P2 is a continuation page that shares the form header but lacks the
     'nombre de la charla' anchor — so min_match=2 fires only on covers.
     """
-    if not _PDF.exists():
-        pytest.skip("Charla fixture PDF not present (gitignored)")
+    skip_unless_present(fixture_pdf(_SIGLA), "Charla")
 
-    gt = _load_gt()
-    scanner = AnchorsScanner(sigla="charla")
-    result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
+    gt = load_gt(_SIGLA)
+    scanner = AnchorsScanner(sigla=_SIGLA)
+    result = scanner.count_ocr(fixture_dir(_SIGLA), cancel=CancellationToken())
 
     assert result.method == "header_band_anchors", (
         f"Expected method 'header_band_anchors', got {result.method!r}"
@@ -72,15 +62,15 @@ def test_charla_count_ocr_smoke():
     "docs/superpowers/reports/2026-05-22-anchor-truncation-postmortem.md."
 )
 def test_charla_count_ocr_per_file_breakdown():
-    """per_file entry for the charla fixture PDF shows count=2."""
-    if not _PDF.exists():
-        pytest.skip("Charla fixture PDF not present (gitignored)")
+    """per_file entry for the charla fixture PDF carries the GT count."""
+    skip_unless_present(fixture_pdf(_SIGLA), "Charla")
 
-    gt = _load_gt()
-    scanner = AnchorsScanner(sigla="charla")
-    result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
+    gt = load_gt(_SIGLA)
+    scanner = AnchorsScanner(sigla=_SIGLA)
+    result = scanner.count_ocr(fixture_dir(_SIGLA), cancel=CancellationToken())
 
-    assert _PDF.name in result.per_file, (
-        f"Expected '{_PDF.name}' in per_file, got keys: {list(result.per_file)}"
+    name = gt["fixture"]
+    assert name in result.per_file, (
+        f"Expected '{name}' in per_file, got keys: {list(result.per_file)}"
     )
-    assert result.per_file[_PDF.name] == gt["covers_expected"]
+    assert result.per_file[name] == gt["covers_expected"]

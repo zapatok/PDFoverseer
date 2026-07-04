@@ -11,27 +11,16 @@ Each of the 4 pages is a separate Chequeo Bodega SUSPEL/RESPEL document
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-
-import pytesseract
-import pytest
-
-pytesseract.pytesseract.tesseract_cmd = os.getenv(
-    "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+from core.scanners.cancellation import CancellationToken
+from core.scanners.pagination_scanner import PaginationScanner
+from tests.unit.scanners.fixture_gt import (
+    fixture_dir,
+    fixture_pdf,
+    load_gt,
+    skip_unless_present,
 )
 
-from core.scanners.cancellation import CancellationToken  # noqa: E402
-from core.scanners.pagination_scanner import PaginationScanner  # noqa: E402
-
-_FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "bodega"
-_PDF = _FIXTURE_DIR / "f_pets_07_03_p1_chequeo.pdf"
-_GT = _FIXTURE_DIR / "ground_truth.json"
-
-
-def _load_gt() -> dict:
-    return json.loads(_GT.read_text())
+_SIGLA = "bodega"
 
 
 def test_bodega_count_ocr_smoke():
@@ -40,12 +29,11 @@ def test_bodega_count_ocr_smoke():
     Each page of the fixture is a separate 1-page Chequeo Bodega document,
     each reading 'Pagina 1 de 1' in the top-right corner.
     """
-    if not _PDF.exists():
-        pytest.skip("Bodega fixture PDF not present (gitignored)")
+    skip_unless_present(fixture_pdf(_SIGLA), "Bodega")
 
-    gt = _load_gt()
-    scanner = PaginationScanner(sigla="bodega")
-    result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
+    gt = load_gt(_SIGLA)
+    scanner = PaginationScanner(sigla=_SIGLA)
+    result = scanner.count_ocr(fixture_dir(_SIGLA), cancel=CancellationToken())
 
     assert result.method == "pagination", f"Expected method 'pagination', got {result.method!r}"
     assert result.count == gt["covers_expected"], (
@@ -56,15 +44,15 @@ def test_bodega_count_ocr_smoke():
 
 
 def test_bodega_count_ocr_per_file_breakdown():
-    """per_file entry exists for the fixture PDF with count=4."""
-    if not _PDF.exists():
-        pytest.skip("Bodega fixture PDF not present (gitignored)")
+    """per_file entry exists for the fixture PDF with the GT count."""
+    skip_unless_present(fixture_pdf(_SIGLA), "Bodega")
 
-    gt = _load_gt()
-    scanner = PaginationScanner(sigla="bodega")
-    result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
+    gt = load_gt(_SIGLA)
+    scanner = PaginationScanner(sigla=_SIGLA)
+    result = scanner.count_ocr(fixture_dir(_SIGLA), cancel=CancellationToken())
 
-    assert _PDF.name in result.per_file, (
-        f"Expected '{_PDF.name}' in per_file, got keys: {list(result.per_file)}"
+    name = gt["fixture"]
+    assert name in result.per_file, (
+        f"Expected '{name}' in per_file, got keys: {list(result.per_file)}"
     )
-    assert result.per_file[_PDF.name] == gt["covers_expected"]
+    assert result.per_file[name] == gt["covers_expected"]

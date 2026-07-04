@@ -7,32 +7,14 @@ absent (gitignored), the test is skipped — not failed.  This keeps CI green.
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-
-import pytesseract
-import pytest
-
-pytesseract.pytesseract.tesseract_cmd = os.getenv(
-    "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+from core.scanners.cancellation import CancellationToken
+from core.scanners.pagination_scanner import PaginationScanner
+from tests.unit.scanners.fixture_gt import (
+    fixture_dir,
+    fixture_pdf,
+    load_gt,
+    skip_unless_present,
 )
-
-from core.scanners.cancellation import CancellationToken  # noqa: E402
-from core.scanners.pagination_scanner import PaginationScanner  # noqa: E402
-
-_IRL_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "irl"
-_IRL_PDF = _IRL_DIR / "f_irl_01_p1.pdf"
-_IRL_GT = _IRL_DIR / "ground_truth.json"
-
-_ODI_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "odi"
-_ODI_PDF = _ODI_DIR / "f_odi_01_p1.pdf"
-_ODI_GT = _ODI_DIR / "ground_truth.json"
-
-
-def _load_gt(path: Path) -> dict:
-    return json.loads(path.read_text())
-
 
 # ---------------------------------------------------------------------------
 # IRL
@@ -48,12 +30,11 @@ def test_irl_count_ocr_smoke():
     code matches — the embedded sub-forms' own page-1s (pages 33+) are
     appendix material, not IRL covers, so they must not inflate the count.
     """
-    if not _IRL_PDF.exists():
-        pytest.skip("IRL fixture PDF not present (gitignored)")
+    skip_unless_present(fixture_pdf("irl"), "IRL")
 
-    gt = _load_gt(_IRL_GT)
+    gt = load_gt("irl")
     scanner = PaginationScanner(sigla="irl")
-    result = scanner.count_ocr(_IRL_DIR, cancel=CancellationToken())
+    result = scanner.count_ocr(fixture_dir("irl"), cancel=CancellationToken())
 
     assert result.method == "pagination", f"Expected method 'pagination', got {result.method!r}"
     assert result.count == gt["covers_expected"], (
@@ -64,15 +45,16 @@ def test_irl_count_ocr_smoke():
 
 
 def test_irl_count_ocr_per_file_breakdown():
-    """per_file entry exists for the IRL fixture PDF."""
-    if not _IRL_PDF.exists():
-        pytest.skip("IRL fixture PDF not present (gitignored)")
+    """per_file entry exists for the IRL fixture PDF and carries the GT count."""
+    skip_unless_present(fixture_pdf("irl"), "IRL")
 
+    gt = load_gt("irl")
     scanner = PaginationScanner(sigla="irl")
-    result = scanner.count_ocr(_IRL_DIR, cancel=CancellationToken())
+    result = scanner.count_ocr(fixture_dir("irl"), cancel=CancellationToken())
 
-    assert _IRL_PDF.name in result.per_file
-    assert result.per_file[_IRL_PDF.name] == 1
+    name = gt["fixture"]
+    assert name in result.per_file
+    assert result.per_file[name] == gt["covers_expected"]
 
 
 # ---------------------------------------------------------------------------
@@ -87,12 +69,11 @@ def test_odi_count_ocr_smoke():
     cover) and P2 'pagina 2 de 2' (the continuation page with 'induccion
     inicial' content) — the engine counts one document start (curr==1 once).
     """
-    if not _ODI_PDF.exists():
-        pytest.skip("ODI fixture PDF not present (gitignored)")
+    skip_unless_present(fixture_pdf("odi"), "ODI")
 
-    gt = _load_gt(_ODI_GT)
+    gt = load_gt("odi")
     scanner = PaginationScanner(sigla="odi")
-    result = scanner.count_ocr(_ODI_DIR, cancel=CancellationToken())
+    result = scanner.count_ocr(fixture_dir("odi"), cancel=CancellationToken())
 
     assert result.method == "pagination", f"Expected method 'pagination', got {result.method!r}"
     assert result.count == gt["covers_expected"], (
@@ -103,12 +84,13 @@ def test_odi_count_ocr_smoke():
 
 
 def test_odi_count_ocr_per_file_breakdown():
-    """per_file entry exists for the ODI fixture PDF."""
-    if not _ODI_PDF.exists():
-        pytest.skip("ODI fixture PDF not present (gitignored)")
+    """per_file entry exists for the ODI fixture PDF and carries the GT count."""
+    skip_unless_present(fixture_pdf("odi"), "ODI")
 
+    gt = load_gt("odi")
     scanner = PaginationScanner(sigla="odi")
-    result = scanner.count_ocr(_ODI_DIR, cancel=CancellationToken())
+    result = scanner.count_ocr(fixture_dir("odi"), cancel=CancellationToken())
 
-    assert _ODI_PDF.name in result.per_file
-    assert result.per_file[_ODI_PDF.name] == 1
+    name = gt["fixture"]
+    assert name in result.per_file
+    assert result.per_file[name] == gt["covers_expected"]

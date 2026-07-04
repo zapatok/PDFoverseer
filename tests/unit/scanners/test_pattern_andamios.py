@@ -24,38 +24,18 @@ Ground truth (committed): tests/fixtures/scanners/andamios/ground_truth.json
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-
-import pytesseract
 import pytest
 
-pytesseract.pytesseract.tesseract_cmd = os.getenv(
-    "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
+from core.scanners.cancellation import CancellationToken
+from core.scanners.pagination_scanner import PaginationScanner
+from tests.unit.scanners.fixture_gt import fixture_covers, fixture_dir, load_gt
 
-from core.scanners.cancellation import CancellationToken  # noqa: E402
-from core.scanners.pagination_scanner import PaginationScanner  # noqa: E402
-
-_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "andamios"
-_GT = _DIR / "ground_truth.json"
+_SIGLA = "andamios"
+_DIR = fixture_dir(_SIGLA)
 
 _LCH_PDF = _DIR / "f_lch_05_p2p5_chequeo_hrb.pdf"
 _RIBEIRO_PDF = _DIR / "f_ribeiro_p1_andamios_hrb.pdf"
 _SHADOW_PDF = _DIR / "f_lch_05_shadow_art.pdf"
-
-
-def _load_gt() -> dict:
-    return json.loads(_GT.read_text())
-
-
-def _fixture_covers(filename: str) -> int:
-    gt = _load_gt()
-    for entry in gt["fixtures"]:
-        if entry["file"] == filename:
-            return entry["covers_expected"]
-    raise KeyError(f"fixture not found in ground_truth.json: {filename!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +48,7 @@ def test_andamios_lch_xx_smoke():
     if not _LCH_PDF.exists():
         pytest.skip("andamios f_lch_xx fixture not present (gitignored)")
 
-    scanner = PaginationScanner(sigla="andamios")
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     assert result.method == "pagination", f"Expected method 'pagination', got {result.method!r}"
@@ -79,8 +59,8 @@ def test_andamios_lch_xx_count():
     if not _LCH_PDF.exists():
         pytest.skip("andamios f_lch_xx fixture not present (gitignored)")
 
-    expected = _fixture_covers(_LCH_PDF.name)
-    scanner = PaginationScanner(sigla="andamios")
+    expected = fixture_covers(_SIGLA, _LCH_PDF.name)
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     assert _LCH_PDF.name in result.per_file, (
@@ -102,8 +82,8 @@ def test_andamios_ribeiro_count():
     if not _RIBEIRO_PDF.exists():
         pytest.skip("andamios f_ribeiro fixture not present (gitignored)")
 
-    expected = _fixture_covers(_RIBEIRO_PDF.name)
-    scanner = PaginationScanner(sigla="andamios")
+    expected = fixture_covers(_SIGLA, _RIBEIRO_PDF.name)
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     assert _RIBEIRO_PDF.name in result.per_file, (
@@ -130,7 +110,7 @@ def test_andamios_shadow_art_yields_zero():
     if not _SHADOW_PDF.exists():
         pytest.skip("andamios ART shadow fixture not present (gitignored)")
 
-    scanner = PaginationScanner(sigla="andamios")
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     got = result.per_file.get(_SHADOW_PDF.name, 0)
@@ -150,10 +130,10 @@ def test_andamios_total_count():
     if not (_LCH_PDF.exists() and _RIBEIRO_PDF.exists() and _SHADOW_PDF.exists()):
         pytest.skip("one or more andamios fixtures not present (gitignored)")
 
-    scanner = PaginationScanner(sigla="andamios")
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
-    gt = _load_gt()
+    gt = load_gt(_SIGLA)
     total_expected = sum(e["covers_expected"] for e in gt["fixtures"])
     assert result.count == total_expected, (
         f"Total cover count: got {result.count}, expected {total_expected}. "

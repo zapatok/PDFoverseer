@@ -10,27 +10,16 @@ p2-p3=continuation (acuerdos).  Expected cover count = 1.
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-
-import pytesseract
-import pytest
-
-pytesseract.pytesseract.tesseract_cmd = os.getenv(
-    "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+from core.scanners.anchors_scanner import AnchorsScanner
+from core.scanners.cancellation import CancellationToken
+from tests.unit.scanners.fixture_gt import (
+    fixture_dir,
+    fixture_pdf,
+    load_gt,
+    skip_unless_present,
 )
 
-from core.scanners.anchors_scanner import AnchorsScanner  # noqa: E402
-from core.scanners.cancellation import CancellationToken  # noqa: E402
-
-_FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "chps"
-_PDF = _FIXTURE_DIR / "f_ar_01_p1_acta_reunion.pdf"
-_GT = _FIXTURE_DIR / "ground_truth.json"
-
-
-def _load_gt() -> dict:
-    return json.loads(_GT.read_text())
+_SIGLA = "chps"
 
 
 def test_chps_count_ocr_smoke():
@@ -41,12 +30,11 @@ def test_chps_count_ocr_smoke():
     'lugar de la reunion' + running header 'acta de reunion' + 'f-crs-ar-01').
     p2/p3 match only 2 anchors (running header only), falling below min_match=3.
     """
-    if not _PDF.exists():
-        pytest.skip("CHPS fixture PDF not present (gitignored)")
+    skip_unless_present(fixture_pdf(_SIGLA), "CHPS")
 
-    gt = _load_gt()
-    scanner = AnchorsScanner(sigla="chps")
-    result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
+    gt = load_gt(_SIGLA)
+    scanner = AnchorsScanner(sigla=_SIGLA)
+    result = scanner.count_ocr(fixture_dir(_SIGLA), cancel=CancellationToken())
 
     assert result.method == "header_band_anchors", (
         f"Expected method 'header_band_anchors', got {result.method!r}"
@@ -59,15 +47,15 @@ def test_chps_count_ocr_smoke():
 
 
 def test_chps_count_ocr_per_file_breakdown():
-    """per_file entry exists for the fixture PDF with count=1."""
-    if not _PDF.exists():
-        pytest.skip("CHPS fixture PDF not present (gitignored)")
+    """per_file entry exists for the fixture PDF with the GT count."""
+    skip_unless_present(fixture_pdf(_SIGLA), "CHPS")
 
-    gt = _load_gt()
-    scanner = AnchorsScanner(sigla="chps")
-    result = scanner.count_ocr(_FIXTURE_DIR, cancel=CancellationToken())
+    gt = load_gt(_SIGLA)
+    scanner = AnchorsScanner(sigla=_SIGLA)
+    result = scanner.count_ocr(fixture_dir(_SIGLA), cancel=CancellationToken())
 
-    assert _PDF.name in result.per_file, (
-        f"Expected '{_PDF.name}' in per_file, got keys: {list(result.per_file)}"
+    name = gt["fixture"]
+    assert name in result.per_file, (
+        f"Expected '{name}' in per_file, got keys: {list(result.per_file)}"
     )
-    assert result.per_file[_PDF.name] == gt["covers_expected"]
+    assert result.per_file[name] == gt["covers_expected"]

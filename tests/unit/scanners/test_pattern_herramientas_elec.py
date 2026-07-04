@@ -24,39 +24,19 @@ Ground truth (committed): tests/fixtures/scanners/herramientas_elec/ground_truth
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-
-import pytesseract
 import pytest
 
-pytesseract.pytesseract.tesseract_cmd = os.getenv(
-    "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
+from core.scanners.cancellation import CancellationToken
+from core.scanners.pagination_scanner import PaginationScanner
+from tests.unit.scanners.fixture_gt import fixture_covers, fixture_dir, load_gt
 
-from core.scanners.cancellation import CancellationToken  # noqa: E402
-from core.scanners.pagination_scanner import PaginationScanner  # noqa: E402
-
-_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scanners" / "herramientas_elec"
-_GT = _DIR / "ground_truth.json"
+_SIGLA = "herramientas_elec"
+_DIR = fixture_dir(_SIGLA)
 
 _LCH_PDF = _DIR / "f_lch_xx_p1p3_extensiones.pdf"
 _HLL_PDF = _DIR / "f_hll_17_p1p2_herr_hll.pdf"
 _TITAN_PDF = _DIR / "f_titan_p1p2_martillo_tronzadora.pdf"
 _SHADOW_PDF = _DIR / "f_lch_xx_shadow_epp.pdf"
-
-
-def _load_gt() -> dict:
-    return json.loads(_GT.read_text())
-
-
-def _fixture_covers(filename: str) -> int:
-    gt = _load_gt()
-    for entry in gt["fixtures"]:
-        if entry["file"] == filename:
-            return entry["covers_expected"]
-    raise KeyError(f"fixture not found in ground_truth.json: {filename!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +49,7 @@ def test_herramientas_elec_lch_xx_smoke():
     if not _LCH_PDF.exists():
         pytest.skip("herramientas_elec f_lch_xx fixture not present (gitignored)")
 
-    scanner = PaginationScanner(sigla="herramientas_elec")
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     assert result.method == "pagination", f"Expected method 'pagination', got {result.method!r}"
@@ -80,8 +60,8 @@ def test_herramientas_elec_lch_xx_count():
     if not _LCH_PDF.exists():
         pytest.skip("herramientas_elec f_lch_xx fixture not present (gitignored)")
 
-    expected = _fixture_covers(_LCH_PDF.name)
-    scanner = PaginationScanner(sigla="herramientas_elec")
+    expected = fixture_covers(_SIGLA, _LCH_PDF.name)
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     assert _LCH_PDF.name in result.per_file, (
@@ -103,8 +83,8 @@ def test_herramientas_elec_hll17_count():
     if not _HLL_PDF.exists():
         pytest.skip("herramientas_elec f_hll_17 fixture not present (gitignored)")
 
-    expected = _fixture_covers(_HLL_PDF.name)
-    scanner = PaginationScanner(sigla="herramientas_elec")
+    expected = fixture_covers(_SIGLA, _HLL_PDF.name)
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     assert _HLL_PDF.name in result.per_file, (
@@ -126,8 +106,8 @@ def test_herramientas_elec_titan_count():
     if not _TITAN_PDF.exists():
         pytest.skip("herramientas_elec f_titan fixture not present (gitignored)")
 
-    expected = _fixture_covers(_TITAN_PDF.name)
-    scanner = PaginationScanner(sigla="herramientas_elec")
+    expected = fixture_covers(_SIGLA, _TITAN_PDF.name)
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     assert _TITAN_PDF.name in result.per_file, (
@@ -154,7 +134,7 @@ def test_herramientas_elec_shadow_epp_anti_anchor_rejects():
     if not _SHADOW_PDF.exists():
         pytest.skip("herramientas_elec EPP shadow fixture not present (gitignored)")
 
-    scanner = PaginationScanner(sigla="herramientas_elec")
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
     got = result.per_file.get(_SHADOW_PDF.name, -1)
@@ -177,10 +157,10 @@ def test_herramientas_elec_total_count():
     if not all_present:
         pytest.skip("one or more herramientas_elec fixtures not present (gitignored)")
 
-    scanner = PaginationScanner(sigla="herramientas_elec")
+    scanner = PaginationScanner(sigla=_SIGLA)
     result = scanner.count_ocr(_DIR, cancel=CancellationToken())
 
-    gt = _load_gt()
+    gt = load_gt(_SIGLA)
     total_expected = sum(e["covers_expected"] for e in gt["fixtures"])
     assert result.count == total_expected, (
         f"Total cover count: got {result.count}, expected {total_expected}. "
