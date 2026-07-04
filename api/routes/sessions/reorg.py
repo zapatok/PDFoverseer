@@ -12,6 +12,7 @@ from api.presence import is_agent
 from api.reorg import build_manifest, file_contribution, resolve_op_defaults, validate_op
 from api.state import SessionManager
 from core.orchestrator import _find_category_folder
+from core.scanners.patterns import count_type_for
 
 from ._common import (
     _broadcast_presence,
@@ -21,6 +22,7 @@ from ._common import (
     _validate_session_id,
     cell_page_counts,
     get_manager,
+    refresh_all_reliable,
 )
 
 router = APIRouter()
@@ -146,6 +148,17 @@ def create_reorg_op(
         raise HTTPException(400, str(exc)) from exc
     # Agent claims only now — after the write succeeded (F3 follow-up).
     _claim_reorg_cells_for_agent(request, mgr, session_id, body.participant_id, cells)
+    # Anti-colados §6: the new op suppresses the source cell's matching suspect
+    # (derived), so recompute all_reliable there — "crear la op restaura el verde
+    # sin re-scan". The session_refresh broadcast lands the value on clients.
+    refresh_all_reliable(
+        mgr,
+        session_id,
+        src["hospital"],
+        src["sigla"],
+        src_folder,
+        count_type=count_type_for(src["sigla"]),
+    )
     _broadcast_session_refresh(request, session_id)
     state = mgr.get_session_state(session_id)
     return {"op": created, "cells": state["cells"]}
@@ -165,6 +178,7 @@ def delete_reorg_op(
         state = mgr.get_session_state(session_id)
     except KeyError as exc:
         raise HTTPException(404, str(exc)) from exc
+    month_root = Path(state.get("month_root", ""))
     # Look up the op BEFORE deleting so we can gate on the cells it touches (F3).
     op = next((o for o in state.get("reorg_ops", []) if o.get("id") == op_id), None)
     if op is None:
@@ -179,6 +193,18 @@ def delete_reorg_op(
         raise HTTPException(404, f"Op not found: {op_id}")
     # Agent claims only now — after the write succeeded (F3 follow-up).
     _claim_reorg_cells_for_agent(request, mgr, session_id, participant_id, cells)
+    # Anti-colados §6: deleting the op un-suppresses the source cell's suspect
+    # (derived) — recompute all_reliable there so the green dot drops again.
+    src = op["source"]
+    src_folder = _find_category_folder(month_root / src["hospital"], src["sigla"])
+    refresh_all_reliable(
+        mgr,
+        session_id,
+        src["hospital"],
+        src["sigla"],
+        src_folder,
+        count_type=count_type_for(src["sigla"]),
+    )
     _broadcast_session_refresh(request, session_id)
     state = mgr.get_session_state(session_id)
     return {"deleted": op_id, "cells": state["cells"]}

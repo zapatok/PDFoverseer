@@ -581,3 +581,75 @@ def test_export_no_pending_ops_returns_400(export_client):
     sid = _open_and_scan(client)
     r = client.post(f"/api/sessions/{sid}/reorg/export")
     assert r.status_code == 400
+
+
+@pytest.fixture
+def colado_client(tmp_path, monkeypatch):
+    """create_app client with a real ABRIL/HRB/CHPS folder holding a legit PDF
+    plus a foreign-named one (the colado). Both single-page so compute_settled
+    is True — the colado's counted-suspect is what keeps the cell amber."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "colado.db"))
+
+    chps_dir = tmp_path / "ABRIL" / "HRB" / CATEGORY_FOLDERS["chps"]
+    chps_dir.mkdir(parents=True)
+    (chps_dir / "crs.pdf").write_bytes(_one_page_pdf())
+    (chps_dir / "2026-05_odi_x.pdf").write_bytes(_one_page_pdf())
+
+    from fastapi.testclient import TestClient
+
+    from api.main import create_app
+
+    app = create_app()
+    with TestClient(app) as c:
+        yield c, app
+
+
+def _seed_chps_colado(app):
+    from core.scanners.base import ConfidenceLevel, ScanResult, ScanTelemetry
+    from core.scanners.utils.colado_guard import find_foreign_filename_suspects
+
+    susp = find_foreign_filename_suspects(["2026-05_odi_x.pdf"], "chps")
+    app.state.manager.apply_filename_result(
+        "2026-04", "HRB", "chps",
+        ScanResult(
+            count=2, confidence=ConfidenceLevel.HIGH, method="filename_glob",
+            breakdown={}, flags=[], errors=[], files_scanned=2, duration_ms=1,
+            per_file={"crs.pdf": 1, "2026-05_odi_x.pdf": 1},
+            telemetry=ScanTelemetry(
+                colado_suspects=susp, present_files=["crs.pdf", "2026-05_odi_x.pdf"]
+            ),
+        ),
+    )
+
+
+def test_create_op_restores_green_delete_op_removes_it(colado_client):
+    """Anti-colados §6: a settled cell with a counted colado is amber; creating a
+    move_file op on that file suppresses the suspect → green; deleting it → amber."""
+    client, app = colado_client
+    _open_session(client)
+    _seed_chps_colado(app)
+    mgr = app.state.manager
+
+    # Counted colado present → amber.
+    assert mgr.get_session_state("2026-04")["cells"]["HRB"]["chps"]["all_reliable"] is False
+
+    r = client.post(
+        "/api/sessions/2026-04/reorg/ops",
+        json={
+            "op_type": "move_file",
+            "source": {"hospital": "HRB", "sigla": "chps", "file": "2026-05_odi_x.pdf"},
+            "dest": {"hospital": "HRB", "sigla": "odi"},
+        },
+    )
+    assert r.status_code == 200, r.text
+    op_id = r.json()["op"]["id"]
+    # The op suppresses the suspect → green restored without a re-scan.
+    assert mgr.get_session_state("2026-04")["cells"]["HRB"]["chps"]["all_reliable"] is True
+
+    d = client.request(
+        "DELETE", f"/api/sessions/2026-04/reorg/ops/{op_id}"
+    )
+    assert d.status_code == 200, d.text
+    # Deleting un-suppresses the suspect → amber again.
+    assert mgr.get_session_state("2026-04")["cells"]["HRB"]["chps"]["all_reliable"] is False
