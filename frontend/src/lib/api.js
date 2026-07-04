@@ -118,6 +118,20 @@ export const api = {
       },
     ).then(jsonOrThrowStructured),
 
+  // Anti-colados — dismiss ONE suspect (operator judged it legitimate). Returns
+  // { colado_suspects: <open list>, all_reliable }; jsonOrThrowStructured
+  // preserves the 409 body (lock_holder) + the 404 for the store.
+  dismissColadoSuspect: (sessionId, hospital, sigla, suspectId, participantId) =>
+    fetch(
+      `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}` +
+        `/colado-suspects/${suspectId}/dismiss`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participant_id: participantId ?? null }),
+      },
+    ).then(jsonOrThrowStructured),
+
   patchNote: async (sessionId, hospital, sigla, patch, opts = {}) => {
     const body = { ...patch, participant_id: opts.participantId ?? null };
     const r = await fetch(

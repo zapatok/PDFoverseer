@@ -3,6 +3,7 @@ import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, In
 import NotePanel from "./NotePanel";
 import ReorganizacionPanel from "./ReorganizacionPanel";
 import OrphanMarksPanel from "./OrphanMarksPanel";
+import PosiblesColadosPanel from "./PosiblesColadosPanel";
 import OverridePanel from "./OverridePanel";
 import EmptyState from "../ui/EmptyState";
 import Badge from "../ui/Badge";
@@ -526,6 +527,16 @@ export default function DetailPanel({ hospital, sigla, cell }) {
           />
         </>
       )}
+
+      {/* Anti-colados: misfiled-document suspects (whole-file by name, or
+          page-run by form code). Self-hides when there are none. */}
+      <PosiblesColadosPanel
+        hospital={hospital}
+        sigla={sigla}
+        cell={cell}
+        sessionId={sessionId}
+        locked={locked}
+      />
 
       <NearMatchesSection
         hospital={hospital}

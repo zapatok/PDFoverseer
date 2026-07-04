@@ -827,6 +827,43 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
+  // Anti-colados — dismiss ONE suspect (operator judged it legitimate). Merges
+  // the backend's { colado_suspects (open list), all_reliable } into the cell.
+  dismissColadoSuspect: async (sessionId, hospital, sigla, suspectId) => {
+    try {
+      const res = await api.dismissColadoSuspect(
+        sessionId, hospital, sigla, suspectId, getParticipantId(),
+      );
+      set((prev) => {
+        if (!prev.session) return {};
+        const cells = { ...prev.session.cells };
+        const hosp = { ...cells[hospital] };
+        hosp[sigla] = {
+          ...hosp[sigla],
+          colado_suspects: res.colado_suspects,
+          all_reliable: res.all_reliable,
+        };
+        cells[hospital] = hosp;
+        return { session: { ...prev.session, cells } };
+      });
+    } catch (error) {
+      if (error.status === 409) {
+        const who = error.body?.lock_holder?.name ?? "Otro usuario";
+        toast.error(`${who} está editando esta celda`);
+        get().refetchSession(sessionId);
+        return;
+      }
+      if (error.status === 404) {
+        // Already gone (re-scan refreshed it, or a concurrent dismiss) — re-sync.
+        toast.error("Ese sospechoso ya no existe");
+        get().refetchSession(sessionId);
+        return;
+      }
+      // U2: toast, no sticky banner.
+      toast.error(`No se pudo descartar el sospechoso: ${String(error)}`);
+    }
+  },
+
   openLightbox: (hospital, sigla, fileIndex = 0, mode = "inspect") =>
     set({ lightbox: { hospital, sigla, fileIndex, mode } }),
   closeLightbox: () => set({ lightbox: null }),
