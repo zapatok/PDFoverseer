@@ -313,8 +313,10 @@ Load-bearing nuance discovered in exploration: the `_cell_has_work` guard branch
 - [ ] **Step 1: failing tests** (manager-level, real tmp DB per project no-mock rule):
   1. fresh cell: apply a ScanResult whose telemetry carries one odi-suspect + present list → `cell["colado_suspects"]` persisted with `counted` annotated from the fresh per_file (unmatched foreign file in a token cell → `counted is False`).
   2. worked cell (set `ocr_count` first so `_cell_has_work` is True): re-apply with new telemetry → suspects still refreshed; pre-existing kind="code" entry for a file ABSENT from present_files is evicted; one for a PRESENT file survives.
-  3. all_reliable AND: build a cell whose result is HIGH + per_file non-empty but telemetry carries a suspect with counted=True (simulate: per_file includes the foreign file with 1 — e.g. host chps folder-scope… simpler: craft per_file containing the foreign name) → `all_reliable is False`; dismissing/evicting it (re-apply without the suspect) → True again.
-- [ ] **Step 2: FAIL** → **Step 3: implement** in `apply_filename_result`, in BOTH branches, immediately before each branch's `update_session_state`:
+  3. all_reliable AND (no-work branch): build a cell whose result is HIGH + per_file non-empty but telemetry carries a suspect with counted=True (simulate: per_file includes the foreign file with 1) → `all_reliable is False`; dismissing/evicting it (re-apply without the suspect) → True again.
+  4. **chps folder-scope (§8 verbatim)**: host `chps` (count_scope="folder": every folder PDF counts, per_file carries them all), foreign `2026-05_odi_x.pdf` in its folder → suspect exists AND `counted is True` (its per_file contribution is 1) — the case that proves the Task-1 helper vs `_matches` split works end-to-end.
+  5. **all_reliable downgrade in the HAS-WORK branch**: an OCR'd cell with baked `all_reliable=True`; a bulk re-scan's telemetry brings a NEW suspect whose file has per_file contribution >0 → after apply, `all_reliable is False`. (Without this the worked-cell branch would keep the green dot despite a counted suspect until some unrelated interactive write — §4.5 violation.)
+- [ ] **Step 2: FAIL** → **Step 3: implement** in `apply_filename_result`. First, a small local helper computed ONCE at the top of the method (both branches need the merged+annotated suspects; suspects are telemetry, so they refresh even in the work-preserving branch):
 
 ```python
 telemetry = result.telemetry
@@ -322,33 +324,55 @@ fresh = list(telemetry.colado_suspects) if telemetry else []
 present = set(telemetry.present_files) if telemetry else set()
 merged = merge_suspects(cell.get("colado_suspects") or [], KIND_FILENAME, fresh, present)
 cell["colado_suspects"] = annotate_counted_filename(merged, cell)
-```
-
-  and in the NO-work branch replace the `all_reliable` assignment with:
-
-```python
-cell["all_reliable"] = (
-    result.confidence.value == "high"
-    and bool(result.per_file)
-    and not has_open_counted_suspects(
-        cell["colado_suspects"], state.get("reorg_ops") or [], hospital, sigla
-    )
+blocked = has_open_counted_suspects(
+    cell["colado_suspects"], state.get("reorg_ops") or [], hospital, sigla
 )
 ```
 
-  Imports at top of state.py: `from core.scanners.utils.colado_guard import KIND_FILENAME, annotate_counted_filename, has_open_counted_suspects, merge_suspects, open_suspects`.
+  Compute this block right after `cell = state.setdefault(...)` and BEFORE the `if _cell_has_work(cell):` branch, so `cell["colado_suspects"]` is set once and both branches share it. Then:
+
+  **NO-work branch** — replace the `all_reliable` assignment (line ~235) with the AND:
+
+```python
+cell["all_reliable"] = (
+    result.confidence.value == "high" and bool(result.per_file) and not blocked
+)
+```
+
+  **HAS-work branch** (line ~211) — the work-preserving branch does NOT recompute the positive readiness (that needs the folder / `compute_settled`, unavailable here), so apply a **one-directional downgrade only**: replace `cell.setdefault("all_reliable", False)` with
+
+```python
+cell.setdefault("all_reliable", False)
+if blocked:
+    cell["all_reliable"] = False  # a newly-discovered counted suspect kills the baked green
+```
+
+  (This is the fix for the class the manual review caught: without it, an OCR'd cell with `all_reliable=True` baked would keep its green dot when a bulk re-scan first surfaces a counted colado, until some unrelated interactive write happened to recompute — a §4.5 violation.)
+
+  Import at top of state.py (NOT `open_suspects` — that one lives only in `_common.py`, importing it here would be an unused-import ruff F401):
+  `from core.scanners.utils.colado_guard import KIND_FILENAME, annotate_counted_filename, has_open_counted_suspects, merge_suspects`.
 - [ ] **Step 4: pass + ruff** → **Step 5: Commit** `feat(guard): persist pase-1 suspects (both rescan branches) + all_reliable AND`.
 
-### Task 5: the remaining `all_reliable` producers
+### Task 5: gate the single `refresh_all_reliable` chokepoint
 
 **Files:**
 - Modify: `api/routes/sessions/_common.py:266-286` (`refresh_all_reliable`)
-- Modify: every other `all_reliable` assignment site in `api/` (enumerate first)
-- Test: `tests/unit/api/test_state.py` / `tests/integration/test_write_responses_all_reliable.py` (append one case)
+- Test: `tests/unit/api/test_state.py` + re-run `tests/integration/test_write_responses_all_reliable.py`
 
-- [ ] **Step 1: enumerate** — `grep -n "all_reliable" api/state.py api/routes/sessions/*.py`. Expected write-sites: `apply_filename_result` (done, T4), `refresh_all_reliable` (`_common.py`), and the OCR merge path in `api/state.py` (`apply_per_file_ocr_result` region, ~line 416) if it assigns. Any OTHER assignment found must get the same AND — list them in the commit body.
-- [ ] **Step 2: failing test** — a cell with a counted open suspect: `refresh_all_reliable` leaves `all_reliable False` even when `compute_settled` says True; after the suspect's file disappears + re-apply (eviction), refresh flips it True.
-- [ ] **Step 3: implement** — in `refresh_all_reliable`:
+**Enumeration result (verified against the tree, not left to the implementer):**
+the only sites that ever bake `all_reliable=True` are `apply_filename_result`
+(both branches — done in Task 4) and `set_all_reliable`, which is called
+**exclusively** from `refresh_all_reliable`. `apply_per_file_ocr_result`
+(~line 416) does NOT assign `all_reliable`; every OCR-completion path
+recomputes through `refresh_all_reliable` instead (`scan.py:132` batch,
+`scan.py:284` per-cell). So the interactive writes (override/per-file/worker/
+note, `writes.py`) AND the OCR completions all funnel through this one
+function — gating it here covers all of them. There is no other producer to
+patch. (The `setdefault("all_reliable", False)` calls at `state.py:211/287`
+only DEFAULT a missing field to False; they can never create a wrong green.)
+
+- [ ] **Step 1: failing test** — a cell with a counted open suspect: `refresh_all_reliable` leaves `all_reliable` False even when `compute_settled` says True; after the suspect's file disappears + re-apply (eviction), refresh flips it True.
+- [ ] **Step 2: FAIL** → **Step 3: implement** — in `refresh_all_reliable` (it already loads `state` + `cell`):
 
 ```python
 blocked = has_open_counted_suspects(
@@ -360,8 +384,8 @@ mgr.set_all_reliable(
 )
 ```
 
-  and the analogous AND at each enumerated OCR-side assignment.
-- [ ] **Step 4: pass** (also re-run `tests/integration/test_write_responses_all_reliable.py` whole file) → **Step 5: Commit** `feat(guard): counted open suspects gate every all_reliable producer`.
+  Import `has_open_counted_suspects` into `_common.py` from `core.scanners.utils.colado_guard`.
+- [ ] **Step 4: pass** (also re-run the whole `test_write_responses_all_reliable.py`) → **Step 5: Commit** `feat(guard): counted open suspects gate refresh_all_reliable (single chokepoint)`.
 
 ### Task 6: payload open-filter (derived dedupe) at the 4 serialization sites
 
