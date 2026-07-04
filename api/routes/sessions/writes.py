@@ -239,6 +239,10 @@ def patch_worker_count(
         "worker_status": cell.get("worker_status"),
         "worker_cursor": cell.get("worker_cursor"),
         "worker_count": enriched.get("worker_count"),
+        # M4: canonical present-filtered effective count for checks cells
+        # (None for documents_workers) — the store merges it so the grid
+        # number can't diverge from Excel/history.
+        "checks_count": enriched.get("checks_count"),
         # F15 follow-up: the pending-save guard drops this write's own
         # cell_updated echo, so the response carries the recomputed
         # all_reliable (checks cells light green on 'terminado').

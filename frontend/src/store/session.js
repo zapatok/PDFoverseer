@@ -281,7 +281,8 @@ export const useSessionStore = create((set, get) => ({
         get().refetchSession(sessionId);
         return null; // handled: the panel must NOT toast success on top
       }
-      set({ error: String(error) });
+      // U2 backport: no sticky banner — the re-throw below drives the panel's
+      // failure toast, which is the single error surface for this action.
       throw error; // re-throw so the panel shows a failure toast (don't claim success)
     }
   },
@@ -618,6 +619,9 @@ export const useSessionStore = create((set, get) => ({
           worker_status: result.worker_status,
           worker_cursor: result.worker_cursor,
           worker_count: result.worker_count,
+          // M4: canonical effective count for checks cells (present-filtered
+          // in the backend); undefined for documents_workers cells.
+          checks_count: result.checks_count,
           // Backend recomputes all_reliable after the worker PATCH (checks cells
           // light green on 'terminado'); merge it because the F15 guard drops
           // this write's own cell_updated echo (saveNote pattern).

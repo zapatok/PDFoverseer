@@ -62,6 +62,15 @@ function _baseCount(cell, countType = "documents", presentFiles = null) {
 }
 
 export function computeCellCount(cell, countType = "documents", presentFiles = null) {
+  // M4: para celdas checks el backend enriquece el payload con el conteo
+  // efectivo canónico (`checks_count` = compute_cell_count con filtro de
+  // archivos PRESENTES, que este mirror no puede conocer) — preferirlo, un
+  // solo productor (F1). El fallback legacy cubre payloads sin enrich
+  // (fixtures de paridad cross-language, estados viejos). OJO paridad:
+  // core/cell_count.py NUNCA lee checks_count — el campo es enriquecimiento
+  // de payload, no estado persistido, así que jamás aparece en
+  // cell_count_cases.json.
+  if (countType === "checks" && cell?.checks_count != null) return cell.checks_count;
   // F5: clamp at 0 — a reorg delta can never drive the effective count negative.
   return Math.max(0, _baseCount(cell, countType, presentFiles) + (cell?.reorg_doc_delta ?? 0));
 }

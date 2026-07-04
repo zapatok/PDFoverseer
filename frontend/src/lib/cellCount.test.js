@@ -44,6 +44,36 @@ describe("computeCellCount (override wins, else files)", () => {
   });
 });
 
+describe("computeCellCount — checks_count canónico (M4)", () => {
+  it("prefers the backend-enriched checks_count for checks cells", () => {
+    const cell = {
+      // Legacy local derivation would say 9 (orphan mark included when
+      // per_file is empty) — the enriched canonical number says 5.
+      worker_marks: { "orphan.pdf": [{ page: 1, count: 9 }] },
+      checks_count: 5,
+    };
+    expect(computeCellCount(cell, "checks")).toBe(5);
+  });
+
+  it("honors checks_count = 0 (a real present-filtered zero, not absence)", () => {
+    const cell = {
+      worker_marks: { "orphan.pdf": [{ page: 1, count: 9 }] },
+      checks_count: 0,
+    };
+    expect(computeCellCount(cell, "checks")).toBe(0);
+  });
+
+  it("falls back to the legacy derivation when checks_count is absent", () => {
+    const cell = { worker_marks: { "m.pdf": [{ page: 1, count: 7 }] } };
+    expect(computeCellCount(cell, "checks")).toBe(7);
+  });
+
+  it("never applies checks_count to document cells", () => {
+    const cell = { per_file: { "a.pdf": 3 }, checks_count: 99 };
+    expect(computeCellCount(cell, "documents")).toBe(3);
+  });
+});
+
 describe("_sumMarks — check tally helper", () => {
   it("sums only marks for present files, discards orphans", () => {
     const cell = {

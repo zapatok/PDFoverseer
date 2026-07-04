@@ -19,7 +19,7 @@ import fitz
 from fastapi import HTTPException, Request
 
 from api.routes.ws import _emit
-from api.state import SessionManager, compute_worker_count
+from api.state import SessionManager, compute_cell_count, compute_worker_count
 from core.domain import CATEGORY_FOLDERS, HOSPITALS, SIGLAS, folder_to_sigla
 from core.orchestrator import _find_category_folder
 from core.scanners.patterns import count_type_for
@@ -156,10 +156,12 @@ def present_file_names(folder: Path) -> set[str]:
 def enrich_cell_worker_count(
     cell: dict, month_root: Path, hospital: str, sigla: str, folder: Path | None = None
 ) -> dict:
-    """Return a copy of ``cell`` with the canonical present-filtered worker_count.
+    """Return a copy of ``cell`` with the canonical present-filtered worker_count
+    (worker/checks siglas), plus ``checks_count`` — the canonical effective CELL
+    count — for checks siglas (M4).
 
-    The frontend must never derive this total (bug #2, F1): one producer, one
-    filter. Only worker/checks siglas get the field; document siglas untouched.
+    The frontend must never derive these totals (bug #2, F1): one producer, one
+    filter. Document siglas are returned untouched.
     Unknown/phantom siglas (e.g. a stale ``no_existe``) default to ``"documents"``
     via ``count_type_for`` and are therefore skipped without crashing.
 
@@ -178,12 +180,20 @@ def enrich_cell_worker_count(
             resolved it (e.g. the batched GET-session path); ``None`` resolves
             via ``_find_category_folder``.
     """
-    if count_type_for(sigla) not in ("documents_workers", "checks"):
+    ct = count_type_for(sigla)
+    if ct not in ("documents_workers", "checks"):
         return cell
     if folder is None:
         folder = _find_category_folder(month_root / hospital, sigla)
     present = present_file_names(folder) if folder.exists() else None
-    return {**cell, "worker_count": compute_worker_count(cell, present)}
+    enriched = {**cell, "worker_count": compute_worker_count(cell, present)}
+    if ct == "checks":
+        # M4: the checks CELL NUMBER (grid/panel total) must match Excel/history,
+        # which derive it present-filtered on the backend. The JS mirror cannot
+        # know present files, so ship the canonical effective count with the
+        # payload (frontend computeCellCount prefers it for checks cells).
+        enriched["checks_count"] = compute_cell_count(cell, "checks", present)
+    return enriched
 
 
 def hospital_category_folders(hosp_dir: Path, siglas: list[str]) -> dict[str, Path]:

@@ -175,13 +175,15 @@ State as of the "a punto" round kickoff (2026-07-03; scope set by Daniel):
   never change, suggestions feed the Incr-J reorg ops).
 - **`api/state.py` god-file split** — committed to this round (Daniel's call,
   2026-07-03); the 2026-06-22 structural round had left it out of scope.
-- **Cleanup batch**: toast-vs-sticky-error backport (`saveOverride`,
-  `confirmCell`, `saveWorkerCount`, `saveNote` still set the sticky `error`
-  on non-409), corpus-skip centralization (per-file `skipif` in 10+ test
-  files → conftest marker), per-sigla fixture idiom unification
-  (`ConfidenceLevel`+GT-helper vs `_fixture_covers()` styles), hardcoded GT
-  values in `test_pattern_{caliente,exc,ext}`, M4 checks-grid
-  present-filter asymmetry.
+- ~~Cleanup batch~~ **DONE 2026-07-04** (5 items, one commit each): U2 toast
+  backport to the 4 sticky-error save actions (+ `reconcileWorkerMarks`);
+  `@pytest.mark.corpus` marker + conftest auto-skip (8 files de-duplicated,
+  slow suite covered); per-sigla fixture idiom unified on
+  `tests/unit/scanners/fixture_gt.py` (16 files, GT-driven paths); hardcoded
+  GT values removed (caliente/exc/ext/art + per-file 1s); M4 — checks cells'
+  payload now carries the canonical present-filtered `checks_count`
+  (`enrich_cell_worker_count`), preferred by `computeCellCount`'s checks
+  branch so the maquinaria grid number can't diverge from Excel/history.
 
 **Resolved / dropped (2026-07-03):**
 - **Incr-J's paso-1 manifest consumer** — DONE in the sibling project
