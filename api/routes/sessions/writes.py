@@ -25,6 +25,7 @@ from ._common import (
     _validate_cell_coords,
     _validate_session_id,
     cell_page_counts,
+    enrich_cell_colado_suspects,
     enrich_cell_worker_count,
     get_manager,
     refresh_all_reliable,
@@ -299,6 +300,7 @@ def reconcile_worker_marks(
     cell = state["cells"].get(hospital, {}).get(sigla, {})
     month_root = Path(state.get("month_root", ""))
     enriched = enrich_cell_worker_count(cell, month_root, hospital, sigla)
+    enriched = enrich_cell_colado_suspects(enriched, state.get("reorg_ops") or [], hospital, sigla)
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     if is_agent(body.participant_id):
         _broadcast_presence(request, mgr, session_id)

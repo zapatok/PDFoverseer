@@ -23,7 +23,7 @@ from api.state import SessionManager, compute_cell_count, compute_worker_count
 from core.domain import CATEGORY_FOLDERS, HOSPITALS, SIGLAS, folder_to_sigla
 from core.orchestrator import _find_category_folder
 from core.scanners.patterns import count_type_for
-from core.scanners.utils.colado_guard import has_open_counted_suspects
+from core.scanners.utils.colado_guard import has_open_counted_suspects, open_suspects
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +197,28 @@ def enrich_cell_worker_count(
     return enriched
 
 
+def enrich_cell_colado_suspects(
+    cell: dict, reorg_ops: list[dict], hospital: str, sigla: str
+) -> dict:
+    """Return a copy of ``cell`` whose ``colado_suspects`` is the OPEN list.
+
+    The §5 dedupe is DERIVED, not persisted: every serialization of a cell to a
+    client goes through here so the panel never shows a suspect an existing
+    pending reorg op already covers — and deleting that op un-suppresses the
+    suspect with no extra bookkeeping. A no-op for cells without suspects.
+
+    Args:
+        cell: the persisted (worker-enriched) cell dict.
+        reorg_ops: the session's reorg ops (``state["reorg_ops"]``).
+        hospital: the cell's hospital.
+        sigla: the cell's sigla.
+    """
+    raw = cell.get("colado_suspects") or []
+    if not raw:
+        return cell
+    return {**cell, "colado_suspects": open_suspects(raw, reorg_ops, hospital, sigla)}
+
+
 def hospital_category_folders(hosp_dir: Path, siglas: list[str]) -> dict[str, Path]:
     """Resolve several siglas' category folders under ONE hospital with a single
     directory listing (the GET-session hot path — one ``iterdir`` instead of one
@@ -350,6 +372,8 @@ def _cell_updated_event(
     # re-derive it (worker/checks siglas only; enrich is a no-op for document cells).
     month_root = Path(state.get("month_root", ""))
     cell = enrich_cell_worker_count(cell, month_root, hospital, sigla)
+    # Anti-colados: broadcast the OPEN suspect list (op-suppressed ones hidden).
+    cell = enrich_cell_colado_suspects(cell, state.get("reorg_ops") or [], hospital, sigla)
     return {
         "type": "cell_updated",
         "hospital": hospital,

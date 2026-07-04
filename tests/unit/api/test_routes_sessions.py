@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.routes.sessions import get_manager, router
+from api.routes.sessions._common import enrich_cell_colado_suspects
 from api.state import SessionManager
 from core.db.connection import close_all, open_connection
 from core.db.migrations import init_schema
@@ -21,6 +22,86 @@ def client(tmp_path):
     app.dependency_overrides[get_manager] = lambda: SessionManager(conn=conn)
     app.include_router(router, prefix="/api")
     yield TestClient(app)
+    close_all()
+
+
+def test_enrich_cell_colado_suspects_open_filter():
+    """Unit: the wrapper returns only suspects not covered by a matching pending op."""
+    cell = {
+        "colado_suspects": [
+            {"kind": "filename", "file": "F.pdf", "page_range": None, "counted": True},
+            {"kind": "filename", "file": "G.pdf", "page_range": None, "counted": True},
+        ]
+    }
+    ops = [
+        {
+            "op_type": "move_file",
+            "status": "pending",
+            "source": {"hospital": "HRB", "sigla": "art", "file": "F.pdf"},
+        }
+    ]
+    out = enrich_cell_colado_suspects(cell, ops, "HRB", "art")
+    files = {s["file"] for s in out["colado_suspects"]}
+    assert files == {"G.pdf"}  # F.pdf suppressed by the pending move_file op
+    # No suspects → unchanged object (no-op).
+    assert enrich_cell_colado_suspects({}, ops, "HRB", "art") == {}
+
+
+def test_get_session_hides_op_suppressed_suspect(tmp_path):
+    """Integration: a pending reorg op on the suspect's (cell, file) hides it from
+    the GET payload; deleting the op un-suppresses it (derived, §5)."""
+    conn = open_connection(tmp_path / "colado.db")
+    init_schema(conn)
+    mgr = SessionManager(conn=conn)
+    mgr.open_session(year=2026, month=4, month_root=tmp_path)
+
+    from core.scanners.base import ConfidenceLevel, ScanResult, ScanTelemetry
+    from core.scanners.utils.colado_guard import find_foreign_filename_suspects
+
+    susp = find_foreign_filename_suspects(["2026-05_odi_x.pdf"], "chps")
+    result = ScanResult(
+        count=2,
+        confidence=ConfidenceLevel.HIGH,
+        method="filename_glob",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=2,
+        duration_ms=1,
+        per_file={"crs.pdf": 1, "2026-05_odi_x.pdf": 1},
+        telemetry=ScanTelemetry(
+            colado_suspects=susp, present_files=["crs.pdf", "2026-05_odi_x.pdf"]
+        ),
+    )
+    mgr.apply_filename_result("2026-04", "HRB", "chps", result)
+
+    app = FastAPI()
+    app.dependency_overrides[get_manager] = lambda: SessionManager(conn=conn)
+    app.include_router(router, prefix="/api")
+    client = TestClient(app)
+
+    # No op yet → the suspect shows in the GET payload.
+    cell = client.get("/api/sessions/2026-04").json()["cells"]["HRB"]["chps"]
+    assert len(cell["colado_suspects"]) == 1
+
+    # A pending move_file op on that (cell, file) suppresses it.
+    mgr.add_reorg_op(
+        "2026-04",
+        {
+            "op_type": "move_file",
+            "status": "pending",
+            "source": {"hospital": "HRB", "sigla": "chps", "file": "2026-05_odi_x.pdf"},
+            "dest": {"hospital": "HRB", "sigla": "odi"},
+        },
+    )
+    cell = client.get("/api/sessions/2026-04").json()["cells"]["HRB"]["chps"]
+    assert cell["colado_suspects"] == []
+
+    # Delete the op → the suspect re-appears (dedupe is derived, not persisted).
+    ops = mgr.get_session_state("2026-04").get("reorg_ops", [])
+    mgr.delete_reorg_op("2026-04", ops[0]["id"])
+    cell = client.get("/api/sessions/2026-04").json()["cells"]["HRB"]["chps"]
+    assert len(cell["colado_suspects"]) == 1
     close_all()
 
 

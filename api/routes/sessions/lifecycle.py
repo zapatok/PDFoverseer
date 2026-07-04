@@ -12,6 +12,7 @@ from core.scanners.patterns import count_type_for
 from ._common import (
     _resolve_month_dir,
     _validate_session_id,
+    enrich_cell_colado_suspects,
     enrich_cell_worker_count,
     get_manager,
     hospital_category_folders,
@@ -62,8 +63,14 @@ def get(
             s for s in cell_map if count_type_for(s) in ("documents_workers", "checks")
         ]
         folders = hospital_category_folders(month_root / hosp, worker_siglas)
+        reorg_ops = state.get("reorg_ops") or []
         enriched_cells[hosp] = {
-            sigla: enrich_cell_worker_count(cell, month_root, hosp, sigla, folders.get(sigla))
+            sigla: enrich_cell_colado_suspects(
+                enrich_cell_worker_count(cell, month_root, hosp, sigla, folders.get(sigla)),
+                reorg_ops,
+                hosp,
+                sigla,
+            )
             for sigla, cell in cell_map.items()
         }
     return {**state, "cells": enriched_cells}
