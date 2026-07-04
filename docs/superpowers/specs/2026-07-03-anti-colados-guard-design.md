@@ -145,9 +145,11 @@ filtro `cover_code`, para que los segmentos coincidan 1:1 con lo que se
 contó). Páginas antes del primer inicio contado se adjuntan al primer
 segmento; si no hubo inicios (fallback conteo=1), un único segmento cubre el
 archivo. Nuevo dataclass `DocSegment {page_start, page_end (1-based,
-inclusivo), start_page: int | None, codes}` — `start_page` es la página del
-inicio CONTADO del segmento (`None` en el segmento fallback; en el segmento 0
-con preámbulo apunta al inicio contado, no a la página 1) — con solo códigos
+inclusivo), counted_start_page: int | None, codes}` — `counted_start_page`
+es la página del inicio CONTADO del segmento (`None` en el segmento
+fallback; en el segmento 0 con preámbulo apunta al inicio contado, no a la
+página 1; el nombre largo es deliberado: NO confundir con `page_start`, el
+borde del rango) — con solo códigos
 de lecturas `direct` (las recuperadas no tienen esquina leída);
 `PaginationCountResult` gana `documents: list[DocSegment]`.
 
@@ -178,14 +180,16 @@ celda anchors multipágina aporta 0 por F8; con A7 un ajeno de 1 página aporta
 1):
 
 - **Sospechoso `kind="code"`** → `counted = (la corrida cubre el
-  `start_page` de su segmento) OR (el segmento es el fallback sin inicios)`.
+  `counted_start_page` de su segmento) OR (el segmento es el fallback sin
+  inicios)`.
   "Dentro de un documento contado" ≠ "sumó al conteo": en un host con
   `cover_code` (irl, espacios — y los paquetes de espacios son exactamente el
   caso de códigos mixtos) el `curr==1` de un documento ajeno nunca pasa el
   filtro del cover_code, así que la corrida ajena queda absorbida a mitad de
   segmento y aporta 0 — el conteo del host es correcto y NO debe ponerse
   ámbar; lo mismo cuando la portada ajena no leyó `curr==1` directo. Ambos
-  términos se derivan de datos ya especificados (`DocSegment.start_page`).
+  términos se derivan de datos ya especificados
+  (`DocSegment.counted_start_page`).
 - **Sospechoso `kind="filename"`** → `counted = (contribución actual del
   archivo al conteo del host) > 0`, leída de los MISMOS datos per-file que
   usa `compute_cell_count` (`per_file_overrides[f] | per_file[f] | ausente→0
@@ -275,12 +279,23 @@ es la superficie. Derivación viva en ambos casos (§2.5), nunca horneada en
   reorg se suman como puntos de recomputación de `all_reliable`** (hoy no
   llaman al refresh; §4.5 exige que crear la op restaure el verde sin
   re-scan, y borrarla lo devuelva — el dedupe es derivado).
-- **Pre-llenado de la op desde un sospechoso:** `doc_count = 1 si
-  counted, si no 0` — alineado con la validación F5 existente (el cap por
-  contribución real ya rechazaría `doc_count>0` para un archivo que no
-  contó). Con `doc_count=0` el delta es neutro: el host queda correcto ya, y
-  la celda destino se corrige sola cuando paso-1 mueva el documento y el
-  re-scan lo encuentre (lifecycle evidencia-basado).
+- **Pre-llenado de la op desde un sospechoso:** `doc_count =` **el default
+  Incr-J si `counted`** (`resolve_op_defaults`: contribución actual del
+  archivo para `move_file` — si el host contó 3, se mueven 3 —, `1` para
+  `extract_pages`), **`0` si no**. OJO doble para el implementador: (1) la
+  rama `0` es carga-portante por sí sola — la validación NO la respalda
+  (`file_contribution` cae a `per_file.get(file, 1)`, así que el bound F5
+  para un archivo que no contó es 1, no 0, y F5 ni siquiera aplica a
+  `extract_pages`); (2) el `0` **diverge a propósito** del default
+  `resolve_op_defaults` (que resolvería 1 vía ese fallback) — no
+  "simplificarlo" de vuelta al default. Con `doc_count=0` el delta es neutro:
+  el host queda correcto ya, y la celda destino se corrige sola cuando paso-1
+  mueva el documento y el re-scan lo encuentre (lifecycle evidencia-basado).
+- **Caso multi-corrida → un solo move_file:** cuando la condición move_file
+  se cumple (todas las páginas ajenas, misma sigla), el panel puede mostrar
+  varias filas (una por corrida) — cada una pre-llena la MISMA op
+  `move_file`; crearla desde cualquiera suprime todas las filas del archivo
+  vía la tabla de dedupe §5.
 - **UI (DetailPanel):** sección **"POSIBLES COLADOS"** en tono suspect
   (patrón OrphanMarksPanel): por fila → chip de tipo (`Archivo` | `Páginas`),
   nombre del archivo, rango de páginas (si aplica), evidencia (token o
@@ -329,8 +344,9 @@ dependiente-de-datos.
   OCR (fallback=1) → true; ajeno 1-página (A7) en celda OCR → true; ajeno
   multipágina 0-covers en celda anchors → false; **corrida ajena absorbida en
   host con `cover_code` (sin inicio contado) → false** (y su op pre-llenada
-  lleva `doc_count=0`); corrida que cubre el `start_page` de su segmento →
-  true.
+  lleva `doc_count=0`); corrida que cubre el `counted_start_page` de su
+  segmento → true; **move_file `counted` con contribución 3 → prefill
+  `doc_count=3`** (default Incr-J, nunca un 1 plano).
 - **Lifecycle:** evicción por evidencia — archivo desaparece de la carpeta →
   el próximo refresh (de cualquier kind) elimina sus sospechosos de AMBOS
   kinds; op `pending` suprime por la tabla §5, op `applied` no participa (el
