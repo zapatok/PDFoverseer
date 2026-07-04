@@ -166,36 +166,31 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 
 ## Pending Work
 
-Verified open as of the Fase 8 docs sweep (2026-07-03) — see the newest
-**Project history** entry below and
-`docs/superpowers/plans/2026-07-02-deep-audit-remediation.md` for the full
-audit trail:
+State as of the "a punto" round kickoff (2026-07-03; scope set by Daniel):
 
-- **`api/state.py` god-file** — `SessionManager` lives in a single ~900-line
-  file; the 2026-06-22 structural round split `core/orchestrator/` and
-  `api/routes/sessions/` into packages but left `state.py` out of scope
-  (a perf pass + a mixin-split were also declined as marginal/negative ROI).
-- **`senal` landscape OCR** — both `AnchorsScanner` and `PaginationScanner`
-  read 0/18 on its corner; open, unresolved.
-- **Incr-J's paso-1 manifest consumer** — the reorg manifest this app exports
-  is meant to be consumed by the sibling normalization pipeline; that
-  consumer is a cross-project follow-up, not tracked in this repo.
-- **Toast-vs-sticky-error asymmetry** — `savePerFileOverride`'s generic-error
-  path (toast + `filesTick` bump, no sticky banner) never got backported to
-  the other 4 single-cell write actions: `saveOverride`, `confirmCell`,
-  `saveWorkerCount`, `saveNote` all still set the old sticky `error` field on
-  a non-409 failure.
-- **`@pytest.mark`-style corpus-skip markers** reimplemented per-file instead
-  of centralized (`test_filename_glob.py`, `test_routes_sessions.py`,
-  `test_routes_output.py` each redefine their own
-  `skipif(not <root>.exists(), ...)`).
-- **Misfiled-document guard** — the pagination-migrated siglas have no
-  anti-anchor mechanism (unlike `AnchorsScanner`), so a misfiled PDF carrying
-  real pagination markers would still count; open product question (see
-  `tests/fixtures/scanners/README.md`).
-- **Per-sigla fixture test idiom** not yet unified — `ConfidenceLevel` enum +
-  a GT-driven fixture-path helper in some files, a `_fixture_covers()`-helper
-  style in others.
+**In flight (this round):**
+- **Misfiled-document guard (anti-colados)** — IN DESIGN/BUILD: spec
+  `docs/superpowers/specs/2026-07-03-anti-colados-guard-design.md` (2
+  vertientes: pase-1 filename + pase-2 form-code, opt-in per sigla; counts
+  never change, suggestions feed the Incr-J reorg ops).
+- **`api/state.py` god-file split** — committed to this round (Daniel's call,
+  2026-07-03); the 2026-06-22 structural round had left it out of scope.
+- **Cleanup batch**: toast-vs-sticky-error backport (`saveOverride`,
+  `confirmCell`, `saveWorkerCount`, `saveNote` still set the sticky `error`
+  on non-409), corpus-skip centralization (per-file `skipif` in 10+ test
+  files → conftest marker), per-sigla fixture idiom unification
+  (`ConfidenceLevel`+GT-helper vs `_fixture_covers()` styles), hardcoded GT
+  values in `test_pattern_{caliente,exc,ext}`, M4 checks-grid
+  present-filter asymmetry.
+
+**Resolved / dropped (2026-07-03):**
+- **Incr-J's paso-1 manifest consumer** — DONE in the sibling project
+  (`A:\informe mensual`); contract `docs/handoff/paso1-manifiesto-reorganizacion.md`
+  unchanged (`manifest_version: 1`). Paso-1 work is not tracked here.
+- **`senal` landscape OCR** — dropped with cause: the merged-monster corpus
+  was a MAYO one-off experiment; from JUNIO the corpus stays as paso-1's
+  first pass leaves it (post-count pass only compresses), where senal is
+  filename-trivial. Revisit only if merged months return.
 
 ## Consolidación de `po_overhaul` — rama única, sincronizada con origin (2026-06-03)
 
