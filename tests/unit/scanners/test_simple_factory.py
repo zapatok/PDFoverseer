@@ -83,6 +83,41 @@ def test_simple_scanner_no_duplicate_flag_in_flat_folder(tmp_path):
     assert "duplicate_basenames" not in result.flags
 
 
+def test_pase1_telemetry_carries_filename_suspects(tmp_path):
+    """Anti-colados V1: a foreign-named file in the folder surfaces as a
+    telemetry suspect; present_files carries every PDF (for downstream eviction).
+    Detection never changes the count (host art: only the art file counts)."""
+    (tmp_path / "2026-05-04_art_a.pdf").write_bytes(b"%PDF\n%%EOF")
+    (tmp_path / "2026-05-04_odi_b.pdf").write_bytes(b"%PDF\n%%EOF")
+    (tmp_path / "crs.pdf").write_bytes(b"%PDF\n%%EOF")  # suggests nothing → silence
+
+    scanner = get("art")
+    result = scanner.count(tmp_path)
+
+    assert result.telemetry is not None
+    suspects = result.telemetry.colado_suspects
+    assert len(suspects) == 1
+    assert suspects[0]["file"] == "2026-05-04_odi_b.pdf"
+    assert suspects[0]["suggested_sigla"] == "odi"
+    assert suspects[0]["kind"] == "filename"
+    assert set(result.telemetry.present_files) == {
+        "2026-05-04_art_a.pdf",
+        "2026-05-04_odi_b.pdf",
+        "crs.pdf",
+    }
+    # The count is unaffected by detection: only the art file matches host art.
+    assert result.count == 1
+
+
+def test_pase1_telemetry_empty_on_missing_folder(tmp_path):
+    """folder_missing → telemetry present but empty (evicts everything downstream)."""
+    scanner = get("art")
+    result = scanner.count(tmp_path / "nope")
+    assert result.telemetry is not None
+    assert result.telemetry.colado_suspects == []
+    assert result.telemetry.present_files == []
+
+
 def _make_pdf(path, n_pages):
     """Real n-page PDF (same fabrication pattern as test_compute_settled)."""
     import fitz

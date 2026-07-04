@@ -28,9 +28,17 @@ class NearMatchEntry:
 
 @dataclass(frozen=True)
 class ScanTelemetry:
-    """A14: machine-readable signals for the operator (UI in chunk 6)."""
+    """A14: machine-readable signals for the operator (UI in chunk 6).
+
+    ``colado_suspects``/``present_files`` (anti-colados V1): misfiled-document
+    suspects detected this scan + every PDF present in the folder (the eviction
+    basis persistence needs). Both default-empty so existing constructions
+    (AnchorsScanner) stay valid.
+    """
 
     near_matches: list[NearMatchEntry] = field(default_factory=list)
+    colado_suspects: list[dict] = field(default_factory=list)
+    present_files: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

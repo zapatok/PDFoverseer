@@ -17,8 +17,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.scanners.base import ConfidenceLevel, Scanner, ScanResult
+from core.scanners.base import ConfidenceLevel, Scanner, ScanResult, ScanTelemetry
 from core.scanners.utils.cell_enumeration import find_duplicate_basenames
+from core.scanners.utils.colado_guard import find_foreign_filename_suspects
 from core.scanners.utils.filename_glob import (
     GlobCountResult,
     _matches,
@@ -54,6 +55,8 @@ class SimpleFilenameScanner:
             flags.append("duplicate_basenames")
 
         if "folder_missing" in flags:
+            # Empty telemetry: no folder → no present files → every persisted
+            # suspect is evicted downstream (the evidence lifecycle, §5).
             return self._result(
                 glob_result,
                 breakdown,
@@ -63,14 +66,27 @@ class SimpleFilenameScanner:
                 method="filename_glob",
                 confidence=ConfidenceLevel.HIGH,  # 0 is correct for missing
                 start=start,
+                telemetry=ScanTelemetry(),
             )
+
+        # Single directory traversal, reused for both path resolution and the
+        # anti-colados present-file set (avoids a second rglob).
+        all_pdfs = list(folder.rglob("*.pdf"))
+
+        # Anti-colados V1 (§3): foreign-named files in this folder → suspects.
+        # Detection only; the count derivation below is untouched.
+        colado_suspects = find_foreign_filename_suspects([p.name for p in all_pdfs], self.sigla)
+        telemetry = ScanTelemetry(
+            colado_suspects=colado_suspects,
+            present_files=[p.name for p in all_pdfs],
+        )
 
         # Matched basenames may live in empresa subfolders (count_pdfs_by_sigla
         # globs recursively but returns basenames). Resolve each to its on-disk
         # path so _page_count opens the right file; open each matched PDF once.
         # _matches honors count_scope (F14) so this stays in lock-step with
         # count_pdfs_by_sigla's own matching (e.g. chps: folder-scope).
-        path_by_name = {p.name: p for p in folder.rglob("*.pdf") if _matches(self.sigla, p.name)}
+        path_by_name = {p.name: p for p in all_pdfs if _matches(self.sigla, p.name)}
         pages = {
             fn: _page_count(path_by_name[fn])
             for fn in glob_result.matched_filenames
@@ -91,6 +107,7 @@ class SimpleFilenameScanner:
                 method="page_count_pure",
                 confidence=ConfidenceLevel.HIGH,
                 start=start,
+                telemetry=telemetry,
             )
 
         # Variable sigla: 1 file = 1 document. HIGH when no matched file is
@@ -112,6 +129,7 @@ class SimpleFilenameScanner:
             method="filename_glob",
             confidence=confidence,
             start=start,
+            telemetry=telemetry,
         )
 
     def _result(
@@ -125,6 +143,7 @@ class SimpleFilenameScanner:
         method: str,
         confidence: ConfidenceLevel,
         start: float,
+        telemetry: ScanTelemetry | None = None,
     ) -> ScanResult:
         """Build a ScanResult from the shared glob/breakdown/flags + variable
         fields. DRY helper (ScanResult is a frozen dataclass, so this lives on
@@ -140,6 +159,7 @@ class SimpleFilenameScanner:
             duration_ms=int((time.perf_counter() - start) * 1000),
             files_scanned=glob_result.files_scanned,
             per_file=per_file,
+            telemetry=telemetry,
         )
 
 
