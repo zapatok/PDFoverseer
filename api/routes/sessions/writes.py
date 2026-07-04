@@ -401,3 +401,52 @@ def patch_confirm(
     if is_agent(body.participant_id):
         _broadcast_presence(request, mgr, session_id)
     return {"confirmed": cell.get("confirmed", False)}
+
+
+class DismissColadoBody(BaseModel):
+    participant_id: str | None = None
+
+
+@router.post(
+    "/sessions/{session_id}/cells/{hospital}/{sigla}/colado-suspects/{suspect_id}/dismiss"
+)
+def dismiss_colado_suspect(
+    request: Request,
+    session_id: str,
+    hospital: str,
+    sigla: str,
+    suspect_id: str,
+    body: DismissColadoBody = Body(default=DismissColadoBody()),
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Dismiss ONE colado suspect the operator judged legitimate (anti-colados §6).
+
+    M3-gated (409 if another participant holds the cell); 404 when the suspect id
+    is absent (so dismissing twice → 404 on the second). Recomputes all_reliable
+    and returns the OPEN suspect list + all_reliable, since the pending-save guard
+    drops this write's own cell_updated echo (the F15 pattern).
+    """
+    _validate_session_id(session_id)
+    _validate_cell_coords(hospital, sigla)
+    try:
+        mgr.dismiss_colado_suspect(
+            session_id, hospital, sigla, suspect_id, participant_id=body.participant_id
+        )
+    except KeyError as exc:
+        raise HTTPException(404, f"Sospechoso no encontrado: {suspect_id}") from exc
+    state = mgr.get_session_state(session_id)
+    month_root = Path(state.get("month_root", ""))
+    try:
+        folder = _find_category_folder(month_root / hospital, sigla)
+    except KeyError as exc:
+        raise HTTPException(404, f"Categoría {sigla} desconocida") from exc
+    refresh_all_reliable(mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla))
+    cell = mgr.get_session_state(session_id)["cells"].get(hospital, {}).get(sigla, {})
+    enriched = enrich_cell_colado_suspects(cell, state.get("reorg_ops") or [], hospital, sigla)
+    _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
+    if is_agent(body.participant_id):
+        _broadcast_presence(request, mgr, session_id)
+    return {
+        "colado_suspects": enriched.get("colado_suspects", []),
+        "all_reliable": cell.get("all_reliable"),
+    }

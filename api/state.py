@@ -534,6 +534,48 @@ class SessionManager:
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     @_synchronized
+    def dismiss_colado_suspect(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        suspect_id: str,
+        *,
+        participant_id: str | None = None,
+    ) -> None:
+        """Drop ONE colado suspect the operator judged legitimate (anti-colados §6).
+
+        Removal lasts until the next scan refresh of that suspect's kind
+        recomputes the list (§5 — no hidden permanent suppressions). M3-gated
+        like every single-cell write.
+
+        Args:
+            session_id: target session.
+            hospital: hospital code.
+            sigla: category code.
+            suspect_id: the ``cs_...`` id to drop.
+            participant_id: caller's participant id for lock enforcement (M3a);
+                ``None`` disables enforcement (legacy / no-presence callers).
+
+        Raises:
+            CellLockedError: the cell is held by a DIFFERENT participant.
+            KeyError: no suspect with ``suspect_id`` in the cell (route → 404).
+        """
+        holder = self._editor_conflict(session_id, hospital, sigla, participant_id)
+        if holder is not None:
+            raise CellLockedError(hospital, sigla, holder)
+        # M3b: agent auto-claim on write (see apply_user_override for full comment).
+        if is_agent(participant_id):
+            self._presence.agent_focus(session_id, f"{hospital}|{sigla}")
+        state, _ = self._load_and_migrate(session_id)
+        cell = (state.get("cells", {}).get(hospital, {}) or {}).get(sigla)
+        suspects = (cell or {}).get("colado_suspects") or []
+        if not any(s.get("id") == suspect_id for s in suspects):
+            raise KeyError(suspect_id)
+        cell["colado_suspects"] = [s for s in suspects if s.get("id") != suspect_id]
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+
+    @_synchronized
     def apply_worker_count(
         self,
         session_id: str,
