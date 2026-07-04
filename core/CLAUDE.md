@@ -181,7 +181,8 @@ counter.
 
 `PaginationScanner` counts documents by their "Página N de M" pagination via
 `utils/pagination_count.count_documents_by_pagination` (the **lite engine**,
-`SCANNER_PATTERNS_VERSION = v4-pagination`). Per page it OCRs only the
+introduced at `SCANNER_PATTERNS_VERSION = v4-pagination`; current version is
+`v6-token-aliases` — see `core/utils.py`). Per page it OCRs only the
 **top-right corner** (orientation-aware), parses the pagination + the form code,
 and **recovers** unreadable corners by completing the numeric sequence from
 neighbors (plain forward-fill — no autocorrelation / Dempster-Shafer). A document

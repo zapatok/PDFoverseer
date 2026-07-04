@@ -36,6 +36,8 @@ python eval/ocr_preprocessing/report.py
 | `ocr_preprocessing/` | Image preprocessing sweep variants (retained research) |
 | `fixtures/` | Test fixtures + extraction tools |
 | `tests/` | Centralized tests for all eval stages |
+| `ocr_params.py` (file) | Parameter search space for the OCR preprocessing sweep (consumed by `ocr_preprocessing/`) |
+| `__init__.py` (file) | Package marker — keeps `eval/` importable from tests |
 
 > **Removed 2026-06-21 (pre-master audit):** `graph_inference/` (HMM+Viterbi, not adopted),
 > `ocr_engines/` (EasyOCR/PaddleOCR — Tesseract is the sole engine), and `pixel_density/`

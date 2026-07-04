@@ -23,7 +23,7 @@
 | `INFORME_MENSUAL_ROOT` | `A:/informe mensual` | Root of the source month folders (read-only corpus) |
 | `OVERSEER_DB_PATH` | `A:/PROJECTS/PDFoverseer/data/overseer.db` | SQLite path: session state + `historical_counts` |
 | `OVERSEER_OUTPUT_DIR` | `A:/PROJECTS/PDFoverseer/data/outputs` | Where the generated RESUMEN Excel is written |
-| `TESSERACT_CMD` | system PATH | Override the Tesseract binary path |
+| `TESSERACT_CMD` | `C:\Program Files\Tesseract-OCR\tesseract.exe` | Override the Tesseract binary path (hardcoded Windows default in `core/ocr.py` / `pagination_count.py`) |
 | `HOST` | `127.0.0.1` | Server bind address (`server.py`) |
 | `PORT` | `8000` | Server port |
 
