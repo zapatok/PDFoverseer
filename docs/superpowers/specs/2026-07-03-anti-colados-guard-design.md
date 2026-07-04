@@ -58,16 +58,24 @@ corrección física — el consumidor en paso-1 está operativo desde 2026-07-03
 ART se delata solo.
 
 **Regla:** para cada PDF de la carpeta de la celda `(hospital, sigla_host)`:
-- Se evalúa el basename con **el mismo predicado `_matches` de
-  `core/scanners/utils/filename_glob.py`** (con `_SIGLA_TOKEN_ALIASES`
-  incluidos: `cphs`, la frase `revision_documentacion`, etc.) contra las 20
-  siglas. Prohibido reimplementar el matching (fuente única, estilo F5).
-- **Sospechoso ⟺ matchea ≥1 sigla ajena Y NO matchea la del host.**
-  - Matchea host (con o sin ajenas) → silencio.
-  - No matchea ninguna (ej. `crs.pdf`, `titan.pdf`) → silencio.
-  - Matchea exactamente 1 ajena → `suggested_sigla` = esa.
-  - Matchea 2+ ajenas → sospechoso con `suggested_sigla = null` (el operador
-    elige el destino en el formulario de la op).
+- La pregunta de esta vertiente es **"¿qué sigla sugiere este NOMBRE?"** — que
+  NO es la pregunta de `_matches` ("¿este archivo pertenece al conteo de la
+  sigla X?"). `_matches` tiene el escape `count_scope == "folder"` (chps):
+  devuelve True para *cualquier* PDF — usarlo aquí haría que todo archivo del
+  corpus "sugiera" chps (tormenta de falsos) y que chps jamás pudiera marcar
+  (todo matchearía al host). Por eso `filename_glob.py` expone un helper
+  nuevo, **`siglas_suggested_by_filename(basename) -> set[str]`**, que evalúa
+  SOLO los patrones de token compilados + `_SIGLA_TOKEN_ALIASES` (`cphs`, la
+  frase `revision_documentacion`, etc.) de las 20 siglas, **ignorando
+  `count_scope`**. Reutiliza `_SIGLA_PATTERNS` internamente — el matching de
+  tokens sigue teniendo una sola fuente (estilo F5), solo que sin el escape
+  de carpeta, y devuelve el SET completo (necesario para la regla "2+").
+- Con `S = siglas_suggested_by_filename(basename)`:
+  - `sigla_host ∈ S` (con o sin ajenas) → silencio.
+  - `S = ∅` (ej. `crs.pdf`, `titan.pdf`) → silencio.
+  - `S = {s'}` con s' ajena → sospechoso, `suggested_sigla = s'`.
+  - `|S| ≥ 2` (todas ajenas) → sospechoso con `suggested_sigla = null` (el
+    operador elige el destino en el formulario de la op).
 - Sugerencia: `move_file` con `dest = {mismo hospital, suggested_sigla}`;
   `doc_count`/`worker_count` por los defaults Incr-J existentes
   (`resolve_op_defaults`).
@@ -121,7 +129,11 @@ mayúsculas → quitar todo no-alfanumérico → plegar confusiones OCR con el m
 (mismo pliegue en ambos lados). **Test de registro obligatorio:** distinción
 par-a-par de todos los `expected_codes` normalizados entre siglas distintas
 (guard de colisión — si dos siglas colisionan post-pliegue, el test bloquea la
-entrada de datos).
+entrada de datos). Semántica con comodín: literal-vs-literal = igualdad
+normalizada; **prefijo`*`-vs-literal = colisión si el literal empieza con el
+prefijo normalizado; prefijo-vs-prefijo = colisión si uno contiene al otro**
+(una comparación de igualdad simple no detectaría el solape — hoy solo
+espacios usa `*`, pero el survey §7 puede agregar más).
 
 ### 4.3 Segmentación por documento (motor, `pagination_count.py`)
 
@@ -141,50 +153,99 @@ Con `own` = set normalizado del host, `foreign(s')` = sets del resto:
 - Página con ≥1 lectura que matchea `foreign(s')` y ninguna que matchee
   `own` → página ajena (atribuida a s').
 - **Corridas máximas consecutivas de páginas ajenas** dentro del segmento →
-  un sospechoso `{page_range, código dominante, suggested_sigla}`.
-- Si las corridas ajenas cubren TODAS las páginas del PDF → sugerencia
-  `move_file`; si no → `extract_pages` por corrida.
+  un sospechoso `{page_range, código dominante, suggested_sigla}`. Una página
+  sin evidencia (sin lectura de código) interrumpe la corrida: dos corridas
+  separadas → dos sospechosos/`extract_pages` (aceptado: fricción menor, pero
+  nunca un rango que abarque páginas sin evidencia).
+- Sugerencia `move_file` (archivo completo) **solo si** las corridas ajenas
+  cubren TODAS las páginas del PDF **y todas sugieren la MISMA sigla** (una
+  op `move_file` tiene un único destino). En cualquier otro caso →
+  `extract_pages` por corrida, aunque en conjunto cubran el archivo.
 - Host sin `expected_codes` → vertiente 2 apagada para esa celda.
 - Código que matchea host y ajeno a la vez → own (silencio; el test §4.2 lo
   hace imposible en la práctica).
 
 ### 4.5 Confianza
 
-Un sospechoso **que contó** en la celda (siempre en vertiente 2; en vertiente
-1 solo si la celda cuenta archivos sin token: celdas OCR y
-`count_scope:"folder"`) marca la celda **no-confiable** (ámbar / LOW por el
-camino existente) con el flag nuevo **`colado_suspect`**, hasta que el
-operador resuelva (op creada o descarte). Cada sospechoso lleva
-`counted: bool`. Un sospechoso que NO contó (vertiente 1 en celda por token:
-el archivo no sumó al host) **no** degrada la confianza del host — su conteo
-es correcto; el panel es la superficie. Derivación viva (§2.5), no horneada en
-`per_file`.
+Cada sospechoso lleva `counted: bool` — **derivado de los datos, no de una
+taxonomía de celdas** (la taxonomía miente: un archivo ajeno en irl/espacios
+cae al fallback conteo=1 del scanner aunque `cover_code` no matchee; en una
+celda anchors multipágina aporta 0 por F8; con A7 un ajeno de 1 página aporta
+1):
+
+- **Sospechoso `kind="code"`** → `counted = true` por construcción (los
+  segmentos son exactamente los documentos contados).
+- **Sospechoso `kind="filename"`** → `counted = (contribución actual del
+  archivo al conteo del host) > 0`, leída de los MISMOS datos per-file que
+  usa `compute_cell_count` (`per_file_overrides[f] | per_file[f] | ausente→0
+  en celdas por token; en celdas OCR/`count_scope:"folder"` el archivo tiene
+  entrada per-file tras el scan). Sin taxonomía paralela que mantener.
+
+**Efecto de un sospechoso abierto con `counted=true`:** la celda deja de ser
+confiable **plegándose a la derivación existente de `all_reliable`**
+(backend: la recomputación estilo `refresh_all_reliable` considera "hay
+sospechosos abiertos contados" → `all_reliable=false`). Se elige este punto
+de integración y NO uno nuevo porque: (1) el frontend ya consume
+`all_reliable` para el punto verde — **cero cable nuevo, cero riesgo de
+divergencia front/back** (la clase de bug F15/toast-asymmetry); (2) la
+precedencia existente se conserva tal cual: `por_resolver` > `confirmed |
+override` (verde ganado por humano NO es anulado por un sospechoso — el
+panel sigue mostrándolo, la información no se pierde) > `all_reliable`.
+Sospechoso con `counted=false` (vertiente 1 en celda por token: el archivo no
+sumó) **no** toca `all_reliable` — el conteo del host es correcto; el panel
+es la superficie. Derivación viva en ambos casos (§2.5), nunca horneada en
+`per_file`: descartar o crear la op restaura el verde sin re-scan.
 
 ## 5. Ciclo de vida de los sospechosos
 
 - Estado de celda gana `colado_suspects: list[Suspect]`;
   `Suspect = {id, kind: "filename"|"code", file, page_range: [a,b] | null,
   evidence: str, suggested_sigla: str | null, counted: bool}`.
-- **Recomputados en cada scan** que toque la celda (pase-1 recomputa los
-  `filename`; el OCR de la celda/archivo recomputa los `code` de los PDFs
-  escaneados) — patrón near_matches.
+  `id = "cs_" + sha1(kind|file|page_range|suggested_sigla)[:10]` —
+  determinístico sobre la evidencia; sirve solo para direccionar el descarte.
+- **Refresh por kind, quirúrgico** (el precedente near_matches hace wipe
+  total en pase-1 + evict-por-archivo en OCR, pero tiene un solo kind; aquí
+  hay dos con dueños distintos):
+  - el scan de **pase-1** reemplaza SOLO las entradas `kind=="filename"` de
+    la celda;
+  - el OCR (de celda o de archivo suelto) reemplaza SOLO las entradas
+    `kind=="code"` **de los PDFs efectivamente escaneados**.
+- **Precedencia entre vertientes sobre el mismo archivo:** si existe un
+  sospechoso `filename` (archivo completo) para F, los sospechosos `code` de
+  F se suprimen — la sugerencia de archivo completo subsume los rangos; los
+  `code` solo aparecen en archivos cuyo nombre no delató nada.
 - **Descartar** (el operador dice "es legítimo") elimina el sospechoso hasta
-  el próximo scan de la celda (sin supresiones permanentes ocultas —
-  consistente con near_matches; se documenta el comportamiento en la UI).
-- **Dedupe contra ops existentes:** un sospechoso computado se suprime si ya
-  existe una op de reorg con el mismo `source.file` y rango solapado — evita
-  re-sugerir mientras la corrección física espera a paso-1.
+  el próximo scan que refresque su kind en esa celda (sin supresiones
+  permanentes ocultas — consistente con near_matches; el microcopy del panel
+  lo advierte).
+- **Dedupe contra ops de reorg existentes** (evita re-sugerir mientras la
+  corrección física espera a paso-1), con regla explícita para rangos nulos
+  (`move_file` no lleva `page_range`; los sospechosos de archivo completo
+  tampoco):
+
+  | sospechoso \ op existente sobre el mismo `source.file` | `move_file` (sin rango) | `extract_pages [c,d]` | `rotate` / `split_in_place` |
+  |---|---|---|---|
+  | `filename` (rango null) | **suprimir** | mantener (la op parcial no resuelve el archivo) | mantener |
+  | `code [a,b]` | **suprimir** (el archivo entero ya se va) | suprimir ⟺ `[a,b]` solapa `[c,d]` | mantener |
+
 - **Crear la op** desde el panel usa el `POST /reorg/ops` existente
-  (pre-llenado); el sospechoso desaparece de la lista abierta (queda la op en
-  el panel REORGANIZACIÓN como superficie de seguimiento).
+  (pre-llenado); el sospechoso desaparece de la lista abierta por el dedupe
+  de arriba (queda la op en el panel REORGANIZACIÓN como superficie de
+  seguimiento; si la op se borra, el sospechoso reaparece solo — dedupe
+  derivado, no estado).
 
 ## 6. API + UI
 
 - **Payload:** `colado_suspects` viaja en el estado de la celda (snapshot
   `cell_updated` incluido).
-- **Endpoint nuevo:** descarte — método de escritura del manager con lock M3
-  (`participant_id`, `CellLockedError`→409) + broadcast, siguiendo el patrón
-  de los 6 write-methods existentes. La creación de op NO agrega backend
+- **Endpoint nuevo (descarte):** `POST
+  /api/sessions/{sid}/cells/{hospital}/{sigla}/colado-suspects/{suspect_id}/dismiss`
+  con body `{participant_id}` — método de escritura del manager con lock M3
+  (primera sentencia `CellLockedError` si la celda la tiene otro → 409 con
+  `lock_holder`, patrón de los 6 write-methods) + auto-claim del agente si
+  aplica + broadcast `cell_updated` + recomputación de `all_reliable`.
+  `suspect_id` inexistente → 404 (idempotencia amable: descartar dos veces no
+  es error de datos, es 404 del segundo). La creación de op NO agrega backend
   nuevo (endpoint Incr-J existente).
 - **UI (DetailPanel):** sección **"POSIBLES COLADOS"** en tono suspect
   (patrón OrphanMarksPanel): por fila → chip de tipo (`Archivo` | `Páginas`),
@@ -208,15 +269,31 @@ Antes de poblar `expected_codes`:
   mapa y se decide (la vertiente 1 se embarca igual — no depende de códigos).
 - El mapa final se presenta a Daniel antes de fijar los datos.
 
+**Faseo del plan (obligatorio):** la vertiente 1 no tiene prerequisitos y se
+implementa/embarca primero, completa (detección + estado + panel + descarte +
+op pre-llenada); la vertiente 2 va después, detrás de esta compuerta — el
+patrón de fases de los milestones previos (Incrementos, M1→M3b). Así la mitad
+barata y sin riesgo del feature no queda bloqueada por la mitad
+dependiente-de-datos.
+
 ## 8. Testing
 
 - **Puras:** segmentación (con `cover_code`, preámbulo, fallback sin
   inicios); normalización/pliegue; regla de decisión (own/foreign/mixto/
   desconocido/ruido `FECHA-31`/multi-ajena → `suggested_sigla null`);
-  corridas máximas; move_file-vs-extract_pages; dedupe contra ops.
-- **Vertiente 1:** unit del predicado con nombres reales y aliases (`cphs`,
-  frase `revision_documentacion`) en ambas direcciones (match del host
-  suprime).
+  corridas máximas (incl. interrupción por página sin evidencia → 2
+  sospechosos); move_file solo con sigla única + cobertura total (multi-sigla
+  cubriendo el archivo → extract_pages); la tabla de dedupe §5 completa
+  (rangos nulos en ambas direcciones, rotate/split nunca suprimen);
+  precedencia filename-sobre-code en el mismo archivo.
+- **Vertiente 1:** unit de `siglas_suggested_by_filename` con nombres reales
+  y aliases (`cphs`, frase `revision_documentacion`) en ambas direcciones
+  (host presente en el set suprime), y el caso chps explícito: `crs.pdf`/
+  `titan.pdf` sugieren ∅ (jamás "todo PDF sugiere chps"), y un `odi_x.pdf` en
+  la carpeta chps sí marca con `counted=true`.
+- **`counted` data-driven:** ajeno en celda por token → false; ajeno en celda
+  OCR (fallback=1) → true; ajeno 1-página (A7) en celda OCR → true; ajeno
+  multipágina 0-covers en celda anchors → false.
 - **Registro:** distinción par-a-par de `expected_codes` normalizados (§4.2)
   + gate de completitud existente intacto.
 - **Integración:** fixture sintético de colado (páginas con código art
