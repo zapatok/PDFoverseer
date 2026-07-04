@@ -252,6 +252,50 @@ def test_apply_filename_has_work_branch_downgrades_baked_green(manager):
     assert cell["all_reliable"] is False
 
 
+def test_refresh_all_reliable_blocked_by_counted_suspect(manager, tmp_path):
+    """§4.5: refresh_all_reliable (the single chokepoint) ANDs settledness with
+    'no open counted suspect' — a settled cell with a counted colado stays amber,
+    and evicting the colado restores green."""
+    import fitz
+
+    from api.routes.sessions._common import refresh_all_reliable
+    from core.scanners.utils.colado_guard import find_foreign_filename_suspects
+
+    folder = tmp_path / "chps_folder"
+    folder.mkdir()
+    for name in ("crs.pdf", "2026-05_odi_x.pdf"):
+        doc = fitz.open()
+        doc.new_page()
+        doc.save(str(folder / name))
+        doc.close()
+
+    susp = find_foreign_filename_suspects(["crs.pdf", "2026-05_odi_x.pdf"], "chps")
+    manager.apply_filename_result(
+        "2026-04",
+        "HPV",
+        "chps",
+        _filename_result_tel(
+            2, {"crs.pdf": 1, "2026-05_odi_x.pdf": 1}, susp, ["crs.pdf", "2026-05_odi_x.pdf"]
+        ),
+    )
+    # Pretend a prior settle left it green; refresh must flip it back (both PDFs
+    # are single-page R1 so compute_settled alone is True — the gate is what bites).
+    manager.set_all_reliable("2026-04", "HPV", "chps", True)
+    refresh_all_reliable(manager, "2026-04", "HPV", "chps", folder)
+    assert manager.get_session_state("2026-04")["cells"]["HPV"]["chps"]["all_reliable"] is False
+
+    # Foreign file leaves → suspect evicted → refresh restores green.
+    (folder / "2026-05_odi_x.pdf").unlink()
+    manager.apply_filename_result(
+        "2026-04",
+        "HPV",
+        "chps",
+        _filename_result_tel(1, {"crs.pdf": 1}, [], ["crs.pdf"]),
+    )
+    refresh_all_reliable(manager, "2026-04", "HPV", "chps", folder)
+    assert manager.get_session_state("2026-04")["cells"]["HPV"]["chps"]["all_reliable"] is True
+
+
 def test_apply_filename_result_sets_filename_count_only(manager):
     manager.apply_filename_result("2026-04", "HPV", "art", _filename_result(767))
     state = manager.get_session_state("2026-04")
