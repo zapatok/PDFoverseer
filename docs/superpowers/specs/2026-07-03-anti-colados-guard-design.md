@@ -131,7 +131,9 @@ par-a-par de todos los `expected_codes` normalizados entre siglas distintas
 (guard de colisión — si dos siglas colisionan post-pliegue, el test bloquea la
 entrada de datos). Semántica con comodín: literal-vs-literal = igualdad
 normalizada; **prefijo`*`-vs-literal = colisión si el literal empieza con el
-prefijo normalizado; prefijo-vs-prefijo = colisión si uno contiene al otro**
+prefijo normalizado; prefijo-vs-prefijo = colisión si uno es PREFIJO del
+otro** (prefijo-de, no substring: `FPETSCRS08` contiene `PETSCRS` pero ningún
+código que empiece con uno empieza con el otro)
 (una comparación de igualdad simple no detectaría el solape — hoy solo
 espacios usa `*`, pero el survey §7 puede agregar más).
 
@@ -143,9 +145,11 @@ filtro `cover_code`, para que los segmentos coincidan 1:1 con lo que se
 contó). Páginas antes del primer inicio contado se adjuntan al primer
 segmento; si no hubo inicios (fallback conteo=1), un único segmento cubre el
 archivo. Nuevo dataclass `DocSegment {page_start, page_end (1-based,
-inclusivo), codes}` con solo códigos de lecturas `direct` (las recuperadas no
-tienen esquina leída); `PaginationCountResult` gana `documents:
-list[DocSegment]`.
+inclusivo), start_page: int | None, codes}` — `start_page` es la página del
+inicio CONTADO del segmento (`None` en el segmento fallback; en el segmento 0
+con preámbulo apunta al inicio contado, no a la página 1) — con solo códigos
+de lecturas `direct` (las recuperadas no tienen esquina leída);
+`PaginationCountResult` gana `documents: list[DocSegment]`.
 
 ### 4.4 Regla de decisión por segmento
 
@@ -173,8 +177,15 @@ cae al fallback conteo=1 del scanner aunque `cover_code` no matchee; en una
 celda anchors multipágina aporta 0 por F8; con A7 un ajeno de 1 página aporta
 1):
 
-- **Sospechoso `kind="code"`** → `counted = true` por construcción (los
-  segmentos son exactamente los documentos contados).
+- **Sospechoso `kind="code"`** → `counted = (la corrida cubre el
+  `start_page` de su segmento) OR (el segmento es el fallback sin inicios)`.
+  "Dentro de un documento contado" ≠ "sumó al conteo": en un host con
+  `cover_code` (irl, espacios — y los paquetes de espacios son exactamente el
+  caso de códigos mixtos) el `curr==1` de un documento ajeno nunca pasa el
+  filtro del cover_code, así que la corrida ajena queda absorbida a mitad de
+  segmento y aporta 0 — el conteo del host es correcto y NO debe ponerse
+  ámbar; lo mismo cuando la portada ajena no leyó `curr==1` directo. Ambos
+  términos se derivan de datos ya especificados (`DocSegment.start_page`).
 - **Sospechoso `kind="filename"`** → `counted = (contribución actual del
   archivo al conteo del host) > 0`, leída de los MISMOS datos per-file que
   usa `compute_cell_count` (`per_file_overrides[f] | per_file[f] | ausente→0
@@ -209,7 +220,14 @@ es la superficie. Derivación viva en ambos casos (§2.5), nunca horneada en
   - el scan de **pase-1** reemplaza SOLO las entradas `kind=="filename"` de
     la celda;
   - el OCR (de celda o de archivo suelto) reemplaza SOLO las entradas
-    `kind=="code"` **de los PDFs efectivamente escaneados**.
+    `kind=="code"` **de los PDFs efectivamente escaneados**;
+  - **evicción por evidencia (ambos kinds, en CUALQUIER refresh que toque la
+    celda):** todo sospechoso cuyo `file` ya no exista en la enumeración
+    actual de la carpeta se elimina — espejo del lifecycle evidencia-basado
+    de Incr-J. Sin esto, el refresh quirúrgico deja fantasmas: un archivo que
+    se fue (p. ej. porque paso-1 ejecutó la corrección) nunca vuelve a
+    escanearse, y su sospechoso `code` con `counted=true` congelado
+    sostendría `all_reliable=false` para siempre.
 - **Precedencia entre vertientes sobre el mismo archivo:** si existe un
   sospechoso `filename` (archivo completo) para F, los sospechosos `code` de
   F se suprimen — la sugerencia de archivo completo subsume los rangos; los
@@ -219,9 +237,16 @@ es la superficie. Derivación viva en ambos casos (§2.5), nunca horneada en
   permanentes ocultas — consistente con near_matches; el microcopy del panel
   lo advierte).
 - **Dedupe contra ops de reorg existentes** (evita re-sugerir mientras la
-  corrección física espera a paso-1), con regla explícita para rangos nulos
-  (`move_file` no lleva `page_range`; los sospechosos de archivo completo
-  tampoco):
+  corrección física espera a paso-1). Clave de comparación: **misma celda
+  fuente Y mismo archivo** (`source.hospital + source.sigla + source.file`) —
+  nunca basename solo, porque el corpus repite basenames entre celdas (el
+  hallazgo F10, `find_duplicate_basenames`). Participan **solo ops con
+  `status=="pending"`**: es seguro porque la transición a `applied` ocurre
+  exactamente cuando pase-1 encuentra el `source.file` ausente — el mismo
+  evento que la evicción por evidencia usa para eliminar el sospechoso; no
+  puede "des-suprimirse" un sospechoso de un archivo que ya no existe. Regla
+  explícita para rangos nulos (`move_file` no lleva `page_range`; los
+  sospechosos de archivo completo tampoco):
 
   | sospechoso \ op existente sobre el mismo `source.file` | `move_file` (sin rango) | `extract_pages [c,d]` | `rotate` / `split_in_place` |
   |---|---|---|---|
@@ -246,7 +271,16 @@ es la superficie. Derivación viva en ambos casos (§2.5), nunca horneada en
   aplica + broadcast `cell_updated` + recomputación de `all_reliable`.
   `suspect_id` inexistente → 404 (idempotencia amable: descartar dos veces no
   es error de datos, es 404 del segundo). La creación de op NO agrega backend
-  nuevo (endpoint Incr-J existente).
+  nuevo (endpoint Incr-J existente), **pero las rutas de crear/borrar op de
+  reorg se suman como puntos de recomputación de `all_reliable`** (hoy no
+  llaman al refresh; §4.5 exige que crear la op restaure el verde sin
+  re-scan, y borrarla lo devuelva — el dedupe es derivado).
+- **Pre-llenado de la op desde un sospechoso:** `doc_count = 1 si
+  counted, si no 0` — alineado con la validación F5 existente (el cap por
+  contribución real ya rechazaría `doc_count>0` para un archivo que no
+  contó). Con `doc_count=0` el delta es neutro: el host queda correcto ya, y
+  la celda destino se corrige sola cuando paso-1 mueva el documento y el
+  re-scan lo encuentre (lifecycle evidencia-basado).
 - **UI (DetailPanel):** sección **"POSIBLES COLADOS"** en tono suspect
   (patrón OrphanMarksPanel): por fila → chip de tipo (`Archivo` | `Páginas`),
   nombre del archivo, rango de páginas (si aplica), evidencia (token o
@@ -293,7 +327,15 @@ dependiente-de-datos.
   la carpeta chps sí marca con `counted=true`.
 - **`counted` data-driven:** ajeno en celda por token → false; ajeno en celda
   OCR (fallback=1) → true; ajeno 1-página (A7) en celda OCR → true; ajeno
-  multipágina 0-covers en celda anchors → false.
+  multipágina 0-covers en celda anchors → false; **corrida ajena absorbida en
+  host con `cover_code` (sin inicio contado) → false** (y su op pre-llenada
+  lleva `doc_count=0`); corrida que cubre el `start_page` de su segmento →
+  true.
+- **Lifecycle:** evicción por evidencia — archivo desaparece de la carpeta →
+  el próximo refresh (de cualquier kind) elimina sus sospechosos de AMBOS
+  kinds; op `pending` suprime por la tabla §5, op `applied` no participa (el
+  archivo ausente ya evictó al sospechoso); descartar dos veces → el segundo
+  es 404 (§6).
 - **Registro:** distinción par-a-par de `expected_codes` normalizados (§4.2)
   + gate de completitud existente intacto.
 - **Integración:** fixture sintético de colado (páginas con código art
