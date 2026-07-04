@@ -18,7 +18,7 @@ CHECKS = {"maquinaria"}
 def test_every_sigla_has_valid_count_type():
     for sigla in SIGLAS:
         assert count_type_for(sigla) in COUNT_TYPES, sigla
-    # el mapeo cubre exactamente las 18 siglas (gate de completitud)
+    # el mapeo cubre exactamente las 20 siglas (gate de completitud)
     assert set(COUNT_TYPE_BY_SIGLA) == set(SIGLAS)
 
 
