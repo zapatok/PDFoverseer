@@ -178,8 +178,11 @@ State as of the "a punto" round kickoff (2026-07-03; scope set by Daniel):
   `refresh_all_reliable` chokepoint + open-filter at every serialization +
   dismiss endpoint + reorg-op green-restore + `PosiblesColadosPanel`). Counts
   never change (detection only). **Vertiente 2 (form-code, pagination opt-in)
-  is GATED** on the §7 deep code survey (Chunk 2, controller talks to Daniel
-  before Chunk 3).
+  was ABORTED** (Daniel, 2026-07-04): the §7 deep survey showed the form code is
+  not a reliable foreign-sigla discriminator (the `F-CRS-LCH-NN` checklist
+  family is shared across ~7 inspection siglas + noisy corner OCR). V1 stands;
+  interior colados remain findable by hand via the existing reorg ops. Record:
+  `docs/research/2026-07-04-anti-colados-v2-survey-abort.md`.
 - **`api/state.py` god-file split** — committed to this round (Daniel's call,
   2026-07-03); the 2026-06-22 structural round had left it out of scope.
 - ~~Cleanup batch~~ **DONE 2026-07-04** (5 items, one commit each): U2 toast

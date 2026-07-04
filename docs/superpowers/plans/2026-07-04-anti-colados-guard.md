@@ -500,6 +500,16 @@ Spec §4.5/§6: "crear la op restaura el verde sin re-scan" — the op suppresse
 
 ---
 
+> **GATE RESULT (2026-07-04): ABORT vertiente 2.** The deep survey
+> (`tools/survey_form_codes.py`) showed the form code is not a reliable
+> foreign-sigla discriminator — the `F-CRS-LCH-NN` checklist family is shared
+> across ~7 inspection siglas (documented collisions) and corner OCR is too
+> noisy. Only ~3-4 siglas have distinct clean codes; the compilation-heavy
+> inspection siglas (where interior colados live) are the undetectable LCH
+> family. Daniel chose ABORT — V1 (filename) stands. **Chunk 3 below is NOT
+> executed.** Full analysis:
+> `docs/research/2026-07-04-anti-colados-v2-survey-abort.md`.
+
 ## Chunk 2: Gate — survey profundo de códigos (§7)
 
 ### Task 11: `tools/survey_form_codes.py` + the map for Daniel
