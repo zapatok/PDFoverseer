@@ -99,6 +99,159 @@ def _ocr_result(count: int, method: str = "header_detect"):
     )
 
 
+def _filename_result_tel(count, per_file, suspects, present, confidence=None):
+    from core.scanners.base import ConfidenceLevel, ScanResult, ScanTelemetry
+
+    return ScanResult(
+        count=count,
+        confidence=confidence or ConfidenceLevel.HIGH,
+        method="filename_glob",
+        breakdown={},
+        flags=[],
+        errors=[],
+        files_scanned=len(present),
+        duration_ms=10,
+        per_file=per_file,
+        telemetry=ScanTelemetry(colado_suspects=suspects, present_files=present),
+    )
+
+
+def test_apply_filename_persists_suspect_counted_false(manager):
+    """A foreign-named file in a TOKEN cell → suspect persisted, counted False
+    (it never entered the host's per_file)."""
+    from core.scanners.utils.colado_guard import find_foreign_filename_suspects
+
+    suspects = find_foreign_filename_suspects(["2026-05_odi_x.pdf"], "art")
+    manager.apply_filename_result(
+        "2026-04",
+        "HPV",
+        "art",
+        _filename_result_tel(
+            1, {"2026-05_art_a.pdf": 1}, suspects, ["2026-05_art_a.pdf", "2026-05_odi_x.pdf"]
+        ),
+    )
+    cell = manager.get_session_state("2026-04")["cells"]["HPV"]["art"]
+    assert len(cell["colado_suspects"]) == 1
+    s = cell["colado_suspects"][0]
+    assert s["file"] == "2026-05_odi_x.pdf"
+    assert s["suggested_sigla"] == "odi"
+    assert s["counted"] is False
+
+
+def test_apply_filename_evicts_departed_file_suspect(manager):
+    """Evidence lifecycle (§5): a suspect whose file leaves the folder is dropped
+    on the next scan (e.g. paso-1 executed the reorg)."""
+    from core.scanners.utils.colado_guard import find_foreign_filename_suspects
+
+    susp = find_foreign_filename_suspects(["2026-05_odi_x.pdf"], "art")
+    manager.apply_filename_result(
+        "2026-04",
+        "HPV",
+        "art",
+        _filename_result_tel(1, {"a.pdf": 1}, susp, ["a.pdf", "2026-05_odi_x.pdf"]),
+    )
+    assert manager.get_session_state("2026-04")["cells"]["HPV"]["art"]["colado_suspects"]
+    # Re-scan: odi file gone from present → evicted.
+    manager.apply_filename_result(
+        "2026-04",
+        "HPV",
+        "art",
+        _filename_result_tel(1, {"a.pdf": 1}, [], ["a.pdf"]),
+    )
+    assert manager.get_session_state("2026-04")["cells"]["HPV"]["art"]["colado_suspects"] == []
+
+
+def test_apply_filename_counted_suspect_blocks_all_reliable(manager):
+    """§4.5: an open COUNTED suspect blocks green in the no-work branch; evicting
+    it restores green (HIGH + per_file)."""
+    from core.scanners.utils.colado_guard import find_foreign_filename_suspects
+
+    # chps folder-scope: every folder PDF (incl. the foreign one) is in per_file.
+    susp = find_foreign_filename_suspects(["2026-05_odi_x.pdf"], "chps")
+    manager.apply_filename_result(
+        "2026-04",
+        "HPV",
+        "chps",
+        _filename_result_tel(
+            2, {"crs.pdf": 1, "2026-05_odi_x.pdf": 1}, susp, ["crs.pdf", "2026-05_odi_x.pdf"]
+        ),
+    )
+    cell = manager.get_session_state("2026-04")["cells"]["HPV"]["chps"]
+    assert cell["colado_suspects"][0]["counted"] is True
+    assert cell["all_reliable"] is False
+    # Foreign file leaves → suspect evicted → green restored.
+    manager.apply_filename_result(
+        "2026-04",
+        "HPV",
+        "chps",
+        _filename_result_tel(1, {"crs.pdf": 1}, [], ["crs.pdf"]),
+    )
+    cell = manager.get_session_state("2026-04")["cells"]["HPV"]["chps"]
+    assert cell["colado_suspects"] == []
+    assert cell["all_reliable"] is True
+
+
+def test_apply_filename_chps_folder_scope_foreign_counted(manager):
+    """Spec §8 chps case: a foreign-named file in the chps folder is a suspect
+    AND counts (folder-scope puts it in per_file) — proves the T1 helper vs
+    _matches split end-to-end."""
+    from core.scanners.utils.colado_guard import find_foreign_filename_suspects
+
+    susp = find_foreign_filename_suspects(["crs.pdf", "titan.pdf", "2026-05_odi_x.pdf"], "chps")
+    # crs/titan suggest nothing (silence); only the odi file is a suspect.
+    assert len(susp) == 1 and susp[0]["file"] == "2026-05_odi_x.pdf"
+    manager.apply_filename_result(
+        "2026-04",
+        "HPV",
+        "chps",
+        _filename_result_tel(
+            3,
+            {"crs.pdf": 1, "titan.pdf": 1, "2026-05_odi_x.pdf": 1},
+            susp,
+            ["crs.pdf", "titan.pdf", "2026-05_odi_x.pdf"],
+        ),
+    )
+    cell = manager.get_session_state("2026-04")["cells"]["HPV"]["chps"]
+    assert len(cell["colado_suspects"]) == 1
+    assert cell["colado_suspects"][0]["counted"] is True
+
+
+def test_apply_filename_has_work_branch_downgrades_baked_green(manager):
+    """§4.5: a bulk re-scan that first surfaces a counted colado on an already-
+    worked (baked-green) cell downgrades all_reliable NOW — not on some later
+    unrelated write (the fix the manual review caught)."""
+    from core.scanners.utils.colado_guard import find_foreign_filename_suspects
+
+    # Establish a green chps cell whose per_file already includes the foreign
+    # file, but WITHOUT the suspect yet (simulate a pre-guard scan).
+    manager.apply_filename_result(
+        "2026-04",
+        "HPV",
+        "chps",
+        _filename_result_tel(
+            2, {"crs.pdf": 1, "2026-05_odi_x.pdf": 1}, [], ["crs.pdf", "2026-05_odi_x.pdf"]
+        ),
+    )
+    cell = manager.get_session_state("2026-04")["cells"]["HPV"]["chps"]
+    assert cell["all_reliable"] is True
+    # Make it "worked" so the next re-scan takes the has-work branch.
+    manager.apply_user_override("2026-04", "HPV", "chps", value=2)
+    # Re-scan now brings the suspect (guard active). per_file preserved (has-work)
+    # still holds the foreign file → counted True → green must drop.
+    susp = find_foreign_filename_suspects(["2026-05_odi_x.pdf"], "chps")
+    manager.apply_filename_result(
+        "2026-04",
+        "HPV",
+        "chps",
+        _filename_result_tel(
+            2, {"crs.pdf": 1, "2026-05_odi_x.pdf": 1}, susp, ["crs.pdf", "2026-05_odi_x.pdf"]
+        ),
+    )
+    cell = manager.get_session_state("2026-04")["cells"]["HPV"]["chps"]
+    assert cell["colado_suspects"][0]["counted"] is True
+    assert cell["all_reliable"] is False
+
+
 def test_apply_filename_result_sets_filename_count_only(manager):
     manager.apply_filename_result("2026-04", "HPV", "art", _filename_result(767))
     state = manager.get_session_state("2026-04")

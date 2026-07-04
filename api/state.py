@@ -28,6 +28,12 @@ from core.db.sessions_repo import (
 )
 from core.orchestrator import _find_category_folder
 from core.scanners.base import ScanResult
+from core.scanners.utils.colado_guard import (
+    KIND_FILENAME,
+    annotate_counted_filename,
+    has_open_counted_suspects,
+    merge_suspects,
+)
 from core.state.migrations import (
     migrate_state_v1_to_v2,
     migrate_state_v2_to_v3,
@@ -198,6 +204,19 @@ class SessionManager:
         state, _ = self._load_and_migrate(session_id)
         cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
 
+        # Anti-colados V1: refresh the filename-kind suspects (per-kind replace +
+        # evict files absent from the folder, §5). ``counted`` is annotated per
+        # branch below — once ``per_file`` is in its final state, since it drives
+        # the counted derivation (§4.5) and the two branches leave per_file
+        # differently (no-work replaces it, has-work preserves it).
+        _telemetry = result.telemetry
+        _fresh_suspects = list(_telemetry.colado_suspects) if _telemetry else []
+        _present = set(_telemetry.present_files) if _telemetry else set()
+        cell["colado_suspects"] = merge_suspects(
+            cell.get("colado_suspects") or [], KIND_FILENAME, _fresh_suspects, _present
+        )
+        reorg_ops = state.get("reorg_ops") or []
+
         if _cell_has_work(cell):
             cell["filename_count"] = result.count
             cell["files_scanned"] = result.files_scanned
@@ -209,6 +228,14 @@ class SessionManager:
             cell.setdefault("excluded", False)
             cell.setdefault("confirmed", False)
             cell.setdefault("all_reliable", False)
+            # per_file is preserved in this branch → annotate against it as-is.
+            cell["colado_suspects"] = annotate_counted_filename(cell["colado_suspects"], cell)
+            # One-directional downgrade only: the work-preserving branch never
+            # recomputes positive readiness (that needs compute_settled/the
+            # folder), but a re-scan that first surfaces a COUNTED colado must
+            # kill a baked-green dot now, not wait for an unrelated write (§4.5).
+            if has_open_counted_suspects(cell["colado_suspects"], reorg_ops, hospital, sigla):
+                cell["all_reliable"] = False
             update_session_state(self._conn, session_id, state_json=json.dumps(state))
             return
 
@@ -228,11 +255,18 @@ class SessionManager:
         # run so the DetailPanel never points "Ver portada" at a PDF that the
         # fresh per_file no longer contains (Bug B).
         cell["near_matches"] = []
+        # per_file is now final (replaced above) → annotate counted against it.
+        cell["colado_suspects"] = annotate_counted_filename(cell["colado_suspects"], cell)
         # all_reliable shortcut (Incr 2 §6.3): HIGH ⟺ every filename_glob file is
         # single-page (= all R1) for the non-OCR scanners. bool(per_file) guards the
         # empty/missing-folder case (simple_factory returns HIGH + per_file={}) so a
-        # cell with no PDFs is NOT 'listo', matching compute_settled.
-        cell["all_reliable"] = result.confidence.value == "high" and bool(result.per_file)
+        # cell with no PDFs is NOT 'listo', matching compute_settled. Anti-colados
+        # (§4.5): an open COUNTED suspect also blocks green (one honest producer).
+        cell["all_reliable"] = (
+            result.confidence.value == "high"
+            and bool(result.per_file)
+            and not has_open_counted_suspects(cell["colado_suspects"], reorg_ops, hospital, sigla)
+        )
         cell.setdefault("per_file_overrides", {})
         cell.setdefault("manual_entry", False)
         cell.setdefault("ocr_count", None)
