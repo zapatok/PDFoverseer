@@ -367,6 +367,8 @@ export const useSessionStore = create((set, get) => ({
         get().refetchSession(sessionId);
         return;
       }
+      // U2 backport: a generic (non-409) failure toasts instead of leaving a
+      // sticky global error banner; the "error" pendingSave chip marks the cell.
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
         if (cleanedPending.get(key)?.controller === controller) {
@@ -375,9 +377,9 @@ export const useSessionStore = create((set, get) => ({
         return {
           _pendingSave: cleanedPending,
           pendingSaves: { ...prev.pendingSaves, [key]: "error" },
-          error: String(error),
         };
       });
+      toast.error(`No se pudo guardar el conteo: ${String(error)}`);
     }
   },
 
@@ -560,7 +562,8 @@ export const useSessionStore = create((set, get) => ({
         get().refetchSession(sessionId);
         return;
       }
-      // Revert the optimistic flag on failure.
+      // Revert the optimistic flag on failure (the visible revert) + toast —
+      // U2 backport: no sticky global error banner.
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
         if (cleanedPending.get(key)?.controller === controller) {
@@ -569,7 +572,6 @@ export const useSessionStore = create((set, get) => ({
         const next = {
           _pendingSave: cleanedPending,
           pendingSaves: { ...prev.pendingSaves, [key]: "error" },
-          error: String(error),
         };
         if (prev.session) {
           const cells = { ...prev.session.cells };
@@ -580,6 +582,7 @@ export const useSessionStore = create((set, get) => ({
         }
         return next;
       });
+      toast.error(`No se pudo actualizar el estado de la celda: ${String(error)}`);
     }
   },
 
@@ -657,6 +660,7 @@ export const useSessionStore = create((set, get) => ({
         get().refetchSession(sessionId);
         return;
       }
+      // U2 backport: toast instead of the sticky global error banner.
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
         if (cleanedPending.get(key)?.controller === controller) {
@@ -665,9 +669,9 @@ export const useSessionStore = create((set, get) => ({
         return {
           _pendingSave: cleanedPending,
           pendingSaves: { ...prev.pendingSaves, [key]: "error" },
-          error: String(error),
         };
       });
+      toast.error(`No se pudo guardar el avance del contador: ${String(error)}`);
     }
   },
 
@@ -742,6 +746,7 @@ export const useSessionStore = create((set, get) => ({
         get().refetchSession(sessionId);
         return;
       }
+      // U2 backport: toast instead of the sticky global error banner.
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
         if (cleanedPending.get(key)?.controller === controller) {
@@ -750,9 +755,9 @@ export const useSessionStore = create((set, get) => ({
         return {
           _pendingSave: cleanedPending,
           pendingSaves: { ...prev.pendingSaves, [key]: "error" },
-          error: String(error),
         };
       });
+      toast.error(`No se pudo guardar la nota: ${String(error)}`);
     }
   },
 
