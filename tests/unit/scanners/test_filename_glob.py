@@ -6,6 +6,7 @@ from core.scanners.utils.filename_glob import (
     count_pdfs_by_sigla,
     extract_sigla,
     per_empresa_breakdown,
+    siglas_suggested_by_filename,
 )
 
 # Real fixtures from ABRIL HPV
@@ -161,6 +162,44 @@ def test_count_pdfs_by_sigla_token_scope_unchanged(tmp_path):
     assert result.count == 1
     assert result.matched_filenames == ["2026-04-15_charla_supervisor.pdf"]
     assert "some_files_unrecognized" in result.flags
+
+
+class TestSiglasSuggestedByFilename:
+    """Vertiente-1 primitive (anti-colados spec §3): "which sigla does this NAME
+    suggest" via token/alias patterns only — count_scope IGNORED (unlike
+    _matches). Returns the full SET (the caller's 2+ rule needs every match)."""
+
+    def test_single_foreign_token(self):
+        assert siglas_suggested_by_filename("2026-05-04_odi_jhon.pdf") == {"odi"}
+
+    def test_alias_cphs_suggests_chps(self):
+        assert "chps" in siglas_suggested_by_filename("2026-04-30_cphs_acta_reunion.pdf")
+
+    def test_phrase_alias_suggests_revdocmaq(self):
+        assert "revdocmaq" in siglas_suggested_by_filename(
+            "REVISION_DOCUMENTACION_MAQUINARIA_AGUASAN.pdf"
+        )
+
+    def test_chps_real_files_suggest_nothing(self):
+        # spec §3: crs.pdf / titan.pdf must suggest ∅ — NEVER "every PDF suggests
+        # chps" (the folder-scope escape that _matches has, which this avoids).
+        assert siglas_suggested_by_filename("crs.pdf") == set()
+        assert siglas_suggested_by_filename("titan.pdf") == set()
+
+    def test_multiple_siglas_returned_as_full_set(self):
+        # cphs (chps alias) + reunion both present → the SET carries BOTH
+        # (extract_sigla collapses to one winner; the 2+ rule needs both).
+        assert siglas_suggested_by_filename("2026-04-30_cphs_acta_reunion.pdf") == {
+            "chps",
+            "reunion",
+        }
+
+    def test_non_pdf_returns_empty(self):
+        assert siglas_suggested_by_filename("notas.txt") == set()
+
+    def test_embedded_substring_does_not_match(self):
+        # 'ext' inside 'extra' must not suggest ext (token boundaries hold).
+        assert "ext" not in siglas_suggested_by_filename("2026-05_extra_material.pdf")
 
 
 @pytest.mark.corpus

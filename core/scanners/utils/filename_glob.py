@@ -118,6 +118,35 @@ def extract_sigla(filename: str) -> str | None:
     return candidates[0][2]
 
 
+def siglas_suggested_by_filename(filename: str) -> set[str]:
+    """Every sigla whose token/alias appears in the filename stem (anti-colados §3).
+
+    The vertiente-1 question is "which sigla does this NAME suggest" — NOT
+    ``_matches``'s "does this file belong to sigla X's count". This deliberately
+    ignores ``count_scope``: the folder-scope escape (chps → every PDF) answers
+    folder-membership and would poison name-suggestion both ways (every corpus
+    file would "suggest" chps, and chps could never flag a foreign file). Returns
+    the full set — the caller's 2+ rule (spec §3) needs every match, not one
+    winner like ``extract_sigla``. Reuses the same compiled ``_SIGLA_PATTERNS``
+    (single source for token matching), only without the folder escape.
+
+    Args:
+        filename: PDF basename (any casing; a non-.pdf name yields the empty set).
+
+    Returns:
+        Set of sigla codes whose compiled token/alias patterns match the stem.
+    """
+    fn_lower = filename.lower()
+    if not fn_lower.endswith(".pdf"):
+        return set()
+    stem = fn_lower[: -len(".pdf")]
+    return {
+        sigla
+        for sigla, patterns in _SIGLA_PATTERNS.items()
+        if any(p.search(stem) for p in patterns)
+    }
+
+
 def _matches(sigla: str, filename: str) -> bool:
     """True if ``filename`` belongs to ``sigla``, honoring ``count_scope`` (F14).
 
