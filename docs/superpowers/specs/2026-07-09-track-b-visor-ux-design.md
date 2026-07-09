@@ -3,7 +3,7 @@
 **Date:** 2026-07-09
 **Status:** DRAFT for review
 **Author:** Claude (Fable 5) + Daniel
-**Scope:** Frontend, plus two one-liner backend touches (month sort; none other).
+**Scope:** Frontend, plus one one-liner backend touch (month sort; none other).
 **No counting change:** nothing in this spec alters `compute_cell_count`, per-file
 state, Excel output, or history.
 
@@ -16,8 +16,10 @@ a "Track paralelo B — Pulido UX" — ~15 small items with design decisions alr
 recorded — that was never scheduled: no spec, plan, or commit exists for any of
 them. Daniel hit the gap live on 2026-07-08 (slow page rendering, small
 thumbnails, missing filters, rotation that doesn't straighten the view) and
-added two new items. Decision 2026-07-09: ship **all** of Track B in one round,
-plus the two new items, plus the still-open M1 month-order bug.
+added two new items: the **month-level manifest panel** (§7) and the
+**DetailPanel reorder** that unburies the worker-count button (§6). Decision
+2026-07-09: ship **all** of Track B in one round, plus the two new items, plus
+the still-open M1 month-order bug.
 
 Where the triage recorded a decision, this spec restates it as the authority —
 implementation must not re-litigate those decisions.
@@ -34,8 +36,11 @@ placeholder. Exactly the state the triage diagnosed ("NO está en su techo").
 cache + instant placeholder.
 
 - **Page cache:** a per-document LRU holding ~5 rendered pages, keyed by
-  `page@scale@rotation`. Rendered output stored as `ImageBitmap` (fallback:
-  dataURL) so re-showing a cached page is a synchronous draw.
+  `page@scale@rotation` — the rotation term is `rotation ?? 0`, so this chunk
+  is order-independent from §4 (which introduces the `rotation` prop on
+  `PdfPage`; until it lands, every key carries `0`). Rendered output stored as
+  `ImageBitmap` (fallback: dataURL) so re-showing a cached page is a
+  synchronous draw.
 - **Pre-render window:** after the current page renders, queue `current ±1`
   then `±2` (clamped to `[1, pageCount]`) at the same scale, low priority
   (idle callback / after paint), cancellable on page change. A pure helper
@@ -69,8 +74,17 @@ Consumers: `WorkerCountViewer` and `PDFLightbox` (both render through
   current single-page behavior; the counting-mode PageDown (fix-and-advance)
   keeps precedence in WorkerCountViewer — Shift only jumps, never counts.
 - **"Ir a página":** a small numeric input in each viewer's toolbar
-  (placeholder `Ir a pág.`), Enter jumps (clamped), Esc blurs. Existing rule
-  honored: counting/nav shortcuts are ignored while focus is in an input.
+  (placeholder `Ir a pág.`), Enter jumps (clamped), Esc blurs.
+- **Input-focus guard — new work, not an existing rule.** `PDFLightbox`
+  already ignores keys while an input has focus (`document.activeElement`
+  check); **`WorkerCountViewer` does NOT** — its keydown handler deliberately
+  captures every `[0-9]` keystroke into the worker-count digit buffer, and its
+  own comment notes this is safe only *because the viewer has no inputs
+  today*. Adding "Ir a página" (here) and the calculator (§8) introduces the
+  first inputs, so the guard must be **built**: every WorkerCountViewer
+  keydown handler (counting digits, nav, reorg gate) becomes a no-op while
+  `document.activeElement` is an input/textarea. Explicit collision risk to
+  test: typing `12` in "Ir a página" must NOT feed the count buffer.
 - **Near-match viewer (I6):** `PdfCoverViewer` gains optional prev/next.
   Contract: DetailPanel passes the near-match list index context
   (`onPrev`, `onNext`, `positionLabel` e.g. `"2 de 5"`); the dialog header
@@ -86,17 +100,29 @@ original I7 was dropped — one state, one source of truth).
 
 - Pure helper in `frontend/src/lib/` (vitest-tested):
   `pageRotation(reorgOps, hospital, sigla, file, page) -> 0|90|180|270` —
-  sums `rotation_deg` (mod 360) of all **pending** `rotate` ops whose
-  `source.file` matches and whose `source.page_range` covers `page`, for that
-  cell. Non-pending (`applied`) ops contribute 0 — when paso-1 physically
-  rotates the file and the op retires on re-scan, the view heals to natural
-  automatically.
+  sums `rotation_deg` (mod 360) of all **pending** `rotate` ops for that cell
+  whose `source.file` matches and whose `source.page_range` covers `page`.
+  **A missing/`null` `page_range` means the whole file** — this is the common
+  case: rotate ops created from FileList's `ReorgMenu` send `source: {file}`
+  with no range; only viewer-reorg-mode ops carry `[start, end]` (1-based,
+  inclusive). Non-pending (`applied`) ops contribute 0.
+- **Healing assumption (stated, cross-project):** an op retires (`applied`)
+  only when its `source.file` *name* disappears from the folder on a pase-1
+  re-scan. This assumes paso-1's second pass renames when it rotates (its
+  naming convention). If paso-1 ever rotates in place keeping the name, the
+  op stays pending and the view would double-rotate — the operator's remedy
+  is deleting the op; flagging evidence for `rotate` in the paso-1 contract
+  is out of scope here.
 - Application: pdf.js native `getViewport({ scale, rotation: base + extra })`
   where `base` is the page's own `/Rotate`. Applied in `PdfPage` (all three
-  viewer surfaces) and `WorkerThumbnails` (rotation term in the cache key).
-- Plumbing: viewers already know `hospital`/`sigla`/`file`; `reorg_ops` come
-  from the session store (already in the session payload consumed by
-  `ReorganizacionPanel`).
+  viewer surfaces) and in thumbnails.
+- Plumbing: the parent viewers know `hospital`/`sigla`/`file` and the store's
+  `reorg_ops` (already in the session payload consumed by
+  `ReorganizacionPanel`). `WorkerThumbnails`/`Thumb` do **not** — instead of
+  threading cell coords into the child, the parent passes a precomputed
+  `rotationForPage(page) -> deg` prop; `Thumb` uses it for rendering and adds
+  the degrees to its cache key (`page@rotation`), so a rotated page's
+  thumbnail re-renders once instead of showing a stale orientation.
 
 ## 5 · FileList (E1 + E2 + E3 + D2)
 
@@ -107,16 +133,21 @@ original I7 was dropped — one state, one source of truth).
   Empty selection = no origin filter (today's behavior). Pure predicate
   `matchesFilters(file, search, activeOrigins)` in `lib/` (vitest). The footer
   count keeps showing `filtered de total`.
-- **docs≠pages highlight (E3, triage: "versión sutil"):** when a documents-cell
-  file's effective count differs from its `page_count`, tint the count number
-  (subtle text-tone change, no heavy background). Documents-type cells only.
+- **docs≠pages highlight (E3, triage: "versión sutil"):** when a file's
+  effective count differs from its `page_count`, tint the count number (subtle
+  text-tone change, no heavy background). Applies to both doc-counting cell
+  types — `documents` **and** `documents_workers` (the `CAPPED_COUNT_TYPES`
+  set: both carry a real per-file doc count comparable to pages); `checks`
+  cells excluded.
 - **Keep scroll position (E1 — triage marked *verificar*):** reproduce first;
   if saving a per-file override resets the list scroll, anchor/restore the
   scroll position across the refetch re-render. If it does not reproduce,
   record that in the plan and close the item.
 - **Steppers (D2):** small always-visible `−`/`+` buttons beside the per-file
   count that save `current±1` through the existing per-file override path
-  (same clamps: ≥0, cap → the Spec-B confirmation flow). Thin layer, no new
+  (same clamps: ≥0, and whatever cap behavior that path has — including the
+  over-cap confirmation once `2026-07-09-conteo-session-fixes-design.md` §3
+  ships; the steppers add no cap logic of their own). Thin layer, no new
   state.
 
 ## 6 · DetailPanel (D1 + reorder + collapsible reorg)
@@ -127,9 +158,12 @@ original I7 was dropped — one state, one source of truth).
   primary counting tool and today sits below a list that grows with every op.
 - **Reorganización collapses:** the section renders as a disclosure
   (collapsed by default) whose header shows the pending-op count for the cell
-  (e.g. `Reorganización · 3 ops`). Keyboard-accessible (the ReorgMenu
-  `<summary>` A11y lesson applies). The panel's per-cell content (in/out ops,
-  delete, net delta) is unchanged — except the export button moves out (§7).
+  (e.g. `Reorganización · 3 ops`). Build it as a small reusable
+  `frontend/src/ui/Disclosure.jsx` primitive (the project already centralizes
+  8 shared primitives there), keyboard-accessible (the ReorgMenu `<summary>`
+  A11y lesson applies); ReorgMenu's existing ad hoc details/summary stays as
+  is. The panel's per-cell content (in/out ops, delete, net delta) is
+  unchanged — except the export button moves out (§7).
 - **Select-on-focus (D1):** the override input in `OverridePanel` and the
   inline cell count (`InlineEditCount`) select their content on focus, so
   typing overwrites immediately.
@@ -174,6 +208,12 @@ line + a unit test with shuffled month folders.
   `matchesFilters`, calculator evaluator) + store-level flows where the
   harness exists (chip filters, go-to-page clamp). Component tests follow the
   existing patterns (mock pdfjs like `DetailPanel.reorgLoop.test.jsx`).
+  **Known test migration:** `ReorganizacionPanel.test.jsx` asserts
+  `data-testid="export-btn"` exists on the per-cell panel — §7 removes that
+  button, so those assertions move to the new month-panel test (export button
+  present + enabled there; per-cell panel asserts its absence). New guard
+  test: the WorkerCountViewer input-focus rule (§3) — digits typed into
+  "Ir a página"/calculator never reach the count buffer.
 - **pytest:** months sort test. Nothing else server-side.
 - **Live smoke (Brave via chrome-devtools MCP, isolated copy DB):** thumbnails
   larger + centered; fast page flipping on a big PDF (cache visibly hot);
@@ -189,6 +229,8 @@ line + a unit test with shuffled month folders.
   F5 subtotals).
 - M2 hospital-card worker indicator — already shipped (Incr 3C).
 - View-only rotation without a manifest op (dropped half of I7).
-- Spec B items (cap confirmation UI arrives with Spec B; the steppers here
-  simply inherit whatever the override path does).
+- The conteo-session fixes spec's items
+  (`2026-07-09-conteo-session-fixes-design.md`: cap confirmation, forbid-extra,
+  irl cover_code, presence) — the steppers here simply inherit whatever the
+  override path does.
 - Flavor-authoring viewer (Grupo G), badges (Grupo K) — separate tracks.

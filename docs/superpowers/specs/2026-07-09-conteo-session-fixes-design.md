@@ -45,13 +45,27 @@ the next time anyone runs "Revisar OCR" on an irl cell.
 
 ### Fix
 
-- Change the value to `"F-CRS-IRL-01"`. One line.
+- Change the value to `"F-CRS-IRL-01"`. One line — **plus the three places
+  that currently document the buggy value**:
+  - `tests/unit/scanners/test_patterns_registry.py:116` —
+    `test_irl_pagination_has_cover_code` asserts the **wrong** value
+    (`== "F-CRS-ODI-01"`); flip the assertion to `"F-CRS-IRL-01"` and fix its
+    docstring. (Without this the suite goes red on the fix.)
+  - `core/scanners/patterns.py` `SiglaPattern` TypedDict docstring (~line
+    48-50) uses `"F-CRS-ODI-01"` as its worked IRL example — update it.
+  - `tests/unit/scanners/test_pattern_irl_odi.py` `test_irl_count_ocr_smoke`
+    docstring (lines 24-32) explains the design with the wrong code — update
+    (doc-only; the test skips without its gitignored fixture).
 - Bump `SCANNER_PATTERNS_VERSION` (core/utils.py) `v6-token-aliases` →
   `v7-irl-cover` with a one-line comment, following the existing changelog
   convention. The constant is informational (no runtime consumer) — the bump
   documents the pattern change for drift tooling.
-- Test: a unit test in the existing per-sigla pattern-test idiom asserting
-  `PATTERNS["irl"]["cover_code"] == "F-CRS-IRL-01"` (pin the regression).
+- Implementation check (plan task): with the corpus present, verify IRL
+  continuation/appendix pages do **not** themselves carry the `F-CRS-IRL-01`
+  substring in the corner band (cover_code is a substring match) — the same
+  over-match class the V2 anti-colados survey found for the `F-CRS-LCH`
+  family. The 2026-07-08 visual pass saw the code only on covers, but confirm
+  on the 54-page HRB packet before shipping.
 
 ### Output safety
 
@@ -81,6 +95,7 @@ error:
 | `api/routes/sessions/writes.py` | `PerFileOverrideRequest`, `ClearNearMatchBody`, `WorkerCountPatch`, `ReconcileWorkerMarksBody`, `NotePatch`, `ConfirmRequest`, `DismissColadoBody` |
 | `api/routes/sessions/writes.py` — `patch_override` | currently takes a **raw `Body(...)` dict** — introduce `OverridePatch(BaseModel)` with `value: Any = None`, `manual: bool = False`, `participant_id: str | None = None`, `extra="forbid"` (+ `allow_over_pages`, §3) |
 | `api/routes/sessions/scan.py` | `ApplyRatioRequest`, `ScanFileOcrRequest` |
+| `api/routes/sessions/scan.py` — `scan` + `scan_ocr` | both currently take **raw `Body(...)` dicts** — introduce thin models (`ScanRequest`, `ScanOcrRequest`) with `Any`-typed fields + `extra="forbid"`, keeping today's manual validation (same trick as `OverridePatch` below) so existing 400 semantics don't shift to 422 |
 | `api/routes/sessions/reorg.py` | `ReorgOpCreate`, `ReorgSource`, `ReorgDest` |
 | `api/routes/presence.py` | `HeartbeatBody`, `FocusBody`, `LeaveBody` |
 
@@ -101,9 +116,14 @@ No other endpoint changes semantics: correct requests behave exactly as before.
 
 ### Frontend audit
 
-`frontend/src/lib/api.js` is the only in-repo client. Audit each write method's
-payload keys against its model during implementation (expected: already exact —
-the bug was hit by an external client, Claude's script). No frontend code
+`frontend/src/lib/api.js` is the only in-repo client. **Already verified**
+(2026-07-09 spec review, code-checked): `patchOverride`,
+`patchPerFileOverride`, `patchWorkerCount`, `patchNote`, `clearNearMatches`,
+`applyRatio`, `scanFileOcr`, `createReorgOp` (including every `opDraft.source`
+producer) and the three presence calls all send exactly the fields their
+target models declare — `extra="forbid"` is safe for every existing in-repo
+caller. The plan should still grep `tests/` for any test that intentionally
+posts an extra key expecting 200 (spot-checks found none). No frontend code
 change expected from this item.
 
 ---
@@ -136,25 +156,44 @@ confirmation** escape hatch.
 
 ### Fix — frontend
 
-- `api.js` `saveOverride`/`savePerFileOverride` accept an optional
-  `allowOverPages` and include the flag in the body.
-- In the two editing surfaces (per-file count in `FileList`, cell override in
-  `OverridePanel`): on a 422 with `error === "count_exceeds_pages"`, show an
-  inline confirmation (po-* tokens, no browser `confirm()`):
-  - Microcopy: **“El archivo tiene {max} páginas. ¿Confirmas {N} documentos?”**
-    (cell variant: “La celda tiene {max} páginas…”), buttons **“Confirmar”** /
-    **“Cancelar”**.
-  - Confirmar → resend with `allow_over_pages: true`. Cancelar → revert to the
-    previous value (the existing 422-revert path).
-- The store's structured-422 handling (`jsonOrThrowStructured`) already
-  preserves the error body; the confirmation hooks into that path.
+**Reality check first:** the cap is enforced **client-side** today — the
+backend 422 is unreachable from the UI. `frontend/src/lib/override-input.js::
+parseOverrideInput` returns `valid: false` when `n > maxPages` and
+`OverridePanel` only flushes valid values; `InlineEditCount`'s commit gate
+(`v <= max`) blocks the per-file path the same way. There is also no existing
+"422-revert" logic to reuse (`count_exceeds_pages` appears nowhere in
+`frontend/src`; the store's `saveOverride` catch only special-cases 409). So
+the confirmation is **client-triggered by the same client-side gates**, and
+the backend flag remains the server-side authority for headless clients:
+
+- `frontend/src/lib/override-input.js`: over-cap stops being a plain
+  `valid: false` — `parseOverrideInput` distinguishes a new result state
+  `over_cap` (n parses, exceeds `maxPages`) from genuinely invalid input.
+- `OverridePanel.jsx` (cell) and `InlineEditCount.jsx` (per-file): on
+  `over_cap`, instead of refusing silently, show an inline confirmation
+  (po-* tokens, no browser `confirm()`):
+  - Microcopy: **“El archivo tiene {max} páginas. ¿Confirmas {N}
+    documentos?”** (cell variant: “La celda tiene {max} páginas…”), buttons
+    **“Confirmar”** / **“Cancelar”**.
+  - Confirmar → save with the flag. Cancelar → keep the previous value
+    (today's refuse behavior).
+- Plumbing (correct symbol names): the **store actions**
+  `saveOverride`/`savePerFileOverride` (`frontend/src/store/session.js`)
+  accept an `allowOverPages` option and pass it to the **api functions**
+  `patchOverride`/`patchPerFileOverride` (`frontend/src/lib/api.js`), which
+  include `allow_over_pages: true` in the body.
+- If the server 422 ever surfaces anyway (race: pages changed between render
+  and save), the store's existing generic error toast handles it — no new
+  422 branch required.
 
 ### Tests
 
 - Backend: over-pages without flag → 422 (unchanged); with flag → 200 and value
   persisted; checks sigla still uncapped; negatives still rejected even with
   the flag.
-- Frontend (vitest): the 422→confirm→resend flow on the store action level.
+- Frontend (vitest): `parseOverrideInput` returns `over_cap` (not plain
+  invalid) for n > maxPages; the confirm→save-with-flag flow at the component/
+  store level; Cancelar keeps the previous value.
 
 ---
 
@@ -190,12 +229,18 @@ write — observed live this session.
 
 ## 5 · Acceptance criteria
 
-1. `PATTERNS["irl"]["cover_code"] == "F-CRS-IRL-01"`; `SCANNER_PATTERNS_VERSION == "v7-irl-cover"`.
-2. Any session-write/presence/scan/reorg request with an unknown JSON key → 422;
-   the note-wipe repro now 422s and preserves the note.
-3. `PATCH …/override` (cell) keeps 400 semantics for bad `value` types/ranges.
-4. Over-pages override: blocked without flag, accepted with `allow_over_pages`,
-   confirmation UI wired in FileList + OverridePanel with the microcopy above.
+1. `PATTERNS["irl"]["cover_code"] == "F-CRS-IRL-01"`; `SCANNER_PATTERNS_VERSION == "v7-irl-cover"`;
+   `test_patterns_registry` asserts the corrected value.
+2. Every body-taking endpoint in `writes.py`, `scan.py`, `reorg.py` and
+   `presence.py` rejects an unknown JSON key with 422 (raw-dict bodies
+   converted to forbid-extra models); the note-wipe repro now 422s and
+   preserves the note.
+3. `PATCH …/override` (cell), `scan` and `scan_ocr` keep their current 400
+   semantics for bad values — the new models guard keys only.
+4. Over-pages override: backend blocks without flag, accepts with
+   `allow_over_pages`; the client-side gates (`parseOverrideInput`,
+   `InlineEditCount`) surface the confirmation with the microcopy above and
+   send the flag on Confirmar.
 5. `GET /sessions/{id}/presence` returns the live snapshot; agent heartbeat
    yields `kind="agent"`.
 6. Gates: full fast suite green (`pytest -m "not slow"`), vitest green,
