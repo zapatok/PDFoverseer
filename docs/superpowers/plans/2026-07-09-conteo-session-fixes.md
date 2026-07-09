@@ -122,16 +122,19 @@ never read the JUNIO/HRB packet this check targets. Write a scratch script
 import sys
 sys.path.insert(0, "a:/PROJECTS/PDFoverseer")
 from pathlib import Path
+from core.scanners.cancellation import CancellationToken
 from core.scanners.utils.pagination_count import count_documents_by_pagination
 
 pdf = next(Path(r"A:/informe mensual/JUNIO/HRB/2.-Induccion IRL").rglob("*.pdf"))
-result = count_documents_by_pagination(pdf, cover_code="F-CRS-IRL-01")
+# cancel is a REQUIRED keyword-only arg (pagination_count.py:198) — the idiom
+# comes from tests/unit/scanners/utils/test_pagination_count.py.
+result = count_documents_by_pagination(pdf, cancel=CancellationToken(), cover_code="F-CRS-IRL-01")
 print(pdf.name, result)
 ```
 
-(Adapt the folder name / function signature to reality — check
-`core/scanners/utils/pagination_count.py` for the exact API and what it
-returns.) Expected: **1 document** per IRL packet (one cover), not 0 (old
+(Adapt the folder name / return-shape handling to reality — check
+`core/scanners/utils/pagination_count.py` for what it returns, and the
+CancellationToken import path against the test file's actual import.) Expected: **1 document** per IRL packet (one cover), not 0 (old
 bug) and not >1 (would mean appendix pages carry the substring — if so, STOP
 and surface to Daniel before committing). Optionally also run the fixed
 MAYO-based benchmark end-to-end (`python eval/pagination_count/benchmark.py`,
@@ -850,7 +853,7 @@ Run: the extended unit file → PASS; `pytest -m "not slow" -q` → 0 failures;
 `ruff check .` → 0.
 
 ```bash
-git add api/presence.py tests/unit/api/<the-file>.py
+git add api/presence.py tests/unit/api/test_presence_registry.py
 git commit -m "fix(presence): agent heartbeat creates/normalizes kind=agent
 
 heartbeat() hardcoded kind=human on create, so an agent that heartbeated

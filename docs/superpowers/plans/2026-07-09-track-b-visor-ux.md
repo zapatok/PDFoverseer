@@ -20,49 +20,35 @@
 
 **Files:**
 - Modify: `api/routes/months.py:48-68` (`list_months`)
-- Test: `tests/unit/api/test_months_sort.py` (create)
+- Test: `tests/unit/api/test_routes_months.py` (extend — it already mounts this router on a bare `FastAPI()`)
 
 - [ ] **Step 1: Write the failing test**
 
 `list_months` builds from `sorted(root.iterdir())` — alphabetical folder
-names (ABRIL, JUNIO, MAYO). Test the route with a fake root:
+names (ABRIL, JUNIO, MAYO). **Extend the existing
+`tests/unit/api/test_routes_months.py`** — it already tests this exact
+router by mounting it on a bare `FastAPI()` (no lifespan, no DB;
+`list_months` never touches the DB). Mirror its fixture idiom instead of the
+heavier `create_app()` + `TestClient` route. The test body:
 
 ```python
-"""list_months must return chronological order, not folder-name order (M1)."""
-
-from __future__ import annotations
-
-import pytest
-from fastapi.testclient import TestClient
-
-
-@pytest.fixture()
-def months_client(tmp_path, monkeypatch):
+def test_months_chronological(tmp_path, monkeypatch):
+    """Months come back in (year, month) order, not folder-name order (M1:
+    alphabetical gave ABRIL, JUNIO, MAYO)."""
     for name in ("ABRIL", "JUNIO", "MAYO", "FEBRERO"):
         (tmp_path / name).mkdir()
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
-    from api.main import create_app
-
-    with TestClient(create_app()) as c:
-        yield c
-
-
-def test_months_chronological(months_client):
-    r = months_client.get("/api/months")
+    r = client_for_months_router().get("/api/months")  # ← the file's idiom
     assert r.status_code == 200
     nums = [m["month"] for m in r.json()["months"]]
-    assert nums == sorted(nums), f"months not chronological: {nums}"
-    assert nums == [2, 4, 5, 6]
+    assert nums == [2, 4, 5, 6], f"months not chronological: {nums}"
 ```
 
-Implementer note: check how `_informe_root()` reads its root (env var vs
-constant) in `api/routes/months.py` and how existing api tests build a client
-(`tests/unit/api/test_cells_routes.py` idiom); adapt the fixture to match —
-env override at import time may need `monkeypatch` + reload, or the root may
-be injectable. Follow the closest existing test's pattern. **conftest DB
-isolation:** api tests must not touch the real `overseer.db` — reuse the
-isolation fixture the suite already has (post-incident `501ff34`); confirm
-`create_app()` in a test context picks up the isolated `OVERSEER_DB_PATH`.
+Implementer note: `client_for_months_router()` is a stand-in — open
+`tests/unit/api/test_routes_months.py` first and reuse ITS exact
+fixture/builder (bare `FastAPI()` + `include_router`) and its existing way of
+pointing `_informe_root()` at a tmp dir (env var vs monkeypatched constant —
+copy whichever that file already does).
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -83,7 +69,7 @@ In `list_months`, after the loop and before `return`:
 Run: `pytest tests/unit/api/test_months_sort.py -v` → PASS; `pytest -m "not slow" -q` → 0 failures; `ruff check .` → 0.
 
 ```bash
-git add api/routes/months.py tests/unit/api/test_months_sort.py
+git add api/routes/months.py tests/unit/api/test_routes_months.py
 git commit -m "fix(api): months list in chronological order (triage M1)"
 ```
 
@@ -191,7 +177,8 @@ git commit -m "feat(ui): Disclosure primitive (button-based, aria-expanded)"
 Current order: `Ajuste manual` (inside a conditional) → `<h4>Nota` +
 `NotePanel` → `<h4>Reorganización` + `ReorganizacionPanel` →
 `WorkerCountModule` + `OrphanMarksPanel` (inside `showsWorkerCounter(...)`) →
-`PosiblesColadosPanel`.
+`PosiblesColadosPanel` → `NearMatchesSection` (trailing, lines ~541-547 —
+stays last, untouched by this task).
 
 - [ ] **Step 2: Reorder + wrap Reorganización in Disclosure**
 
@@ -513,10 +500,12 @@ Import both helpers from `"../lib/page-rotation"`.
 `PdfPage` call becomes `rotation={rotationForPage ? rotationForPage(page) : 0}`
 and its `WorkerThumbnails` gets `rotationForPage={rotationForPage}`. The
 parent `PDFLightbox` builds it (it has `lightbox.hospital/sigla`, the current
-file name, and the store): pass
-`rotationForPage={rotationForPageFn(reorgOps, lightbox.hospital, lightbox.sigla, currentFileName)}`
-— read the component to find the current-file variable name at the
-`InspectView` call site.
+file object, and the store): pass
+`rotationForPage={rotationForPageFn(reorgOps, lightbox.hospital, lightbox.sigla, currentFile?.name)}`
+— use **`currentFile?.name`** (the file OBJECT in scope at the `InspectView`
+call site), NOT the `filename` string variable: that one carries a
+loading-state "…" fallback that would break `pageRotation`'s exact-match
+lookup during the loading window.
 
 - [ ] **Step 3: PdfCoverViewer + DetailPanel**
 
@@ -735,7 +724,11 @@ function cacheFor(doc) {
 
 const keyFor = (page, scale, rotation) => `${page}@${scale}@${rotation}`;
 
-async function renderToBitmap(doc, pageNumber, scale, rotation) {
+// registerTask lets the caller cancel the in-flight pdf.js RenderTask on
+// page/scale change (spec §1: "the existing render-task cancel ... stays").
+// The `cancelled` flag alone would only discard the RESULT — the paint work
+// would keep burning CPU in the background under rapid page-flipping.
+async function renderToBitmap(doc, pageNumber, scale, rotation, registerTask) {
   const page = await doc.getPage(pageNumber);
   try {
     const viewport = page.getViewport({
@@ -745,7 +738,9 @@ async function renderToBitmap(doc, pageNumber, scale, rotation) {
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+    const task = page.render({ canvasContext: canvas.getContext("2d"), viewport });
+    registerTask?.(task);
+    await task.promise; // rejects with RenderingCancelledException on cancel
     if (typeof createImageBitmap === "function") {
       const bmp = await createImageBitmap(canvas);
       canvas.width = 0; // release backing store eagerly
@@ -775,6 +770,13 @@ export function PdfPage({ doc, pageNumber, scale = 1.5, rotation = 0 }) {
     if (!doc) return undefined;
     let cancelled = false;
     const cache = cacheFor(doc);
+    // Every in-flight pdf.js RenderTask (current page + pre-renders) lands
+    // here so cleanup can .cancel() them — not just ignore their results.
+    const liveTasks = new Set();
+    const track = (task) => {
+      liveTasks.add(task);
+      task.promise.catch(() => {}).finally(() => liveTasks.delete(task));
+    };
 
     const draw = (bmp) => {
       const canvas = canvasRef.current;
@@ -791,7 +793,7 @@ export function PdfPage({ doc, pageNumber, scale = 1.5, rotation = 0 }) {
     } else {
       // Instant placeholder from the thumbnail cache while the real render runs.
       setPlaceholder(getCachedThumb(doc, pageNumber));
-      renderToBitmap(doc, pageNumber, scale, rotation)
+      renderToBitmap(doc, pageNumber, scale, rotation, track)
         .then((bmp) => {
           if (cancelled) {
             bmp?.close?.();
@@ -813,14 +815,14 @@ export function PdfPage({ doc, pageNumber, scale = 1.5, rotation = 0 }) {
         const k = keyFor(p, scale, rotation);
         if (cache.get(k)) continue;
         try {
-          const bmp = await renderToBitmap(doc, p, scale, rotation);
+          const bmp = await renderToBitmap(doc, p, scale, rotation, track);
           if (cancelled) {
             bmp?.close?.();
             return;
           }
           cache.set(k, bmp);
         } catch {
-          return; // doc closed mid-prerender — stop quietly
+          return; // cancelled / doc closed mid-prerender — stop quietly
         }
       }
     });
@@ -828,6 +830,9 @@ export function PdfPage({ doc, pageNumber, scale = 1.5, rotation = 0 }) {
     return () => {
       cancelled = true;
       cancelIdle(handle);
+      // Spec §1: cancel semantics preserved — kill in-flight paints, current
+      // and pre-render alike (the old PdfPage cancelled its single task too).
+      for (const task of liveTasks) task.cancel();
     };
   }, [doc, pageNumber, scale, rotation]);
 
@@ -1009,9 +1014,12 @@ Add to the zoom cluster overlay (the `absolute bottom-3 right-3` div, ~line
             />
 ```
 
-(`e.stopPropagation()` is belt-and-suspenders on top of the Task 11 guard —
-the window listener still fires first on keydown capture order; the guard is
-the real protection, verified in the test below.)
+(Event-order note, stated correctly: the viewer's `window` keydown listener
+is bubble-phase, and `window` is the OUTERMOST node in the bubble chain — so
+the input's React `onKeyDown` runs first, and its `e.stopPropagation()` alone
+already prevents the event from ever reaching the window listener. The Task
+11 `focusIsInInput` guard is deliberate defense-in-depth for keys that reach
+the window through any other path, and is what the test below pins.)
 
 - [ ] **Step 4: InspectView (PDFLightbox) — same two features**
 
@@ -1021,12 +1029,10 @@ activeElement guard already covers focus isolation.
 
 - [ ] **Step 5: Guard collision test (the §10 required test)**
 
-In a new `frontend/src/components/WorkerCountViewer.guard.test.jsx`, mock
-pdfjs like `DetailPanel.reorgLoop.test.jsx` does (stub `usePdfDocument` to
-return `{doc: null}` and stub child components as needed) OR — cheaper and
-sufficient — test the guard logic itself: render the viewer is heavy, so if
-mocking proves disproportionate, extract the guard predicate to
-`lib/keyboard-focus.js`:
+Rendering the whole viewer is heavy (precedent: `DetailPanel.reorgLoop.test.jsx`
+doesn't mock pdfjs internals — it stubs the entire `PdfCoverViewer` component
+with `vi.mock`). Skip the component render entirely: extract the guard
+predicate to `lib/keyboard-focus.js` and test it directly:
 
 ```js
 export function focusIsInInput(el = document.activeElement) {
@@ -1195,17 +1201,24 @@ git commit -m "feat(web): FileList origin-chip filter bar, AND-combined with sea
 - [ ] **Step 1: Pure predicate (in `file-filters.js`) + tests**
 
 ```js
+import { isCappedCountType } from "./cell-status";
+
 /** E3: subtle cue when a file's effective doc count differs from its pages.
- *  Doc-counting cells only (documents / documents_workers) — checks excluded. */
+ *  Doc-counting cells only — reuse isCappedCountType (CAPPED_COUNT_TYPES in
+ *  cell-status.js exists precisely so FileList/DetailPanel don't drift;
+ *  FileList already imports it). checks excluded by that same predicate. */
 export function countDiffersFromPages(file, countType) {
-  if (countType !== "documents" && countType !== "documents_workers") return false;
+  if (!isCappedCountType(countType)) return false;
   if (file.effective_count == null || file.page_count == null) return false;
   return file.effective_count !== file.page_count;
 }
 ```
 
-Tests: differs → true; equal → false; null count (Pendiente) → false; checks
-countType → false. Run → FAIL → implement → PASS.
+(Verify the exact exported name in `frontend/src/lib/cell-status.js` — if
+only the `CAPPED_COUNT_TYPES` array is exported, use
+`CAPPED_COUNT_TYPES.includes(countType)`.) Tests: differs → true; equal →
+false; null count (Pendiente) → false; checks countType → false. Run → FAIL
+→ implement → PASS.
 
 - [ ] **Step 2: Apply the tint in the count cell**
 
@@ -1278,7 +1291,10 @@ git commit --allow-empty -m "docs(web): E1 scroll-reset did not reproduce — cl
 
 - [ ] **Step 1: Add − / + beside the count (editable branch only)**
 
-In the count cell `<div>`, alongside `InlineEditCount`:
+In the count cell `<div>`, alongside `InlineEditCount`. Composition with
+Task 15: the E3 tint `<span>` wraps ONLY `InlineEditCount` (the number keeps
+the tone); the steppers sit outside it — the `inline-flex` span below hosts
+`[− button] [tint-span > InlineEditCount] [+ button]`:
 
 ```jsx
               <span className="inline-flex items-center gap-0.5">
@@ -1365,13 +1381,28 @@ const ops = [
   { id: "op_2", op_type: "move_file", status: "applied", doc_count: 2,
     source: { hospital: "HLU", sigla: "art", file: "b.pdf" },
     dest: { hospital: "HLU", sigla: "odi" } },
+  // pending CROSS-CELL op — pins the grouping decision below
+  { id: "op_3", op_type: "extract_pages", status: "pending", doc_count: 21,
+    source: { hospital: "HRB", sigla: "altura", file: "c.pdf", page_range: [80, 100] },
+    dest: { hospital: "HRB", sigla: "insgral" } },
 ];
 
 describe("MonthReorgPanel", () => {
-  it("groups pending ops by cell and hides applied ones", () => {
+  it("groups pending ops by SOURCE cell and hides applied ones", () => {
     render(<MonthReorgPanel open ops={ops} onClose={() => {}} onDelete={() => {}} onExport={() => {}} />);
     expect(screen.getByText(/HRB · altura/)).toBeTruthy();
     expect(screen.queryByText(/HLU · art/)).toBeNull(); // applied → hidden
+  });
+
+  it("a cross-cell op lists under its SOURCE cell, dest shown inline", () => {
+    // DECISION (documented, not accidental): the month panel groups by the
+    // SOURCE cell only — the op is executed FROM the source file; the dest
+    // appears inline in the row (as the per-cell OpRow already renders it).
+    // The per-cell panel keeps showing incoming ops for the dest cell.
+    render(<MonthReorgPanel open ops={ops} onClose={() => {}} onDelete={() => {}} onExport={() => {}} />);
+    const groups = screen.getAllByText(/HRB · /).map((n) => n.textContent);
+    expect(groups.some((t) => t.includes("altura"))).toBe(true);
+    expect(groups.some((t) => t.includes("insgral"))).toBe(false); // no dest group
   });
 
   it("export button present and enabled with pending ops", () => {
@@ -1440,10 +1471,19 @@ block and the `canExport` derivation; drop the now-unused `onExport` prop and
 `Download` import. In `DetailPanel.jsx`: remove `onExport={...}` from the
 `ReorganizacionPanel` call site (inside the Task 3 Disclosure).
 
-In `ReorganizacionPanel.test.jsx`: the export assertions (including the
-locked-state "export stays enabled" test around lines 178-194) change to
-assert **absence**: `expect(container.querySelector('[data-testid="export-btn"]')).toBeNull();`.
-The presence+enabled semantics now live in `MonthReorgPanel.test.jsx` (Step 1).
+In `ReorganizacionPanel.test.jsx`, be surgical about WHICH assertions move:
+
+- **Only the DOM-querying export test flips** (the locked-state block around
+  lines 178-194 asserting `[data-testid="export-btn"]` exists/enabled) — it
+  becomes `expect(container.querySelector('[data-testid="export-btn"]')).toBeNull();`.
+  Its presence+enabled semantics now live in `MonthReorgPanel.test.jsx`
+  (Step 1).
+- **Do NOT touch the helper-level tests** (line ~81, ~142-144, and the
+  "(d) export button state" describe block ~148-160): those exercise the
+  exported `hasPendingOps` **pure helper**, which is cell-scoped and distinct
+  from the removed component `canExport` (session-wide `ops.some(...)`).
+  `hasPendingOps` stays exported and used — don't conflate the two while
+  migrating.
 
 - [ ] **Step 5: Gates + commit**
 
@@ -1531,7 +1571,8 @@ filtered). Run → FAIL → implement → PASS.
 
 - [ ] **Step 2: Host it in the HUD right column**
 
-Read `WorkerHud.jsx` first; append at its bottom a collapsed-by-default
+Read `WorkerHud.jsx` first (note: it does NOT currently import `useState` —
+add it for `CalcBar`); append at its bottom a collapsed-by-default
 `Disclosure` (Task 2 primitive):
 
 ```jsx
