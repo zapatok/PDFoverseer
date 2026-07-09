@@ -160,7 +160,7 @@ original I7 was dropped — one state, one source of truth).
   (collapsed by default) whose header shows the pending-op count for the cell
   (e.g. `Reorganización · 3 ops`). Build it as a small reusable
   `frontend/src/ui/Disclosure.jsx` primitive (the project already centralizes
-  8 shared primitives there), keyboard-accessible (the ReorgMenu `<summary>`
+  its shared primitives there), keyboard-accessible (the ReorgMenu `<summary>`
   A11y lesson applies); ReorgMenu's existing ad hoc details/summary stays as
   is. The panel's per-cell content (in/out ops, delete, net delta) is
   unchanged — except the export button moves out (§7).

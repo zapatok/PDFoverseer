@@ -45,8 +45,8 @@ the next time anyone runs "Revisar OCR" on an irl cell.
 
 ### Fix
 
-- Change the value to `"F-CRS-IRL-01"`. One line — **plus the three places
-  that currently document the buggy value**:
+- Change the value to `"F-CRS-IRL-01"`. One line — **plus the four places
+  that currently carry the buggy value**:
   - `tests/unit/scanners/test_patterns_registry.py:116` —
     `test_irl_pagination_has_cover_code` asserts the **wrong** value
     (`== "F-CRS-ODI-01"`); flip the assertion to `"F-CRS-IRL-01"` and fix its
@@ -56,6 +56,12 @@ the next time anyone runs "Revisar OCR" on an irl cell.
   - `tests/unit/scanners/test_pattern_irl_odi.py` `test_irl_count_ocr_smoke`
     docstring (lines 24-32) explains the design with the wrong code — update
     (doc-only; the test skips without its gitignored fixture).
+  - `eval/pagination_count/samples.py:86` — the IRL benchmark `Sample`
+    hardcodes `cover_code="F-CRS-ODI-01"` and `benchmark.py` consumes it
+    live. Left as-is, re-running the benchmark (the §1 implementation check's
+    natural tool) would silently reproduce the bug being fixed. Same
+    one-line change. (Dated history/decision docs that quote the old value
+    stay untouched.)
 - Bump `SCANNER_PATTERNS_VERSION` (core/utils.py) `v6-token-aliases` →
   `v7-irl-cover` with a one-line comment, following the existing changelog
   convention. The constant is informational (no runtime consumer) — the bump
