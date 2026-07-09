@@ -52,8 +52,16 @@ copy whichever that file already does).
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `pytest tests/unit/api/test_months_sort.py -v`
+Run: `pytest tests/unit/api/test_routes_months.py -k test_months_chronological -v`
 Expected: FAIL — `[2, 4, 5, 6] != [4, 6, 5, 2]`-style mismatch (ABRIL, JUNIO, MAYO, FEBRERO alphabetical).
+
+Marker caveat: `test_routes_months.py` carries a module-level
+`pytestmark = pytest.mark.corpus` (line 9) that would make the new
+tmp_path-based test auto-skip on a corpus-less machine. Convert the module
+`pytestmark` into per-test `@pytest.mark.corpus` decorators on the two
+existing corpus tests, leave the new test unmarked, and fix the file's
+header comment (it claims the whole file needs the live corpus — no longer
+true).
 
 - [ ] **Step 3: Implement (one line)**
 
@@ -66,7 +74,7 @@ In `list_months`, after the loop and before `return`:
 
 - [ ] **Step 4: Run + commit**
 
-Run: `pytest tests/unit/api/test_months_sort.py -v` → PASS; `pytest -m "not slow" -q` → 0 failures; `ruff check .` → 0.
+Run: `pytest tests/unit/api/test_routes_months.py -v` → the new test PASSES (corpus tests run or skip per machine); `pytest -m "not slow" -q` → 0 failures; `ruff check .` → 0.
 
 ```bash
 git add api/routes/months.py tests/unit/api/test_routes_months.py
