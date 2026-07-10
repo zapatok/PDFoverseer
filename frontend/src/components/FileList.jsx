@@ -356,7 +356,11 @@ export default function FileList({ hospital, sigla }) {
           className="w-full bg-transparent text-sm text-po-text placeholder-po-text-subtle focus:outline-none px-2 py-1"
         />
       </div>
-      <div className="flex flex-wrap gap-1 border-b border-po-border px-2 py-1.5">
+      <div
+        role="group"
+        aria-label="Filtrar por origen"
+        className="flex flex-wrap gap-1 border-b border-po-border px-2 py-1.5"
+      >
         {FILTER_ORIGINS.map((o) => {
           const active = activeOrigins.includes(o);
           return (
@@ -370,7 +374,8 @@ export default function FileList({ hospital, sigla }) {
                 )
               }
               className={[
-                "rounded-full border px-2 py-0.5 text-[11px] transition",
+                "rounded-full border px-2 py-0.5 text-[11px] transition outline-none",
+                "focus-visible:ring-1 focus-visible:ring-po-accent",
                 active
                   ? "border-po-accent bg-po-panel-hover text-po-accent"
                   : "border-po-border text-po-text-muted hover:border-po-border-strong",
@@ -451,7 +456,7 @@ export default function FileList({ hospital, sigla }) {
                       aria-label="Restar un documento"
                       disabled={locked || (value ?? 0) <= 0}
                       onClick={() => commitStep(-1)}
-                      className="rounded px-1 text-po-text-muted hover:text-po-text disabled:opacity-30"
+                      className="rounded px-1 text-po-text-muted hover:text-po-text disabled:opacity-30 outline-none focus-visible:ring-1 focus-visible:ring-po-accent"
                     >
                       −
                     </button>
@@ -480,7 +485,7 @@ export default function FileList({ hospital, sigla }) {
                       aria-label="Sumar un documento"
                       disabled={locked}
                       onClick={() => commitStep(+1)}
-                      className="rounded px-1 text-po-text-muted hover:text-po-text disabled:opacity-30"
+                      className="rounded px-1 text-po-text-muted hover:text-po-text disabled:opacity-30 outline-none focus-visible:ring-1 focus-visible:ring-po-accent"
                     >
                       +
                     </button>
