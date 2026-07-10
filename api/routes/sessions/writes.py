@@ -6,10 +6,10 @@ worker-count, note, confirm. Each enforces the M3 per-cell lock via the
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.presence import is_agent
 from api.state import SessionManager, compute_cell_count
@@ -34,20 +34,31 @@ from ._common import (
 router = APIRouter()
 
 
+class OverridePatch(BaseModel):
+    """Cell-override body. `value` stays Any: the endpoint's hand-rolled
+    validation must keep returning 400 (not Pydantic 422) for bad types."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: Any = None
+    manual: bool = False
+    participant_id: str | None = None
+
+
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/override")
 def patch_override(
     request: Request,
     session_id: str,
     hospital: str,
     sigla: str,
-    body: dict = Body(...),
+    body: OverridePatch,
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     _validate_session_id(session_id)
     _validate_cell_coords(hospital, sigla)
-    value = body.get("value")
-    manual = bool(body.get("manual", False))
-    participant_id: str | None = body.get("participant_id")
+    value = body.value
+    manual = bool(body.manual)
+    participant_id: str | None = body.participant_id
     if value is not None:
         if not isinstance(value, int) or isinstance(value, bool):
             raise HTTPException(400, "value must be int or null")
@@ -83,6 +94,8 @@ def patch_override(
 
 
 class PerFileOverrideRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     count: int = Field(ge=0)  # F5: a per-file override can never be negative
     participant_id: str | None = None
 
@@ -153,6 +166,8 @@ def patch_per_file_override(
 class ClearNearMatchBody(BaseModel):
     """Body for the near-matches clear route. Omit both fields = clear all."""
 
+    model_config = ConfigDict(extra="forbid")
+
     pdf_name: str | None = None
     page_index: int | None = None
     participant_id: str | None = None
@@ -187,6 +202,8 @@ def clear_near_matches(
 
 class WorkerCountPatch(BaseModel):
     """Body del PATCH worker-count. Patch parcial: los campos None no se tocan."""
+
+    model_config = ConfigDict(extra="forbid")
 
     marks: dict | None = None
     status: Literal["en_progreso", "terminado"] | None = None
@@ -259,6 +276,8 @@ class ReconcileWorkerMarksBody(BaseModel):
     un ``Literal`` no expresa junto.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     action: str
     from_file: str
     to_file: str | None = None
@@ -315,6 +334,8 @@ class NotePatch(BaseModel):
     invariante nota⟺estado.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     text: str | None = None
     status: Literal["por_resolver", "resuelto"] = "por_resolver"
     participant_id: str | None = None
@@ -364,6 +385,8 @@ def patch_note(
 
 
 class ConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     confirmed: bool
     participant_id: str | None = None
 
@@ -404,12 +427,12 @@ def patch_confirm(
 
 
 class DismissColadoBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     participant_id: str | None = None
 
 
-@router.post(
-    "/sessions/{session_id}/cells/{hospital}/{sigla}/colado-suspects/{suspect_id}/dismiss"
-)
+@router.post("/sessions/{session_id}/cells/{hospital}/{sigla}/colado-suspects/{suspect_id}/dismiss")
 def dismiss_colado_suspect(
     request: Request,
     session_id: str,

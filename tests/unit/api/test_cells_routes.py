@@ -70,7 +70,7 @@ def test_patch_override_validates_range(client) -> None:
     for bad in (-1, 999_999, "seventeen"):
         r = client.patch(
             f"/api/sessions/{sess}/cells/HPV/odi/override",
-            json={"value": bad, "note": None},
+            json={"value": bad},
         )
         assert r.status_code == 400, f"expected 400 for value={bad!r}"
 

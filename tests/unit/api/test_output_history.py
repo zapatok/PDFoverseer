@@ -58,7 +58,7 @@ def test_output_history_method_reflects_override(client) -> None:
     # rejects). The test's point is that an override's method reaches history.
     test_client.patch(
         f"/api/sessions/{sid}/cells/HPV/odi/override",
-        json={"value": 1, "note": "revisado"},
+        json={"value": 1},
     )
     test_client.post(f"/api/sessions/{sid}/output")
 
