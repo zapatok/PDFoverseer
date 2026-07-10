@@ -28,17 +28,12 @@ import { pageRotation } from "../lib/page-rotation";
 import { api } from "../lib/api";
 import { toast } from "sonner";
 
-function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex, locked = false, reorgOps = [] }) {
-  const [viewerOpen, setViewerOpen] = useState(false);
+function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex, locked = false, onOpenViewer }) {
   const clearNearMatches = useSessionStore((s) => s.clearNearMatches);
   // pdfIndex < 0 means the near-match PDF name was not found among the
   // cell's per_file keys (e.g. nested-folder name forms diverge). Opening
   // any URL would silently show the wrong PDF, so the viewer is disabled.
   const located = pdfIndex >= 0;
-  const pdfUrl =
-    sessionId && located
-      ? api.cellPdfUrl(sessionId, hospital, sigla, pdfIndex)
-      : null;
 
   async function handleCopyStub() {
     try {
@@ -67,7 +62,7 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex, locked = false
         <Button
           variant="secondary"
           icon={ScanSearch}
-          onClick={() => setViewerOpen(true)}
+          onClick={onOpenViewer}
           disabled={!sessionId || !located}
         >
           Ver portada
@@ -99,16 +94,6 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex, locked = false
           Descartar
         </Button>
       </div>
-      {viewerOpen && pdfUrl && (
-        <PdfCoverViewer
-          open={viewerOpen}
-          onClose={() => setViewerOpen(false)}
-          url={pdfUrl}
-          pageNumber={nm.page_index + 1}
-          title={`${nm.pdf_name} — p. ${nm.page_index + 1}`}
-          rotation={pageRotation(reorgOps, hospital, sigla, nm.pdf_name, nm.page_index + 1)}
-        />
-      )}
     </li>
   );
 }
@@ -116,11 +101,32 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex, locked = false
 function NearMatchesSection({ hospital, sigla, cell, sessionId, locked = false, reorgOps = [] }) {
   const clearNearMatches = useSessionStore((s) => s.clearNearMatches);
   const nearMatches = cell.near_matches;
+  // Viewer state lives here (not per-row): one PdfCoverViewer, reused for
+  // whichever candidate is being inspected, so prev/next can step through
+  // the whole list. `viewerIndex` is a position into `nearMatches`, so it
+  // must be reset when the operator switches cells — otherwise an index
+  // minted for HRB|odi's list would be read against MAYO|ext's (DetailPanel
+  // doesn't remount on cell switch, so this component's state would go stale).
+  const [viewerIndex, setViewerIndex] = useState(null);
+  useEffect(() => {
+    setViewerIndex(null);
+  }, [hospital, sigla]);
+
   if (!nearMatches || nearMatches.length === 0) return null;
 
   // Derive file indices: sort the per_file keys (bare filenames, alphabetically)
   // to match the server-side sorted(folder.rglob("*.pdf")) order for flat folders.
   const sortedNames = Object.keys(cell.per_file || {}).sort();
+
+  // `nearMatches[viewerIndex]` can be undefined if the list shrank (e.g. a
+  // "Descartar" elsewhere) while the viewer was open — the guards below
+  // (`activeNm &&`) just make the viewer disappear rather than crash.
+  const activeNm = viewerIndex != null ? nearMatches[viewerIndex] : null;
+  const activePdfIndex = activeNm ? sortedNames.indexOf(activeNm.pdf_name) : -1;
+  const activePdfUrl =
+    activeNm && sessionId && activePdfIndex >= 0
+      ? api.cellPdfUrl(sessionId, hospital, sigla, activePdfIndex)
+      : null;
 
   return (
     <div className="mt-6">
@@ -150,11 +156,24 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId, locked = false, 
               sessionId={sessionId}
               pdfIndex={pdfIndex}
               locked={locked}
-              reorgOps={reorgOps}
+              onOpenViewer={() => setViewerIndex(i)}
             />
           );
         })}
       </ul>
+      {activeNm && activePdfUrl && (
+        <PdfCoverViewer
+          open={viewerIndex != null}
+          onClose={() => setViewerIndex(null)}
+          url={activePdfUrl}
+          pageNumber={activeNm.page_index + 1}
+          title={`${activeNm.pdf_name} — p. ${activeNm.page_index + 1}`}
+          rotation={pageRotation(reorgOps, hospital, sigla, activeNm.pdf_name, activeNm.page_index + 1)}
+          positionLabel={`${viewerIndex + 1} de ${nearMatches.length}`}
+          onPrev={viewerIndex > 0 ? () => setViewerIndex(viewerIndex - 1) : null}
+          onNext={viewerIndex < nearMatches.length - 1 ? () => setViewerIndex(viewerIndex + 1) : null}
+        />
+      )}
     </div>
   );
 }
