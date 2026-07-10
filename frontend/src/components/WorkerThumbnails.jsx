@@ -125,18 +125,25 @@ export function WorkerThumbnails({
   return (
     <aside className="w-28 shrink-0 overflow-y-auto border-r border-po-border bg-po-panel p-1.5">
       <ul className="flex flex-col gap-1.5">
-        {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
-          <li key={p} ref={p === currentPage ? currentRef : null}>
-            <Thumb
-              doc={doc}
-              pageNumber={p}
-              active={p === currentPage}
-              count={countByPage.has(p) ? countByPage.get(p) : null}
-              onSelect={onSelect}
-              rotation={rotationForPage ? rotationForPage(p) : 0}
-            />
-          </li>
-        ))}
+        {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => {
+          const rotation = rotationForPage ? rotationForPage(p) : 0;
+          return (
+            // Key by page@rotation (Thumb's cache key): a live rotation change
+            // (op created/deleted/retired mid-session) remounts Thumb, whose
+            // lazy `url` init then reads the RIGHT cache slot — otherwise the
+            // `if (url)` guard in its effect would keep the stale orientation.
+            <li key={rotation ? `${p}@${rotation}` : p} ref={p === currentPage ? currentRef : null}>
+              <Thumb
+                doc={doc}
+                pageNumber={p}
+                active={p === currentPage}
+                count={countByPage.has(p) ? countByPage.get(p) : null}
+                onSelect={onSelect}
+                rotation={rotation}
+              />
+            </li>
+          );
+        })}
       </ul>
     </aside>
   );

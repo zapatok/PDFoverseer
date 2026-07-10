@@ -17,6 +17,10 @@ export function pageRotation(reorgOps, hospital, sigla, file, page) {
   let deg = 0;
   for (const op of reorgOps || []) {
     if (op.op_type !== "rotate") continue;
+    // Tolerant read (missing status = pending): the backend's resolve_op_defaults
+    // always sets status, so the fallback is inert on real data — pure-function
+    // defensiveness only. ReorganizacionPanel's helpers read strictly
+    // (=== "pending"); both are correct today. Deliberate — do not "unify".
     if ((op.status ?? "pending") !== "pending") continue;
     const src = op.source || {};
     if (src.hospital !== hospital || src.sigla !== sigla || src.file !== file) continue;
