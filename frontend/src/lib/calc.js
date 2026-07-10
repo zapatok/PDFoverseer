@@ -3,7 +3,13 @@
 // factor := number | '(' expr ')' | '-' factor. No eval(), ever.
 
 export function evaluate(input) {
-  const s = String(input).replace(/\s+/g, "");
+  const raw = String(input);
+  // Digit-space-digit would become concatenation after the whitespace strip
+  // ("2 3" → 23: a silent wrong value). Reject it up front. Legit spacing
+  // ("12 + 3") survives: there the whitespace borders an operator, not two
+  // digits, so \d\s+\d never matches.
+  if (/\d\s+\d/.test(raw)) return null;
+  const s = raw.replace(/\s+/g, "");
   if (!s) return null;
   let i = 0;
 
@@ -47,7 +53,16 @@ export function evaluate(input) {
     return v;
   }
 
-  const v = expr();
+  // evaluate() runs inside CalcBar's render and the app has no ErrorBoundary:
+  // an uncaught exception here (e.g. RangeError from pathologically nested
+  // parens overflowing the recursion stack) would blank the whole viewer.
+  // Any failure to evaluate is just "no result" — return null.
+  let v;
+  try {
+    v = expr();
+  } catch {
+    return null;
+  }
   if (i !== s.length || Number.isNaN(v) || !Number.isFinite(v)) return null;
   return v;
 }

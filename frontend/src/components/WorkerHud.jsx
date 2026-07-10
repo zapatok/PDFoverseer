@@ -38,8 +38,9 @@ function MicChip({ status }) {
 // viewer's key handler already guards shortcuts with focusIsInInput() (see
 // WorkerCountViewer.jsx §3), so digits typed here never leak into the
 // pending-count buffer — no extra wiring needed.
-function CalcBar() {
-  const [expr, setExpr] = useState("");
+// `expr` state lives in WorkerHud, NOT here: Disclosure unmounts its children
+// when collapsed, so local state would wipe the scratch pad on every toggle.
+function CalcBar({ expr, setExpr }) {
   const result = evaluate(expr);
   return (
     <div className="space-y-1">
@@ -69,6 +70,10 @@ export function WorkerHud({
   unit = "trabajadores", showMic = true,
 }) {
   const pageMarks = [...(marks[currentFilename] || [])].sort((a, b) => a.page - b.page);
+
+  // Calculator scratch-pad expression — lifted here so collapsing the
+  // Disclosure (which unmounts CalcBar) doesn't lose the typed expression.
+  const [calcExpr, setCalcExpr] = useState("");
 
   const currentRowRef = useRef(null);
   useEffect(() => {
@@ -146,7 +151,7 @@ export function WorkerHud({
       </div>
 
       <Disclosure summary="Calculadora">
-        <CalcBar />
+        <CalcBar expr={calcExpr} setExpr={setCalcExpr} />
       </Disclosure>
     </aside>
   );

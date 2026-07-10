@@ -32,4 +32,17 @@ describe("evaluate (viewer calculator, I8)", () => {
   it("rejects division by zero (Infinity is not a valid result)", () => {
     expect(evaluate("8/0")).toBeNull();
   });
+  it("rejects digit-space-digit (whitespace strip must not concatenate '2 3' into 23)", () => {
+    expect(evaluate("2 3")).toBeNull();
+  });
+  it("still accepts legitimate spacing around operators", () => {
+    expect(evaluate("12 + 3")).toBe(15);
+  });
+  it("returns null (not throw) on pathologically nested input", () => {
+    // 20k nested parens overflows the recursive-descent stack (RangeError).
+    // evaluate must swallow it: CalcBar calls this in render and the app has
+    // no ErrorBoundary — an exception here would blank the whole viewer.
+    const pathological = "(".repeat(20000) + "1" + ")".repeat(20000);
+    expect(evaluate(pathological)).toBeNull();
+  });
 });
