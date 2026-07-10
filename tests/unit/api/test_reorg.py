@@ -53,6 +53,31 @@ def test_validate_range_bounds_and_doc_cap():
     assert validate_op(_extract([3, 7]), src_pages=_src_pages(), existing_ops=[]) == []
 
 
+def _rotate(rotation_deg):
+    op = {
+        "op_type": "rotate",
+        "source": {"hospital": "HRB", "sigla": "art", "file": "art_crs.pdf"},
+        "dest": {"hospital": "HRB", "sigla": "art"},
+    }
+    if rotation_deg is not None:
+        op["rotation_deg"] = rotation_deg
+    return op
+
+
+def test_validate_rotate_ok():
+    assert validate_op(_rotate(90), src_pages=_src_pages(), existing_ops=[]) == []
+    assert validate_op(_rotate(270), src_pages=_src_pages(), existing_ops=[]) == []
+
+
+def test_validate_rejects_rotate_zero_degrees():
+    # Regresión 2026-07-10: el HUD del visor creaba ops rotate con
+    # rotation_deg 0 (default del select fuera de las opciones) — un no-op
+    # silencioso que paso-1 ejecutaría como "no rotar nada".
+    assert validate_op(_rotate(0), src_pages=_src_pages(), existing_ops=[])
+    # rotation_deg ausente en un rotate defaultea a 0 → igual de inválido.
+    assert validate_op(_rotate(None), src_pages=_src_pages(), existing_ops=[])
+
+
 def test_validate_rejects_overlapping_extract_same_file():
     existing = [{**_extract([3, 7]), "status": "pending"}]
     assert validate_op(

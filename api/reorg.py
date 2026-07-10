@@ -115,6 +115,11 @@ def validate_op(
     rot = op.get("rotation_deg", 0)
     if rot not in ROTATIONS:
         errors.append(f"rotation_deg inválido: {rot}")
+    elif ot == "rotate" and rot == 0:
+        # Un rotate de 0° es un no-op que paso-1 "ejecutaría" sin efecto. Solo
+        # llega así por un bug de UI (select sin opción 0 con estado inicial 0,
+        # 2026-07-10) — mejor 400 aquí que una op fantasma en el manifiesto.
+        errors.append("rotate requiere rotation_deg 90/180/270 (0 es un no-op)")
 
     dc = op.get("doc_count")
     if dc is not None:
