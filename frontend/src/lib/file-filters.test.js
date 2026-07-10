@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FILTER_ORIGINS, matchesFilters } from "./file-filters";
+import { countDiffersFromPages, FILTER_ORIGINS, matchesFilters } from "./file-filters";
 
 describe("matchesFilters (FileList chip filters, E2)", () => {
   it("search-only, case-insensitive against file.name", () => {
@@ -42,5 +42,38 @@ describe("matchesFilters (FileList chip filters, E2)", () => {
 
   it("FILTER_ORIGINS lists the 7 canonical origins", () => {
     expect(FILTER_ORIGINS).toEqual(["R1", "RN", "OCR", "Manual", "Pendiente", "Revisar", "Error"]);
+  });
+});
+
+describe("countDiffersFromPages (FileList docs≠pages tint, E3)", () => {
+  it("differs -> true, for a doc-counting count_type", () => {
+    const file = { effective_count: 2, page_count: 5 };
+    expect(countDiffersFromPages(file, "documents")).toBe(true);
+    expect(countDiffersFromPages(file, "documents_workers")).toBe(true);
+  });
+
+  it("equal -> false", () => {
+    const file = { effective_count: 3, page_count: 3 };
+    expect(countDiffersFromPages(file, "documents")).toBe(false);
+  });
+
+  it("null count (Pendiente, not yet counted) -> false", () => {
+    const file = { effective_count: null, page_count: 5 };
+    expect(countDiffersFromPages(file, "documents")).toBe(false);
+  });
+
+  it("null page_count -> false", () => {
+    const file = { effective_count: 2, page_count: null };
+    expect(countDiffersFromPages(file, "documents")).toBe(false);
+  });
+
+  it("checks count_type -> always false (excluded by isCappedCountType)", () => {
+    const file = { effective_count: 2, page_count: 5 };
+    expect(countDiffersFromPages(file, "checks")).toBe(false);
+  });
+
+  it("undefined count_type -> false (not a capped type)", () => {
+    const file = { effective_count: 2, page_count: 5 };
+    expect(countDiffersFromPages(file, undefined)).toBe(false);
   });
 });

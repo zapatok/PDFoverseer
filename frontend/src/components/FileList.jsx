@@ -10,7 +10,7 @@ import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
 import PresenceBadge from "./PresenceBadge";
 import { fileCountDisplay } from "../lib/file-origin";
-import { FILTER_ORIGINS, matchesFilters } from "../lib/file-filters";
+import { countDiffersFromPages, FILTER_ORIGINS, matchesFilters } from "../lib/file-filters";
 import { hasOverride, isCappedCountType, perFileCountEditable } from "../lib/cell-status";
 import { SIGLAS } from "../lib/sigla-labels";
 import { cellLockHolder } from "../lib/presence";
@@ -391,25 +391,31 @@ export default function FileList({ hospital, sigla }) {
                     </span>
                   );
                 }
+                // E3: subtle text-tone cue when this file's effective count
+                // differs from its page count (doc-counting cells only) — a
+                // hint the "1 doc per file" default may be wrong, not an error.
+                const tinted = countDiffersFromPages(f, scanInfo?.count_type);
                 return (
-                  <InlineEditCount
-                    value={value}
-                    placeholder={placeholder}
-                    disabled={locked}
-                    max={isCapped ? (f.page_count ?? null) : null}
-                    onCommit={(newCount, opts) => {
-                      setFiles((prev) =>
-                        prev.map((row) =>
-                          row.name === f.name
-                            ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
-                            : row,
-                        ),
-                      );
-                      savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount, {
-                        allowOverPages: opts?.allowOverPages,
-                      });
-                    }}
-                  />
+                  <span className={tinted ? "[&_button]:text-po-suspect" : ""}>
+                    <InlineEditCount
+                      value={value}
+                      placeholder={placeholder}
+                      disabled={locked}
+                      max={isCapped ? (f.page_count ?? null) : null}
+                      onCommit={(newCount, opts) => {
+                        setFiles((prev) =>
+                          prev.map((row) =>
+                            row.name === f.name
+                              ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
+                              : row,
+                          ),
+                        );
+                        savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount, {
+                          allowOverPages: opts?.allowOverPages,
+                        });
+                      }}
+                    />
+                  </span>
                 );
               })()}
             </div>
