@@ -14,9 +14,12 @@ function cacheFor(doc) {
   return m;
 }
 
-function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores" }) {
+function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores", rotation = 0 }) {
   const ref = useRef(null);
-  const [url, setUrl] = useState(() => cacheFor(doc).get(pageNumber) || null);
+  // Composite cache key only when rotated — unrotated pages keep the plain
+  // numeric key so existing (pre-rotation) cache entries stay valid.
+  const cacheKey = rotation ? `${pageNumber}@${rotation}` : pageNumber;
+  const [url, setUrl] = useState(() => cacheFor(doc).get(cacheKey) || null);
 
   useEffect(() => {
     if (url) return undefined; // ya cacheada
@@ -31,8 +34,9 @@ function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores"
           page.cleanup();
           return;
         }
-        const base = page.getViewport({ scale: 1 });
-        const v = page.getViewport({ scale: THUMB_WIDTH / base.width });
+        const rot = ((page.rotate ?? 0) + rotation) % 360;
+        const base = page.getViewport({ scale: 1, rotation: rot });
+        const v = page.getViewport({ scale: THUMB_WIDTH / base.width, rotation: rot });
         const canvas = document.createElement("canvas");
         canvas.width = v.width;
         canvas.height = v.height;
@@ -40,7 +44,7 @@ function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores"
         task.promise
           .then(() => {
             const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-            cacheFor(doc).set(pageNumber, dataUrl);
+            cacheFor(doc).set(cacheKey, dataUrl);
             page.cleanup();
             if (!cancelled) setUrl(dataUrl);
           })
@@ -52,7 +56,7 @@ function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores"
       cancelled = true;
       io.disconnect();
     };
-  }, [doc, pageNumber, url]);
+  }, [doc, pageNumber, url, cacheKey, rotation]);
 
   return (
     <button
@@ -96,8 +100,17 @@ function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores"
  * @param {{page:number,count:number}[]} props.marks - marcas del archivo actual.
  * @param {(page:number)=>void} props.onSelect
  * @param {string} [props.unit] - "trabajadores" | "chequeos" (label del aria-label por página).
+ * @param {(page:number)=>number} [props.rotationForPage] - grados extra por página (§4), null si no aplica.
  */
-export function WorkerThumbnails({ doc, pageCount, currentPage, marks, onSelect, unit = "trabajadores" }) {
+export function WorkerThumbnails({
+  doc,
+  pageCount,
+  currentPage,
+  marks,
+  onSelect,
+  unit = "trabajadores",
+  rotationForPage = null,
+}) {
   const countByPage = new Map((marks || []).map((m) => [m.page, m.count]));
   const currentRef = useRef(null);
 
@@ -120,6 +133,7 @@ export function WorkerThumbnails({ doc, pageCount, currentPage, marks, onSelect,
               active={p === currentPage}
               count={countByPage.has(p) ? countByPage.get(p) : null}
               onSelect={onSelect}
+              rotation={rotationForPage ? rotationForPage(p) : 0}
             />
           </li>
         ))}

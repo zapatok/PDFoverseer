@@ -12,6 +12,7 @@ import { useSessionStore } from "../store/session";
 import { computeWorkerCount, fileSubtotal } from "../lib/worker-count";
 import { countTypeFor } from "../lib/sigla-info";
 import { isValidRange, normalizeRange } from "../lib/reorg-range";
+import { pageRotation, rotationForPageFn } from "../lib/page-rotation";
 import Button from "../ui/Button";
 import Badge from "../ui/Badge";
 import { PdfPage } from "./PdfPage";
@@ -295,6 +296,9 @@ export function WorkerCountViewer({
   const saveStatus = useSessionStore(
     (s) => s.pendingSaves[`${hospital}|${sigla}|workers`] ?? "idle",
   );
+  // Zustand v5 footgun: select the raw value (stable across renders) and
+  // default OUTSIDE the selector — see DetailPanel's identical idiom.
+  const reorgOps = useSessionStore((s) => s.session?.reorg_ops) ?? [];
 
   // El estado inicial se lee UNA vez del store (no se suscribe a la celda: el
   // visor es dueño de las marcas durante la sesión, igual que OverridePanel).
@@ -548,6 +552,7 @@ export function WorkerCountViewer({
           marks={marks[currentFile.name] || []}
           onSelect={setPageInFile}
           unit={unit}
+          rotationForPage={rotationForPageFn(reorgOps, hospital, sigla, currentFile.name)}
         />
       )}
       <div ref={panelRef} className="relative flex-1 overflow-auto bg-black">
@@ -562,7 +567,12 @@ export function WorkerCountViewer({
         ) : (
           doc && (
             <div className="flex justify-center p-4">
-              <PdfPage doc={doc} pageNumber={page} scale={effectiveScale} />
+              <PdfPage
+                doc={doc}
+                pageNumber={page}
+                scale={effectiveScale}
+                rotation={pageRotation(reorgOps, hospital, sigla, currentFile.name, page)}
+              />
             </div>
           )
         )}

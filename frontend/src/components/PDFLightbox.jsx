@@ -11,6 +11,7 @@ import { wheelToPageStep } from "../lib/viewer-nav";
 import { cellLockHolder } from "../lib/presence";
 import { getParticipantId } from "../lib/identity";
 import { isCappedCountType, perFileCountEditable } from "../lib/cell-status";
+import { rotationForPageFn } from "../lib/page-rotation";
 import OriginChip from "./OriginChip";
 import InlineEditCount from "./InlineEditCount";
 import FileViewerProgress from "./FileViewerProgress";
@@ -51,7 +52,7 @@ function FileSummary({ file }) {
 // Paged inspect viewer on the proven WorkerCountViewer pattern: a thumbnails
 // column, fit-to-window by default, one page at a time. Nav (review #9, Daniel's
 // choice): scroll = page, Shift+scroll = zoom; +/- and PgUp/Dn also work.
-function InspectView({ url, pageCount }) {
+function InspectView({ url, pageCount, rotationForPage = null }) {
   const { doc, error, loading } = usePdfDocument(url);
   const [page, setPage] = useState(1);
   const [zoom, setZoom] = useState(1);
@@ -118,6 +119,7 @@ function InspectView({ url, pageCount }) {
         currentPage={page}
         marks={[]}
         onSelect={(p) => setPage(clampPage(p))}
+        rotationForPage={rotationForPage}
       />
       <div
         ref={panelRef}
@@ -129,7 +131,12 @@ function InspectView({ url, pageCount }) {
             Cargando…
           </div>
         ) : (
-          <PdfPage doc={doc} pageNumber={page} scale={effectiveScale} />
+          <PdfPage
+            doc={doc}
+            pageNumber={page}
+            scale={effectiveScale}
+            rotation={rotationForPage ? rotationForPage(page) : 0}
+          />
         )}
         {doc && !loading && (
           <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg bg-po-panel/90 p-1 shadow-sm ring-1 ring-po-border backdrop-blur">
@@ -154,6 +161,9 @@ export default function PDFLightbox() {
   const scanFileOcr = useSessionStore((s) => s.scanFileOcr);
   const cancelScan = useSessionStore((s) => s.cancelScan);
   const addReorgOp = useSessionStore((s) => s.addReorgOp);
+  // Zustand v5 footgun: select the raw value (stable across renders) and
+  // default OUTSIDE the selector — see DetailPanel's identical idiom.
+  const reorgOps = useSessionStore((s) => s.session?.reorg_ops) ?? [];
   const fileScan = useSessionStore((s) => s.fileScan);
   const presence = useSessionStore((s) => s.presence);
   // B1: another participant editing this cell → read-only (disable the OCR button).
@@ -297,7 +307,11 @@ export default function PDFLightbox() {
         ) : (
           <>
             <div className="flex-1 overflow-hidden bg-black">
-              <InspectView url={pdfUrl} pageCount={pageCount ?? 0} />
+              <InspectView
+                url={pdfUrl}
+                pageCount={pageCount ?? 0}
+                rotationForPage={rotationForPageFn(reorgOps, lightbox.hospital, lightbox.sigla, currentFile?.name)}
+              />
             </div>
             <aside className="w-80 border-l border-po-border p-4 overflow-y-auto">
               <FileSummary file={files?.[lightbox.fileIndex]} />

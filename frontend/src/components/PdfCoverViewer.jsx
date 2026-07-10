@@ -16,8 +16,9 @@ import * as RadixDialog from "@radix-ui/react-dialog";
  *   url        — URL del PDF (api.cellPdfUrl(...)).
  *   pageNumber — número de página a mostrar (1-based).
  *   title      — texto del encabezado del diálogo.
+ *   rotation   — grados extra sobre el /Rotate propio (§4), 0 por defecto.
  */
-export default function PdfCoverViewer({ open, onClose, url, pageNumber, title }) {
+export default function PdfCoverViewer({ open, onClose, url, pageNumber, title, rotation = 0 }) {
   const { doc, error, loading } = usePdfDocument(open ? url : null);
 
   return (
@@ -49,7 +50,7 @@ export default function PdfCoverViewer({ open, onClose, url, pageNumber, title }
               </p>
             )}
             {doc && (
-              <PdfPage doc={doc} pageNumber={pageNumber} scale={1.5} />
+              <PdfPage doc={doc} pageNumber={pageNumber} scale={1.5} rotation={rotation} />
             )}
           </div>
         </RadixDialog.Content>

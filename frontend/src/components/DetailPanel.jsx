@@ -24,10 +24,11 @@ import { hasOverride, isCappedCountType, showsWorkerCounter } from "../lib/cell-
 import { copyFlavorStub } from "../lib/flavorStub";
 import { cellLockHolder } from "../lib/presence";
 import { getParticipantId } from "../lib/identity";
+import { pageRotation } from "../lib/page-rotation";
 import { api } from "../lib/api";
 import { toast } from "sonner";
 
-function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex, locked = false }) {
+function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex, locked = false, reorgOps = [] }) {
   const [viewerOpen, setViewerOpen] = useState(false);
   const clearNearMatches = useSessionStore((s) => s.clearNearMatches);
   // pdfIndex < 0 means the near-match PDF name was not found among the
@@ -105,13 +106,14 @@ function NearMatchRow({ nm, hospital, sigla, sessionId, pdfIndex, locked = false
           url={pdfUrl}
           pageNumber={nm.page_index + 1}
           title={`${nm.pdf_name} — p. ${nm.page_index + 1}`}
+          rotation={pageRotation(reorgOps, hospital, sigla, nm.pdf_name, nm.page_index + 1)}
         />
       )}
     </li>
   );
 }
 
-function NearMatchesSection({ hospital, sigla, cell, sessionId, locked = false }) {
+function NearMatchesSection({ hospital, sigla, cell, sessionId, locked = false, reorgOps = [] }) {
   const clearNearMatches = useSessionStore((s) => s.clearNearMatches);
   const nearMatches = cell.near_matches;
   if (!nearMatches || nearMatches.length === 0) return null;
@@ -148,6 +150,7 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId, locked = false }
               sessionId={sessionId}
               pdfIndex={pdfIndex}
               locked={locked}
+              reorgOps={reorgOps}
             />
           );
         })}
@@ -551,6 +554,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
         cell={cell}
         sessionId={sessionId}
         locked={locked}
+        reorgOps={reorgOps}
       />
     </div>
   );
