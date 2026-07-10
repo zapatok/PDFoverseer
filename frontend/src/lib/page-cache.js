@@ -36,7 +36,13 @@ export class LruCache {
   }
 
   set(key, value) {
-    if (this.map.has(key)) this.map.delete(key);
+    if (this.map.has(key)) {
+      const old = this.map.get(key);
+      this.map.delete(key);
+      // Overwrite drops the old value — onEvict it (close() the ImageBitmap)
+      // unless the caller re-set the very same object, which stays live.
+      if (old !== value) this.onEvict?.(old);
+    }
     this.map.set(key, value);
     if (this.map.size > this.capacity) {
       const [oldestKey, oldestVal] = this.map.entries().next().value;

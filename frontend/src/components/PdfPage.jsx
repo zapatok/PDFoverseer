@@ -70,6 +70,9 @@ export function PdfPage({ doc, pageNumber, scale = 1.5, rotation = 0 }) {
     const liveTasks = new Set();
     const track = (task) => {
       liveTasks.add(task);
+      // Late registration: if cleanup already ran (cancelled), the liveTasks
+      // sweep missed this task — cancel it on arrival.
+      if (cancelled) task.cancel();
       task.promise.catch(() => {}).finally(() => liveTasks.delete(task));
     };
 

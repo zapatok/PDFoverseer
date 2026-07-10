@@ -31,6 +31,16 @@ describe("LruCache", () => {
     expect(c.get("a")).toBe(1);
     expect(evicted).toEqual([2]);
   });
+  it("overwriting an existing key onEvicts the replaced value, not identical re-sets", () => {
+    const evicted = [];
+    const c = new LruCache(4, (v) => evicted.push(v));
+    c.set("a", 1);
+    c.set("a", 2); // replaces → old value must be evicted (ImageBitmap close())
+    expect(evicted).toEqual([1]);
+    c.set("a", 2); // identical value re-set → NOT evicted (still live)
+    expect(evicted).toEqual([1]);
+    expect(c.get("a")).toBe(2);
+  });
   it("clear() evicts everything", () => {
     const evicted = [];
     const c = new LruCache(4, (v) => evicted.push(v));
