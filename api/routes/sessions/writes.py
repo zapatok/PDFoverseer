@@ -43,7 +43,7 @@ class OverridePatch(BaseModel):
     value: Any = None
     manual: bool = False
     participant_id: str | None = None
-    allow_over_pages: bool = False
+    allow_over_pages: bool = False  # lifts ONLY the pages cap (2 docs/sheet corpus); not persisted
 
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/override")
@@ -99,7 +99,7 @@ class PerFileOverrideRequest(BaseModel):
 
     count: int = Field(ge=0)  # F5: a per-file override can never be negative
     participant_id: str | None = None
-    allow_over_pages: bool = False
+    allow_over_pages: bool = False  # lifts ONLY the pages cap (2 docs/sheet corpus); not persisted
 
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/files/{filename:path}/override")

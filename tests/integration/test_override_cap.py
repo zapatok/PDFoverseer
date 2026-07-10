@@ -73,12 +73,15 @@ def test_cell_override_over_cap_with_flag_allowed(client, session_with_pending_c
 
 
 def test_per_file_override_over_cap_with_flag_allowed(client, session_with_pending_cell):
+    """allow_over_pages=True bypasses the cap on a per-file override too."""
     sid, hosp, sigla = session_with_pending_cell  # big.pdf = 8 pages
     r = client.patch(
         f"/api/sessions/{sid}/cells/{hosp}/{sigla}/files/2026-04-15_odi_big.pdf/override",
         json={"count": 16, "allow_over_pages": True},
     )
     assert r.status_code == 200, r.text
+    state = client.get(f"/api/sessions/{sid}").json()
+    assert state["cells"][hosp][sigla]["per_file_overrides"]["2026-04-15_odi_big.pdf"] == 16
 
 
 def test_flag_does_not_bypass_negative_or_max(client, session_with_pending_cell):
