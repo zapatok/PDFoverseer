@@ -60,6 +60,16 @@ export function hasPendingOps(ops, hospital, sigla) {
   );
 }
 
+/** Count of pending ops touching a cell as source or dest (Disclosure badge). */
+export function pendingOpsCountForCell(ops, hospital, sigla) {
+  return (ops || []).filter(
+    (op) =>
+      op.status === "pending" &&
+      ((op.source?.hospital === hospital && op.source?.sigla === sigla) ||
+        (op.dest?.hospital === hospital && op.dest?.sigla === sigla)),
+  ).length;
+}
+
 function formatDelta(n) {
   if (n > 0) return `+${n}`;
   if (n < 0) return `${n}`;

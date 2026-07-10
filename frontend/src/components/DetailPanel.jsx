@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2, Ratio, Copy } from "lucide-react";
 import NotePanel from "./NotePanel";
-import ReorganizacionPanel from "./ReorganizacionPanel";
+import ReorganizacionPanel, { pendingOpsCountForCell } from "./ReorganizacionPanel";
 import OrphanMarksPanel from "./OrphanMarksPanel";
 import PosiblesColadosPanel from "./PosiblesColadosPanel";
 import OverridePanel from "./OverridePanel";
@@ -283,12 +283,7 @@ export default function DetailPanel({ hospital, sigla, cell }) {
 
   const isCompilationSuspect = cell.flags?.includes("compilation_suspect");
   const hasDuplicateBasenames = cell.flags?.includes("duplicate_basenames");
-  const pendingOpsCount = reorgOps.filter(
-    (op) =>
-      (op.status ?? "pending") === "pending" &&
-      ((op.source?.hospital === hospital && op.source?.sigla === sigla) ||
-        (op.dest?.hospital === hospital && op.dest?.sigla === sigla)),
-  ).length;
+  const pendingOpsCount = pendingOpsCountForCell(reorgOps, hospital, sigla);
   const filesCount = computeFilesCount(cell);
   const total = computeCellCount(cell, countType);
   const label = SIGLA_LABELS[sigla];

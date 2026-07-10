@@ -13,6 +13,7 @@ import ReorganizacionPanel, {
   incomingOps,
   netDocDelta,
   hasPendingOps,
+  pendingOpsCountForCell,
 } from "./ReorganizacionPanel";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -156,6 +157,18 @@ describe("(d) export button state", () => {
 
   it("enabled with one pending incoming", () => {
     expect(hasPendingOps([pendingIn], H, S)).toBe(true);
+  });
+});
+
+// ── (d2) pendingOpsCountForCell (Disclosure badge) ────────────────────────
+describe("(d2) pendingOpsCountForCell", () => {
+  it("counts pending ops touching the cell as source OR dest", () => {
+    expect(pendingOpsCountForCell([pendingOut, pendingIn], H, S)).toBe(2);
+  });
+
+  it("ignores applied ops, other cells' ops, and tolerates undefined ops", () => {
+    expect(pendingOpsCountForCell([appliedOut, unrelated], H, S)).toBe(0);
+    expect(pendingOpsCountForCell(undefined, H, S)).toBe(0);
   });
 });
 

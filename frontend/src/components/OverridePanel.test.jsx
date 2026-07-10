@@ -197,6 +197,16 @@ describe("OverridePanel — over-cap confirmation", () => {
     expect(container.querySelector("input").value).toBe("2");
   });
 
+  it("focusing the input selects its full contents (triage D1)", () => {
+    const { container } = mount(
+      <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: 4 }} maxPages={6} />,
+    );
+    const input = container.querySelector("input");
+    input.select = vi.fn();
+    focusIn(input);
+    expect(input.select).toHaveBeenCalled();
+  });
+
   it("a debounced valid save scheduled on one cell lands on THAT cell after switching", () => {
     // The debounce hook invokes the LATEST render's callback when the timer
     // fires — the cell identity must travel as args (captured at schedule
