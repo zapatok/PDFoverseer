@@ -1,6 +1,5 @@
-import { ArrowRight, ArrowLeft, Download, Trash2 } from "lucide-react";
+import { ArrowRight, ArrowLeft, Trash2 } from "lucide-react";
 import Badge from "../ui/Badge";
-import Button from "../ui/Button";
 
 // op_type → chip variant + label (same Badge primitive, vary color/text).
 // Keys are the four canonical backend op_types (api/reorg.py OP_TYPES) — never a
@@ -76,7 +75,8 @@ function formatDelta(n) {
   return "±0";
 }
 
-function OpRow({ op, isOutgoing, onDelete, locked = false }) {
+/** Also used by MonthReorgPanel (Task 18) — one row renderer, not duplicated. */
+export function OpRow({ op, isOutgoing, onDelete, locked = false }) {
   const muted = op.status === "applied";
   const otherHospital = isOutgoing ? op.dest?.hospital : op.source?.hospital;
   const otherSigla   = isOutgoing ? op.dest?.sigla    : op.source?.sigla;
@@ -138,16 +138,19 @@ function OpRow({ op, isOutgoing, onDelete, locked = false }) {
  *   sigla     {string}   — current cell's sigla
  *   ops       {object[]} — full session reorg_ops array (all hospitals)
  *   onDelete  {fn(opId)} — called when the operator removes a pending op
- *   onExport  {fn()}     — called when the operator exports the manifest
  *   locked    {boolean}  — another participant holds this cell (F3): disable the
- *                          per-op delete buttons. Export stays enabled (session-wide).
+ *                          per-op delete buttons.
+ *
+ * Export lives ONLY in MonthReorgPanel now (Task 18) — it's session-wide (the
+ * endpoint writes ALL pending ops), so a per-cell export button was
+ * misleading ("quiero que exista en un solo lugar donde exporte todos los
+ * cambios", Daniel 2026-07-08).
  */
 export default function ReorganizacionPanel({
   hospital,
   sigla,
   ops = [],
   onDelete,
-  onExport,
   locked = false,
 }) {
   const outgoing = outgoingOps(ops, hospital, sigla);
@@ -155,9 +158,6 @@ export default function ReorganizacionPanel({
 
   const all = [...outgoing, ...incoming];
   const delta = netDocDelta(ops, hospital, sigla);
-  // Export is session-wide (the endpoint writes ALL pending ops), so the button is
-  // enabled whenever the session has any pending op — not just ops touching this cell.
-  const canExport = ops.some((op) => op.status === "pending");
 
   return (
     <div className="space-y-2">
@@ -187,16 +187,6 @@ export default function ReorganizacionPanel({
           </ul>
         </>
       )}
-      <Button
-        variant="secondary"
-        icon={Download}
-        disabled={!canExport}
-        onClick={onExport}
-        size="sm"
-        data-testid="export-btn"
-      >
-        Exportar manifiesto
-      </Button>
     </div>
   );
 }

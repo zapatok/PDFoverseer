@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 //
 // Tests for ReorganizacionPanel pure helpers (outgoingOps, incomingOps,
-// netDocDelta, hasPendingOps) + the F3 lock rendering (locked disables per-op
-// delete but keeps Export enabled). jsdom env so the render tests can mount;
-// the pure-helper tests are env-agnostic and still pass under it.
+// netDocDelta, hasPendingOps, pendingOpsCountForCell) + the F3 lock rendering
+// (locked disables per-op delete). Export moved to MonthReorgPanel (Task 18) —
+// this component no longer renders an export button at all. jsdom env so the
+// render tests can mount; the pure-helper tests are env-agnostic and still
+// pass under it.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import React, { act } from "react";
@@ -188,22 +190,20 @@ describe("(f) locked rendering", () => {
     document.body.innerHTML = "";
   });
 
-  it("disables the per-op delete button but leaves Export enabled when locked", () => {
+  it("disables the per-op delete button when locked; export button is gone (moved to MonthReorgPanel)", () => {
     const { container } = mount(
       <ReorganizacionPanel
         hospital={H}
         sigla={S}
         ops={[pendingOut]}
         onDelete={() => {}}
-        onExport={() => {}}
         locked
       />,
     );
     const del = container.querySelector('[data-testid="eliminar-btn"]');
     expect(del).toBeTruthy();
     expect(del.disabled).toBe(true);
-    const exp = container.querySelector('[data-testid="export-btn"]');
-    expect(exp.disabled).toBe(false); // export is session-wide, stays enabled
+    expect(container.querySelector('[data-testid="export-btn"]')).toBeNull();
   });
 
   it("delete is enabled when not locked", () => {
@@ -213,7 +213,6 @@ describe("(f) locked rendering", () => {
         sigla={S}
         ops={[pendingOut]}
         onDelete={() => {}}
-        onExport={() => {}}
       />,
     );
     const del = container.querySelector('[data-testid="eliminar-btn"]');

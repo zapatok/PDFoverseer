@@ -249,7 +249,6 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   // value (stable across renders) and apply the default OUTSIDE the selector.
   const reorgOps = useSessionStore((s) => s.session?.reorg_ops) ?? [];
   const deleteReorgOp = useSessionStore((s) => s.deleteReorgOp);
-  const exportManifest = useSessionStore((s) => s.exportManifest);
   const saveOverride = useSessionStore((s) => s.saveOverride);
   const applyRatioCell = useSessionStore((s) => s.applyRatioCell);
   const filesTick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
@@ -566,7 +565,6 @@ export default function DetailPanel({ hospital, sigla, cell }) {
             sigla={sigla}
             ops={reorgOps}
             onDelete={(opId) => deleteReorgOp(sessionId, opId)}
-            onExport={() => exportManifest(sessionId)}
             locked={locked}
           />
         </Disclosure>

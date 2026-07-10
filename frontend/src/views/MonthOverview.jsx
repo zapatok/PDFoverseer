@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Calendar, RefreshCw, FileSpreadsheet } from "lucide-react";
+import { Calendar, RefreshCw, FileSpreadsheet, FolderSync } from "lucide-react";
 import { toast } from "sonner";
 import { useSessionStore } from "../store/session";
 import HospitalCard from "../components/HospitalCard";
 import SparkGrid from "../components/SparkGrid";
 import HistoryDrawer from "../components/HistoryDrawer";
+import MonthReorgPanel from "../components/MonthReorgPanel";
 import Button from "../ui/Button";
 import { api } from "../lib/api";
 import { computeCellCount } from "../lib/cellCount";
@@ -30,12 +31,21 @@ export default function MonthOverview() {
   const historyDrawer = useSessionStore((s) => s.historyDrawer);
   const openHistoryDrawer = useSessionStore((s) => s.openHistoryDrawer);
   const closeHistoryDrawer = useSessionStore((s) => s.closeHistoryDrawer);
+  const deleteReorgOp = useSessionStore((s) => s.deleteReorgOp);
+  const exportManifest = useSessionStore((s) => s.exportManifest);
+  // Zustand v5 footgun: default OUTSIDE the selector (see DetailPanel's
+  // identical idiom) — a fresh `?? []` INSIDE the selector mints a new array
+  // every render and loops React #185.
+  const reorgOps = useSessionStore((s) => s.session?.reorg_ops) ?? [];
 
   const sessionId = session?.session_id;
   const { data: history } = useHistory(historyView ? sessionId : null);
 
   // G5 — generated RESUMEN files, so the home can open the last Excel directly.
   const [outputs, setOutputs] = useState([]);
+  // Task 18 — "Reorganización del mes" is now the ONE export surface.
+  const [reorgPanelOpen, setReorgPanelOpen] = useState(false);
+  const pendingOpsTotal = reorgOps.filter((op) => op.status === "pending").length;
 
   useEffect(() => {
     loadMonths();
@@ -122,6 +132,13 @@ export default function MonthOverview() {
               >
                 Generar Excel del mes
               </Button>
+              <Button
+                icon={FolderSync}
+                disabled={loading}
+                onClick={() => setReorgPanelOpen(true)}
+              >
+                Reorganización{pendingOpsTotal > 0 ? ` (${pendingOpsTotal})` : ""}
+              </Button>
             </div>
             {activeOutput && (
               <a
@@ -201,6 +218,14 @@ export default function MonthOverview() {
             : undefined
         }
         onClose={closeHistoryDrawer}
+      />
+
+      <MonthReorgPanel
+        open={reorgPanelOpen}
+        ops={reorgOps}
+        onClose={() => setReorgPanelOpen(false)}
+        onDelete={(opId) => deleteReorgOp(sessionId, opId)}
+        onExport={() => exportManifest(sessionId)}
       />
 
       {error && <p className="text-po-error">{error}</p>}
