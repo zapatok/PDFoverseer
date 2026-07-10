@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.presence import is_agent
 from api.reorg import build_manifest, file_contribution, resolve_op_defaults, validate_op
@@ -29,6 +29,8 @@ router = APIRouter()
 
 
 class ReorgSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     hospital: str
     sigla: str
     file: str
@@ -36,11 +38,15 @@ class ReorgSource(BaseModel):
 
 
 class ReorgDest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     hospital: str
     sigla: str
 
 
 class ReorgOpCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     op_type: str
     source: ReorgSource
     dest: ReorgDest

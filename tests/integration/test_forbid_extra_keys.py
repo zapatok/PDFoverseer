@@ -94,3 +94,43 @@ def test_reconcile_worker_marks_unknown_key_422(client, session_with_pending_cel
         json={"action": "discard", "from_file": "nonexistent.pdf", "bogus": 1},
     )
     assert r.status_code == 422, r.text
+
+
+def test_presence_heartbeat_unknown_key_422(client, session_with_pending_cell):
+    sid, _, _ = session_with_pending_cell
+    r = client.post(
+        f"/api/sessions/{sid}/presence/heartbeat",
+        json={"participant_id": "p1", "name": "Ana", "color": "#fff", "bogus": 1},
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_scan_unknown_key_422(client, session_with_pending_cell):
+    sid, _, _ = session_with_pending_cell
+    r = client.post(f"/api/sessions/{sid}/scan", json={"scope": "all", "bogus": 1})
+    assert r.status_code == 422, r.text
+
+
+def test_reorg_create_unknown_key_422(client, session_with_pending_cell):
+    sid, hosp, sigla = session_with_pending_cell
+    # source MUST carry hospital/sigla (ReorgSource requires them, no default)
+    # or the request 422s TODAY for missing fields — which would make this
+    # test pass without exercising the extra="forbid" guard at all.
+    r = client.post(
+        f"/api/sessions/{sid}/reorg/ops",
+        json={
+            "op_type": "rotate",
+            "source": {
+                "hospital": hosp,
+                "sigla": sigla,
+                "file": "2026-04-15_odi_big.pdf",
+                "bogus": 1,
+            },
+            "dest": {"hospital": hosp, "sigla": sigla},
+            "rotation_deg": 90,
+        },
+    )
+    assert r.status_code == 422, r.text
+    # Belt-and-suspenders: the 422 must be about the unknown key, not a
+    # missing required field.
+    assert "bogus" in r.text

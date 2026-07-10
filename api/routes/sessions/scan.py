@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.batch import register_batch_handle
 from api.presence import AGENT_PARTICIPANT_ID, CellLockedError, is_agent
@@ -47,6 +48,8 @@ router = APIRouter()
 
 
 class ApplyRatioRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     n: int = Field(ge=1)
     participant_id: str | None = None
 
@@ -139,11 +142,22 @@ def apply_ratio(
     return state["cells"][hospital][sigla]
 
 
+class ScanRequest(BaseModel):
+    """Body for the pase-1 scan trigger. ``scope`` mirrors the previous raw-dict
+    default (``Body(default={"scope": "all"})``) verbatim — the handler doesn't
+    read it today, so this stays a dead-but-preserved field (behavior unchanged).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Any = "all"
+
+
 @router.post("/sessions/{session_id}/scan")
 def scan(
     request: Request,
     session_id: str,
-    body: dict = Body(default={"scope": "all"}),
+    body: ScanRequest = Body(default=ScanRequest()),
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Trigger a full scan of the session's month folder and persist results."""
@@ -383,11 +397,30 @@ def _handle_scan_progress(
         emit(followup)
 
 
+class ScanOcrRequest(BaseModel):
+    """Body for the pase-2 OCR batch trigger.
+
+    Mirrors the raw dict keys the handler read today via ``body.get(...)``:
+    ``cells`` (the only key actually read; default ``None`` behaves the same as
+    the old ``.get("cells", [])`` default — both fail the handler's
+    ``isinstance(cells_pairs, list)`` check and 400). ``participant_id`` is kept
+    for parity with the other M3b-aware bodies (``ApplyRatioRequest`` /
+    ``ScanFileOcrRequest``) though this handler doesn't consume it today — the
+    OCR batch always acts as the fixed Claude agent identity internally
+    (``_handle_scan_progress``), never a per-request participant.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cells: Any = None
+    participant_id: str | None = None
+
+
 @router.post("/sessions/{session_id}/scan-ocr")
 def scan_ocr(
     request: Request,
     session_id: str,
-    body: dict = Body(...),
+    body: ScanOcrRequest,
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Pase 2 — launch OCR batch for the given cells.
@@ -400,7 +433,7 @@ def scan_ocr(
     except KeyError as exc:
         raise HTTPException(404, f"Session not found: {session_id}") from exc
 
-    cells_pairs = body.get("cells", [])
+    cells_pairs = body.cells
     if not isinstance(cells_pairs, list) or not cells_pairs:
         raise HTTPException(400, "cells must be a non-empty list of [hospital, sigla] pairs")
 
@@ -543,6 +576,8 @@ def cancel(request: Request, session_id: str) -> dict:
 
 
 class ScanFileOcrRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     participant_id: str | None = None
 
 

@@ -4,7 +4,7 @@ snapshot down. No locking/enforcement here — that is M3 (spec §6.4)."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from api.routes.sessions import _validate_session_id, get_manager
 from api.routes.ws import _emit
@@ -14,17 +14,23 @@ router = APIRouter()
 
 
 class HeartbeatBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     participant_id: str
     name: str
     color: str
 
 
 class FocusBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     participant_id: str
     cell: str | None = None
 
 
 class LeaveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     participant_id: str
 
 
