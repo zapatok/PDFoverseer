@@ -9,6 +9,7 @@ import EmptyState from "../ui/EmptyState";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Tooltip from "../ui/Tooltip";
+import Disclosure from "../ui/Disclosure";
 import PdfCoverViewer from "./PdfCoverViewer";
 import PresenceBadge from "./PresenceBadge";
 import { SIGLA_LABELS, siglaDisplay } from "../lib/sigla-labels";
@@ -282,6 +283,12 @@ export default function DetailPanel({ hospital, sigla, cell }) {
 
   const isCompilationSuspect = cell.flags?.includes("compilation_suspect");
   const hasDuplicateBasenames = cell.flags?.includes("duplicate_basenames");
+  const pendingOpsCount = reorgOps.filter(
+    (op) =>
+      (op.status ?? "pending") === "pending" &&
+      ((op.source?.hospital === hospital && op.source?.sigla === sigla) ||
+        (op.dest?.hospital === hospital && op.dest?.sigla === sigla)),
+  ).length;
   const filesCount = computeFilesCount(cell);
   const total = computeCellCount(cell, countType);
   const label = SIGLA_LABELS[sigla];
@@ -499,19 +506,9 @@ export default function DetailPanel({ hospital, sigla, cell }) {
       <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Nota</h4>
       <NotePanel hospital={hospital} sigla={sigla} cell={cell} locked={locked} />
 
-      <h4 className="text-xs font-medium uppercase tracking-wider text-po-text-muted mt-6 mb-2">Reorganización</h4>
-      <ReorganizacionPanel
-        hospital={hospital}
-        sigla={sigla}
-        ops={reorgOps}
-        onDelete={(opId) => deleteReorgOp(sessionId, opId)}
-        onExport={() => exportManifest(sessionId)}
-        locked={locked}
-      />
-
       {/* Worker/checks counting module: documents_workers (charla/chintegral/dif_pts)
-          and checks (maquinaria). dif_pts wired to N15 in Incr 3B. Keep above
-          near-match suspects. */}
+          and checks (maquinaria). dif_pts wired to N15 in Incr 3B. Kept above
+          Reorganización so the counter is never buried under a growing op list. */}
       {showsWorkerCounter(countType) && (
         <>
           <WorkerCountModule hospital={hospital} sigla={sigla} cell={cell} countType={countType} locked={locked} />
@@ -527,6 +524,21 @@ export default function DetailPanel({ hospital, sigla, cell }) {
           />
         </>
       )}
+
+      <div className="mt-6">
+        <Disclosure
+          summary={`Reorganización${pendingOpsCount > 0 ? ` · ${pendingOpsCount} op${pendingOpsCount !== 1 ? "s" : ""}` : ""}`}
+        >
+          <ReorganizacionPanel
+            hospital={hospital}
+            sigla={sigla}
+            ops={reorgOps}
+            onDelete={(opId) => deleteReorgOp(sessionId, opId)}
+            onExport={() => exportManifest(sessionId)}
+            locked={locked}
+          />
+        </Disclosure>
+      </div>
 
       {/* Anti-colados: misfiled-document suspects (whole-file by name, or
           page-run by form code). Self-hides when there are none. */}
