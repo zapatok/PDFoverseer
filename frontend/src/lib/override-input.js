@@ -1,6 +1,8 @@
 // Validation for the manual-override field (Incr 1B, Decisión 4 partial).
 // Negatives are rejected; 0 is a valid override; empty clears it. The ≤páginas
-// cap is intentionally NOT here (deferred to Incr 2 with persisted per_file_pages).
+// cap (Incr 2) lives here via maxPages: an over-cap integer comes back flagged
+// as overCap — not plain invalid — so callers can offer the allow_over_pages
+// confirmation instead of a mute refusal.
 
 export function parseOverrideInput(raw, { maxPages = null } = {}) {
   if (raw === "" || raw === null || raw === undefined) {

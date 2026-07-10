@@ -22,18 +22,20 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   const inputRef = useRef(null);
 
   // Resync from store when cell changes (e.g., InlineEditCount committed externally),
-  // but ONLY if not currently editing that field — and NOT while an over-cap
-  // confirmation is pending: clicking Confirmar/Cancelar blurs the input first
-  // (mousedown), so an ungated resync here would unmount the buttons before
-  // the click lands (the same reason InlineEditCount gates its onBlur). When
-  // the confirmation resolves (either button, or retyping) pendingOverCap goes
-  // null → this effect re-runs → the field resyncs to the stored value.
+  // but ONLY if not currently editing that field. A blur-to-elsewhere also
+  // DISCARDS a pending over-cap confirmation — the operator walked away from
+  // the question. This cannot race the Confirmar/Cancelar clicks: their
+  // onMouseDown preventDefault keeps focus on the input, so clicking them
+  // never flips focused.value. And while the operator IS focused mid-decision,
+  // the !focused.value guard keeps a remote cell update from wiping their
+  // pending state.
   useEffect(() => {
-    if (!focused.value && pendingOverCap == null) {
+    if (!focused.value) {
       setValue(cell?.user_override ?? "");
       setInvalid(false); // a fresh cell must not inherit the previous error border
+      setPendingOverCap(null);
     }
-  }, [cell?.user_override, focused.value, pendingOverCap]);
+  }, [cell?.user_override, focused.value]);
 
   // Identity change: this instance is NOT keyed by cell (DetailPanel reuses it
   // across sigla/hospital switches), so a pending confirmation must die with
@@ -133,6 +135,9 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
           </span>
           <button
             type="button"
+            // Keep focus on the input: without this, mousedown blurs it and the
+            // resync effect would unmount this button before the click lands.
+            onMouseDown={(e) => e.preventDefault()}
             className="rounded border border-po-border px-1.5 py-0.5 text-po-text hover:border-po-border-strong"
             onClick={confirmOverCap}
           >
@@ -140,8 +145,16 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             className="text-po-text-muted hover:text-po-text"
-            onClick={() => setPendingOverCap(null)}
+            onClick={() => {
+              // The click keeps focus (preventDefault above), so the resync
+              // effect won't fire — revert the field explicitly: Cancelar
+              // means "keep the previous value", not "keep the refused text".
+              setPendingOverCap(null);
+              setValue(cell?.user_override ?? "");
+              setInvalid(false);
+            }}
           >
             Cancelar
           </button>

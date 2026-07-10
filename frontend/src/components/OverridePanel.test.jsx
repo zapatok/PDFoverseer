@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 //
-// Over-cap confirmation flow (task 5 + spec-review follow-up): typing a value
+// Over-cap confirmation flow (task 5 + review follow-ups): typing a value
 // above maxPages surfaces "¿Confirmas N documentos?"; Confirmar saves with
-// allowOverPages, Cancelar reverts to the last synced value. The load-bearing
-// case is BLUR SURVIVAL: clicking either button blurs the input first
-// (mousedown), so the confirmation row must not be torn down by the blur
-// resync effect before the click lands.
+// allowOverPages, Cancelar reverts to the last synced value. Focus contract:
+// the buttons' onMouseDown preventDefault keeps focus on the input (clicking
+// them never blurs), while a genuine blur-to-elsewhere DISCARDS the pending
+// confirmation and resyncs the field.
 //
 // Follows the DOM-mount pattern of DetailPanel.reorgLoop.test.jsx
 // (react-dom/client + act, real Zustand store with setState, no testing-library).
@@ -43,6 +43,10 @@ function findButton(container, label) {
   return Array.from(container.querySelectorAll("button")).find(
     (b) => b.textContent === label,
   );
+}
+
+function click(button) {
+  act(() => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
 const saveOverride = vi.fn();
@@ -87,39 +91,54 @@ describe("OverridePanel — over-cap confirmation", () => {
     expect(saveOverride).not.toHaveBeenCalled();
   });
 
-  it("the confirmation row SURVIVES the input blur (mousedown on the button blurs first)", () => {
+  it("an unrelated blur DISCARDS the pending confirmation and resyncs the field", () => {
     const { container } = mount(
-      <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: null }} maxPages={6} />,
+      <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: 4 }} maxPages={6} />,
     );
     const input = typeOverCap(container);
-    // What a real click does before the click event: blur the input.
+    // The operator clicks somewhere unrelated (NotePanel textarea, another
+    // control): the input blurs, and the abandoned question must not linger.
     focusOut(input);
-    expect(findButton(container, "Confirmar")).toBeTruthy();
+    expect(container.textContent).not.toContain("¿Confirmas 12 documentos?");
+    expect(findButton(container, "Confirmar")).toBeUndefined();
+    expect(saveOverride).not.toHaveBeenCalled();
+    expect(input.value).toBe("4");
   });
 
-  it("Confirmar (after the blur) saves with allowOverPages and no manual flag", () => {
+  it("Confirmar/Cancelar preventDefault on mousedown so the click never blurs the input", () => {
     const { container } = mount(
       <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: null }} maxPages={6} />,
     );
-    const input = typeOverCap(container);
-    focusOut(input);
+    typeOverCap(container);
+    for (const label of ["Confirmar", "Cancelar"]) {
+      const ev = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+      act(() => findButton(container, label).dispatchEvent(ev));
+      expect(ev.defaultPrevented).toBe(true);
+    }
+  });
+
+  it("Confirmar saves with allowOverPages and no manual flag", () => {
+    const { container } = mount(
+      <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: null }} maxPages={6} />,
+    );
+    typeOverCap(container);
+    // No blur: the button's preventDefault keeps focus on the input.
     const confirmar = findButton(container, "Confirmar");
     expect(confirmar).toBeTruthy();
-    act(() => confirmar.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    click(confirmar);
     expect(saveOverride).toHaveBeenCalledWith("2026-04", "HRB", "odi", 12, {
       allowOverPages: true,
     });
   });
 
-  it("Cancelar (after the blur) saves nothing and resyncs the field to the last value", () => {
+  it("Cancelar saves nothing and reverts the field to the stored value", () => {
     const { container } = mount(
       <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: 4 }} maxPages={6} />,
     );
     const input = typeOverCap(container);
-    focusOut(input);
     const cancelar = findButton(container, "Cancelar");
     expect(cancelar).toBeTruthy();
-    act(() => cancelar.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    click(cancelar);
     expect(saveOverride).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain("¿Confirmas 12 documentos?");
     // The field reverts to the stored override, not the refused over-cap text.
@@ -129,15 +148,14 @@ describe("OverridePanel — over-cap confirmation", () => {
   it("switching the selected cell clears a pending confirmation (no cross-cell save)", () => {
     // DetailPanel does NOT key OverridePanel by cell — the same instance
     // survives sigla switches. A confirmation typed for HRB|odi must not be
-    // committable once the props point at HRB|art.
+    // committable once the props point at HRB|art. No blur is dispatched:
+    // this pins the identity-change effect, which covers switches that never
+    // flip focus (the blur path is covered by the unrelated-blur case above).
     const { container, root } = mount(
       <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: null }} maxPages={6} />,
     );
-    const input = typeOverCap(container);
+    typeOverCap(container);
     expect(container.textContent).toContain("¿Confirmas 12 documentos?");
-    // Clicking another CategoryRow: the input blurs, then the SAME instance
-    // re-renders with the new cell's props.
-    focusOut(input);
     act(() =>
       root.render(
         <OverridePanel hospital="HRB" sigla="art" cell={{ user_override: 2 }} maxPages={10} />,

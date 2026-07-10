@@ -85,7 +85,12 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
             setOverCap(null);
           }
         }}
-        onBlur={() => { if (overCap == null) setEditing(false); }}
+        // Unconditional close, and a blur-to-elsewhere also DISCARDS a pending
+        // confirmation — else the editor + row would sit stuck open (worst in
+        // CategoryRow's long-lived rows) until someone came back to Escape it.
+        // Clicking Sí/No never blurs: their onMouseDown preventDefault keeps
+        // focus on the input, so this handler never races the buttons.
+        onBlur={() => { setEditing(false); setOverCap(null); }}
         className={`font-mono tabular-nums text-sm w-14 text-right text-po-text bg-po-bg border rounded px-1 focus-visible:outline-none ${
           invalid ? "border-po-error" : overCap != null ? "border-po-suspect-border" : "border-po-accent"
         }`}
@@ -95,6 +100,9 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
           ¿{overCap} docs en {max} págs?
           <button
             type="button"
+            // Keep focus on the input: without this, mousedown blurs it and the
+            // onBlur close would unmount this button before the click lands.
+            onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => {
               e.stopPropagation();
               onCommit(overCap, { allowOverPages: true });
@@ -107,6 +115,7 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => {
               e.stopPropagation();
               setOverCap(null);
