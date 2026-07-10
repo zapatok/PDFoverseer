@@ -101,3 +101,18 @@ def test_lock_409_and_release(tmp_path, monkeypatch):
             json={"value": 5, "participant_id": "p2"},
         )
         assert r2.status_code != 409
+
+
+def test_get_presence_snapshot(client, session_with_pending_cell):
+    """Headless clients can poll the same snapshot the WS pushes."""
+    sid, _, _ = session_with_pending_cell
+    client.post(
+        f"/api/sessions/{sid}/presence/heartbeat",
+        json={"participant_id": "p1", "name": "Ana", "color": "#fff"},
+    )
+    r = client.get(f"/api/sessions/{sid}/presence")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["type"] == "presence"
+    ids = [p["participant_id"] for p in body["participants"]]
+    assert "p1" in ids

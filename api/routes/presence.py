@@ -42,6 +42,27 @@ def _presence_event(session_id: str, mgr: SessionManager) -> dict:
     }
 
 
+@router.get("/sessions/{session_id}/presence")
+def get_presence(
+    session_id: str,
+    mgr: SessionManager = Depends(get_manager),
+) -> dict:
+    """Return the live presence snapshot (same shape as the WS event).
+
+    Read-only: headless clients (e.g. Claude driving the API) can poll this
+    without a WS connection. No broadcast, no lease renewal side-effect.
+
+    Args:
+        session_id: YYYY-MM session identifier.
+        mgr: session manager (injected).
+
+    Returns:
+        Presence event dict with ``type="presence"`` and ``participants``.
+    """
+    _validate_session_id(session_id)
+    return _presence_event(session_id, mgr)
+
+
 @router.post("/sessions/{session_id}/presence/heartbeat")
 def heartbeat(
     session_id: str,
