@@ -11,6 +11,7 @@ import { useSpeechNumber } from "../hooks/useSpeechNumber";
 import { useSessionStore } from "../store/session";
 import { computeWorkerCount, fileSubtotal } from "../lib/worker-count";
 import { countTypeFor } from "../lib/sigla-info";
+import { focusIsInInput } from "../lib/keyboard-focus";
 import { isValidRange, normalizeRange } from "../lib/reorg-range";
 import { pageRotation, rotationForPageFn } from "../lib/page-rotation";
 import Button from "../ui/Button";
@@ -499,12 +500,19 @@ export function WorkerCountViewer({
     flushSave(marks, next, { file: fileIdx, page });
   };
 
-  // refresca la ref del teclado con los closures de este render. El visor no
-  // tiene ningún <input>, así que captura toda la entrada: los dígitos van al
-  // buffer pendiente, Backspace lo corrige, y los atajos de §5.4 a la marca.
+  // refresca la ref del teclado con los closures de este render. El visor
+  // AHORA sí aloja <input>s ("Ir a pág.", calculadora) — el guard §3 de abajo
+  // es lo que mantiene la captura segura: mientras uno tenga foco, los
+  // dígitos van al campo, no al buffer pendiente. Fuera de eso, captura toda
+  // la entrada: los dígitos van al buffer pendiente, Backspace lo corrige, y
+  // los atajos de §5.4 a la marca.
   // GATE: in reorg mode the keyboard handler is a no-op — digits/PageDown must
   // NOT write worker marks while the operator is selecting a page range.
   keyHandler.current = (e) => {
+    // §3 guard (NEW in this round): the viewer now hosts inputs ("Ir a pág.",
+    // calculator). While one has focus, counting/nav shortcuts are inert —
+    // typing "12" in a field must NOT feed the count buffer.
+    if (focusIsInInput()) return;
     if (mode === "reorg") return;
     if (e.key === "PageDown") { e.preventDefault(); fixAndAdvance(); }
     else if (e.key === "PageUp") { e.preventDefault(); retreat(); }
