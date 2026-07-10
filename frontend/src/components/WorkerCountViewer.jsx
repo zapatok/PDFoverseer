@@ -15,6 +15,7 @@ import { focusIsInInput } from "../lib/keyboard-focus";
 import { parseGoToPage } from "../lib/go-to-page";
 import { isValidRange, normalizeRange } from "../lib/reorg-range";
 import { pageRotation, rotationForPageFn } from "../lib/page-rotation";
+import { DEFAULT_ROTATION_DEG, ROTATION_OPTIONS } from "../lib/rotation-options";
 import Button from "../ui/Button";
 import Badge from "../ui/Badge";
 import { PdfPage } from "./PdfPage";
@@ -115,7 +116,10 @@ function ReorgHud({
   const [opType, setOpType] = useState("extract_pages");
   const [destHospital, setDestHospital] = useState(HOSPITALS[0]);
   const [destSigla, setDestSigla] = useState(SIGLAS[0]);
-  const [rotDeg, setRotDeg] = useState(0);
+  // DEFAULT_ROTATION_DEG (no 0): el default DEBE ser una opción visible del
+  // select, o el usuario ve "90°" elegido mientras el estado sigue en 0 y la
+  // op viaja como rotar-0° (el no-op silencioso del 2026-07-10).
+  const [rotDeg, setRotDeg] = useState(DEFAULT_ROTATION_DEG);
   const [creating, setCreating] = useState(false);
 
   // Validate the NORMALIZED range so marking end-before-start (pág. 7 then 3) is
@@ -259,9 +263,9 @@ function ReorgHud({
             value={rotDeg}
             onChange={(e) => setRotDeg(Number(e.target.value))}
           >
-            <option value={90}>90°</option>
-            <option value={180}>180°</option>
-            <option value={270}>270°</option>
+            {ROTATION_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
           </select>
         </div>
       )}

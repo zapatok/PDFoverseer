@@ -13,6 +13,7 @@ import { fileCountDisplay } from "../lib/file-origin";
 import { countDiffersFromPages, FILTER_ORIGINS, matchesFilters } from "../lib/file-filters";
 import { hasOverride, isCappedCountType, perFileCountEditable } from "../lib/cell-status";
 import { SIGLAS } from "../lib/sigla-labels";
+import { DEFAULT_ROTATION_DEG, ROTATION_OPTIONS } from "../lib/rotation-options";
 import { cellLockHolder } from "../lib/presence";
 import { getParticipantId } from "../lib/identity";
 
@@ -33,7 +34,7 @@ function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated, disabled
   );
   const [destSigla, setDestSigla] = useState(srcSigla);
   const [empresa, setEmpresa] = useState("");
-  const [rotDeg, setRotDeg] = useState(90);
+  const [rotDeg, setRotDeg] = useState(DEFAULT_ROTATION_DEG);
   const [busy, setBusy] = useState(false);
 
   // Close the popover after a successful submit
@@ -163,9 +164,9 @@ function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated, disabled
               onChange={(e) => setRotDeg(Number(e.target.value))}
               className="w-full rounded border border-po-border bg-po-bg px-2 py-1 text-xs focus:border-po-accent focus:outline-none"
             >
-              <option value={90}>90°</option>
-              <option value={180}>180°</option>
-              <option value={270}>270°</option>
+              {ROTATION_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
             </select>
           </div>
         )}
