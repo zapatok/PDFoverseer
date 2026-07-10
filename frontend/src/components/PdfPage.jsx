@@ -7,8 +7,9 @@ import { useEffect, useRef } from "react";
  * @param {object} props.doc - PDFDocumentProxy de usePdfDocument.
  * @param {number} props.pageNumber - número de página, 1-indexado.
  * @param {number} [props.scale] - escala de render (1.5 por defecto).
+ * @param {number} [props.rotation] - grados extra sobre el /Rotate propio (§4).
  */
-export function PdfPage({ doc, pageNumber, scale = 1.5 }) {
+export function PdfPage({ doc, pageNumber, scale = 1.5, rotation = 0 }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -26,7 +27,10 @@ export function PdfPage({ doc, pageNumber, scale = 1.5 }) {
       loadedPage = page;
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const viewport = page.getViewport({ scale });
+      const viewport = page.getViewport({
+        scale,
+        rotation: ((page.rotate ?? 0) + rotation) % 360,
+      });
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       renderTask = page.render({
@@ -44,7 +48,7 @@ export function PdfPage({ doc, pageNumber, scale = 1.5 }) {
       // doc.destroy() si no se llama cleanup() explícito.
       if (loadedPage) loadedPage.cleanup();
     };
-  }, [doc, pageNumber, scale]);
+  }, [doc, pageNumber, scale, rotation]);
 
   return (
     <canvas
