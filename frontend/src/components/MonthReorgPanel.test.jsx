@@ -8,10 +8,11 @@
 // OverridePanel.test.jsx / DetailPanel.nearMatchNav.test.jsx (react-dom/client
 // + act, no testing-library). Radix Dialog portals to document.body, not the
 // local mount container, so assertions read document.body.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import MonthReorgPanel from "./MonthReorgPanel";
+import { useSessionStore } from "../store/session";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -52,6 +53,11 @@ const ops = [
 ];
 
 describe("MonthReorgPanel", () => {
+  beforeEach(() => {
+    // The panel reads presence from the real store (per-row lock visibility) —
+    // reset it so one test's lock never leaks into another.
+    useSessionStore.setState({ presence: [] });
+  });
   afterEach(() => {
     document.body.innerHTML = "";
   });
@@ -95,5 +101,44 @@ describe("MonthReorgPanel", () => {
     expect(document.body.textContent).toContain("Sin operaciones pendientes");
     const btn = document.querySelector('[data-testid="export-btn"]');
     expect(btn.disabled).toBe(true);
+  });
+
+  it("disables delete on rows whose SOURCE cell is held by another participant", () => {
+    // Carla holds HRB|altura as editor (M3 lock) — ops sourced there must not
+    // offer a clickable delete that would just 409 (per-cell F3 precedent).
+    useSessionStore.setState({
+      presence: [
+        {
+          participant_id: "other-1",
+          name: "Carla",
+          color: "#ef4444",
+          focused_cell: "HRB|altura",
+          mode: "editor",
+        },
+      ],
+    });
+    const freeOp = {
+      id: "op_4",
+      op_type: "move_file",
+      status: "pending",
+      doc_count: 1,
+      source: { hospital: "HLL", sigla: "odi", file: "d.pdf" },
+      dest: { hospital: "HLL", sigla: "art" },
+    };
+    mount(
+      <MonthReorgPanel
+        open
+        ops={[ops[0], freeOp]}
+        onClose={() => {}}
+        onDelete={() => {}}
+        onExport={() => {}}
+      />,
+    );
+    const btns = [...document.querySelectorAll('[data-testid="eliminar-btn"]')];
+    expect(btns).toHaveLength(2);
+    // Group order follows pending-op insertion order: op_1 (HRB · altura,
+    // held → disabled) first, then op_4 (HLL · odi, free → enabled).
+    expect(btns[0].disabled).toBe(true);
+    expect(btns[1].disabled).toBe(false);
   });
 });

@@ -2,6 +2,9 @@ import { X, Download } from "lucide-react";
 import * as RadixDialog from "@radix-ui/react-dialog";
 import Button from "../ui/Button";
 import { OpRow } from "./ReorganizacionPanel";
+import { useSessionStore } from "../store/session";
+import { cellLockHolder } from "../lib/presence";
+import { getParticipantId } from "../lib/identity";
 
 /**
  * MonthReorgPanel — "Reorganización del mes": the ONE session-wide export
@@ -32,6 +35,15 @@ import { OpRow } from "./ReorganizacionPanel";
  *   onExport  {fn()}
  */
 export default function MonthReorgPanel({ open, ops = [], onClose, onDelete, onExport }) {
+  // M3 lock visibility (per-cell F3 precedent, mirrored from DetailPanel):
+  // this panel spans cells, so each row derives its own `locked` from the
+  // op's SOURCE cell — a delete against a cell held by another participant
+  // would just 409, so it must not look clickable. Raw selector, no `?? []`
+  // inside (Zustand v5 footgun); presence is always initialized in the store,
+  // and cellLockHolder tolerates undefined anyway.
+  const presence = useSessionStore((s) => s.presence);
+  const selfId = getParticipantId();
+
   const pending = ops.filter((op) => op.status === "pending");
   const hasPending = pending.length > 0;
 
@@ -77,7 +89,20 @@ export default function MonthReorgPanel({ open, ops = [], onClose, onDelete, onE
                   </h4>
                   <ul className="divide-y divide-po-border">
                     {groupOps.map((op) => (
-                      <OpRow key={op.id} op={op} isOutgoing onDelete={onDelete} />
+                      <OpRow
+                        key={op.id}
+                        op={op}
+                        isOutgoing
+                        onDelete={onDelete}
+                        locked={
+                          !!cellLockHolder(
+                            presence,
+                            op.source?.hospital,
+                            op.source?.sigla,
+                            selfId,
+                          )
+                        }
+                      />
                     ))}
                   </ul>
                 </div>
