@@ -10,6 +10,7 @@ import InlineEditCount from "./InlineEditCount";
 import OriginChip from "./OriginChip";
 import PresenceBadge from "./PresenceBadge";
 import { fileCountDisplay } from "../lib/file-origin";
+import { FILTER_ORIGINS, matchesFilters } from "../lib/file-filters";
 import { hasOverride, isCappedCountType, perFileCountEditable } from "../lib/cell-status";
 import { SIGLAS } from "../lib/sigla-labels";
 import { cellLockHolder } from "../lib/presence";
@@ -214,6 +215,7 @@ export default function FileList({ hospital, sigla }) {
   const tick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
   const [files, setFiles] = useState(null);
   const [search, setSearch] = useState("");
+  const [activeOrigins, setActiveOrigins] = useState([]);
   const [scanInfo, setScanInfo] = useState(null);
 
   useEffect(() => {
@@ -282,9 +284,7 @@ export default function FileList({ hospital, sigla }) {
 
   // Stable order — files keep the backend's folder/filename order so a row stays
   // put where the operator acts on it (no reordering on edit).
-  const filtered = files.filter((f) =>
-    f.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = files.filter((f) => matchesFilters(f, search, activeOrigins));
 
   return (
     <div className="rounded-xl bg-po-panel border border-po-border overflow-hidden">
@@ -322,6 +322,31 @@ export default function FileList({ hospital, sigla }) {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full bg-transparent text-sm text-po-text placeholder-po-text-subtle focus:outline-none px-2 py-1"
         />
+      </div>
+      <div className="flex flex-wrap gap-1 border-b border-po-border px-2 py-1.5">
+        {FILTER_ORIGINS.map((o) => {
+          const active = activeOrigins.includes(o);
+          return (
+            <button
+              key={o}
+              type="button"
+              aria-pressed={active}
+              onClick={() =>
+                setActiveOrigins((prev) =>
+                  prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o],
+                )
+              }
+              className={[
+                "rounded-full border px-2 py-0.5 text-[11px] transition",
+                active
+                  ? "border-po-accent bg-po-panel-hover text-po-accent"
+                  : "border-po-border text-po-text-muted hover:border-po-border-strong",
+              ].join(" ")}
+            >
+              {o}
+            </button>
+          );
+        })}
       </div>
       <ul className="max-h-[60vh] overflow-y-auto">
         {filtered.map((f, i) => (
