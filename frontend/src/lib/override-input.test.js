@@ -35,8 +35,24 @@ describe("parseOverrideInput", () => {
 });
 
 describe("parseOverrideInput maxPages cap", () => {
-  it("rejects value above maxPages", () => {
-    expect(parseOverrideInput("10", { maxPages: 8 })).toEqual({ value: null, valid: false });
+  it("over-cap integer returns overCap (value kept) instead of plain invalid", () => {
+    expect(parseOverrideInput("12", { maxPages: 6 })).toEqual({
+      value: 12,
+      valid: false,
+      overCap: true,
+    });
+  });
+  it("garbage stays plain invalid (no overCap)", () => {
+    const r = parseOverrideInput("12abc", { maxPages: 6 });
+    expect(r.valid).toBe(false);
+    expect(r.overCap).toBeUndefined();
+  });
+  it("rejects value above maxPages (legacy alias of the overCap case)", () => {
+    expect(parseOverrideInput("10", { maxPages: 8 })).toEqual({
+      value: 10,
+      valid: false,
+      overCap: true,
+    });
   });
   it("accepts value equal to maxPages", () => {
     expect(parseOverrideInput("8", { maxPages: 8 })).toEqual({ value: 8, valid: true });

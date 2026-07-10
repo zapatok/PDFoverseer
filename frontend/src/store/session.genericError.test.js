@@ -102,7 +102,7 @@ describe("saveWorkerCount on a generic failure", () => {
 describe("saveNote on a generic failure", () => {
   it("toasts and does NOT set the sticky banner", async () => {
     api.patchNote.mockRejectedValueOnce(boom());
-    await getState().saveNote("2026-04", "HRB", "odi", { note: "x" });
+    await getState().saveNote("2026-04", "HRB", "odi", { text: "x" });
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.error.mock.calls[0][0]).toContain("No se pudo guardar la nota");
     expect(getState().error).toBeNull();

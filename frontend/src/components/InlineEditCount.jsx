@@ -7,6 +7,9 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [invalid, setInvalid] = useState(false);
+  // Over-cap confirmation (task 5): holds the pending value while we wait for
+  // the operator to confirm "sí, de verdad son N documentos en M páginas".
+  const [overCap, setOverCap] = useState(null);
   const buttonRef = useRef(null);
 
   // Value-reset effect (Task 15): keep draft in sync when value changes externally.
@@ -36,6 +39,7 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
           e.stopPropagation();
           setDraft(value ?? "");
           setInvalid(false);
+          setOverCap(null);
           setEditing(true);
         }}
         className={[
@@ -51,34 +55,69 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
   }
 
   return (
-    <input
-      type="number"
-      autoFocus
-      value={draft}
-      onChange={(e) => { setDraft(e.target.value); setInvalid(false); }}
-      onClick={(e) => e.stopPropagation()}
-      min={0}
-      max={max ?? undefined}
-      title={invalid && max != null ? `máx. ${max} (páginas)` : undefined}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          const v = parseInt(draft, 10);
-          if (!Number.isNaN(v) && v >= 0 && (max === null || v <= max)) {
-            onCommit(v);
+    <>
+      <input
+        type="number"
+        autoFocus
+        value={draft}
+        onChange={(e) => { setDraft(e.target.value); setInvalid(false); setOverCap(null); }}
+        onClick={(e) => e.stopPropagation()}
+        min={0}
+        max={max ?? undefined}
+        title={invalid && max != null ? `máx. ${max} (páginas)` : undefined}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            const v = parseInt(draft, 10);
+            if (!Number.isNaN(v) && v >= 0 && (max === null || v <= max)) {
+              onCommit(v);
+              setEditing(false);
+            } else if (!Number.isNaN(v) && v >= 0 && max !== null && v > max) {
+              // Over-cap is not garbage: the value parses, it just exceeds the
+              // pages. Surface a confirmation instead of a mute refusal.
+              setOverCap(v);
+            } else {
+              // not a number / negative → keep editing so the rejected value
+              // stays visible with an error cue, instead of silently snapping back.
+              setInvalid(true);
+            }
+          } else if (e.key === "Escape") {
             setEditing(false);
-          } else {
-            // over cap / not a number → keep editing so the rejected value stays
-            // visible with an error cue, instead of silently snapping back.
-            setInvalid(true);
+            setOverCap(null);
           }
-        } else if (e.key === "Escape") {
-          setEditing(false);
-        }
-      }}
-      onBlur={() => setEditing(false)}
-      className={`font-mono tabular-nums text-sm w-14 text-right text-po-text bg-po-bg border rounded px-1 focus-visible:outline-none ${
-        invalid ? "border-po-error" : "border-po-accent"
-      }`}
-    />
+        }}
+        onBlur={() => { if (overCap == null) setEditing(false); }}
+        className={`font-mono tabular-nums text-sm w-14 text-right text-po-text bg-po-bg border rounded px-1 focus-visible:outline-none ${
+          invalid ? "border-po-error" : overCap != null ? "border-po-suspect-border" : "border-po-accent"
+        }`}
+      />
+      {overCap != null && (
+        <span className="ml-1 inline-flex items-center gap-1 text-[11px] text-po-suspect whitespace-nowrap">
+          ¿{overCap} docs en {max} págs?
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCommit(overCap, { allowOverPages: true });
+              setOverCap(null);
+              setEditing(false);
+            }}
+            className="underline"
+          >
+            Sí
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOverCap(null);
+              setEditing(false);
+            }}
+            className="underline text-po-text-muted"
+          >
+            No
+          </button>
+        </span>
+      )}
+    </>
   );
 }

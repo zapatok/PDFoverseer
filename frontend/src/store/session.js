@@ -313,7 +313,7 @@ export const useSessionStore = create((set, get) => ({
     try {
       const result = await api.patchOverride(
         sessionId, hospital, sigla, value,
-        { signal: controller.signal, manual: opts.manual, participantId },
+        { signal: controller.signal, manual: opts.manual, allowOverPages: opts.allowOverPages, participantId },
       );
 
       // If our controller was aborted while in flight, the newer save wins.
@@ -384,7 +384,7 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
-  savePerFileOverride: async (sessionId, hospital, sigla, filename, count) => {
+  savePerFileOverride: async (sessionId, hospital, sigla, filename, count, opts = {}) => {
     const key = `${hospital}|${sigla}|${filename}`;
     const controller = new AbortController();
     const participantId = getParticipantId();
@@ -403,7 +403,7 @@ export const useSessionStore = create((set, get) => ({
     try {
       const result = await api.patchPerFileOverride(
         sessionId, hospital, sigla, filename, count,
-        { signal: controller.signal, participantId },
+        { signal: controller.signal, allowOverPages: opts.allowOverPages, participantId },
       );
       if (controller.signal.aborted) return;
 

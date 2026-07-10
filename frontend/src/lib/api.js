@@ -65,6 +65,7 @@ export const api = {
   patchOverride: async (sessionId, hospital, sigla, value, opts = {}) => {
     const body = { value };
     if (opts.manual) body.manual = true;
+    if (opts.allowOverPages) body.allow_over_pages = true;
     body.participant_id = opts.participantId ?? null;
     const r = await fetch(
       `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/override`,
@@ -79,12 +80,14 @@ export const api = {
   },
 
   patchPerFileOverride: async (sessionId, hospital, sigla, filename, count, opts = {}) => {
+    const body = { count, participant_id: opts.participantId ?? null };
+    if (opts.allowOverPages) body.allow_over_pages = true;
     const r = await fetch(
       `${BASE}/sessions/${sessionId}/cells/${hospital}/${sigla}/files/${encodeURIComponent(filename)}/override`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count, participant_id: opts.participantId ?? null }),
+        body: JSON.stringify(body),
         signal: opts.signal,
       }
     );

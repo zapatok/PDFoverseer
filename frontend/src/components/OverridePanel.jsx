@@ -15,6 +15,9 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   const [value, setValue] = useState(cell?.user_override ?? "");
   const [focused, setFocused] = useState({ value: false });
   const [invalid, setInvalid] = useState(false);
+  // Over-cap confirmation (task 5): holds the pending value while we wait for
+  // the operator to confirm "sí, de verdad son N documentos en M páginas".
+  const [pendingOverCap, setPendingOverCap] = useState(null);
 
   const inputRef = useRef(null);
 
@@ -24,6 +27,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
     if (!focused.value) {
       setValue(cell?.user_override ?? "");
       setInvalid(false); // a fresh cell must not inherit the previous error border
+      setPendingOverCap(null);
     }
   }, [cell?.user_override, focused.value]);
 
@@ -43,9 +47,30 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   const onChangeValue = (e) => {
     const raw = e.target.value;
     setValue(raw);
-    const { value: parsed, valid } = parseOverrideInput(raw, { maxPages });
-    setInvalid(!valid);
-    if (valid) flushSave(parsed === null ? "" : String(parsed));
+    // Typing again always clears a stale confirmation — the operator must
+    // re-trigger it deliberately, not carry over a confirm for an old value.
+    setPendingOverCap(null);
+    const { value: parsed, valid, overCap } = parseOverrideInput(raw, { maxPages });
+    setInvalid(!valid && !overCap);
+    if (valid) {
+      flushSave(parsed === null ? "" : String(parsed));
+    } else if (overCap) {
+      setPendingOverCap(parsed);
+    }
+  };
+
+  // The confirmed save is an explicit click, not a debounced keystroke — it
+  // calls saveOverride directly (with the flag) instead of flushSave, which
+  // only forwards the plain value. NOTE: manual is intentionally omitted —
+  // that flag means "entered via the HLL no-PDF manual-entry flow" (sets
+  // cell.manual_entry, see api/state.py::apply_user_override), a different
+  // concept from this confirmation; the plain-valid path above (flushSave)
+  // never sets it either, so this stays consistent for every hospital.
+  const confirmOverCap = () => {
+    saveOverride(session.session_id, hospital, sigla, pendingOverCap, {
+      allowOverPages: true,
+    });
+    setPendingOverCap(null);
   };
 
   return (
@@ -67,13 +92,36 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
               ? "cursor-not-allowed border-po-border bg-po-bg text-po-text-muted opacity-50"
               : invalid
                 ? "border-po-error bg-po-bg focus:border-po-error"
-                : "border-po-border bg-po-bg focus:border-po-accent"
+                : pendingOverCap != null
+                  ? "border-po-suspect-border bg-po-bg focus:border-po-suspect-border"
+                  : "border-po-border bg-po-bg focus:border-po-accent"
           }`}
         />
         <SaveIndicator status={saveStatus} />
       </div>
       {invalid && maxPages != null && (
         <p className="text-xs text-po-error mt-1">máx. {maxPages} (páginas)</p>
+      )}
+      {pendingOverCap != null && (
+        <div className="mt-1 flex items-center gap-2 text-xs text-po-suspect">
+          <span>
+            La celda tiene {maxPages} páginas. ¿Confirmas {pendingOverCap} documentos?
+          </span>
+          <button
+            type="button"
+            className="rounded border border-po-border px-1.5 py-0.5 text-po-text hover:border-po-border-strong"
+            onClick={confirmOverCap}
+          >
+            Confirmar
+          </button>
+          <button
+            type="button"
+            className="text-po-text-muted hover:text-po-text"
+            onClick={() => setPendingOverCap(null)}
+          >
+            Cancelar
+          </button>
+        </div>
       )}
     </div>
   );

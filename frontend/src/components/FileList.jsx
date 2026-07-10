@@ -372,7 +372,7 @@ export default function FileList({ hospital, sigla }) {
                     placeholder={placeholder}
                     disabled={locked}
                     max={isCapped ? (f.page_count ?? null) : null}
-                    onCommit={(newCount) => {
+                    onCommit={(newCount, opts) => {
                       setFiles((prev) =>
                         prev.map((row) =>
                           row.name === f.name
@@ -380,7 +380,9 @@ export default function FileList({ hospital, sigla }) {
                             : row,
                         ),
                       );
-                      savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount);
+                      savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount, {
+                        allowOverPages: opts?.allowOverPages,
+                      });
                     }}
                   />
                 );

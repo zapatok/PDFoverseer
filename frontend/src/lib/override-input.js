@@ -13,7 +13,9 @@ export function parseOverrideInput(raw, { maxPages = null } = {}) {
     return { value: null, valid: false };
   }
   if (maxPages != null && n > maxPages) {
-    return { value: null, valid: false };
+    // Over-cap is NOT garbage: the value parses, it just exceeds the pages.
+    // Callers surface a confirmation (allow_over_pages) instead of refusing.
+    return { value: n, valid: false, overCap: true };
   }
   return { value: n, valid: true };
 }

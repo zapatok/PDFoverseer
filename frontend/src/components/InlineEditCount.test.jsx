@@ -58,3 +58,61 @@ describe("InlineEditCount — negative-input guard (F5)", () => {
     expect(onCommit).toHaveBeenCalledWith(7);
   });
 });
+
+describe("InlineEditCount — over-cap confirmation (task 5)", () => {
+  it("Enter with a value above max shows the confirmation instead of committing", () => {
+    const onCommit = vi.fn();
+    const { container } = mount(
+      <InlineEditCount value={3} onCommit={onCommit} max={6} autoFocus />,
+    );
+    const input = container.querySelector("input");
+    setInputValue(input, "12");
+    pressEnter(input);
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("¿12 docs en 6 págs?");
+  });
+
+  it('"Sí" commits the over-cap value with { allowOverPages: true }', () => {
+    const onCommit = vi.fn();
+    const { container } = mount(
+      <InlineEditCount value={3} onCommit={onCommit} max={6} autoFocus />,
+    );
+    const input = container.querySelector("input");
+    setInputValue(input, "12");
+    pressEnter(input);
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const yes = buttons.find((b) => b.textContent === "Sí");
+    expect(yes).toBeTruthy();
+    act(() => yes.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(onCommit).toHaveBeenCalledWith(12, { allowOverPages: true });
+  });
+
+  it('"No" commits nothing and dismisses the confirmation', () => {
+    const onCommit = vi.fn();
+    const { container } = mount(
+      <InlineEditCount value={3} onCommit={onCommit} max={6} autoFocus />,
+    );
+    const input = container.querySelector("input");
+    setInputValue(input, "12");
+    pressEnter(input);
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const no = buttons.find((b) => b.textContent === "No");
+    expect(no).toBeTruthy();
+    act(() => no.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("¿12 docs en 6 págs?");
+  });
+
+  it("typing again clears a stale confirmation", () => {
+    const onCommit = vi.fn();
+    const { container } = mount(
+      <InlineEditCount value={3} onCommit={onCommit} max={6} autoFocus />,
+    );
+    const input = container.querySelector("input");
+    setInputValue(input, "12");
+    pressEnter(input);
+    expect(container.textContent).toContain("¿12 docs en 6 págs?");
+    setInputValue(input, "4");
+    expect(container.textContent).not.toContain("¿12 docs en 6 págs?");
+  });
+});

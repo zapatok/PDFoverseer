@@ -39,8 +39,11 @@ export default function CategoryRow({
   const isPendingSave = pendingSaves[cellKey] === "saving";
   const placeholder = mode === "manual" ? "—" : null;
 
-  const onCommitCount = (v) => {
-    saveOverride(session.session_id, hospital, sigla, v, { manual: mode === "manual" });
+  const onCommitCount = (v, opts) => {
+    saveOverride(session.session_id, hospital, sigla, v, {
+      manual: mode === "manual",
+      allowOverPages: opts?.allowOverPages,
+    });
     if (mode === "manual") onCommitNext?.();
   };
 
