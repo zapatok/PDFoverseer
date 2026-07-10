@@ -27,7 +27,7 @@ function mount(ui) {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => root.render(ui));
-  return { container, unmount: () => act(() => root.unmount()) };
+  return { container, root, unmount: () => act(() => root.unmount()) };
 }
 
 function setInputValue(input, value) {
@@ -124,5 +124,56 @@ describe("OverridePanel — over-cap confirmation", () => {
     expect(container.textContent).not.toContain("¿Confirmas 12 documentos?");
     // The field reverts to the stored override, not the refused over-cap text.
     expect(input.value).toBe("4");
+  });
+
+  it("switching the selected cell clears a pending confirmation (no cross-cell save)", () => {
+    // DetailPanel does NOT key OverridePanel by cell — the same instance
+    // survives sigla switches. A confirmation typed for HRB|odi must not be
+    // committable once the props point at HRB|art.
+    const { container, root } = mount(
+      <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: null }} maxPages={6} />,
+    );
+    const input = typeOverCap(container);
+    expect(container.textContent).toContain("¿Confirmas 12 documentos?");
+    // Clicking another CategoryRow: the input blurs, then the SAME instance
+    // re-renders with the new cell's props.
+    focusOut(input);
+    act(() =>
+      root.render(
+        <OverridePanel hospital="HRB" sigla="art" cell={{ user_override: 2 }} maxPages={10} />,
+      ),
+    );
+    // The confirmation row is gone — there is nothing left to click into art.
+    expect(container.textContent).not.toContain("Confirmas");
+    expect(findButton(container, "Confirmar")).toBeUndefined();
+    expect(saveOverride).not.toHaveBeenCalled();
+    // And the field shows art's stored value, not odi's refused text.
+    expect(container.querySelector("input").value).toBe("2");
+  });
+
+  it("a debounced valid save scheduled on one cell lands on THAT cell after switching", () => {
+    // The debounce hook invokes the LATEST render's callback when the timer
+    // fires — the cell identity must travel as args (captured at schedule
+    // time), or a save typed on odi would be written into art.
+    vi.useFakeTimers();
+    try {
+      const { container, root } = mount(
+        <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: null }} maxPages={20} />,
+      );
+      const input = container.querySelector("input");
+      focusIn(input);
+      setInputValue(input, "5"); // valid → debounced save scheduled for HRB|odi
+      focusOut(input);
+      act(() =>
+        root.render(
+          <OverridePanel hospital="HRB" sigla="art" cell={{ user_override: null }} maxPages={20} />,
+        ),
+      );
+      act(() => vi.advanceTimersByTime(400));
+      expect(saveOverride).toHaveBeenCalledTimes(1);
+      expect(saveOverride).toHaveBeenCalledWith("2026-04", "HRB", "odi", 5);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

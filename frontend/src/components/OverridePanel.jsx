@@ -35,6 +35,20 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
     }
   }, [cell?.user_override, focused.value, pendingOverCap]);
 
+  // Identity change: this instance is NOT keyed by cell (DetailPanel reuses it
+  // across sigla/hospital switches), so a pending confirmation must die with
+  // the cell it was typed for — otherwise Confirmar would save the old cell's
+  // value into the NEWLY selected cell with the cap lifted. Same on a flip to
+  // disabled (lock / "Por archivos"): drop the stale prompt, resync the draft.
+  useEffect(() => {
+    setPendingOverCap(null);
+    setValue(cell?.user_override ?? "");
+    setInvalid(false);
+    // Deliberately NOT depending on cell — the sibling effect above owns
+    // steady-state resync; this one only fires on identity/disabled changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hospital, sigla, disabled]);
+
   // Focus and select the input when the toggle switches to Manual mode.
   useEffect(() => {
     if (focusNonce > 0 && !disabled && inputRef.current) {
@@ -43,9 +57,15 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
     }
   }, [focusNonce, disabled]);
 
-  const flushSave = useDebouncedCallback((v) => {
+  // The cell identity travels as ARGS, not via the closure: the debounce hook
+  // invokes the LATEST render's callback when the timer fires, so a closure
+  // read of hospital/sigla would misdirect a save scheduled on cell X into
+  // cell Y if the operator switches selection within the 400 ms window. Args
+  // are captured at schedule time — the save always lands on the cell where
+  // the value was typed.
+  const flushSave = useDebouncedCallback((h, s, v) => {
     const numericValue = v === "" || v === null ? null : parseInt(v, 10);
-    saveOverride(session.session_id, hospital, sigla, numericValue);
+    saveOverride(session.session_id, h, s, numericValue);
   }, 400);
 
   const onChangeValue = (e) => {
@@ -57,7 +77,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
     const { value: parsed, valid, overCap } = parseOverrideInput(raw, { maxPages });
     setInvalid(!valid && !overCap);
     if (valid) {
-      flushSave(parsed === null ? "" : String(parsed));
+      flushSave(hospital, sigla, parsed === null ? "" : String(parsed));
     } else if (overCap) {
       setPendingOverCap(parsed);
     }
@@ -106,7 +126,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
       {invalid && maxPages != null && (
         <p className="text-xs text-po-error mt-1">máx. {maxPages} (páginas)</p>
       )}
-      {pendingOverCap != null && (
+      {pendingOverCap != null && !disabled && (
         <div className="mt-1 flex items-center gap-2 text-xs text-po-suspect">
           <span>
             La celda tiene {maxPages} páginas. ¿Confirmas {pendingOverCap} documentos?

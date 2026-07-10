@@ -350,6 +350,13 @@ export default function PDFLightbox() {
                     FileList's gate). */}
                 {perFileCountEditable(scanInfo?.count_type) ? (
                   <InlineEditCount
+                    // Key by cell + file identity: stepping files (or opening
+                    // another cell) remounts the editor, so a draft or pending
+                    // over-cap confirmation typed for one file can never commit
+                    // into the file navigated to — onCommit reads
+                    // files[lightbox.fileIndex] at click time, which would
+                    // otherwise resolve to the NEW file.
+                    key={`${lightbox.hospital}|${lightbox.sigla}|${currentFile?.name ?? lightbox.fileIndex}`}
                     value={files?.[lightbox.fileIndex]?.effective_count ?? 1}
                     disabled={isLocked}
                     max={isCappedCountType(scanInfo?.count_type) ? (currentFile?.page_count ?? null) : null}
