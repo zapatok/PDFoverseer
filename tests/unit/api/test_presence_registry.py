@@ -1,4 +1,10 @@
-from api.presence import PresenceRegistry
+from api.presence import (
+    AGENT_COLOR,
+    AGENT_KIND,
+    AGENT_NAME,
+    AGENT_PARTICIPANT_ID,
+    PresenceRegistry,
+)
 
 
 def test_heartbeat_creates_participant_and_snapshot_lists_it():
@@ -64,3 +70,36 @@ def test_one_participants_expiry_is_a_change_for_others():
     changed = reg.heartbeat("2026-04", "p2", name="C", color="#y")
     assert changed is True  # p1 purged -> roster changed
     assert {p["participant_id"] for p in reg.snapshot("2026-04")} == {"p2"}
+
+
+def test_agent_heartbeat_creates_agent_record():
+    """A heartbeat from AGENT_PARTICIPANT_ID must not create a human record.
+
+    Regression 2026-07-08: the agent heartbeated before its first write and
+    the UI showed initials instead of the Bot icon."""
+    reg = PresenceRegistry(now=lambda: 0.0)
+    reg.heartbeat("s", AGENT_PARTICIPANT_ID, name="whatever", color="#000")
+    (rec,) = reg.snapshot("s")
+    assert rec["kind"] == AGENT_KIND
+    assert rec["name"] == AGENT_NAME
+    assert rec["color"] == AGENT_COLOR
+
+
+def test_agent_heartbeat_heals_stale_human_record():
+    """A pre-existing human-kind record for the agent id is normalized."""
+    reg = PresenceRegistry(now=lambda: 0.0)
+    reg.heartbeat(
+        "s", AGENT_PARTICIPANT_ID, name="X", color="#000"
+    )  # will already be agent post-fix
+    # Simulate legacy state:
+    reg._participants["s"][AGENT_PARTICIPANT_ID]["kind"] = "human"
+    reg.heartbeat("s", AGENT_PARTICIPANT_ID, name="X", color="#000")
+    (rec,) = reg.snapshot("s")
+    assert rec["kind"] == AGENT_KIND
+
+
+def test_human_heartbeat_unchanged():
+    reg = PresenceRegistry(now=lambda: 0.0)
+    reg.heartbeat("s", "p1", name="Ana", color="#fff")
+    (rec,) = reg.snapshot("s")
+    assert rec["kind"] == "human"

@@ -62,7 +62,15 @@ class PresenceRegistry:
         kind: str = "human",
     ) -> bool:
         """Create (join) or renew a participant's lease. Returns True iff the
-        roster changed (join, or expiry purge happened) -> caller should broadcast."""
+        roster changed (join, or expiry purge happened) -> caller should broadcast.
+
+        A heartbeat from the Claude agent's own id is always normalized to the
+        AGENT_* identity, on both create and renew — a heartbeat that lands
+        before the agent's first write must not wear a human avatar (regression
+        2026-07-08).
+        """
+        if is_agent(participant_id):
+            name, color, kind = AGENT_NAME, AGENT_COLOR, AGENT_KIND
         changed = self._purge_expired(session_id)
         members = self._participants.setdefault(session_id, {})
         existing = members.get(participant_id)
@@ -78,11 +86,15 @@ class PresenceRegistry:
             }
             return True
         existing["expires_at"] = self._now() + PRESENCE_TTL_SECONDS
+        record_changed = False
         if existing["name"] != name or existing["color"] != color:
             existing["name"] = name
             existing["color"] = color
-            return True
-        return changed
+            record_changed = True
+        if existing["kind"] != kind:
+            existing["kind"] = kind
+            record_changed = True
+        return record_changed or changed
 
     def focus(self, session_id: str, participant_id: str, cell: str | None) -> bool:
         """Focus = atomic claim (caller holds the RLock). Free cell -> editor; held
