@@ -65,6 +65,7 @@ def list_months() -> dict:
                 "path": str(sub),
             }
         )
+    months.sort(key=lambda m: (m["year"], m["month"]))
     return {"months": months}
 
 
