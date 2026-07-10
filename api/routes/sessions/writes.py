@@ -43,6 +43,7 @@ class OverridePatch(BaseModel):
     value: Any = None
     manual: bool = False
     participant_id: str | None = None
+    allow_over_pages: bool = False
 
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/override")
@@ -72,7 +73,7 @@ def patch_override(
             total_pages = _cell_total_pages(state, hospital, sigla)
             # total_pages == 0 means pages are unknowable (missing folder / all PDFs
             # unreadable) → don't block; 0 is "unknown", not "max is 0".
-            if total_pages > 0 and value > total_pages:
+            if total_pages > 0 and value > total_pages and not body.allow_over_pages:
                 raise HTTPException(
                     422,
                     {"error": "count_exceeds_pages", "max": total_pages},
@@ -98,6 +99,7 @@ class PerFileOverrideRequest(BaseModel):
 
     count: int = Field(ge=0)  # F5: a per-file override can never be negative
     participant_id: str | None = None
+    allow_over_pages: bool = False
 
 
 @router.patch("/sessions/{session_id}/cells/{hospital}/{sigla}/files/{filename:path}/override")
@@ -127,7 +129,7 @@ def patch_per_file_override(
         raise HTTPException(status_code=404, detail=f"Unknown sigla: {sigla}") from exc
     if _is_capped_sigla(sigla) and folder.exists():
         file_pages = cell_page_counts(folder).get(filename, 0)
-        if file_pages > 0 and body.count > file_pages:
+        if file_pages > 0 and body.count > file_pages and not body.allow_over_pages:
             raise HTTPException(
                 422,
                 {"error": "count_exceeds_pages", "max": file_pages},

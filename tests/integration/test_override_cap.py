@@ -58,3 +58,34 @@ def test_checks_sigla_uncapped(client, session_with_checks_cell):
         json={"count": 50},
     )
     assert r.status_code == 200, r.text
+
+
+def test_cell_override_over_cap_with_flag_allowed(client, session_with_pending_cell):
+    """allow_over_pages=True bypasses the cap (2-docs-per-page corpus case)."""
+    sid, hosp, sigla = session_with_pending_cell  # total pages = 9
+    r = client.patch(
+        f"/api/sessions/{sid}/cells/{hosp}/{sigla}/override",
+        json={"value": 18, "allow_over_pages": True},
+    )
+    assert r.status_code == 200, r.text
+    state = client.get(f"/api/sessions/{sid}").json()
+    assert state["cells"][hosp][sigla]["user_override"] == 18
+
+
+def test_per_file_override_over_cap_with_flag_allowed(client, session_with_pending_cell):
+    sid, hosp, sigla = session_with_pending_cell  # big.pdf = 8 pages
+    r = client.patch(
+        f"/api/sessions/{sid}/cells/{hosp}/{sigla}/files/2026-04-15_odi_big.pdf/override",
+        json={"count": 16, "allow_over_pages": True},
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_flag_does_not_bypass_negative_or_max(client, session_with_pending_cell):
+    """The flag only lifts the pages cap — nothing else."""
+    sid, hosp, sigla = session_with_pending_cell
+    r = client.patch(
+        f"/api/sessions/{sid}/cells/{hosp}/{sigla}/files/2026-04-15_odi_big.pdf/override",
+        json={"count": -1, "allow_over_pages": True},
+    )
+    assert r.status_code == 422, r.text  # Field(ge=0) — pydantic validation
