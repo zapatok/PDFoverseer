@@ -1,10 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff } from "lucide-react";
 
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
+import Disclosure from "../ui/Disclosure";
 import SaveIndicator from "../ui/SaveIndicator";
 import { WORKER_SHORTCUTS } from "../lib/worker-shortcuts";
+import { evaluate } from "../lib/calc";
 
 function Metric({ label, value }) {
   return (
@@ -29,6 +31,30 @@ const MIC_CHIP = {
 function MicChip({ status }) {
   const c = MIC_CHIP[status] ?? MIC_CHIP.unsupported;
   return <Badge variant={c.variant} icon={c.icon}>{c.label}</Badge>;
+}
+
+// Collapsible keyboard calculator (triage I8) — a scratch pad for quick sums
+// while counting (e.g. "3*24+7" workers across shifts). Focus isolation: the
+// viewer's key handler already guards shortcuts with focusIsInInput() (see
+// WorkerCountViewer.jsx §3), so digits typed here never leak into the
+// pending-count buffer — no extra wiring needed.
+function CalcBar() {
+  const [expr, setExpr] = useState("");
+  const result = evaluate(expr);
+  return (
+    <div className="space-y-1">
+      <input
+        value={expr}
+        onChange={(e) => setExpr(e.target.value)}
+        placeholder="p. ej. 3*24+7"
+        aria-label="Calculadora"
+        className="w-full rounded border border-po-border bg-po-panel px-2 py-1 text-xs font-mono text-po-text placeholder-po-text-subtle focus:outline-none focus:ring-1 focus:ring-po-accent"
+      />
+      <p className="text-right font-mono text-sm tabular-nums text-po-text">
+        {result != null ? `= ${result}` : expr ? "…" : ""}
+      </p>
+    </div>
+  );
 }
 
 /**
@@ -118,6 +144,10 @@ export function WorkerHud({
           ))}
         </ul>
       </div>
+
+      <Disclosure summary="Calculadora">
+        <CalcBar />
+      </Disclosure>
     </aside>
   );
 }
