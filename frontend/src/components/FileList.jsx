@@ -380,7 +380,7 @@ export default function FileList({ hospital, sigla }) {
         {filtered.map((f, i) => (
           <li
             key={`${f.name}-${i}`}
-            className="grid grid-cols-[minmax(0,1fr)_3rem_1.25rem_3.5rem_5.5rem_2rem] items-center gap-2 px-3 py-2 hover:bg-po-panel-hover transition"
+            className="grid grid-cols-[minmax(0,1fr)_3rem_1.25rem_6.5rem_5.5rem_2rem] items-center gap-2 px-3 py-2 hover:bg-po-panel-hover transition"
           >
             {/* icon + name — the lightbox trigger; name scrolls horizontally */}
             <button
@@ -414,7 +414,7 @@ export default function FileList({ hospital, sigla }) {
                 const { value, placeholder } = fileCountDisplay(f.origin, f.effective_count);
                 if (!perFileCountEditable(scanInfo?.count_type)) {
                   return (
-                    <span className="font-mono tabular-nums text-sm w-14 text-right inline-block text-po-text-muted">
+                    <span className="font-mono tabular-nums text-sm w-full text-right inline-block text-po-text-muted">
                       {value != null ? value.toLocaleString() : (placeholder ?? "—")}
                     </span>
                   );
@@ -423,26 +423,62 @@ export default function FileList({ hospital, sigla }) {
                 // differs from its page count (doc-counting cells only) — a
                 // hint the "1 doc per file" default may be wrong, not an error.
                 const tinted = countDiffersFromPages(f, scanInfo?.count_type);
+                // D2: always-visible -/+ steppers — same optimistic update +
+                // save call as the typed-value path (InlineEditCount's
+                // onCommit below), just without the over-cap confirmation
+                // dance: a "+" past the pages cap 422s and the store
+                // toasts+reverts, same honest feedback as any other failed save.
+                const commitStep = (delta) => {
+                  const next = Math.max(0, (value ?? 0) + delta);
+                  setFiles((prev) =>
+                    prev.map((row) =>
+                      row.name === f.name
+                        ? { ...row, effective_count: next, override_count: next, origin: "Manual" }
+                        : row,
+                    ),
+                  );
+                  savePerFileOverride(session.session_id, hospital, sigla, f.name, next);
+                };
                 return (
-                  <span className={tinted ? "[&_button]:text-po-suspect" : ""}>
-                    <InlineEditCount
-                      value={value}
-                      placeholder={placeholder}
+                  <span className="inline-flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      aria-label="Restar un documento"
+                      disabled={locked || (value ?? 0) <= 0}
+                      onClick={() => commitStep(-1)}
+                      className="rounded px-1 text-po-text-muted hover:text-po-text disabled:opacity-30"
+                    >
+                      −
+                    </button>
+                    <span className={tinted ? "[&_button]:text-po-suspect" : ""}>
+                      <InlineEditCount
+                        value={value}
+                        placeholder={placeholder}
+                        disabled={locked}
+                        max={isCapped ? (f.page_count ?? null) : null}
+                        onCommit={(newCount, opts) => {
+                          setFiles((prev) =>
+                            prev.map((row) =>
+                              row.name === f.name
+                                ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
+                                : row,
+                            ),
+                          );
+                          savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount, {
+                            allowOverPages: opts?.allowOverPages,
+                          });
+                        }}
+                      />
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Sumar un documento"
                       disabled={locked}
-                      max={isCapped ? (f.page_count ?? null) : null}
-                      onCommit={(newCount, opts) => {
-                        setFiles((prev) =>
-                          prev.map((row) =>
-                            row.name === f.name
-                              ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
-                              : row,
-                          ),
-                        );
-                        savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount, {
-                          allowOverPages: opts?.allowOverPages,
-                        });
-                      }}
-                    />
+                      onClick={() => commitStep(+1)}
+                      className="rounded px-1 text-po-text-muted hover:text-po-text disabled:opacity-30"
+                    >
+                      +
+                    </button>
                   </span>
                 );
               })()}
