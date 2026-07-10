@@ -26,8 +26,15 @@ export default function NotePanel({ hospital, sigla, cell, locked = false }) {
     if (!focused) setText(cell?.note ?? "");
   }, [cell?.note, focused]);
 
-  const flush = useDebouncedCallback((value, nextStatus) => {
-    saveNote(session.session_id, hospital, sigla, { text: value, status: nextStatus });
+  // The cell identity travels as ARGS, not via the closure: the debounce hook
+  // invokes the LATEST render's callback when the timer fires, so a closure
+  // read of hospital/sigla would land a note typed on cell X into cell Y if
+  // the operator switches selection within the 400 ms window (NotePanel is
+  // not keyed by cell). Args are captured at schedule time — the note always
+  // saves to the cell where it was typed. Same fix as OverridePanel's
+  // flushSave; markResolved/reopen are safe (they cancel + save synchronously).
+  const flush = useDebouncedCallback((hosp, sig, value, nextStatus) => {
+    saveNote(session.session_id, hosp, sig, { text: value, status: nextStatus });
   }, 400);
 
   const readOnly = status === "resuelto";
@@ -35,7 +42,7 @@ export default function NotePanel({ hospital, sigla, cell, locked = false }) {
   const onChange = (e) => {
     const v = e.target.value;
     setText(v);
-    flush(v, "por_resolver");
+    flush(hospital, sigla, v, "por_resolver");
   };
 
   // Explicit status changes are authoritative: cancel any pending debounced
