@@ -91,7 +91,8 @@ def test_agent_heartbeat_heals_stale_human_record():
     reg.heartbeat(
         "s", AGENT_PARTICIPANT_ID, name="X", color="#000"
     )  # will already be agent post-fix
-    # Simulate legacy state:
+    # Simulate legacy state by poking internals: post-fix, no public path can
+    # produce a human-kind agent record, so fabricating one requires _participants.
     reg._participants["s"][AGENT_PARTICIPANT_ID]["kind"] = "human"
     reg.heartbeat("s", AGENT_PARTICIPANT_ID, name="X", color="#000")
     (rec,) = reg.snapshot("s")

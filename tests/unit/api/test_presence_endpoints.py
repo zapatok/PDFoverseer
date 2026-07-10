@@ -74,3 +74,26 @@ def test_bad_session_id_400(tmp_path, monkeypatch):
             json={"participant_id": "p1", "name": "D", "color": "#x"},
         )
         assert r.status_code == 400
+
+
+def test_get_presence_snapshot(tmp_path, monkeypatch):
+    """Headless clients can poll the same snapshot the WS pushes."""
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "presence_get.db"))
+    with _client() as c:
+        c.post(
+            "/api/sessions/2026-04/presence/heartbeat",
+            json={"participant_id": "p1", "name": "Ana", "color": "#fff"},
+        )
+        r = c.get("/api/sessions/2026-04/presence")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["type"] == "presence"
+        ids = [p["participant_id"] for p in body["participants"]]
+        assert "p1" in ids
+
+
+def test_get_presence_bad_session_id_400(tmp_path, monkeypatch):
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "presence_get_bad_id.db"))
+    with _client() as c:
+        r = c.get("/api/sessions/not-a-month/presence")
+        assert r.status_code == 400
