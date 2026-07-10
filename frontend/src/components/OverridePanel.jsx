@@ -22,14 +22,18 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   const inputRef = useRef(null);
 
   // Resync from store when cell changes (e.g., InlineEditCount committed externally),
-  // but ONLY if not currently editing that field.
+  // but ONLY if not currently editing that field — and NOT while an over-cap
+  // confirmation is pending: clicking Confirmar/Cancelar blurs the input first
+  // (mousedown), so an ungated resync here would unmount the buttons before
+  // the click lands (the same reason InlineEditCount gates its onBlur). When
+  // the confirmation resolves (either button, or retyping) pendingOverCap goes
+  // null → this effect re-runs → the field resyncs to the stored value.
   useEffect(() => {
-    if (!focused.value) {
+    if (!focused.value && pendingOverCap == null) {
       setValue(cell?.user_override ?? "");
       setInvalid(false); // a fresh cell must not inherit the previous error border
-      setPendingOverCap(null);
     }
-  }, [cell?.user_override, focused.value]);
+  }, [cell?.user_override, focused.value, pendingOverCap]);
 
   // Focus and select the input when the toggle switches to Manual mode.
   useEffect(() => {

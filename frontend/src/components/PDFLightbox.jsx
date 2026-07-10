@@ -353,7 +353,7 @@ export default function PDFLightbox() {
                     value={files?.[lightbox.fileIndex]?.effective_count ?? 1}
                     disabled={isLocked}
                     max={isCappedCountType(scanInfo?.count_type) ? (currentFile?.page_count ?? null) : null}
-                    onCommit={(newCount) => {
+                    onCommit={(newCount, opts) => {
                       const name = files?.[lightbox.fileIndex]?.name;
                       if (!name) return;
                       setFiles((prev) =>
@@ -363,7 +363,9 @@ export default function PDFLightbox() {
                             : row,
                         ),
                       );
-                      savePerFileOverride(session.session_id, lightbox.hospital, lightbox.sigla, name, newCount);
+                      savePerFileOverride(session.session_id, lightbox.hospital, lightbox.sigla, name, newCount, {
+                        allowOverPages: opts?.allowOverPages,
+                      });
                     }}
                   />
                 ) : (
