@@ -237,10 +237,15 @@ export default function FileList({ hospital, sigla }) {
     // Only preserve scroll when this run was triggered by a tick bump on the
     // SAME cell (a per-file save refetch) — not when the operator navigated
     // to a different hospital/sigla, where resetting to the top is correct.
-    if (prevCellKeyRef.current === cellKey && listRef.current) {
-      savedScrollRef.current = listRef.current.scrollTop;
-    } else {
+    // Two independent decisions: null the snapshot ONLY on a genuine cell
+    // change; refresh it only when the <ul> is actually mounted. When a second
+    // tick bump lands mid-refetch (Skeleton shown, listRef.current === null —
+    // two quick stepper clicks), neither applies: keep the FIRST bump's
+    // snapshot instead of discarding it and snapping the list to the top.
+    if (prevCellKeyRef.current !== cellKey) {
       savedScrollRef.current = null;
+    } else if (listRef.current) {
+      savedScrollRef.current = listRef.current.scrollTop;
     }
     prevCellKeyRef.current = cellKey;
     setFiles(null);
