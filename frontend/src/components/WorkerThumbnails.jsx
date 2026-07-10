@@ -14,6 +14,11 @@ function cacheFor(doc) {
   return m;
 }
 
+/** Read-only peek for PdfPage's instant placeholder (spec §1). */
+export function getCachedThumb(doc, pageNumber) {
+  return THUMB_CACHE.get(doc)?.get(pageNumber) ?? null;
+}
+
 function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores", rotation = 0 }) {
   const ref = useRef(null);
   // Composite cache key only when rotated — unrotated pages keep the plain
