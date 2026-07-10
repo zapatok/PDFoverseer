@@ -140,6 +140,22 @@ describe("InlineEditCount — over-cap confirmation (task 5)", () => {
     expect(container.textContent).not.toContain("¿12 docs en 6 págs?");
   });
 
+  it("a second Enter while the question is pending confirms with the flag (keyboard path)", () => {
+    const onCommit = vi.fn();
+    const { container } = mount(
+      <InlineEditCount value={3} onCommit={onCommit} max={6} autoFocus />,
+    );
+    const input = container.querySelector("input");
+    setInputValue(input, "12");
+    pressEnter(input);
+    expect(container.textContent).toContain("¿12 docs en 6 págs?");
+    pressEnter(input); // confirm — must NOT just re-ask the same question
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenCalledWith(12, { allowOverPages: true });
+    expect(container.textContent).not.toContain("¿12 docs en 6 págs?");
+    expect(container.querySelector("input")).toBeNull(); // editor closed
+  });
+
   it("Sí/No preventDefault on mousedown so the click never blurs the input", () => {
     const onCommit = vi.fn();
     const { container } = mount(

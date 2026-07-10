@@ -145,6 +145,34 @@ describe("OverridePanel — over-cap confirmation", () => {
     expect(input.value).toBe("4");
   });
 
+  it("Enter while the question is pending confirms with the flag (keyboard path)", () => {
+    const { container } = mount(
+      <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: null }} maxPages={6} />,
+    );
+    const input = typeOverCap(container);
+    act(() =>
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
+    );
+    expect(saveOverride).toHaveBeenCalledTimes(1);
+    expect(saveOverride).toHaveBeenCalledWith("2026-04", "HRB", "odi", 12, {
+      allowOverPages: true,
+    });
+    expect(container.textContent).not.toContain("¿Confirmas 12 documentos?");
+  });
+
+  it("Escape while the question is pending cancels (same as Cancelar)", () => {
+    const { container } = mount(
+      <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: 4 }} maxPages={6} />,
+    );
+    const input = typeOverCap(container);
+    act(() =>
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+    expect(saveOverride).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("¿Confirmas 12 documentos?");
+    expect(input.value).toBe("4");
+  });
+
   it("switching the selected cell clears a pending confirmation (no cross-cell save)", () => {
     // DetailPanel does NOT key OverridePanel by cell — the same instance
     // survives sigla switches. A confirmation typed for HRB|odi must not be

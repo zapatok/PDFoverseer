@@ -99,6 +99,28 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
     setPendingOverCap(null);
   };
 
+  // Cancelar means "keep the previous value", not "keep the refused text" —
+  // and since neither the button click (preventDefault) nor Escape blurs the
+  // input, the resync effect can't do the revert; do it explicitly here.
+  const cancelOverCap = () => {
+    setPendingOverCap(null);
+    setValue(cell?.user_override ?? "");
+    setInvalid(false);
+  };
+
+  // Keyboard path while the question is pending: Enter = Confirmar, Escape =
+  // Cancelar. Without this, confirm is mouse-only (a Tab-away blur discards).
+  // Escape is otherwise unused here — the only global Escape handler is the
+  // HistoryDrawer overlay, which can't hold focus in this input while open.
+  const onKeyDownValue = (e) => {
+    if (pendingOverCap == null) return;
+    if (e.key === "Enter") {
+      confirmOverCap();
+    } else if (e.key === "Escape") {
+      cancelOverCap();
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
@@ -110,6 +132,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
           value={value}
           placeholder={String(cell?.ocr_count ?? cell?.filename_count ?? 0)}
           onChange={onChangeValue}
+          onKeyDown={onKeyDownValue}
           onFocus={() => setFocused((f) => ({ ...f, value: true }))}
           onBlur={() => setFocused((f) => ({ ...f, value: false }))}
           disabled={disabled}
@@ -147,14 +170,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             className="text-po-text-muted hover:text-po-text"
-            onClick={() => {
-              // The click keeps focus (preventDefault above), so the resync
-              // effect won't fire — revert the field explicitly: Cancelar
-              // means "keep the previous value", not "keep the refused text".
-              setPendingOverCap(null);
-              setValue(cell?.user_override ?? "");
-              setInvalid(false);
-            }}
+            onClick={cancelOverCap}
           >
             Cancelar
           </button>

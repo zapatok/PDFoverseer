@@ -67,6 +67,15 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
         title={invalid && max != null ? `máx. ${max} (páginas)` : undefined}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
+            // Keyboard path: a second Enter while the question is showing =
+            // confirm. Without this, confirm is mouse-only (Tab-away discards,
+            // and re-parsing the unchanged draft would just re-ask).
+            if (overCap != null) {
+              onCommit(overCap, { allowOverPages: true });
+              setOverCap(null);
+              setEditing(false);
+              return;
+            }
             const v = parseInt(draft, 10);
             if (!Number.isNaN(v) && v >= 0 && (max === null || v <= max)) {
               onCommit(v);
@@ -109,7 +118,7 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
               setOverCap(null);
               setEditing(false);
             }}
-            className="underline"
+            className="underline font-medium"
           >
             Sí
           </button>
