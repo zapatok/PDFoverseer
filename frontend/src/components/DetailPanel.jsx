@@ -103,13 +103,18 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId, locked = false, 
   const nearMatches = cell.near_matches;
   // Viewer state lives here (not per-row): one PdfCoverViewer, reused for
   // whichever candidate is being inspected, so prev/next can step through
-  // the whole list. `viewerIndex` is a position into `nearMatches`, so it
-  // must be reset when the operator switches cells — otherwise an index
-  // minted for HRB|odi's list would be read against MAYO|ext's (DetailPanel
-  // doesn't remount on cell switch, so this component's state would go stale).
-  const [viewerIndex, setViewerIndex] = useState(null);
+  // the whole list. The state is the active item's IDENTITY (pdf_name +
+  // page_index), NOT its position: the store's cell_updated handler
+  // wholesale-replaces near_matches on any remote write (another
+  // participant's Descartar, a background scan), and a positional index
+  // would silently re-resolve to a DIFFERENT candidate when an earlier item
+  // is removed. The identity is re-derived to an index each render; if it's
+  // gone from today's list, the viewer closes. It's still reset on cell
+  // switch (DetailPanel doesn't remount, so state would otherwise go stale
+  // against the new cell's list).
+  const [viewerItem, setViewerItem] = useState(null); // {pdf_name, page_index} | null
   useEffect(() => {
-    setViewerIndex(null);
+    setViewerItem(null);
   }, [hospital, sigla]);
 
   if (!nearMatches || nearMatches.length === 0) return null;
@@ -118,15 +123,25 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId, locked = false, 
   // to match the server-side sorted(folder.rglob("*.pdf")) order for flat folders.
   const sortedNames = Object.keys(cell.per_file || {}).sort();
 
-  // `nearMatches[viewerIndex]` can be undefined if the list shrank (e.g. a
-  // "Descartar" elsewhere) while the viewer was open — the guards below
-  // (`activeNm &&`) just make the viewer disappear rather than crash.
-  const activeNm = viewerIndex != null ? nearMatches[viewerIndex] : null;
+  // Position of the active identity in TODAY'S list (-1 = discarded remotely
+  // → viewer closes). Duplicated identities resolve to the first occurrence —
+  // acceptable; the list key already tolerates dupes the same way.
+  const viewerIndex = viewerItem
+    ? nearMatches.findIndex(
+        (nm) => nm.pdf_name === viewerItem.pdf_name && nm.page_index === viewerItem.page_index,
+      )
+    : -1;
+  const activeNm = viewerIndex >= 0 ? nearMatches[viewerIndex] : null;
   const activePdfIndex = activeNm ? sortedNames.indexOf(activeNm.pdf_name) : -1;
   const activePdfUrl =
     activeNm && sessionId && activePdfIndex >= 0
       ? api.cellPdfUrl(sessionId, hospital, sigla, activePdfIndex)
       : null;
+  // Open (or step to) position i by storing that item's identity.
+  const openAt = (i) => {
+    const nm = nearMatches[i];
+    setViewerItem({ pdf_name: nm.pdf_name, page_index: nm.page_index });
+  };
 
   return (
     <div className="mt-6">
@@ -156,22 +171,22 @@ function NearMatchesSection({ hospital, sigla, cell, sessionId, locked = false, 
               sessionId={sessionId}
               pdfIndex={pdfIndex}
               locked={locked}
-              onOpenViewer={() => setViewerIndex(i)}
+              onOpenViewer={() => openAt(i)}
             />
           );
         })}
       </ul>
       {activeNm && activePdfUrl && (
         <PdfCoverViewer
-          open={viewerIndex != null}
-          onClose={() => setViewerIndex(null)}
+          open
+          onClose={() => setViewerItem(null)}
           url={activePdfUrl}
           pageNumber={activeNm.page_index + 1}
           title={`${activeNm.pdf_name} — p. ${activeNm.page_index + 1}`}
           rotation={pageRotation(reorgOps, hospital, sigla, activeNm.pdf_name, activeNm.page_index + 1)}
           positionLabel={`${viewerIndex + 1} de ${nearMatches.length}`}
-          onPrev={viewerIndex > 0 ? () => setViewerIndex(viewerIndex - 1) : null}
-          onNext={viewerIndex < nearMatches.length - 1 ? () => setViewerIndex(viewerIndex + 1) : null}
+          onPrev={viewerIndex > 0 ? () => openAt(viewerIndex - 1) : null}
+          onNext={viewerIndex < nearMatches.length - 1 ? () => openAt(viewerIndex + 1) : null}
         />
       )}
     </div>
