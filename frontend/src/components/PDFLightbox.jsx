@@ -10,6 +10,8 @@ import { SIGLA_LABELS } from "../lib/sigla-labels";
 import { wheelToPageStep } from "../lib/viewer-nav";
 import { cellLockHolder } from "../lib/presence";
 import { getParticipantId } from "../lib/identity";
+import { focusIsInInput } from "../lib/keyboard-focus";
+import { parseGoToPage } from "../lib/go-to-page";
 import { isCappedCountType, perFileCountEditable } from "../lib/cell-status";
 import { rotationForPageFn } from "../lib/page-rotation";
 import OriginChip from "./OriginChip";
@@ -90,9 +92,9 @@ function InspectView({ url, pageCount, rotationForPage = null }) {
   // manual-adjust input so digits / "-" don't move the page.
   useEffect(() => {
     const onKey = (e) => {
-      const el = document.activeElement;
-      const tag = el?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      if (focusIsInInput()) return;
+      if (e.key === "PageDown" && e.shiftKey) { e.preventDefault(); setPage((p) => clampPage(p + 10)); return; }
+      if (e.key === "PageUp" && e.shiftKey) { e.preventDefault(); setPage((p) => clampPage(p - 10)); return; }
       if (e.key === "PageDown" || e.key === "ArrowDown") { e.preventDefault(); setPage((p) => clampPage(p + 1)); }
       else if (e.key === "PageUp" || e.key === "ArrowUp") { e.preventDefault(); setPage((p) => clampPage(p - 1)); }
       else if (e.key === "+" || e.key === "=") { e.preventDefault(); zoomIn(); }
@@ -140,6 +142,22 @@ function InspectView({ url, pageCount, rotationForPage = null }) {
         )}
         {doc && !loading && (
           <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg bg-po-panel/90 p-1 shadow-sm ring-1 ring-po-border backdrop-blur">
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="Ir a pág."
+              aria-label="Ir a página"
+              className="w-20 rounded border border-po-border bg-po-panel px-1.5 py-0.5 text-xs text-po-text placeholder-po-text-subtle focus:outline-none focus:ring-1 focus:ring-po-accent"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const p = parseGoToPage(e.currentTarget.value, safePageCount);
+                  if (p != null) { setPage(p); e.currentTarget.value = ""; e.currentTarget.blur(); }
+                } else if (e.key === "Escape") {
+                  e.currentTarget.blur();
+                }
+                e.stopPropagation();
+              }}
+            />
             <Button size="sm" variant="ghost" icon={ZoomOut} onClick={zoomOut} aria-label="Alejar" />
             <Button size="sm" variant="ghost" icon={Maximize2} onClick={() => setZoom(1)} aria-label="Ajustar a ventana">
               {Math.round(zoom * 100)}%
@@ -201,9 +219,7 @@ export default function PDFLightbox() {
     if (!lightbox || lightbox.mode !== "inspect") return;
     const onKey = (e) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-      const el = document.activeElement;
-      const tag = el?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      if (focusIsInInput()) return;
       if (!files || files.length === 0) return;
       e.preventDefault();
       const delta = e.key === "ArrowRight" ? 1 : -1;

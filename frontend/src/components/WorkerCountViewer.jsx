@@ -12,6 +12,7 @@ import { useSessionStore } from "../store/session";
 import { computeWorkerCount, fileSubtotal } from "../lib/worker-count";
 import { countTypeFor } from "../lib/sigla-info";
 import { focusIsInInput } from "../lib/keyboard-focus";
+import { parseGoToPage } from "../lib/go-to-page";
 import { isValidRange, normalizeRange } from "../lib/reorg-range";
 import { pageRotation, rotationForPageFn } from "../lib/page-rotation";
 import Button from "../ui/Button";
@@ -514,6 +515,8 @@ export function WorkerCountViewer({
     // typing "12" in a field must NOT feed the count buffer.
     if (focusIsInInput()) return;
     if (mode === "reorg") return;
+    if (e.key === "PageDown" && e.shiftKey) { e.preventDefault(); setPageInFile(Math.min(page + 10, pageCount)); return; }
+    if (e.key === "PageUp" && e.shiftKey) { e.preventDefault(); setPageInFile(Math.max(page - 10, 1)); return; }
     if (e.key === "PageDown") { e.preventDefault(); fixAndAdvance(); }
     else if (e.key === "PageUp") { e.preventDefault(); retreat(); }
     else if (e.key === "Delete") { e.preventDefault(); deleteMark(); }
@@ -588,6 +591,22 @@ export function WorkerCountViewer({
         {mode === "worker" && <WorkerBubble state={bubbleState} value={bubbleValue} />}
         {doc && !error && (
           <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg bg-po-panel/90 p-1 shadow-sm ring-1 ring-po-border backdrop-blur">
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="Ir a pág."
+              aria-label="Ir a página"
+              className="w-20 rounded border border-po-border bg-po-panel px-1.5 py-0.5 text-xs text-po-text placeholder-po-text-subtle focus:outline-none focus:ring-1 focus:ring-po-accent"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const p = parseGoToPage(e.currentTarget.value, pageCount);
+                  if (p != null) { setPageInFile(p); e.currentTarget.value = ""; e.currentTarget.blur(); }
+                } else if (e.key === "Escape") {
+                  e.currentTarget.blur();
+                }
+                e.stopPropagation();
+              }}
+            />
             <Button size="sm" variant="ghost" icon={ZoomOut} onClick={zoomOut} aria-label="Alejar" />
             <Button size="sm" variant="ghost" icon={Maximize2} onClick={resetZoom} aria-label="Ajustar a ventana">
               {Math.round(zoom * 100)}%
