@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { releaseRenderCache } from "../components/PdfPage";
 import { pdfjsLib } from "../lib/pdf";
 
 /**
@@ -15,6 +16,7 @@ export function usePdfDocument(url) {
   useEffect(() => {
     if (!url) return undefined;
     let cancelled = false;
+    let loadedDoc = null;
     setDoc(null);
     setError(null);
     setNumPages(0);
@@ -26,6 +28,7 @@ export function usePdfDocument(url) {
           pdf.destroy();
           return;
         }
+        loadedDoc = pdf;
         setDoc(pdf);
         setNumPages(pdf.numPages);
       },
@@ -36,6 +39,9 @@ export function usePdfDocument(url) {
 
     return () => {
       cancelled = true;
+      // Cierra determinísticamente los ImageBitmaps cacheados de este doc
+      // (PdfPage's LRU) antes de destruirlo — sin esto quedan a merced del GC.
+      if (loadedDoc) releaseRenderCache(loadedDoc);
       task.destroy();
     };
   }, [url]);

@@ -14,7 +14,13 @@ function cacheFor(doc) {
   return m;
 }
 
-/** Read-only peek for PdfPage's instant placeholder (spec §1). */
+/**
+ * Read-only peek for PdfPage's instant placeholder (spec §1).
+ *
+ * Caveat: looks up only the plain numeric (unrotated) key, so a page under an
+ * active rotate op usually gets NO placeholder (full miss), not a
+ * stale-orientation one — expected, tiny impact (~100 ms of blank).
+ */
 export function getCachedThumb(doc, pageNumber) {
   return THUMB_CACHE.get(doc)?.get(pageNumber) ?? null;
 }

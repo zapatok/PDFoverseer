@@ -4,7 +4,9 @@ import { getCachedThumb } from "./WorkerThumbnails";
 
 // Per-document render cache: WeakMap<doc, LruCache>. Key `page@scale@rot`;
 // value ImageBitmap (or HTMLCanvasElement fallback). Capacity 6 ≈ the ±2
-// window + current at one scale, with slack for a zoom change.
+// window + current at one scale, with slack for a zoom change — sized against
+// prerenderOrder's default radius = 2; bumping that radius without bumping
+// this capacity degrades the cache to always-cold. Revisit both together.
 const RENDER_CACHE = new WeakMap();
 const CACHE_CAPACITY = 6;
 
@@ -15,6 +17,12 @@ function cacheFor(doc) {
     RENDER_CACHE.set(doc, c);
   }
   return c;
+}
+
+/** Deterministically release a doc's cached bitmaps (call before doc.destroy()). */
+export function releaseRenderCache(doc) {
+  RENDER_CACHE.get(doc)?.clear(); // clear() onEvicts → bmp.close()
+  RENDER_CACHE.delete(doc);
 }
 
 const keyFor = (page, scale, rotation) => `${page}@${scale}@${rotation}`;

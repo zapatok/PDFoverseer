@@ -7,7 +7,8 @@
  *
  * @param {number} current - 1-based current page.
  * @param {number} pageCount
- * @param {number} [radius] - window half-width (default 2).
+ * @param {number} [radius] - window half-width (default 2). PdfPage's
+ *   CACHE_CAPACITY is sized against this default — revisit both together.
  * @returns {number[]} pages in priority order.
  */
 export function prerenderOrder(current, pageCount, radius = 2) {
