@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FileText, FileStack, FileX, MousePointer2, MoreHorizontal } from "lucide-react";
 import { useSessionStore } from "../store/session";
 import { api } from "../lib/api";
@@ -217,17 +217,45 @@ export default function FileList({ hospital, sigla }) {
   const [search, setSearch] = useState("");
   const [activeOrigins, setActiveOrigins] = useState([]);
   const [scanInfo, setScanInfo] = useState(null);
+  // E1: a per-file save (savePerFileOverride, all completion paths — success,
+  // 409, generic error) bumps filesTick to force this effect to re-fetch and
+  // show server truth. That refetch sets `files` to null first, which swaps
+  // the <ul> for the Skeleton view (unmount) and later mounts a BRAND NEW <ul>
+  // — a fresh DOM node always starts at scrollTop 0. Without this guard, every
+  // single per-file edit silently scrolls a long list back to the top.
+  const listRef = useRef(null);
+  const savedScrollRef = useRef(null);
+  const prevCellKeyRef = useRef(null);
 
   useEffect(() => {
     if (!session?.session_id || !hospital || !sigla) {
       setFiles(null);
+      prevCellKeyRef.current = null;
       return;
     }
+    const cellKey = `${hospital}|${sigla}`;
+    // Only preserve scroll when this run was triggered by a tick bump on the
+    // SAME cell (a per-file save refetch) — not when the operator navigated
+    // to a different hospital/sigla, where resetting to the top is correct.
+    if (prevCellKeyRef.current === cellKey && listRef.current) {
+      savedScrollRef.current = listRef.current.scrollTop;
+    } else {
+      savedScrollRef.current = null;
+    }
+    prevCellKeyRef.current = cellKey;
     setFiles(null);
     api.getCellFiles(session.session_id, hospital, sigla)
       .then(setFiles)
       .catch((err) => setFiles({ error: String(err) }));
   }, [session?.session_id, hospital, sigla, tick]);
+
+  // Restore the pre-refetch scroll position once the new <ul> is mounted.
+  useLayoutEffect(() => {
+    if (savedScrollRef.current != null && listRef.current) {
+      listRef.current.scrollTop = savedScrollRef.current;
+      savedScrollRef.current = null;
+    }
+  }, [files]);
 
   // Fetch sigla scan-info to determine if page-cap applies (Incr 2).
   useEffect(() => {
@@ -348,7 +376,7 @@ export default function FileList({ hospital, sigla }) {
           );
         })}
       </div>
-      <ul className="max-h-[60vh] overflow-y-auto">
+      <ul ref={listRef} className="max-h-[60vh] overflow-y-auto">
         {filtered.map((f, i) => (
           <li
             key={`${f.name}-${i}`}
