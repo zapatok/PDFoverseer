@@ -173,3 +173,14 @@ describe("InlineEditCount — over-cap confirmation (task 5)", () => {
     }
   });
 });
+
+describe("InlineEditCount — select-on-focus (triage D1)", () => {
+  it("focusing the input selects its full contents", () => {
+    const onCommit = vi.fn();
+    const { container } = mount(<InlineEditCount value={3} onCommit={onCommit} autoFocus />);
+    const input = container.querySelector("input");
+    input.select = vi.fn();
+    act(() => input.dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
+    expect(input.select).toHaveBeenCalled();
+  });
+});

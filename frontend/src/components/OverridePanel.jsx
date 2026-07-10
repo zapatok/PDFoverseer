@@ -133,7 +133,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
           placeholder={String(cell?.ocr_count ?? cell?.filename_count ?? 0)}
           onChange={onChangeValue}
           onKeyDown={onKeyDownValue}
-          onFocus={() => setFocused((f) => ({ ...f, value: true }))}
+          onFocus={(e) => { setFocused((f) => ({ ...f, value: true })); e.target.select(); }}
           onBlur={() => setFocused((f) => ({ ...f, value: false }))}
           disabled={disabled}
           className={`w-24 rounded border px-2 py-1.5 text-sm tabular-nums outline-none ${

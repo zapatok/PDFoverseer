@@ -62,6 +62,7 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
         value={draft}
         onChange={(e) => { setDraft(e.target.value); setInvalid(false); setOverCap(null); }}
         onClick={(e) => e.stopPropagation()}
+        onFocus={(e) => e.target.select()}
         min={0}
         max={max ?? undefined}
         title={invalid && max != null ? `máx. ${max} (páginas)` : undefined}
