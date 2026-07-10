@@ -115,8 +115,9 @@ _ART_ANCHORS: list[Flavor] = [
 # ---------------------------------------------------------------------------
 # IRL anchor constants (verbatim from spec §2 · irl).
 #
-# IRL = "Información de Riesgos Laborales" (F-CRS-ODI-01 — el código real es
-# ODI-01, no IRL). El header del formulario y los encabezados de tabla
+# IRL = "Información de Riesgos Laborales" (código real F-CRS-IRL-01; la
+# creencia previa "el código es ODI-01" resultó errónea — corregida 2026-07-09
+# con el fix v7 del cover_code). El header del formulario y los encabezados de tabla
 # (ACTIVIDAD / PELIGRO / RIESGOS ASOCIADOS / MEDIDAS DE CONTROL) repiten en
 # TODAS las páginas — por eso NO sirven como anclas. Las anclas son
 # campos del formulario que solo aparecen en la portada (cover-only).
