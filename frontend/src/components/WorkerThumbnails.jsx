@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 // Cache de miniaturas: WeakMap sobre el objeto `doc` → Map(page → dataURL).
 // Al cambiar de archivo `doc` es otro objeto, así que el cache se invalida solo.
 const THUMB_CACHE = new WeakMap();
-const THUMB_WIDTH = 92; // px de ancho del raster
+const THUMB_WIDTH = 110; // px de ancho del raster (+20%, triage I1)
 
 function cacheFor(doc) {
   let m = THUMB_CACHE.get(doc);
@@ -126,15 +126,15 @@ export function WorkerThumbnails({
   const currentRef = useRef(null);
 
   useEffect(() => {
-    currentRef.current?.scrollIntoView({ block: "nearest" });
+    currentRef.current?.scrollIntoView({ block: "center" });
   }, [currentPage]);
 
   if (!doc || !pageCount) {
-    return <aside aria-hidden="true" className="w-28 shrink-0 border-r border-po-border bg-po-panel" />;
+    return <aside aria-hidden="true" className="w-32 shrink-0 border-r border-po-border bg-po-panel" />;
   }
 
   return (
-    <aside className="w-28 shrink-0 overflow-y-auto border-r border-po-border bg-po-panel p-1.5">
+    <aside className="w-32 shrink-0 overflow-y-auto border-r border-po-border bg-po-panel p-1.5">
       <ul className="flex flex-col gap-1.5">
         {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => {
           const rotation = rotationForPage ? rotationForPage(p) : 0;
