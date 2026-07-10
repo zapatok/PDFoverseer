@@ -64,7 +64,9 @@ SCANNER_PATTERNS_VERSION = (
     #     "cphs" + revdocmaq "revision"+"documentacion" phrase, F6/F14a); chps
     #     counts by folder membership instead of by token (F14); duplicate
     #     PDF basename detection surfaced as a flag (F10).
-    "v6-token-aliases"
+    # v7: irl cover_code corrected F-CRS-ODI-01 → F-CRS-IRL-01 (2026-07-09
+    #     counting session found the real cover header; ODI's code matched 0).
+    "v7-irl-cover"
 )
 
 # Tipos de conteo válidos por sigla (Decisión 4 / grupo F del triage). La

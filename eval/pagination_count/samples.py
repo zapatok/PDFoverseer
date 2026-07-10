@@ -83,7 +83,7 @@ SAMPLES: list[Sample] = [
         None,
         1,
         "eye",
-        cover_code="F-CRS-ODI-01",
+        cover_code="F-CRS-IRL-01",
         note="1 induction packet (31pp IRL form + appendices)",
     ),
     # --- "verificar": likely paginated, migration decided by the benchmark ---

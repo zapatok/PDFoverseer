@@ -46,7 +46,7 @@ class SiglaPattern(TypedDict):
     `recursive_glob`: optional — INFORMATIONAL ONLY (count_pdfs_by_sigla
         already uses rglob unconditionally; this field documents intent).
     `cover_code`: pagination only — count only covers whose form code contains
-        this substring (e.g. ``"F-CRS-ODI-01"`` for IRL). When absent, every
+        this substring (e.g. ``"F-CRS-IRL-01"`` for IRL). When absent, every
         ``curr==1`` page counts as a document start.
     `count_scope`: optional — default ``"token"`` (pase-1 counts only PDFs
         whose filename resolves to this sigla via ``extract_sigla``).
@@ -724,7 +724,7 @@ PATTERNS: dict[str, SiglaPattern] = {
     },
     "irl": {
         "scan_strategy": "pagination",  # v4: migrated — packet covers via cover_code
-        "cover_code": "F-CRS-ODI-01",  # count only IRL form covers, not appendix page-1s
+        "cover_code": "F-CRS-IRL-01",  # count only IRL form covers, not appendix page-1s
         "cover_flavors": _IRL_ANCHORS,
     },
     "odi": {

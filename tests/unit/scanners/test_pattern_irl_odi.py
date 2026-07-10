@@ -25,7 +25,7 @@ def test_irl_count_ocr_smoke():
     """PaginationScanner returns 1 cover for the 54-page IRL booklet fixture.
 
     The booklet embeds many sub-forms, each with its own 'pagina N de M'
-    header.  IRL's patterns.py entry sets cover_code='F-CRS-ODI-01', so the
+    header.  IRL's patterns.py entry sets cover_code='F-CRS-IRL-01', so the
     engine only counts a document start where curr==1 AND the page's form
     code matches — the embedded sub-forms' own page-1s (pages 33+) are
     appendix material, not IRL covers, so they must not inflate the count.

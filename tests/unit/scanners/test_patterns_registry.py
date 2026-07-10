@@ -111,9 +111,13 @@ def test_v4_pagination_migration_state():
 
 
 def test_irl_pagination_has_cover_code():
-    """IRL counts only its F-CRS-ODI-01 covers (ignores appendix page-1s)."""
+    """IRL counts only its F-CRS-IRL-01 covers (ignores appendix page-1s).
+
+    Regression pin for the 2026-07-09 fix: the entry shipped with odi's code
+    (F-CRS-ODI-01) by mistake — a pase-2 run on irl matched no covers.
+    """
     assert PATTERNS["irl"]["scan_strategy"] == "pagination"
-    assert PATTERNS["irl"].get("cover_code") == "F-CRS-ODI-01"
+    assert PATTERNS["irl"].get("cover_code") == "F-CRS-IRL-01"
 
 
 def test_cover_code_only_on_pagination_siglas():
