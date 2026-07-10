@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useSessionStore } from "../store/session";
 import { api } from "../lib/api";
 import Dialog from "../ui/Dialog";
@@ -314,9 +315,13 @@ export default function PDFLightbox() {
             onCreateOp={async (draft) => {
               try {
                 await addReorgOp(session.session_id, lightbox.hospital, lightbox.sigla, draft);
-                closeLightbox();
+                toast.success(`Operación creada — ${draft.source?.file ?? ""}`);
+                // Volver al visor de inspección del MISMO archivo (no cerrar el
+                // lightbox): para un rotate, la vista ya endereza la página con
+                // la op recién creada — el usuario ve el resultado al instante.
+                openLightbox(lightbox.hospital, lightbox.sigla, lightbox.fileIndex);
               } catch {
-                // addReorgOp already toasted the error; keep the lightbox open to retry.
+                // addReorgOp already toasted the error; keep the reorg mode open to retry.
               }
             }}
           />
