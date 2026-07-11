@@ -341,8 +341,14 @@ def _handle_scan_progress(
         "agent_active": bool,                   # True once the agent has claimed any cell
         "current_cell_skipped": bool,           # True while the current cell is skipped
         "lent": list[tuple[str, str, str]],     # [(hospital, sigla, launcher_id), ...] self-lends
+        "preseeded_skips": list[dict],          # [{hospital, sigla, lock_holder}, ...] §B5
     }.
 
+    - ``scan_started``: emit it, then FLUSH ``ctx["preseeded_skips"]`` — one
+      ``cell_skipped`` per cell the route already excluded from dispatch
+      (§B5, before any worker was submitted). This is the single emission
+      point for those pre-skips: it never fires before ``scan_started`` (the
+      orchestrator emits that event first, so this preserves event order).
     - ``cell_scanning``: claim the cell as the Claude agent.
       If a human holds it → record the skip, emit ``cell_skipped``, set
       ``current_cell_skipped=True``, do NOT broadcast cell_scanning.
@@ -357,11 +363,27 @@ def _handle_scan_progress(
     - ``scan_complete`` / ``scan_cancelled``: release the agent once, then
       re-promote every self-lend's launcher back to editor (§B2 —
       ``promote_lender`` never dethrones a different live editor); enrich
-      ``scan_complete`` with ``ctx["skipped_cells"]``; broadcast and return.
+      ``scan_complete`` with ``ctx["skipped_cells"]`` (which already includes
+      the §B5 pre-skips — they were seeded into it by the route); broadcast
+      and return.
     - Otherwise: normal path (``_apply_scan_event`` + ``cell_done`` followup).
     """
     etype = event.get("type")
     h, s = event.get("hospital"), event.get("sigla")
+
+    if etype == "scan_started":
+        emit(_apply_scan_event(mgr, session_id, event))
+        for entry in ctx.get("preseeded_skips") or []:
+            emit(
+                {
+                    "type": "cell_skipped",
+                    "hospital": entry["hospital"],
+                    "sigla": entry["sigla"],
+                    "reason": "locked",
+                    "lock_holder": entry["lock_holder"],
+                }
+            )
+        return
 
     if etype == "cell_scanning":
         ctx["current_cell_skipped"] = False  # reset first; the skip path below overwrites to True
@@ -489,7 +511,14 @@ def scan_ocr(
         (c.hospital, c.sigla): c.folder_path for cell_list in inv.cells.values() for c in cell_list
     }
 
+    # §B5: pre-skip cells a DIFFERENT human currently holds — BEFORE any OCR
+    # work is scheduled, so a locked cell never wastes a worker's CPU/RAM just
+    # to have its result thrown away at cell_scanning time. The launcher's own
+    # held cell is NOT pre-skipped here (self-lend, §B2): it proceeds normally
+    # into cells_with_paths and is claimed by agent_claim_cell(lend_from=...)
+    # at cell_scanning.
     cells_with_paths: list[tuple[str, str, Path]] = []
+    preseeded_skips: list[dict] = []
     for pair in cells_pairs:
         if not (isinstance(pair, list) and len(pair) == 2):
             raise HTTPException(400, f"Invalid cell pair: {pair}")
@@ -497,6 +526,12 @@ def scan_ocr(
         folder_path = folder_by_key.get((hosp, sigla))
         if folder_path is None or not folder_path.exists():
             raise HTTPException(404, f"Folder missing for {hosp}/{sigla}")
+        holder = mgr.presence_lock_holder(
+            session_id, f"{hosp}|{sigla}", exclude=AGENT_PARTICIPANT_ID
+        )
+        if holder is not None and holder.get("participant_id") != body.participant_id:
+            preseeded_skips.append({"hospital": hosp, "sigla": sigla, "lock_holder": holder})
+            continue
         cells_with_paths.append((hosp, sigla, folder_path))
 
     # Incr. 1A fusionar-y-saltar: por celda, los archivos ya confiables que el OCR
@@ -524,9 +559,15 @@ def scan_ocr(
 
     # M3b: per-scan context for the agent lock-skip policy (mutated by
     # _handle_scan_progress; lives in the route scope so on_progress closes over it).
+    # §B5: seed the cells pre-skipped above so they're in scan_complete.skipped
+    # and get their cell_skipped event flushed when scan_started passes through
+    # _handle_scan_progress — they were never submitted to the pool, so no
+    # cell_scanning will ever arrive for them.
     ctx: dict = {
-        "skipped_set": set(),
-        "skipped_cells": [],
+        "skipped_set": {(e["hospital"], e["sigla"]) for e in preseeded_skips},
+        "skipped_cells": [
+            {"hospital": e["hospital"], "sigla": e["sigla"]} for e in preseeded_skips
+        ],
         "agent_active": False,
         "current_cell_skipped": False,
         # Self-lend: the launcher's own per-cell hold is borrowed instead of
@@ -535,6 +576,7 @@ def scan_ocr(
         # §B2: (hospital, sigla, launcher_id) tuples for each self-lend, so the
         # launcher can get their editorship back at the batch terminal.
         "lent": [],
+        "preseeded_skips": preseeded_skips,
     }
 
     def _safe_broadcast(event: dict) -> None:

@@ -153,6 +153,7 @@ def _new_ctx() -> dict:
         "agent_active": False,
         "current_cell_skipped": False,
         "lent": [],
+        "preseeded_skips": [],
     }
 
 
@@ -675,3 +676,144 @@ def test_scan_ocr_http_self_lend_end_to_end(tmp_path, monkeypatch):
         assert any(s["hospital"] == "HPV" and s["sigla"] == "art" for s in skipped), (
             f"cell held by a different human must still be skipped, got: {skipped}"
         )
+
+
+# ---------------------------------------------------------------------------
+# §B5 — pre-skip locked cells BEFORE submitting workers (no wasted OCR)
+# ---------------------------------------------------------------------------
+
+
+def _lock_holder_dict(
+    pid: str = "human-2", name: str = "Carla", color: str = "#b", cell: str = "HPV|art"
+) -> dict:
+    return {
+        "participant_id": pid,
+        "name": name,
+        "color": color,
+        "kind": "human",
+        "focused_cell": cell,
+        "mode": "editor",
+    }
+
+
+def test_handler_scan_started_flushes_preseeded_skips(tmp_path):
+    """§B5: ctx pre-sembrado con 1 skip -> al pasar scan_started se emite el
+    evento scan_started seguido de EXACTAMENTE 1 cell_skipped, con el mismo
+    shape del skip dinámico (hospital/sigla/reason/lock_holder)."""
+    mgr = _make_manager(tmp_path)
+    sid = "2026-04"
+    out: list[dict] = []
+    ctx = _new_ctx()
+    holder = _lock_holder_dict()
+    ctx["skipped_set"] = {("HPV", "art")}
+    ctx["skipped_cells"] = [{"hospital": "HPV", "sigla": "art"}]
+    ctx["preseeded_skips"] = [{"hospital": "HPV", "sigla": "art", "lock_holder": holder}]
+
+    _handle_scan_progress(
+        mgr, sid, {"type": "scan_started", "total_cells": 1, "total_pdfs": 3}, ctx, out.append
+    )
+
+    assert [e["type"] for e in out] == ["scan_started", "cell_skipped"]
+    assert out[0]["total_pdfs"] == 3
+    skip_evt = out[1]
+    assert skip_evt["hospital"] == "HPV"
+    assert skip_evt["sigla"] == "art"
+    assert skip_evt["reason"] == "locked"
+    assert skip_evt["lock_holder"] == holder
+
+
+def test_handler_preseeded_skip_appears_once_in_scan_complete(tmp_path):
+    """A cell pre-skipped before dispatch never reaches the drain (it was never
+    submitted to the pool), so scan_complete.skipped lists it exactly once —
+    no duplicate from a later cell_scanning event."""
+    mgr = _make_manager(tmp_path)
+    sid = "2026-04"
+    out: list[dict] = []
+    ctx = _new_ctx()
+    holder = _lock_holder_dict()
+    ctx["skipped_set"] = {("HPV", "art")}
+    ctx["skipped_cells"] = [{"hospital": "HPV", "sigla": "art"}]
+    ctx["preseeded_skips"] = [{"hospital": "HPV", "sigla": "art", "lock_holder": holder}]
+
+    _handle_scan_progress(
+        mgr, sid, {"type": "scan_started", "total_cells": 1, "total_pdfs": 3}, ctx, out.append
+    )
+    out.clear()
+    _handle_scan_progress(
+        mgr,
+        sid,
+        {"type": "scan_complete", "scanned": 0, "errors": 0, "cancelled": 0},
+        ctx,
+        out.append,
+    )
+
+    complete = next(e for e in out if e["type"] == "scan_complete")
+    assert complete["skipped"] == [{"hospital": "HPV", "sigla": "art"}]
+
+
+def test_scan_ocr_http_pre_skips_locked_cell_before_pool(tmp_path, monkeypatch):
+    """§B5 end-to-end: a cell held by a DIFFERENT human is excluded from the
+    ProcessPool dispatch entirely — the spy on ``scan_cells_ocr`` (patched in
+    the scan route's own module namespace) receives ONLY the free cell, and
+    ``scan_started.total_pdfs``/the route's ``total`` exclude the locked one."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "b5_preskip.db"))
+
+    odi_dir = tmp_path / "ABRIL" / "HPV" / "3.-ODI Visitas"
+    art_dir = tmp_path / "ABRIL" / "HPV" / "7.-ART"
+    odi_dir.mkdir(parents=True)
+    art_dir.mkdir(parents=True)
+    _make_pdf(odi_dir / "a.pdf")
+    _make_pdf(art_dir / "b.pdf")
+
+    import api.routes.sessions.scan as scan_mod
+
+    captured: dict = {}
+
+    def _spy_scan_cells_ocr(cells, *, on_progress, cancel, max_workers=2, skip_by_cell=None):
+        captured["cells"] = list(cells)
+        on_progress({"type": "scan_started", "total_cells": len(cells), "total_pdfs": 1})
+        on_progress({"type": "scan_complete", "scanned": len(cells), "errors": 0, "cancelled": 0})
+        return {}
+
+    monkeypatch.setattr(scan_mod, "scan_cells_ocr", _spy_scan_cells_ocr)
+
+    app = create_app()
+    with TestClient(app) as c:
+        r = c.post("/api/sessions", json={"year": 2026, "month": 4})
+        assert r.status_code == 200, r.text
+        sid = r.json()["session_id"]
+        c.post(f"/api/sessions/{sid}/scan")  # populates cell folder_path
+
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "human-2", "name": "Carla", "color": "#b"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/focus",
+            json={"participant_id": "human-2", "cell": "HPV|art"},
+        )
+
+        with c.websocket_connect(f"/ws/sessions/{sid}") as ws:
+            r2 = c.post(
+                f"/api/sessions/{sid}/scan-ocr",
+                json={"cells": [["HPV", "odi"], ["HPV", "art"]]},
+            )
+            assert r2.status_code == 200, r2.text
+            body = r2.json()
+            # Only the free cell was dispatched — the route excludes the locked
+            # one BEFORE building cells_with_paths / total_pdfs (never mind the
+            # worker even opening it).
+            assert body["total"] == 1
+            assert body["total_pdfs"] == 1
+
+            scan_complete = None
+            for _ in range(200):
+                evt = json.loads(ws.receive_text())
+                if evt.get("type") == "scan_complete":
+                    scan_complete = evt
+                    break
+
+    assert scan_complete is not None
+    assert [(h, s) for (h, s, _f) in captured["cells"]] == [("HPV", "odi")]
+    assert scan_complete["skipped"] == [{"hospital": "HPV", "sigla": "art"}]
