@@ -182,7 +182,7 @@ counter.
 `PaginationScanner` counts documents by their "Página N de M" pagination via
 `utils/pagination_count.count_documents_by_pagination` (the **lite engine**,
 introduced at `SCANNER_PATTERNS_VERSION = v4-pagination`; current version is
-`v6-token-aliases` — see `core/utils.py`). Per page it OCRs only the
+`v7-irl-cover` — see `core/utils.py`). Per page it OCRs only the
 **top-right corner** (orientation-aware), parses the pagination + the form code,
 and **recovers** unreadable corners by completing the numeric sequence from
 neighbors (plain forward-fill — no autocorrelation / Dempster-Shafer). A document
@@ -244,6 +244,14 @@ colados* panel, where the operator creates the reorg op or dismisses it. Design:
 
 ### Uniform behaviors
 
+- **Threaded page OCR (2026-07-10)** — both engines run their per-page OCR on
+  a `ThreadPoolExecutor` (`OCR_PAGE_THREADS` in `core/utils.py`, default
+  `min(6, cpu-2)`, env `OVERSEER_OCR_THREADS`; `ocr_threads=1` forces the
+  legacy sequential path). pytesseract releases the GIL, so this is a pure
+  execution change: page reads land in page-indexed slots BEFORE any
+  interpretation runs — counts/telemetry are deterministic in both modes
+  (verified A/B on real samples: identical results, 2.9–3.8×). `on_page` is a
+  0-based monotonic completed-pages counter and may fire from worker threads.
 - **A7** — a 1-page PDF counts as 1 document, locked, without OCR.
 - **A8** — a missing sigla folder yields count 0 with a `folder_missing` flag,
   never an error.

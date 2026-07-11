@@ -14,7 +14,7 @@
 - `routes/output.py` — `POST /api/sessions/{id}/output` — generate the RESUMEN Excel (atomic tmp→bak→rename).
 - `routes/history.py` — historical per-cell counts (range queries over `historical_counts`).
 - `routes/presence.py` — `POST /api/sessions/{id}/presence/{heartbeat,focus,leave}` — multiplayer M2 HTTP up-channel (no locking/enforcement here; that lives in the `sessions/` write routes, M3).
-- `routes/ws.py` — `WS /ws/sessions/{session_id}` — progress events (`scan_started`, `cell_scanning`, `pdf_progress`, `cell_done`/`cell_error`, `scan_complete`/`scan_cancelled`), `cell_updated`/`session_refresh`/`presence` broadcasts, + 15 s keepalive ping.
+- `routes/ws.py` — `WS /ws/sessions/{session_id}` — progress events (`scan_started`, `cell_scanning`, `pdf_progress`, `pdf_page_progress` [in-flight PDF page counter, throttled 0.3 s], `cell_done`/`cell_error`, `scan_complete`/`scan_cancelled`), `cell_updated`/`session_refresh`/`presence` broadcasts, + 15 s keepalive ping.
 
 ## Environment Variables
 
