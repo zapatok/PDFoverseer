@@ -287,8 +287,8 @@ def _apply_scan_event(mgr: SessionManager, session_id: str, event: dict) -> dict
                 "near_matches": cell.get("near_matches") or [],
             },
         }
-        # Recompute all_reliable now that every file has been OCR-merged (RLock is
-        # reentrant so calling get_session_state + set_all_reliable here is safe).
+        # Recompute all_reliable now that every file has been OCR-merged (delegates
+        # to the atomic SessionManager.recompute_all_reliable, §B4).
         # Best-effort: skip when the folder isn't on disk (synthetic-event tests) —
         # the reliability signal is metadata; it must never break the count merge.
         month_root = Path(mgr.get_session_state(session_id).get("month_root", ""))

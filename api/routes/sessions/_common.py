@@ -337,6 +337,17 @@ def refresh_all_reliable(
     checks cells settle on ``worker_status`` alone (``compute_settled``
     short-circuits before reading pages), so they get inert empty pages instead
     of a walk they would never use — exactly the I/O the pre-§B4 code did.
+
+    Args:
+        mgr: The active SessionManager.
+        session_id: Target session identifier.
+        hospital: Hospital code of the cell.
+        sigla: Category sigla of the cell.
+        folder: The cell's category folder on disk.
+        pages: Pre-resolved ``{filename: page_count}``; pass it when the caller
+            already computed it (avoids reopening PDFs). ``None`` → resolved here.
+        count_type: The sigla's count type; checks cells settle on
+            ``worker_status`` and never walk the folder.
     """
     if pages is None:
         pages = {} if count_type == "checks" else cell_page_counts(folder)
