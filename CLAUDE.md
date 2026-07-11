@@ -166,14 +166,34 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 
 ## Pending Work
 
-State as of the 2026-07-10 overnight double-round close. **Both plans COMPLETE
-and pushed** (tags `conteo-session-fixes` + `track-b-visor-ux`; see Project
-history). No committed next task — awaiting Daniel's priority. Open Daniel-side
-items: FF-merge `master` (behind by several rounds), the JUNIO counting
-decisions from his por_resolver notes, the MAYO HPV|chps phantom override.
-Minor deferred nits (recorded in `project_track_b_conteo_fixes_shipped`
-memory): IRL anchor-flavor name `f_crs_odi_01` (inert), parametrize
-`ui/Dialog.jsx` if a 4th hand-rolled Radix dialog appears, `FileList.jsx` size.
+State as of the 2026-07-11 review-round close. **COMMITTED NEXT TASK: execute
+the "pulido post-revisión" round** — spec
+`docs/superpowers/specs/2026-07-11-pulido-post-revision-design.md` + plan
+`docs/superpowers/plans/2026-07-11-pulido-post-revision.md` (6 chunks / 26
+tasks, both reviewer-approved; the plan header's "Contexto para el ejecutor"
+is binding; execute via superpowers:subagent-driven-development or
+executing-plans). Distilled from the 2026-07-11 "Fable revisa la app" round
+(3 parallel reviewers + core/product pass, ~46 verified findings; scope
+A+B+C approved by Daniel). **Track D is a FUTURE separate spec** (not yet
+written): RCH→pagination eval-first experiment (charla/chintegral/dif_pts —
+the heaviest cells, ~5-8x scan win if the "repeats 1 de 2" bug is solvable),
+tesserocr spike (~2x, kills the 195 ms/page spawn floor; Windows wheel risk),
+reorg-mode viewer UX (keyboard + real thumbnails).
+
+Shipped between the overnight close and this round (12 commits,
+`780856f..697250a` — see Project history): threaded page OCR both engines
+(2.9-3.8x, `OCR_PAGE_THREADS`), pdf_page_progress batch event, self-lend
+lock v1 (launcher's own cell scans instead of skipping), stat-keyed
+page-count cache (0.81s→0.067s on HPV|art), FileList virtualization
+(`lib/list-window.js`), rotate-op fixes (0° phantom bug: shared
+rotation-options + backend 400 + lightbox returns to viewer), 2 review-round
+hotfixes (computeWindow clamp; pdf_page_progress cell-identity filter).
+
+Open Daniel-side items: FF-merge `master` (behind by several rounds), the
+JUNIO counting decisions from his por_resolver notes, the MAYO HPV|chps
+phantom override. Minor deferred nits: IRL anchor-flavor name `f_crs_odi_01`
+(inert), `ui/Dialog.jsx` parametrization (A3/ui-Popover in the plan may
+supersede), `FileList.jsx` size (shrinks after plan Task 11).
 
 ---
 
