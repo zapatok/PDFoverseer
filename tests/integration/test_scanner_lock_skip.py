@@ -420,3 +420,34 @@ def test_handler_self_lend_never_borrows_someone_elses_cell(tmp_path):
     assert [e["type"] for e in out] == ["cell_skipped"]
     assert out[0]["lock_holder"]["participant_id"] == "carla"
     assert ("HRB", "odi") in ctx["skipped_set"]
+
+
+def test_handler_pdf_page_progress_filtered_by_own_cell_identity(tmp_path):
+    """pdf_page_progress trae hospital/sigla: se filtra por SU celda (skipped_set),
+    no por el booleano current_cell_skipped de la última celda — con 2 workers
+    los eventos de una celda viva no deben caerse porque otra se saltó."""
+    mgr = _make_manager(tmp_path)
+    sid = "2026-04"
+    _register_human(mgr, sid, pid="human-1", name="Daniel", color="#a")
+    mgr.presence_focus(sid, "human-1", "HRB|odi")
+
+    out: list[dict] = []
+    ctx = _new_ctx()
+    # Celda A (HRB|odi) se salta; current_cell_skipped queda True.
+    _handle_scan_progress(
+        mgr, sid, {"type": "cell_scanning", "hospital": "HRB", "sigla": "odi"}, ctx, out.append
+    )
+    assert ctx["current_cell_skipped"] is True
+    out.clear()
+
+    # Páginas de la celda VIVA (HPV|art) llegan intercaladas → deben pasar.
+    alive = {"type": "pdf_page_progress", "hospital": "HPV", "sigla": "art", "page": 3, "pages_total": 9}
+    _handle_scan_progress(mgr, sid, alive, ctx, out.append)
+    assert out == [alive]
+    out.clear()
+
+    # Páginas de la celda SALTADA se caen aunque current_cell_skipped ya sea False.
+    ctx["current_cell_skipped"] = False
+    skipped = {"type": "pdf_page_progress", "hospital": "HRB", "sigla": "odi", "page": 1, "pages_total": 9}
+    _handle_scan_progress(mgr, sid, skipped, ctx, out.append)
+    assert out == []

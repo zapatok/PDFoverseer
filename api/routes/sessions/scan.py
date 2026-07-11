@@ -333,8 +333,9 @@ def _handle_scan_progress(
       ``current_cell_skipped=True``, do NOT broadcast cell_scanning.
       Else → mark agent_active, emit a presence snapshot (badge appears),
       set ``current_cell_skipped=False``, fall through to the normal path.
-    - ``pdf_progress`` / ``pdf_page_progress`` while ``current_cell_skipped`` →
-      drop silently.
+    - ``pdf_progress`` (no cell identity) while ``current_cell_skipped`` → drop
+      silently; ``pdf_page_progress`` (carries hospital/sigla) → drop iff ITS
+      cell is in ``skipped_set``.
     - ``file_result`` / ``cell_done`` while ``(h, s) in skipped_set`` → drop.
     - ``scan_complete`` / ``scan_cancelled``: release the agent once; enrich
       ``scan_complete`` with ``ctx["skipped_cells"]``; broadcast and return.
@@ -372,7 +373,13 @@ def _handle_scan_progress(
         )
         # Fall through: emit the cell_scanning event normally.
 
-    if etype in ("pdf_progress", "pdf_page_progress") and ctx["current_cell_skipped"]:
+    if etype == "pdf_progress" and ctx["current_cell_skipped"]:
+        return
+    # pdf_page_progress SÍ trae hospital/sigla: filtrar por identidad propia,
+    # no por el booleano de la última celda — con max_workers=2 el booleano
+    # puede pertenecer a OTRA celda (páginas de una celda viva se caerían, o
+    # se colarían las de una saltada).
+    if etype == "pdf_page_progress" and (h, s) in ctx["skipped_set"]:
         return
 
     if etype in ("file_result", "cell_done") and (h, s) in ctx["skipped_set"]:
