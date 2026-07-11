@@ -736,7 +736,7 @@ class SessionManager:
         sigla: str,
         folder: Path,
         *,
-        pages: dict[str, int] | None = None,
+        pages: dict[str, int],
         count_type: str | None = None,
     ) -> bool:
         """Atomically recompute + persist ``all_reliable`` (§B4).
@@ -757,13 +757,14 @@ class SessionManager:
             session_id: target session.
             hospital: hospital code.
             sigla: category code.
-            folder: the cell's resolved category folder — forwarded to
-                ``compute_settled`` for the (rare) caller that has not
-                precomputed ``pages``; pass it even when ``pages`` is given.
-            pages: precomputed ``{filename: page_count}``. Callers should
-                resolve this via disk I/O BEFORE acquiring the lock (the whole
-                point of threading it through) — pass ``None`` only when the
-                caller genuinely has no precomputed pages.
+            folder: the cell's resolved category folder — threaded through to
+                ``compute_settled`` (positional there); with ``pages`` always
+                resolved it is never walked under the lock.
+            pages: precomputed ``{filename: page_count}``. REQUIRED — the disk
+                I/O must be resolved by the caller BEFORE this method acquires
+                the lock (§B4: no folder walk / ``fitz.open`` under the RLock).
+                ``_common.refresh_all_reliable`` resolves it when its own
+                caller didn't.
             count_type: the cell's count_type (checks cells settle on
                 ``worker_status`` instead of per-file provenance).
 

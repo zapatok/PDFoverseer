@@ -330,7 +330,16 @@ def refresh_all_reliable(
     an open COUNTED suspect blocks green — lives inside it), so a concurrent
     write can't interleave with a stale compute. This wrapper's public
     signature is unchanged for its callers.
+
+    The disk I/O is resolved HERE, before the delegate takes the lock (the
+    other half of §B4): when ``pages`` is ``None`` the folder walk runs in this
+    wrapper, so the atomic method only ever receives an already-resolved dict.
+    checks cells settle on ``worker_status`` alone (``compute_settled``
+    short-circuits before reading pages), so they get inert empty pages instead
+    of a walk they would never use — exactly the I/O the pre-§B4 code did.
     """
+    if pages is None:
+        pages = {} if count_type == "checks" else cell_page_counts(folder)
     mgr.recompute_all_reliable(
         session_id, hospital, sigla, folder, pages=pages, count_type=count_type
     )

@@ -134,3 +134,110 @@ def test_recompute_all_reliable_blocked_by_open_counted_suspect(tmp_path):
     assert value is False
     state = mgr.get_session_state("2026-04")
     assert state["cells"]["HRB"]["chps"]["all_reliable"] is False
+
+
+# ── (c) the wrapper resolves the disk I/O BEFORE delegating (lock-free walk) ──
+
+
+def _spy_recompute(mgr, monkeypatch):
+    """Wrap mgr.recompute_all_reliable recording the kwargs the WRAPPER passed."""
+    received: dict = {}
+    orig = mgr.recompute_all_reliable
+
+    def spy(session_id, hospital, sigla, folder, *, pages, count_type=None):
+        received["pages"] = pages
+        return orig(session_id, hospital, sigla, folder, pages=pages, count_type=count_type)
+
+    monkeypatch.setattr(mgr, "recompute_all_reliable", spy)
+    return received
+
+
+def test_refresh_all_reliable_resolves_pages_before_delegating(tmp_path, monkeypatch):
+    """§B4's point: with pages=None, the folder walk (cell_page_counts) happens in
+    the WRAPPER — before the delegate acquires the RLock — and the atomic method
+    receives the already-resolved dict, never None. This test fails if the wrapper
+    forwards None and lets compute_settled walk the disk under the lock."""
+    from api.routes.sessions import _common
+
+    mgr = _make_manager(tmp_path)
+    _seed_reliable_cell(mgr, tmp_path)
+
+    walk_calls: list[Path] = []
+
+    def fake_cell_page_counts(folder):
+        walk_calls.append(folder)
+        return {"a.pdf": 1}
+
+    monkeypatch.setattr(_common, "cell_page_counts", fake_cell_page_counts)
+    received = _spy_recompute(mgr, monkeypatch)
+
+    folder = tmp_path / "HRB" / "3.-ODI Visitas"
+    _common.refresh_all_reliable(
+        mgr, "2026-04", "HRB", "odi", folder, pages=None, count_type="documents"
+    )
+
+    assert walk_calls == [folder], "the wrapper must resolve the walk exactly once"
+    assert received["pages"] == {"a.pdf": 1}, "the delegate must receive resolved pages, not None"
+    state = mgr.get_session_state("2026-04")
+    assert state["cells"]["HRB"]["odi"]["all_reliable"] is True
+
+
+def test_refresh_all_reliable_precomputed_pages_skip_the_walk(tmp_path, monkeypatch):
+    """When the caller already computed pages, the wrapper must NOT walk again."""
+    from api.routes.sessions import _common
+
+    mgr = _make_manager(tmp_path)
+    _seed_reliable_cell(mgr, tmp_path)
+
+    def boom(folder):
+        raise AssertionError("cell_page_counts must not be called when pages is given")
+
+    monkeypatch.setattr(_common, "cell_page_counts", boom)
+    received = _spy_recompute(mgr, monkeypatch)
+
+    _common.refresh_all_reliable(
+        mgr,
+        "2026-04",
+        "HRB",
+        "odi",
+        tmp_path / "unused",
+        pages={"a.pdf": 1},
+        count_type="documents",
+    )
+
+    assert received["pages"] == {"a.pdf": 1}
+
+
+def test_refresh_all_reliable_checks_cells_never_walk_the_folder(tmp_path, monkeypatch):
+    """checks cells settle on worker_status alone (compute_settled short-circuits
+    before reading pages) — the old code therefore never walked their folder, and
+    the wrapper must not start doing so: it delegates inert empty pages instead."""
+    from api.routes.sessions import _common
+
+    mgr = _make_manager(tmp_path)
+    _seed_reliable_cell(mgr, tmp_path, sigla="maquinaria")
+
+    walk_calls: list[Path] = []
+
+    def fake_cell_page_counts(folder):
+        walk_calls.append(folder)
+        return {}
+
+    monkeypatch.setattr(_common, "cell_page_counts", fake_cell_page_counts)
+    received = _spy_recompute(mgr, monkeypatch)
+
+    _common.refresh_all_reliable(
+        mgr,
+        "2026-04",
+        "HRB",
+        "maquinaria",
+        tmp_path / "unused",
+        pages=None,
+        count_type="checks",
+    )
+
+    assert walk_calls == [], "checks cells must not pay a folder walk"
+    assert received["pages"] == {}, "the delegate still receives resolved (empty) pages"
+    state = mgr.get_session_state("2026-04")
+    # worker_status is unset → not 'terminado' → not settled.
+    assert state["cells"]["HRB"]["maquinaria"]["all_reliable"] is False
