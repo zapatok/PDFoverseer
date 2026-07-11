@@ -57,6 +57,9 @@ porque el botón desaparece mid-interaction.
 - Los 3 consumidores leen del store con selectores por-campo. `FileList`
   elimina su `setFiles`/fetch local; los updates optimistas de steppers/
   InlineEditCount mutan la entrada del store (acción `patchCellFile`).
+- Existe un CUARTO consumidor de `getCellFiles`: `WorkerCountViewer.jsx:329`
+  — se dispara al abrir el visor, NO por `filesTick`. Queda FUERA de A1
+  (conserva su fetch propio); no migrarlo.
 - **E1 se simplifica:** el `<ul>` ya no se desmonta en save → el scroll se
   conserva naturalmente. Se mantiene el reset-al-top en cambio genuino de
   celda. El baile `savedScrollRef`/`prevCellKeyRef`/`useLayoutEffect` se
@@ -80,9 +83,10 @@ sin dismiss).
 
 **Diseño.** Migrar esos 5 paths al patrón U2 existente (`toast.error` con
 contexto de celda/archivo en el mensaje, español neutro). Retirar los
-`set({ error })` correspondientes. `error` global queda reservado para el
-fallo de carga del mes (`openMonth`), único caso que MonthOverview muestra.
-`generateOutput` deja SOLO el toast (hoy duplica toast + banner).
+`set({ error })` correspondientes. `error` global queda reservado para los
+fallos que se RENDERIZAN donde vive el banner (MonthOverview): `openMonth`,
+`loadMonths` (`session.js:59`) y el pase-1 `runScan` (`:135`) — esos tres NO
+se migran. `generateOutput` deja SOLO el toast (hoy duplica toast + banner).
 
 **AC.** Cada path con test vitest: acción falla → `toast.error` llamado con
 mensaje que identifica la operación; `error` global no se setea.
@@ -263,8 +267,10 @@ enfoca la celda → se vuelve editor → el siguiente autosave del lanzador
 recibe 409 con un panel que se veía editable.
 
 **Diseño.** Registrar los préstamos en el ctx del scan
-(`lent: list[(h, s, launcher_id)]` — `agent_claim_cell` retorna o expone si
-hubo lend). En el terminal (`scan_complete`/`scan_cancelled`), tras
+(`lent: list[(h, s, launcher_id)]` — el mecanismo exacto para que
+`agent_claim_cell` señale "hubo lend" lo decide el plan: cambio de retorno,
+out-param o flag; las condiciones de la re-promoción de abajo son las
+vinculantes). En el terminal (`scan_complete`/`scan_cancelled`), tras
 `agent_leave`: para cada préstamo, nueva primitiva
 `PresenceRegistry.promote_to_editor(session_id, cell, participant_id)` —
 solo si ese participante sigue vivo, sigue `focused_cell == cell` y la celda
@@ -296,15 +302,20 @@ con holder ajeno → sigue en `skipped`.
 
 ### B4. `refresh_all_reliable` atómico
 
-**Defecto.** `_common.py:330-340` — read-compute-write en TRES adquisiciones
-del RLock (get_session_state → compute_settled → set_all_reliable), la misma
-clase de carrera que F4 cerró para los deltas reorg. Interleaving durante un
-batch puede persistir un `all_reliable` calculado contra estado viejo.
+**Defecto.** `_common.py:330-340` — read-compute-write en DOS adquisiciones
+del RLock (get_session_state → set_all_reliable, con `compute_settled` puro
+entre medio), la misma clase de carrera que F4 cerró para los deltas reorg.
+Interleaving durante un batch puede persistir un `all_reliable` calculado
+contra estado viejo.
 
 **Diseño.** Nuevo método `SessionManager.recompute_all_reliable(session_id,
 hospital, sigla, *, pages, count_type)` `@_synchronized`: load→compute→persist
 en UNA adquisición. `pages` (I/O de disco) se computa FUERA del lock, como
-hoy; `compute_settled` es puro. `_common.refresh_all_reliable` delega en él
+hoy; `compute_settled` es puro. **El gate anti-colados que hoy vive en el
+cuerpo del refresher (`_common.py:332-334`,
+`has_open_counted_suspects(...)` → `and not blocked`) SE MUEVE ADENTRO del
+método atómico** — un suspect contado abierto sigue bloqueando el verde
+(§4.5); omitirlo sería regresión. `_common.refresh_all_reliable` delega en él
 (firma pública sin cambios para los callers).
 
 **AC.** Unit del método nuevo (compute con estado fresco bajo el lock);
@@ -321,9 +332,14 @@ crash de esa celda aún emite `cell_error` visible para una celda "saltada".
 el lock de cada celda (`presence_lock_holder(exclude=AGENT)`, con la exención
 self-lend de `launcher_id`). Las bloqueadas: se excluyen de `cells_with_paths`
 y de `total_pdfs`, se siembran en `ctx["skipped_set"]`/`skipped_cells`, y se
-emite un `cell_skipped` por cada una inmediatamente tras `scan_started`
-(mismo shape que hoy). El skip del drain QUEDA como red para claims que
-aparezcan en vuelo (entre el pre-check y el `cell_scanning` del worker).
+emite un `cell_skipped` por cada una (mismo shape que hoy). **Punto de
+emisión:** `scan_started` lo emite el orquestador dentro del `_run` pooleado
+(`ocr_scan.py:193`), así que los `cell_skipped` pre-sembrados se FLUSHEAN
+cuando `scan_started` pasa por `_handle_scan_progress` (nuevo branch: al ver
+`scan_started`, emitirlo y a continuación un `cell_skipped` por entrada
+pre-sembrada) — nunca antes, para preservar el orden observable. El skip del
+drain QUEDA como red para claims que aparezcan en vuelo (entre el pre-check y
+el `cell_scanning` del worker).
 
 **AC.** Test de ruta: 2 celdas, una bloqueada por humano ajeno → el
 ProcessPool recibe SOLO la libre (spy sobre `scan_cells_ocr`: su arg `cells`),
@@ -340,16 +356,19 @@ existente se mantiene.
 **Diseño.** Modelo Pydantic `OpenSessionRequest` con
 `ConfigDict(extra="forbid")`, `year: int = Field(ge=2020, le=2100)`,
 `month: int = Field(ge=1, le=12)`. Semántica de error: 422 de validación
-(consistente con el resto de la superficie forbid).
+(consistente con el resto de la superficie forbid). **Decisión registrada:**
+el `year`/`month` faltante o inválido hoy responde 400 (`lifecycle.py:32-33`)
+y pasa a 422 — cualquier test existente que pinee ese 400 se ACTUALIZA a 422
+como parte del item.
 
 **AC.** Tests: key extra → 422; year fuera de rango → 422; camino feliz
-idéntico.
+idéntico; tests que pineaban 400 migrados a 422.
 
 ### B7. Leak del batch handle si el dispatch falla
 
 **Defecto.** `register_batch_handle` instala el handle (`batch.py:54`) pero el
 `pop` vive solo en el `finally` de `_run`; si `_DISPATCH_POOL.submit` lanza
-(`scan.py:572/703`), el slot queda ocupado → todo scan posterior de esa
+(`scan.py:579` y `:710`), el slot queda ocupado → todo scan posterior de esa
 sesión recibe 409 "another batch is already running" hasta reiniciar.
 
 **Diseño.** try/except alrededor del submit (ambos sitios): en fallo,
@@ -360,7 +379,7 @@ un segundo intento NO recibe 409.
 
 ### B8. Nits de consistencia (un commit, items mecánicos)
 
-1. `POST /sessions/{id}/cancel` (`scan.py:576`): añadir
+1. `POST /sessions/{id}/cancel` (`scan.py:583`): añadir
    `_validate_session_id` (400 por formato, como el resto del paquete).
 2. `apply_ratio` (`scan.py:141-142`): pasar la respuesta por
    `enrich_cell_worker_count` + `enrich_cell_colado_suspects` (patrón
