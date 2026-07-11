@@ -683,6 +683,13 @@ def scan_file_ocr(
                 method=r["method"],
                 near_matches=r.get("near_matches") or [],
             )
+            # B1: recompute all_reliable now that this file's per_file has been
+            # merged — otherwise a cell that started green stays green after a
+            # file OCR'd to a low-trust "Revisar" result, and the stale True
+            # propagates to every client via the cell_updated broadcast below.
+            refresh_all_reliable(
+                mgr, session_id, hospital, sigla, folder, count_type=count_type_for(sigla)
+            )
             # M1: tras fusionar el per_file, difunde la celda completa para los demás clientes.
             cu = _cell_updated_event(mgr, session_id, hospital, sigla)
             if cu is not None:
