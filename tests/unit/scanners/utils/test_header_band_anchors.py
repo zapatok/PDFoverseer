@@ -186,6 +186,9 @@ def test_count_covers_uses_first_passing_flavor(monkeypatch):
         Path("/fake.pdf"),
         flavors=flavors,
         top_fraction=0.25,
+        # ocr_threads=1: this test pins MATCHING semantics; its current_page
+        # stub is shared mutable state, only valid on the sequential path.
+        ocr_threads=1,
     )
     assert result.count == 2
     assert result.pages_total == 4
@@ -196,3 +199,76 @@ def test_count_covers_uses_first_passing_flavor(monkeypatch):
     assert len(result.near_matches) == 1
     assert result.near_matches[0].page_index == 1
     assert result.near_matches[0].flavor_name == "f_lch_xx"
+
+
+def test_count_covers_threaded_equals_sequential(monkeypatch):
+    """Threaded page OCR is a pure execution change: identical AnchorCountResult
+    fields vs ocr_threads=1, page-ordered near-matches included. The stub is
+    page-keyed (image tagged with its index) so it is order-independent; pass-2
+    inputs (preprocessed ndarrays, untagged) read as empty — a page that fails
+    pass 1 also fails pass 2, deterministically."""
+    import core.scanners.utils.header_band_anchors as mod
+
+    page_texts = [
+        "ITEM ACTIVIDAD CUMPLE",  # passes
+        "ITEM ACTIVIDAD",  # near-match on pass 1, pass 2 "" → near from pass 2? no: pass 2 re-matches "" → no near
+        "unrelated",  # no match
+        "ITEM ACTIVIDAD CUMPLE",  # passes
+        "ITEM ACTIVIDAD",
+        "ITEM ACTIVIDAD CUMPLE",  # passes
+    ]
+
+    def fake_render(_path, page_idx, **_):
+        im = Image.new("RGB", (10, 10), "white")
+        im.info["pi"] = page_idx
+        return im
+
+    def patched_ocr(img, **kw):
+        if isinstance(img, Image.Image):
+            return page_texts[img.info["pi"]]
+        return ""  # pass-2 preprocessed ndarray — page identity gone, no match
+
+    monkeypatch.setattr(mod, "get_page_count", lambda _p: len(page_texts))
+    monkeypatch.setattr(mod, "render_page_region", fake_render)
+    monkeypatch.setattr(mod.pytesseract, "image_to_string", patched_ocr)
+
+    flavors: list[Flavor] = [
+        {"name": "f_lch_xx", "anchors": ["ITEM", "ACTIVIDAD", "CUMPLE"], "min_match": 3},
+    ]
+    kw = dict(flavors=flavors, top_fraction=0.25)
+    seq = mod.count_covers_by_anchors(Path("/fake.pdf"), ocr_threads=1, **kw)
+    thr = mod.count_covers_by_anchors(Path("/fake.pdf"), ocr_threads=6, **kw)
+    assert (seq.count, seq.pages_total, seq.matches_per_flavor) == (
+        thr.count,
+        thr.pages_total,
+        thr.matches_per_flavor,
+    )
+    assert [n.page_index for n in seq.near_matches] == [n.page_index for n in thr.near_matches]
+    assert thr.count == 3
+
+
+def test_count_covers_threaded_on_page_monotonic(monkeypatch):
+    """on_page under threads emits the exact 0..n-1 counter sequence."""
+    import core.scanners.utils.header_band_anchors as mod
+
+    def fake_render(_path, page_idx, **_):
+        im = Image.new("RGB", (10, 10), "white")
+        im.info["pi"] = page_idx
+        return im
+
+    monkeypatch.setattr(mod, "get_page_count", lambda _p: 8)
+    monkeypatch.setattr(mod, "render_page_region", fake_render)
+    monkeypatch.setattr(
+        mod.pytesseract,
+        "image_to_string",
+        lambda img, **kw: "ITEM ACTIVIDAD CUMPLE" if isinstance(img, Image.Image) else "",
+    )
+
+    seen = []
+    mod.count_covers_by_anchors(
+        Path("/fake.pdf"),
+        flavors=[{"name": "f", "anchors": ["ITEM", "ACTIVIDAD", "CUMPLE"], "min_match": 3}],
+        ocr_threads=6,
+        on_page=lambda d, t: seen.append((d, t)),
+    )
+    assert seen == [(i, 8) for i in range(8)]

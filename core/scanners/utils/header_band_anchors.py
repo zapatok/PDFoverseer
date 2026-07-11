@@ -14,8 +14,10 @@ Sub-utilities:
 from __future__ import annotations
 
 import re
+import threading
 import unicodedata
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -33,6 +35,7 @@ from core.scanners.patterns import (
     Flavor,
 )
 from core.scanners.utils.pdf_render import get_page_count, render_page_region
+from core.utils import OCR_PAGE_THREADS
 
 if TYPE_CHECKING:
     from core.scanners.cancellation import CancellationToken
@@ -161,6 +164,7 @@ def count_covers_by_anchors(
     dpi: int = 200,
     cancel: CancellationToken | None = None,
     on_page: Callable[[int, int], None] | None = None,
+    ocr_threads: int | None = None,
 ) -> AnchorCountResult:
     """OCR the top band of each page; count pages that match any flavor (A4).
 
@@ -179,6 +183,13 @@ def count_covers_by_anchors(
         top_fraction: fraction of page height OCR'd from the top (default 0.25).
         dpi: OCR rendering resolution.
         cancel: optional CancellationToken (cooperative cancellation).
+        on_page: 0-based monotonic completed-pages counter ``(done - 1, total)``,
+            emitted under a lock as pages finish — the same contract as the
+            pagination engine (``pagination_count.count_documents_by_pagination``).
+        ocr_threads: per-page OCR parallelism (default
+            ``core.utils.OCR_PAGE_THREADS``); ``1`` forces the sequential path.
+            Per-page results land in page-indexed slots and aggregate in page
+            order, so count/telemetry are deterministic in both modes.
 
     Returns:
         AnchorCountResult with the total cover count + per-flavor breakdown
@@ -190,17 +201,22 @@ def count_covers_by_anchors(
             (AnchorsScanner) catches it at the PDF level and falls back.
     """
     pages_total = get_page_count(pdf_path)
-    matches_per_flavor: dict[str, int] = {f["name"]: 0 for f in flavors}
-    near_matches: list[NearMatch] = []
-    cover_pages = 0
-
     bbox = (0.0, 0.0, 1.0, max(0.05, min(1.0, top_fraction)))
+    threads = OCR_PAGE_THREADS if ocr_threads is None else ocr_threads
 
-    for page_idx in range(pages_total):
+    owned_by_page: list[str | None] = [None] * pages_total
+    near_by_page: list[NearMatch | None] = [None] * pages_total
+    done = 0
+    progress_lock = threading.Lock()
+
+    def _scan_page(page_idx: int) -> None:
+        nonlocal done
         if cancel is not None:
             cancel.check()
-        if on_page is not None:
-            on_page(page_idx, pages_total)
+        # render_page_region opens the PDF per call — measured 0.7–20 ms even on
+        # a 516 MB file (lazy xref), so the per-page open is kept: it makes each
+        # page task self-contained (fitz Documents are not thread-safe) and
+        # preserves the path-based test seam.
         pil: Image.Image = render_page_region(pdf_path, page_idx, bbox=bbox, dpi=dpi)
 
         # E6 — two-pass OCR. Pass 1: raw band (clean scans read fine, no
@@ -216,11 +232,37 @@ def count_covers_by_anchors(
             prep = pytesseract.image_to_string(gray, config="--psm 6 --oem 1", lang="spa+eng")
             owned, page_near = _match_page(_normalize_text(prep), flavors, page_idx)
 
+        owned_by_page[page_idx] = owned
+        near_by_page[page_idx] = page_near
+        with progress_lock:
+            done += 1
+            if on_page is not None:
+                on_page(done - 1, pages_total)
+
+    if threads <= 1 or pages_total <= 1:
+        for page_idx in range(pages_total):
+            _scan_page(page_idx)
+    else:
+        with ThreadPoolExecutor(max_workers=min(threads, pages_total)) as ex:
+            futures = [ex.submit(_scan_page, pi) for pi in range(pages_total)]
+            try:
+                for fut in as_completed(futures):
+                    fut.result()
+            except BaseException:
+                for fut in futures:
+                    fut.cancel()
+                raise
+
+    matches_per_flavor: dict[str, int] = {f["name"]: 0 for f in flavors}
+    near_matches: list[NearMatch] = []
+    cover_pages = 0
+    for page_idx in range(pages_total):
+        owned = owned_by_page[page_idx]
         if owned is not None:
             matches_per_flavor[owned] += 1
             cover_pages += 1
-        elif page_near is not None:
-            near_matches.append(page_near)
+        elif near_by_page[page_idx] is not None:
+            near_matches.append(near_by_page[page_idx])
 
     return AnchorCountResult(
         count=cover_pages,
