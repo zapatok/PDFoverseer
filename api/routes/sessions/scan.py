@@ -442,9 +442,10 @@ class ScanOcrRequest(BaseModel):
     ``isinstance(cells_pairs, list)`` check and 400). ``participant_id``
     identifies the LAUNCHER for the self-lend policy (2026-07-10): a cell held
     by that same participant is borrowed (scanned with the agent as editor)
-    instead of skipped; any other human's hold still skips. The batch still
-    acts as the fixed Claude agent identity internally
-    (``_handle_scan_progress``).
+    instead of skipped, and editorship is given back at the batch terminal
+    (§B2, 2026-07-11 — see ``_handle_scan_progress``); any other human's hold
+    still skips. The batch still acts as the fixed Claude agent identity
+    internally (``_handle_scan_progress``).
     """
 
     model_config = ConfigDict(extra="forbid")
