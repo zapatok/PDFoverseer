@@ -11,8 +11,10 @@ from __future__ import annotations
 import io
 import os as _os
 import re
+import threading
 from collections import Counter
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -22,6 +24,7 @@ import pytesseract
 from PIL import Image
 
 from core.scanners.cancellation import CancellationToken
+from core.utils import OCR_PAGE_THREADS
 
 # Tesseract binary path — mirror core/ocr.py convention
 pytesseract.pytesseract.tesseract_cmd = _os.getenv(
@@ -195,35 +198,118 @@ def _corner_text(page: fitz.Page) -> str:
     return pytesseract.image_to_string(img, config="--psm 6 --oem 1", lang="spa+eng").strip()
 
 
+def _read_pages_sequential(
+    pdf_path: Path,
+    cancel: CancellationToken,
+    on_page: Callable[[int, int], None] | None,
+) -> list[tuple[int | None, int | None, str | None]]:
+    """Read every corner in page order on the calling thread (single open, A2)."""
+    parsed: list[tuple[int | None, int | None, str | None]] = []
+    with fitz.open(pdf_path) as doc:
+        n = doc.page_count
+        for pi in range(n):
+            cancel.check()
+            raw = _corner_text(doc[pi])
+            curr, total = parse_pagination(raw)
+            parsed.append((curr, total, extract_code(raw)))
+            if on_page is not None:
+                on_page(pi, n)
+    return parsed
+
+
+def _read_pages_threaded(
+    pdf_path: Path,
+    threads: int,
+    cancel: CancellationToken,
+    on_page: Callable[[int, int], None] | None,
+) -> list[tuple[int | None, int | None, str | None]]:
+    """Read all corners with a thread pool (pytesseract releases the GIL).
+
+    fitz Documents are not thread-safe, so each worker thread opens its own
+    handle (cheap: 0.7–20 ms measured, even on a 516 MB PDF) and keeps it
+    thread-local for its whole share of pages. Results land in a page-indexed
+    list, so parse/recover/count downstream see the exact same input order as
+    the sequential path — the count is deterministic regardless of completion
+    order. ``on_page`` reports a monotonic completed-pages counter under a lock
+    (0-based, same value sequence as sequential). Cancellation: each page task
+    re-checks the token; the first ``CancelledError`` cancels the queued
+    futures and propagates (in-flight pages finish, ≤1 page per thread).
+    """
+    with fitz.open(pdf_path) as doc:
+        n = doc.page_count
+    if n == 0:
+        return []
+    parsed: list[tuple[int | None, int | None, str | None]] = [(None, None, None)] * n
+    done = 0
+    progress_lock = threading.Lock()
+    tl = threading.local()
+    docs: list[fitz.Document] = []
+    docs_lock = threading.Lock()
+
+    def _read_one(pi: int) -> None:
+        nonlocal done
+        cancel.check()
+        d = getattr(tl, "doc", None)
+        if d is None:
+            d = fitz.open(pdf_path)
+            tl.doc = d
+            with docs_lock:
+                docs.append(d)
+        raw = _corner_text(d[pi])
+        curr, total = parse_pagination(raw)
+        parsed[pi] = (curr, total, extract_code(raw))
+        with progress_lock:
+            done += 1
+            if on_page is not None:
+                on_page(done - 1, n)
+
+    try:
+        with ThreadPoolExecutor(max_workers=min(threads, n)) as ex:
+            futures = [ex.submit(_read_one, pi) for pi in range(n)]
+            try:
+                for fut in as_completed(futures):
+                    fut.result()
+            except BaseException:
+                for fut in futures:
+                    fut.cancel()
+                raise
+    finally:
+        for d in docs:
+            d.close()
+    return parsed
+
+
 def count_documents_by_pagination(
     pdf_path: Path,
     *,
     cancel: CancellationToken,
     cover_code: str | None = None,
     on_page: Callable[[int, int], None] | None = None,
+    ocr_threads: int | None = None,
 ) -> PaginationCountResult:
     """Count documents in a compilation by their "Página N de M" pagination.
 
-    ``on_page`` (U7), when given, is called with 0-based ``(page_idx, total)``
-    BEFORE each page is OCR'd — the same contract as the anchors engine
-    (``header_band_anchors.count_covers_by_anchors``) — so callers can share one
-    "page N of M" rendering regardless of which engine ran.
+    ``on_page`` (U7), when given, is called with 0-based ``(pages_done - 1,
+    total)`` as each page completes OCR — a monotonic progress counter (the
+    same value sequence in both execution modes; under threads the *counter*
+    is ordered even though pages complete out of order). Same contract as the
+    anchors engine (``header_band_anchors.count_covers_by_anchors``).
+
+    ``ocr_threads`` (default ``core.utils.OCR_PAGE_THREADS``) parallelizes the
+    per-page corner OCR; ``1`` forces the sequential path. Counting is
+    deterministic in both modes — page reads land in page order before any
+    interpretation runs.
     """
     cancel.check()
-    parsed: list[tuple[int | None, int | None, str | None]] = []
+    threads = OCR_PAGE_THREADS if ocr_threads is None else ocr_threads
+    if threads <= 1:
+        parsed = _read_pages_sequential(pdf_path, cancel, on_page)
+    else:
+        parsed = _read_pages_threaded(pdf_path, threads, cancel, on_page)
     codes: Counter[str] = Counter()
-    with fitz.open(pdf_path) as doc:  # single open (A2)
-        n = doc.page_count
-        for pi in range(n):
-            cancel.check()
-            if on_page is not None:
-                on_page(pi, n)
-            raw = _corner_text(doc[pi])
-            curr, total = parse_pagination(raw)
-            code = extract_code(raw)
-            if code:
-                codes[code] += 1
-            parsed.append((curr, total, code))
+    for _, _, code in parsed:  # page order → deterministic Counter order
+        if code:
+            codes[code] += 1
     dom = dominant_total(parsed)
     reads = recover_sequence(parsed, dom)
     recovered = sum(1 for r in reads if r.status == "recovered")

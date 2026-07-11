@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -15,6 +16,16 @@ CROP_Y_END = 0.22  # top 22%
 TESS_CONFIG = "--psm 6 --oem 1"
 PARALLEL_WORKERS = 6  # concurrent Tesseract subprocesses
 BATCH_SIZE = 12  # pages per batch (pause/cancel granularity)
+
+# Hilos de OCR por PDF en los motores pase-2 (paginación + anclas). pytesseract
+# libera el GIL mientras corre tesseract.exe, así que ThreadPoolExecutor da
+# ~3.5-4x medidos (2026-07-10, samples reales) sin dependencias nuevas. El
+# default deja margen: el batch corre 2 celdas en paralelo (procesos), o sea
+# 2 x OCR_PAGE_THREADS tesseracts simultáneos como techo. Override:
+# OVERSEER_OCR_THREADS.
+OCR_PAGE_THREADS = int(os.getenv("OVERSEER_OCR_THREADS", "0")) or max(
+    1, min(6, (os.cpu_count() or 4) - 2)
+)
 
 # OCR auto-retry (FASE 5) — el orquestador reintenta un scan de celda fallido
 # en silencio antes de reportar el error.

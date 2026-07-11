@@ -178,8 +178,9 @@ def test_count_documents_landscape(tmp_path, make_pagination_pdf):
 
 
 def test_count_documents_on_page_callback(tmp_path, make_pagination_pdf):
-    """U7: on_page is 0-based, called BEFORE each page — the same contract as
-    the anchors engine (header_band_anchors.py) — so a single-file viewer never
+    """U7: on_page is a 0-based monotonic completed-pages counter — the same
+    value sequence in sequential and threaded modes (under threads the counter
+    is emitted under a lock as pages finish), so a single-file viewer never
     renders "página N+1 de N"."""
     from core.scanners.cancellation import CancellationToken
     from core.scanners.utils.pagination_count import count_documents_by_pagination
@@ -247,8 +248,10 @@ def test_count_documents_exposes_recovered_start_count(tmp_path, make_pagination
     from core.scanners.utils import pagination_count as pc
 
     pdf = make_pagination_pdf(tmp_path / "mix.pdf", docs=[(2, "A"), (1, "B")])
-    texts = iter(["Pagina 2 de 2", "", "Pagina 1 de 2"])
-    monkeypatch.setattr(pc, "_corner_text", lambda page: next(texts))
+    # Keyed by page.number (not an iterator): the stub must be order-independent
+    # and thread-safe — the default execution mode OCRs pages concurrently.
+    texts = {0: "Pagina 2 de 2", 1: "", 2: "Pagina 1 de 2"}
+    monkeypatch.setattr(pc, "_corner_text", lambda page: texts[page.number])
 
     r = pc.count_documents_by_pagination(pdf, cancel=CancellationToken())
     assert r.recovered_start_count == 1
@@ -262,3 +265,65 @@ def test_count_documents_recovered_start_count_zero_when_clean(tmp_path, make_pa
     pdf = make_pagination_pdf(tmp_path / "clean.pdf", docs=[(4, "F-CRS-ART-01")] * 3)
     r = count_documents_by_pagination(pdf, cancel=CancellationToken())
     assert r.recovered_start_count == 0
+
+
+# --- Threaded page-OCR (perf 2026-07-10) ---
+
+
+def test_count_documents_threaded_equals_sequential(tmp_path, make_pagination_pdf, monkeypatch):
+    """The threaded path is a pure execution change: same PaginationCountResult
+    as ocr_threads=1 on the same input, including read stats and codes."""
+    from core.scanners.cancellation import CancellationToken
+    from core.scanners.utils import pagination_count as pc
+
+    pdf = make_pagination_pdf(
+        tmp_path / "eq.pdf", docs=[(3, "F-CRS-ART-01"), (2, "F-CRS-ART-01"), (3, "F-CRS-ART-01")]
+    )
+    # Deterministic per-page stub with a gap on page 4 (index-keyed, thread-safe).
+    texts = {
+        0: "Pagina 1 de 3 F-CRS-ART-01",
+        1: "Pagina 2 de 3",
+        2: "Pagina 3 de 3",
+        3: "Pagina 1 de 2 F-CRS-ART-01",
+        4: "",
+        5: "Pagina 1 de 3 F-CRS-ART-01",
+        6: "Pagina 2 de 3",
+        7: "Pagina 3 de 3",
+    }
+    monkeypatch.setattr(pc, "_corner_text", lambda page: texts[page.number])
+
+    seq = pc.count_documents_by_pagination(pdf, cancel=CancellationToken(), ocr_threads=1)
+    thr = pc.count_documents_by_pagination(pdf, cancel=CancellationToken(), ocr_threads=6)
+    assert seq == thr
+    assert thr.count == 3 and thr.recovered_reads == 1
+
+
+def test_count_documents_threaded_on_page_monotonic(tmp_path, make_pagination_pdf, monkeypatch):
+    """Under threads, on_page still emits the exact 0..n-1 counter sequence."""
+    from core.scanners.cancellation import CancellationToken
+    from core.scanners.utils import pagination_count as pc
+
+    pdf = make_pagination_pdf(tmp_path / "mono.pdf", docs=[(4, "F-CRS-ART-01")] * 2)
+    monkeypatch.setattr(pc, "_corner_text", lambda page: f"Pagina {page.number % 4 + 1} de 4")
+    seen = []
+    pc.count_documents_by_pagination(
+        pdf, cancel=CancellationToken(), ocr_threads=6, on_page=lambda d, t: seen.append((d, t))
+    )
+    assert seen == [(i, 8) for i in range(8)]
+
+
+def test_count_documents_threaded_cancel_propagates(tmp_path, make_pagination_pdf, monkeypatch):
+    """A token cancelled mid-scan raises CancelledError out of the threaded path."""
+    from core.scanners.cancellation import CancellationToken, CancelledError
+    from core.scanners.utils import pagination_count as pc
+
+    pdf = make_pagination_pdf(tmp_path / "c.pdf", docs=[(4, "F-CRS-ART-01")] * 3)
+    cancel = CancellationToken()
+
+    def _text_then_cancel(page):
+        cancel.cancel()  # first page read flips the token; queued pages must bail
+        return "Pagina 1 de 4"
+
+    monkeypatch.setattr(pc, "_corner_text", _text_then_cancel)
+    with pytest.raises(CancelledError):
+        pc.count_documents_by_pagination(pdf, cancel=cancel, ocr_threads=2)
