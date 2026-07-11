@@ -423,6 +423,83 @@ def test_handler_self_lend_never_borrows_someone_elses_cell(tmp_path):
     assert ("HRB", "odi") in ctx["skipped_set"]
 
 
+def test_pase1_self_lend_scans_launchers_own_cell(tmp_path, monkeypatch):
+    """§B3: POST /api/sessions/{id}/scan with the launcher's own participant_id
+    does NOT skip the cell THEY hold (self-lend) but still skips a cell held
+    by a DIFFERENT human — same request, both branches exercised.
+    """
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test_pase1_selflend.db"))
+
+    month_root = tmp_path / "ABRIL"
+    (month_root / "HRB" / "3.-ODI Visitas").mkdir(parents=True)
+    (month_root / "HRB" / "7.-ART").mkdir(parents=True)
+
+    from core.scanners.base import ConfidenceLevel, ScanResult
+
+    def _fake_result(name: str) -> ScanResult:
+        return ScanResult(
+            count=5,
+            confidence=ConfidenceLevel.HIGH,
+            method="filename_glob",
+            breakdown=None,
+            flags=[],
+            errors=[],
+            duration_ms=0,
+            files_scanned=1,
+            per_file={f"{name}.pdf": 5},
+        )
+
+    import api.routes.sessions.scan as scan_mod
+
+    def _stub_scan_month(_inv):
+        return {("HRB", "odi"): _fake_result("odi"), ("HRB", "art"): _fake_result("art")}
+
+    monkeypatch.setattr(scan_mod, "scan_month", _stub_scan_month)
+
+    app = create_app()
+    with TestClient(app) as c:
+        r = c.post("/api/sessions", json={"year": 2026, "month": 4})
+        assert r.status_code == 200, r.text
+        sid = r.json()["session_id"]
+
+        # The launcher holds HRB|odi; a different human holds HRB|art.
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "launcher-1", "name": "Daniel", "color": "#a"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/focus",
+            json={"participant_id": "launcher-1", "cell": "HRB|odi"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "human-2", "name": "Carla", "color": "#b"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/focus",
+            json={"participant_id": "human-2", "cell": "HRB|art"},
+        )
+
+        r2 = c.post(f"/api/sessions/{sid}/scan", json={"participant_id": "launcher-1"})
+        assert r2.status_code == 200, r2.text
+        body = r2.json()
+        skipped = body["skipped"]
+
+        # The launcher's own cell was self-lent — NOT in skipped.
+        assert not any(s["hospital"] == "HRB" and s["sigla"] == "odi" for s in skipped)
+        # The other human's cell is still skipped.
+        assert any(s["hospital"] == "HRB" and s["sigla"] == "art" for s in skipped)
+
+        r3 = c.get(f"/api/sessions/{sid}")
+        assert r3.status_code == 200, r3.text
+        cells = r3.json()["cells"]
+        # The launcher's cell WAS updated (self-lend proceeded normally).
+        assert cells["HRB"]["odi"].get("filename_count") == 5
+        # The foreign-held cell was NOT updated (still skipped).
+        assert cells["HRB"]["art"].get("filename_count") != 5
+
+
 def test_handler_self_lend_promotes_launcher_back_at_scan_complete(tmp_path):
     """§B2: at the batch terminal, the lender (launcher) gets editorship back —
     the scan_complete-triggered presence broadcast shows them as editor again

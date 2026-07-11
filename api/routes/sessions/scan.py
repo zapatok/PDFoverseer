@@ -146,11 +146,18 @@ class ScanRequest(BaseModel):
     """Body for the pase-1 scan trigger. ``scope`` mirrors the previous raw-dict
     default (``Body(default={"scope": "all"})``) verbatim — the handler doesn't
     read it today, so this stays a dead-but-preserved field (behavior unchanged).
+
+    ``participant_id`` (§B3, 2026-07-11) identifies the LAUNCHER for pase-1's
+    self-lend policy: a cell held by that same participant is scanned normally
+    instead of skipped (symmetry with pase-2's ``scan-ocr``); any other
+    human's hold still skips. ``None`` (legacy clients) keeps the pre-existing
+    strict skip behavior.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     scope: Any = "all"
+    participant_id: str | None = None
 
 
 @router.post("/sessions/{session_id}/scan")
@@ -181,6 +188,13 @@ def scan(
         holder = mgr.presence_lock_holder(
             session_id, f"{hosp}|{sigla}", exclude=AGENT_PARTICIPANT_ID
         )
+        # §B3 self-lend: the launcher's own hold is not a conflict for pase-1 —
+        # it doesn't claim the cell (no demote, no badge; unlike pase-2's
+        # agent_claim_cell), it just proceeds. The existing clobber-guards in
+        # apply_filename_result protect any prior OCR work, and the launcher
+        # explicitly asked for this rescan.
+        if holder is not None and holder.get("participant_id") == body.participant_id:
+            holder = None
         if holder is not None:
             skipped.append({"hospital": hosp, "sigla": sigla})
             skipped_keys.add((hosp, sigla))

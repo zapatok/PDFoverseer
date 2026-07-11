@@ -128,7 +128,7 @@ export const useSessionStore = create((set, get) => ({
   runScan: async (sessionId) => {
     set({ loading: true, error: null });
     try {
-      await api.scanSession(sessionId);
+      await api.scanSession(sessionId, "all", getParticipantId());
       const session = await api.getSession(sessionId);
       set({ session, loading: false });
     } catch (error) {

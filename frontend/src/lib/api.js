@@ -34,11 +34,13 @@ export const api = {
     }).then(jsonOrThrow),
   getSession: (sessionId) =>
     fetch(`${BASE}/sessions/${sessionId}`).then(jsonOrThrow),
-  scanSession: (sessionId, scope = "all") =>
+  // §B3: participant_id = el LANZADOR — pase-1 no salta la celda que TÚ tienes
+  // abierta (auto-préstamo, simetría con scanOcr); simplemente la re-escanea.
+  scanSession: (sessionId, scope = "all", participantId = null) =>
     fetch(`${BASE}/sessions/${sessionId}/scan`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scope }),
+      body: JSON.stringify({ scope, participant_id: participantId }),
     }).then(jsonOrThrow),
   generateOutput: (sessionId) =>
     // U8: jsonOrThrowStructured (not jsonOrThrow) so a friendly 409 detail
