@@ -10,6 +10,7 @@ layer, plus the FastAPI TestClient for the pase-1 HTTP route.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,8 @@ from api.routes.sessions import _handle_scan_progress
 from api.state import SessionManager
 from core.db.connection import open_connection
 from core.db.migrations import init_schema
+from core.scanners.base import ConfidenceLevel, ScanResult
+from core.scanners.pagination_scanner import PaginationScanner
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -572,3 +575,103 @@ def test_handler_pdf_page_progress_filtered_by_own_cell_identity(tmp_path):
     }
     _handle_scan_progress(mgr, sid, skipped, ctx, out.append)
     assert out == []
+
+
+# ---------------------------------------------------------------------------
+# §C4 — self-lend end-to-end by HTTP: pins body.participant_id -> ctx["launcher_id"]
+# -> agent_claim_cell(lend_from=...) through the REAL /scan-ocr route, the real
+# background batch dispatch, and the real WS broadcast. PaginationScanner.count_ocr
+# is faked (no Tesseract/OCR work) so the test is fast and deterministic while
+# every other layer (route, presence, batch, WS) is genuine.
+# ---------------------------------------------------------------------------
+
+
+def _make_pdf(path: Path) -> None:
+    import fitz
+
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(str(path))
+    doc.close()
+
+
+def _fake_count_ocr(self, folder, *, cancel, on_pdf=None, only=None, skip=None, on_page=None):
+    fname = next(folder.rglob("*.pdf")).name
+    return ScanResult(
+        count=1,
+        confidence=ConfidenceLevel.HIGH,
+        method="pagination",
+        breakdown=None,
+        flags=[],
+        errors=[],
+        duration_ms=1,
+        files_scanned=1,
+        per_file={fname: 1},
+    )
+
+
+def test_scan_ocr_http_self_lend_end_to_end(tmp_path, monkeypatch):
+    """The launcher's own held cell is scanned (not skipped) via a real
+    POST /scan-ocr; a cell held by someone else is still skipped — observed
+    over the real WS's scan_complete.skipped list."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "c4_e2e.db"))
+    monkeypatch.setattr(PaginationScanner, "count_ocr", _fake_count_ocr)
+
+    odi_dir = tmp_path / "ABRIL" / "HPV" / "3.-ODI Visitas"
+    art_dir = tmp_path / "ABRIL" / "HPV" / "7.-ART"
+    odi_dir.mkdir(parents=True)
+    art_dir.mkdir(parents=True)
+    _make_pdf(odi_dir / "a.pdf")
+    _make_pdf(art_dir / "b.pdf")
+
+    app = create_app()
+    with TestClient(app) as c:
+        r = c.post("/api/sessions", json={"year": 2026, "month": 4})
+        assert r.status_code == 200, r.text
+        sid = r.json()["session_id"]
+        c.post(f"/api/sessions/{sid}/scan")  # populates cell folder_path (existing idiom)
+
+        # The launcher holds HPV|odi; a different human holds HPV|art.
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "launcher-1", "name": "Daniel", "color": "#a"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/focus",
+            json={"participant_id": "launcher-1", "cell": "HPV|odi"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/heartbeat",
+            json={"participant_id": "human-2", "name": "Carla", "color": "#b"},
+        )
+        c.post(
+            f"/api/sessions/{sid}/presence/focus",
+            json={"participant_id": "human-2", "cell": "HPV|art"},
+        )
+
+        with c.websocket_connect(f"/ws/sessions/{sid}") as ws:
+            r2 = c.post(
+                f"/api/sessions/{sid}/scan-ocr",
+                json={
+                    "cells": [["HPV", "odi"], ["HPV", "art"]],
+                    "participant_id": "launcher-1",
+                },
+            )
+            assert r2.status_code == 200, r2.text
+
+            scan_complete = None
+            for _ in range(200):
+                evt = json.loads(ws.receive_text())
+                if evt.get("type") == "scan_complete":
+                    scan_complete = evt
+                    break
+
+        assert scan_complete is not None
+        skipped = scan_complete.get("skipped") or []
+        assert not any(s["hospital"] == "HPV" and s["sigla"] == "odi" for s in skipped), (
+            f"launcher's own cell must NOT be skipped (self-lend), got: {skipped}"
+        )
+        assert any(s["hospital"] == "HPV" and s["sigla"] == "art" for s in skipped), (
+            f"cell held by a different human must still be skipped, got: {skipped}"
+        )
