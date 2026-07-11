@@ -19,8 +19,13 @@
  */
 export function computeWindow(scrollTop, viewportH, rowH, total, overscan = 8) {
   if (total <= 0) return { start: 0, end: 0, topPad: 0, bottomPad: 0 };
-  const start = Math.max(0, Math.floor(scrollTop / rowH) - overscan);
-  const end = Math.min(total, Math.ceil((scrollTop + viewportH) / rowH) + overscan);
+  // Clamp del scrollTop de entrada: al filtrar/buscar estando scrolleado
+  // profundo, `total` encoge pero el estado de scroll queda viejo — sin clamp,
+  // start > end → ventana vacía con spacer gigante (lista en blanco).
+  const maxTop = Math.max(0, total * rowH - viewportH);
+  const top = Math.min(Math.max(0, scrollTop), maxTop);
+  const start = Math.max(0, Math.floor(top / rowH) - overscan);
+  const end = Math.min(total, Math.ceil((top + viewportH) / rowH) + overscan);
   return {
     start,
     end,
