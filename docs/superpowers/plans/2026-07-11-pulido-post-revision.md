@@ -86,12 +86,18 @@ def recompute_all_reliable(
 ```
 
   Ajustar nombres de helpers internos a los reales de `state.py` (leer cómo
-  `set_all_reliable` carga/persiste y calcar). `compute_settled` /
-  `has_open_counted_suspects`: importar de donde ya se importan en `_common.py`
-  — si eso crea import circular api↔core, importar dentro del método (patrón
-  late-import existente con `# noqa: E402` NO aplica aquí; import local plano).
-  Reescribir `_common.refresh_all_reliable` para computar `pages` (idéntico a
-  hoy) y delegar — firma pública SIN cambios.
+  `set_all_reliable` carga/persiste y calcar: `_load_and_migrate` +
+  `update_session_state`). **OJO firma real:** `compute_settled(cell, folder,
+  pages=None, count_type=None)` (`_common.py:277`) tiene `folder` posicional
+  — threadear `folder` a `recompute_all_reliable(…, folder, *, pages,
+  count_type)` y pasarlo. Hoy, con `pages=None`, el walk de disco ocurre
+  DENTRO de `compute_settled` (`:293-294`): ese walk SE MUEVE al wrapper —
+  `_common.refresh_all_reliable` llama `cell_page_counts(folder)` cuando
+  `pages is None` y delega con pages ya resueltas (ese es el punto de §B4:
+  I/O fuera del lock). `compute_settled` / `has_open_counted_suspects`: el
+  import circular real es api.state ↔ `_common` (que importa de api.state) —
+  import local plano dentro del método.
+  Firma pública de `refresh_all_reliable` SIN cambios para los callers.
 - [ ] **Step 4:** Correr el test nuevo → PASS. Correr
   `python -m pytest tests/unit/api -q` → verde (los callers no cambian).
 - [ ] **Step 5: Commit** — `fix(api): atomic recompute_all_reliable under a single lock acquisition`
@@ -110,10 +116,10 @@ def recompute_all_reliable(
   `all_reliable=False` Y el `cell_updated` difundido lo lleva.
 - [ ] **Step 2:** Correr → FAIL (queda True).
 - [ ] **Step 3: Implementar** — tras el merge (`apply_per_file_ocr_result`) en
-  el handler, resolver folder (patrón exacto de `_apply_scan_event`,
-  `scan.py:294-300`: `month_root`/`hosp_dir.exists()`/`_find_category_folder`)
-  y llamar `refresh_all_reliable(...)` ANTES de construir el evento
-  `cell_updated`.
+  el handler, llamar `refresh_all_reliable(...)` ANTES de construir el evento
+  `cell_updated`. Nota: la closure de la ruta YA tiene `folder` en scope
+  (`scan.py:628`) — usarlo directo; si no aplica, resolver con el patrón de
+  `_apply_scan_event` (`scan.py:294-300`).
 - [ ] **Step 4:** Correr test → PASS; `python -m pytest tests/ -q -m "not slow" -k "scan_file or reliability"` verde.
 - [ ] **Step 5: Commit** — `fix(api): scan_file_ocr recomputes all_reliable (dishonest green)`
 
@@ -168,7 +174,11 @@ def promote_to_editor(self, session_id: str, cell: str, participant_id: str) -> 
   `lent_out=ctx["lent"]`; en el branch terminal (`scan_complete`/
   `scan_cancelled`, tras `mgr.agent_leave`): `for h2, s2, pid in ctx["lent"]:
   mgr.promote_lender(session_id, h2, s2, pid)` — el broadcast de presence ya
-  existe en ese branch, queda DESPUÉS de las promociones.
+  existe en ese branch, queda DESPUÉS de las promociones. Nota consciente: el
+  crash-path de `_run` (`scan.py:541-557`) también hace `agent_leave` pero NO
+  promueve — decisión spec-aligned (§B2 solo cubre el terminal; tras un crash
+  el lanzador se auto-sana al re-enfocar); dejar un comentario de una línea
+  ahí.
 - [ ] **Step 4:** Correr `test_agent_claim.py` + `test_scanner_lock_skip.py` → verdes (añadir un handler-level test: lend → scan_complete → snapshot muestra al lanzador editor de nuevo).
 - [ ] **Step 5: Commit** — `feat(scan): self-lend v1.1 — the lender gets editorship back at scan end`
 
@@ -305,12 +315,19 @@ comentario honesto de §B8.4; (5) `_PAGE_COUNT_CACHE.clear()` en POST
   promesa pendiente); (c) dedup: dos bumps con fetch en vuelo → 1 sola
   llamada api extra como máximo; (d) `patchCellFile` muta la entrada
   (optimista de steppers); (e) error de fetch → `error` en la entrada, files
-  previos intactos.
+  previos intactos; (f) **primer open de una celda** (sin entrada previa en
+  `cellFiles`) → fetch disparado — ver el segundo trigger del Step 3.
 - [ ] **Step 2:** `npx vitest run src/store/session.cellFiles.test.js` → FAIL.
 - [ ] **Step 3:** Implementar en el store. Forma:
-  `cellFiles: {}` → `{ [key]: { files, error, fetchedTick } }`; el disparo
-  vive donde hoy se bumpea `filesTick` (cada bump llama `fetchCellFiles` si
-  hay sesión) — así NINGÚN componente fetchea.
+  `cellFiles: {}` → `{ [key]: { files, error, fetchedTick } }`. **DOS
+  triggers** (§A1): (1) los bumps de `filesTick` — todos viven en el store
+  (~8 sitios: session.js:244/:438/:470/:489/:953/:1002/:1134/:1166), cada
+  bump llama `fetchCellFiles`; (2) el **cambio de celda seleccionada** — la
+  selección es estado local de `HospitalDetail.jsx:18`, INVISIBLE al store:
+  mantener UN efecto delgado (en HospitalDetail, junto al `setFocus` de
+  `:23-27` que ya espeja la selección, o en FileList) que llame
+  `fetchCellFiles` en el cambio genuino de celda — ese cubre el primer open.
+  Fuera de esos dos, ningún componente fetchea.
 - [ ] **Step 4:** Correr → PASS.
 - [ ] **Step 5: Commit** — `feat(web): store-level cellFiles cache with stale-while-revalidate`
 
@@ -458,15 +475,20 @@ comentario honesto de §B8.4; (5) `_PAGE_COUNT_CACHE.clear()` en POST
 
 - [ ] **Step 1:** `eval/tests/test_pagination_benchmark.py`: fixture
   module-scoped con UNA corrida compartida de `run_benchmark` (solo
-  `skips_missing_glob` y `temp_dir_cleaned_up` corren aparte).
+  `skips_missing_glob` y `temp_dir_cleaned_up` corren aparte). OJO pytest
+  ScopeMismatch: una fixture module-scoped NO puede pedir `tmp_path`
+  (function-scoped) — usar `tmp_path_factory` y construir el corpus sintético
+  dentro de la fixture de módulo.
 - [ ] **Step 2:** `tests/integration/test_forbid_extra_keys.py`: fixture
   module-scoped (env monkeypatch a tmp_path SIGUE por-módulo — lección DB
-  2026-07-03).
-- [ ] **Step 3:** Autouse `_PAGE_COUNT_CACHE.clear()` en
-  `tests/unit/api/conftest.py`.
+  2026-07-03; mismo aviso `tmp_path_factory`).
+- [ ] **Step 3:** CREAR `tests/unit/api/conftest.py` (no existe) con la
+  fixture autouse que hace `_PAGE_COUNT_CACHE.clear()`.
 - [ ] **Step 4:** Dedup `_make_pdf` (7 copias) y `_make_manager` (4 copias) →
-  fixtures en `tests/conftest.py` (precedente `make_pagination_pdf`); los
-  archivos importan la fixture, no la función.
+  fixtures en `tests/conftest.py` (precedente `make_pagination_pdf`); las
+  fixtures se INYECTAN por nombre en la firma del test (no se importan).
+  Antes de dedupear, diffear las 7/4 copias — pueden no ser idénticas; la
+  fixture unificada debe cubrir todas las variantes (parámetros con default).
 - [ ] **Step 5:** Medir: `python -m pytest -m "not slow" -q --durations=10` —
   objetivo: ≥30 s menos que el baseline (~185 s). Anotar el número real en el
   commit.
