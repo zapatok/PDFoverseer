@@ -990,7 +990,12 @@ class SessionManager:
 
     @_synchronized
     def agent_claim_cell(
-        self, session_id: str, hospital: str, sigla: str, lend_from: str | None = None
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        lend_from: str | None = None,
+        lent_out: list[tuple[str, str, str]] | None = None,
     ) -> dict | None:
         """Atomic claim for the Claude scanner/agent (M3b).
 
@@ -1005,12 +1010,19 @@ class SessionManager:
         goes read-only with the Bot badge for the duration, exactly as if
         another participant were editing; anyone ELSE's hold still skips.
 
+        Self-lend v1.1 (2026-07-11, §B2): when ``lent_out`` is given and a real
+        lend happens (the cell's holder IS ``lend_from``), the caller's list
+        gets a ``(hospital, sigla, lend_from)`` tuple appended — the signal the
+        scan route uses to re-promote the launcher via :meth:`promote_lender`
+        once the batch finishes. Zero behavior change for callers that omit it.
+
         Args:
             session_id: Target session identifier (e.g. ``"2026-04"``).
             hospital: Hospital code (e.g. ``"HRB"``).
             sigla: Category code (e.g. ``"odi"``).
             lend_from: participant_id whose own hold may be borrowed (the scan
                 launcher), or None for the strict M3b behavior.
+            lent_out: optional out-param list to record a real lend into.
 
         Returns:
             None if the claim succeeded; the holder's public-fields dict if the
@@ -1022,6 +1034,8 @@ class SessionManager:
             if lend_from is None or holder.get("participant_id") != lend_from:
                 return holder
             self._presence.demote_to_viewer(session_id, cell, lend_from)
+            if lent_out is not None:
+                lent_out.append((hospital, sigla, lend_from))
         self._presence.agent_focus(session_id, cell)
         return None
 
@@ -1036,6 +1050,26 @@ class SessionManager:
             True iff the roster changed (agent was present).
         """
         return self._presence.leave(session_id, AGENT_PARTICIPANT_ID)
+
+    @_synchronized
+    def promote_lender(
+        self, session_id: str, hospital: str, sigla: str, participant_id: str
+    ) -> bool:
+        """Re-promote a self-lend's lender back to editor at scan end (§B2).
+
+        Thin pass-through to :meth:`PresenceRegistry.promote_to_editor` — see
+        its docstring for the (never-dethrone) conditions.
+
+        Args:
+            session_id: Target session identifier.
+            hospital: Hospital code.
+            sigla: Category code.
+            participant_id: The lender (scan launcher) to re-promote.
+
+        Returns:
+            True iff the registry record changed.
+        """
+        return self._presence.promote_to_editor(session_id, f"{hospital}|{sigla}", participant_id)
 
     def _editor_conflict(
         self,

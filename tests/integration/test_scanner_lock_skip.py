@@ -149,6 +149,7 @@ def _new_ctx() -> dict:
         "skipped_cells": [],
         "agent_active": False,
         "current_cell_skipped": False,
+        "lent": [],
     }
 
 
@@ -422,6 +423,37 @@ def test_handler_self_lend_never_borrows_someone_elses_cell(tmp_path):
     assert ("HRB", "odi") in ctx["skipped_set"]
 
 
+def test_handler_self_lend_promotes_launcher_back_at_scan_complete(tmp_path):
+    """§B2: at the batch terminal, the lender (launcher) gets editorship back —
+    the scan_complete-triggered presence broadcast shows them as editor again
+    and the agent gone."""
+    mgr = _make_manager(tmp_path)
+    sid = "2026-04"
+    _register_human(mgr, sid, pid="human-1", name="Daniel", color="#a")
+    mgr.presence_focus(sid, "human-1", "HRB|odi")
+
+    out: list[dict] = []
+    ctx = _new_ctx()
+    ctx["launcher_id"] = "human-1"
+
+    _handle_scan_progress(
+        mgr, sid, {"type": "cell_scanning", "hospital": "HRB", "sigla": "odi"}, ctx, out.append
+    )
+    out.clear()
+    _handle_scan_progress(
+        mgr,
+        sid,
+        {"type": "scan_complete", "scanned": 1, "errors": 0, "cancelled": 0},
+        ctx,
+        out.append,
+    )
+
+    presence = next(e for e in out if e["type"] == "presence")
+    snap = {p["participant_id"]: p for p in presence["participants"]}
+    assert snap["human-1"]["mode"] == "editor"
+    assert AGENT_PARTICIPANT_ID not in snap
+
+
 def test_handler_pdf_page_progress_filtered_by_own_cell_identity(tmp_path):
     """pdf_page_progress trae hospital/sigla: se filtra por SU celda (skipped_set),
     no por el booleano current_cell_skipped de la última celda — con 2 workers
@@ -441,13 +473,25 @@ def test_handler_pdf_page_progress_filtered_by_own_cell_identity(tmp_path):
     out.clear()
 
     # Páginas de la celda VIVA (HPV|art) llegan intercaladas → deben pasar.
-    alive = {"type": "pdf_page_progress", "hospital": "HPV", "sigla": "art", "page": 3, "pages_total": 9}
+    alive = {
+        "type": "pdf_page_progress",
+        "hospital": "HPV",
+        "sigla": "art",
+        "page": 3,
+        "pages_total": 9,
+    }
     _handle_scan_progress(mgr, sid, alive, ctx, out.append)
     assert out == [alive]
     out.clear()
 
     # Páginas de la celda SALTADA se caen aunque current_cell_skipped ya sea False.
     ctx["current_cell_skipped"] = False
-    skipped = {"type": "pdf_page_progress", "hospital": "HRB", "sigla": "odi", "page": 1, "pages_total": 9}
+    skipped = {
+        "type": "pdf_page_progress",
+        "hospital": "HRB",
+        "sigla": "odi",
+        "page": 1,
+        "pages_total": 9,
+    }
     _handle_scan_progress(mgr, sid, skipped, ctx, out.append)
     assert out == []

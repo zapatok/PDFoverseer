@@ -314,3 +314,124 @@ def test_agent_claim_lend_from_free_cell_is_plain_claim(tmp_path):
     assert mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from="p1") is None
     holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
     assert holder is not None and holder["participant_id"] == AGENT_PARTICIPANT_ID
+
+
+# ── Self-lend v1.1 (2026-07-11, §B2): the lender gets editorship back ────────
+
+
+def test_promote_to_editor_reinstates_lender():
+    """After demote_to_viewer (the lend step), promote_to_editor flips the
+    lender back to editor — the mainline scan-end path."""
+    r = _reg()
+    r.heartbeat("m", "p1", name="Daniel", color="#a")
+    r.focus("m", "p1", "HRB|odi")
+    r.demote_to_viewer("m", "HRB|odi", "p1")
+
+    changed = r.promote_to_editor("m", "HRB|odi", "p1")
+
+    assert changed is True
+    snap = {p["participant_id"]: p for p in r.snapshot("m")}
+    assert snap["p1"]["mode"] == "editor"
+
+
+def test_promote_to_editor_noop_if_lender_changed_focus():
+    """The lender navigated away from the cell mid-scan -> no promotion for the
+    (now stale) cell they used to hold."""
+    r = _reg()
+    r.heartbeat("m", "p1", name="Daniel", color="#a")
+    r.focus("m", "p1", "HRB|odi")
+    r.demote_to_viewer("m", "HRB|odi", "p1")
+    r.focus("m", "p1", "HRB|art")  # moved to a different (free) cell
+
+    changed = r.promote_to_editor("m", "HRB|odi", "p1")
+
+    assert changed is False
+    assert r.lock_holder("m", "HRB|odi", exclude="x") is None
+
+
+def test_promote_to_editor_noop_if_other_editor_present():
+    """Another human claimed the cell while the agent held it -> the lender must
+    NOT dethrone them on promotion."""
+    r = _reg()
+    r.heartbeat("m", "p1", name="Daniel", color="#a")
+    r.focus("m", "p1", "HRB|odi")
+    r.demote_to_viewer("m", "HRB|odi", "p1")
+    r.heartbeat("m", "p2", name="Carla", color="#b")
+    r.focus("m", "p2", "HRB|odi")  # Carla claims the free (agent-held) cell
+
+    changed = r.promote_to_editor("m", "HRB|odi", "p1")
+
+    assert changed is False
+    snap = {p["participant_id"]: p for p in r.snapshot("m")}
+    assert snap["p2"]["mode"] == "editor"
+    assert snap["p1"]["mode"] == "viewer"
+
+
+def test_promote_to_editor_noop_if_lender_lease_expired():
+    """The lender's heartbeat lapsed (TTL) during a long scan -> no promotion of
+    a participant who is no longer present."""
+    clock = {"t": 1000.0}
+    r = PresenceRegistry(now=lambda: clock["t"])
+    r.heartbeat("m", "p1", name="Daniel", color="#a")
+    r.focus("m", "p1", "HRB|odi")
+    r.demote_to_viewer("m", "HRB|odi", "p1")
+    clock["t"] += 46.0  # > PRESENCE_TTL_SECONDS (45s)
+
+    changed = r.promote_to_editor("m", "HRB|odi", "p1")
+
+    assert changed is False
+    assert all(p["participant_id"] != "p1" for p in r.snapshot("m"))
+
+
+def test_agent_claim_lend_out_appends_on_lend(tmp_path):
+    """agent_claim_cell records (hospital, sigla, lend_from) in lent_out only
+    when a real lend happened (holder == lend_from)."""
+    mgr = _make_manager(tmp_path)
+    mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
+    mgr.presence_focus("2026-04", "p1", "HRB|odi")
+    lent: list = []
+
+    result = mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from="p1", lent_out=lent)
+
+    assert result is None
+    assert lent == [("HRB", "odi", "p1")]
+
+
+def test_agent_claim_lend_out_untouched_on_free_cell(tmp_path):
+    """A plain claim on a free cell (no lend) must not append to lent_out."""
+    mgr = _make_manager(tmp_path)
+    lent: list = []
+
+    mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from="p1", lent_out=lent)
+
+    assert lent == []
+
+
+def test_agent_claim_lend_out_untouched_on_skip(tmp_path):
+    """A skip (holder != lend_from) must not append to lent_out."""
+    mgr = _make_manager(tmp_path)
+    mgr.presence_heartbeat("2026-04", "p2", name="Carla", color="#b")
+    mgr.presence_focus("2026-04", "p2", "HRB|odi")
+    lent: list = []
+
+    holder = mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from="p1", lent_out=lent)
+
+    assert holder is not None
+    assert lent == []
+
+
+def test_promote_lender_pass_through(tmp_path):
+    """SessionManager.promote_lender delegates to PresenceRegistry.promote_to_editor
+    under the manager's lock."""
+    mgr = _make_manager(tmp_path)
+    mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
+    mgr.presence_focus("2026-04", "p1", "HRB|odi")
+    lent: list = []
+    mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from="p1", lent_out=lent)
+    mgr.agent_leave("2026-04")
+
+    changed = mgr.promote_lender("2026-04", "HRB", "odi", "p1")
+
+    assert changed is True
+    holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
+    assert holder is not None and holder["participant_id"] == "p1"

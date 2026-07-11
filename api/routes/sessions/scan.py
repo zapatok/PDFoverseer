@@ -326,18 +326,23 @@ def _handle_scan_progress(
         "skipped_cells": list[dict],            # [{hospital, sigla}, ...]
         "agent_active": bool,                   # True once the agent has claimed any cell
         "current_cell_skipped": bool,           # True while the current cell is skipped
+        "lent": list[tuple[str, str, str]],     # [(hospital, sigla, launcher_id), ...] self-lends
     }.
 
     - ``cell_scanning``: claim the cell as the Claude agent.
       If a human holds it → record the skip, emit ``cell_skipped``, set
       ``current_cell_skipped=True``, do NOT broadcast cell_scanning.
       Else → mark agent_active, emit a presence snapshot (badge appears),
-      set ``current_cell_skipped=False``, fall through to the normal path.
+      set ``current_cell_skipped=False``, fall through to the normal path. A
+      self-lend (holder == launcher_id) appends to ``ctx["lent"]`` so the
+      launcher can be re-promoted to editor at the terminal event (§B2).
     - ``pdf_progress`` (no cell identity) while ``current_cell_skipped`` → drop
       silently; ``pdf_page_progress`` (carries hospital/sigla) → drop iff ITS
       cell is in ``skipped_set``.
     - ``file_result`` / ``cell_done`` while ``(h, s) in skipped_set`` → drop.
-    - ``scan_complete`` / ``scan_cancelled``: release the agent once; enrich
+    - ``scan_complete`` / ``scan_cancelled``: release the agent once, then
+      re-promote every self-lend's launcher back to editor (§B2 —
+      ``promote_lender`` never dethrones a different live editor); enrich
       ``scan_complete`` with ``ctx["skipped_cells"]``; broadcast and return.
     - Otherwise: normal path (``_apply_scan_event`` + ``cell_done`` followup).
     """
@@ -348,7 +353,9 @@ def _handle_scan_progress(
         ctx["current_cell_skipped"] = False  # reset first; the skip path below overwrites to True
         # Self-lend: the launcher's own hold is borrowed (their panel goes
         # read-only + Bot badge while the cell scans); anyone else's hold skips.
-        holder = mgr.agent_claim_cell(session_id, h, s, lend_from=ctx.get("launcher_id"))
+        holder = mgr.agent_claim_cell(
+            session_id, h, s, lend_from=ctx.get("launcher_id"), lent_out=ctx.get("lent")
+        )
         if holder is not None:
             ctx["skipped_set"].add((h, s))
             ctx["skipped_cells"].append({"hospital": h, "sigla": s})
@@ -389,6 +396,11 @@ def _handle_scan_progress(
         if ctx["agent_active"]:
             mgr.agent_leave(session_id)
             ctx["agent_active"] = False
+            # §B2: give every self-lend's launcher their editorship back now
+            # that the agent released the cell — BEFORE the presence broadcast
+            # below so it reflects the reinstated editor, not the stale viewer.
+            for h2, s2, launcher_id in ctx.get("lent") or []:
+                mgr.promote_lender(session_id, h2, s2, launcher_id)
             emit(
                 {
                     "type": "presence",
@@ -505,6 +517,9 @@ def scan_ocr(
         # Self-lend: the launcher's own per-cell hold is borrowed instead of
         # skipped (None for legacy clients that send no participant_id).
         "launcher_id": body.participant_id,
+        # §B2: (hospital, sigla, launcher_id) tuples for each self-lend, so the
+        # launcher can get their editorship back at the batch terminal.
+        "lent": [],
     }
 
     def _safe_broadcast(event: dict) -> None:
@@ -538,6 +553,8 @@ def scan_ocr(
         except Exception:
             logger.exception("scan_cells_ocr crashed for session %s", session_id)
             # M3b: release the agent on crash so it doesn't haunt the roster.
+            # §B2: no promote_lender here on purpose — a crash is not the
+            # normal terminal path; the lender self-heals on their next focus.
             if ctx["agent_active"]:
                 mgr.agent_leave(session_id)
                 ctx["agent_active"] = False

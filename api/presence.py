@@ -168,6 +168,25 @@ class PresenceRegistry:
         rec["mode"] = "viewer"
         return True
 
+    def promote_to_editor(self, session_id: str, cell: str, participant_id: str) -> bool:
+        """Re-promote ``participant_id`` from viewer back to editor on ``cell``
+        (self-lend v1.1, §B2 — undo of :meth:`demote_to_viewer` at scan end).
+
+        Only when ``participant_id`` is still present, still focused on
+        ``cell``, and NOT already the editor there; and only when the cell
+        currently has NO editor. Never dethrones a different live editor (e.g.
+        another human claimed the cell while the agent held it). Caller holds
+        the RLock. Returns True iff the record changed.
+        """
+        self._purge_expired(session_id)
+        rec = self._participants.get(session_id, {}).get(participant_id)
+        if rec is None or rec["focused_cell"] != cell or rec["mode"] == "editor":
+            return False
+        if self._editor_of(session_id, cell) is not None:
+            return False
+        rec["mode"] = "editor"
+        return True
+
     def _editor_of(self, session_id: str, cell: str, exclude: str | None = None) -> str | None:
         """participant_id of the live editor of `cell`, or None. Caller purges first."""
         for pid, r in self._participants.get(session_id, {}).items():
