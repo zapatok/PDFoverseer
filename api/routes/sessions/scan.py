@@ -37,6 +37,8 @@ from ._common import (
     _validate_cell_coords,
     _validate_session_id,
     cell_page_counts,
+    enrich_cell_colado_suspects,
+    enrich_cell_worker_count,
     file_origin,
     get_manager,
     logger,
@@ -135,11 +137,19 @@ def apply_ratio(
     refresh_all_reliable(
         mgr, session_id, hospital, sigla, folder, pages=pages, count_type=count_type_for(sigla)
     )
+    # §B8.2: return the same enriched shape as the cell_updated broadcast
+    # (the reconcile_worker_marks pattern, writes.py:320-328) instead of the
+    # raw state cell — worker_count/colado_suspects are derived-only fields
+    # never persisted into state, so a caller reading this response used to
+    # see a cell shape that diverged from every other write endpoint's.
+    state = mgr.get_session_state(session_id)
+    cell = state["cells"].get(hospital, {}).get(sigla, {})
+    enriched = enrich_cell_worker_count(cell, month_root, hospital, sigla, folder)
+    enriched = enrich_cell_colado_suspects(enriched, state.get("reorg_ops") or [], hospital, sigla)
     _broadcast_cell_updated(request, mgr, session_id, hospital, sigla)
     if is_agent(participant_id):
         _broadcast_presence(request, mgr, session_id)
-    state = mgr.get_session_state(session_id)
-    return state["cells"][hospital][sigla]
+    return enriched
 
 
 class ScanRequest(BaseModel):
@@ -210,7 +220,7 @@ def scan(
                 },
             )
             continue
-        mgr.apply_cell_result(session_id, hosp, sigla, r)
+        mgr.apply_filename_result(session_id, hosp, sigla, r)
     refresh_reorg_deltas(mgr, session_id, check_applied=True)
     _broadcast_session_refresh(request, session_id)
     return {
@@ -665,7 +675,9 @@ def scan_ocr(
 
 @router.post("/sessions/{session_id}/cancel")
 def cancel(request: Request, session_id: str) -> dict:
-    """Always returns 200. If a batch is active, sets its cancel event."""
+    """Always returns 200 (once the session_id format is valid). If a batch
+    is active, sets its cancel event."""
+    _validate_session_id(session_id)  # §B8.1: same format check as every other route
     handle = request.app.state.batches.get(session_id)
     if handle is not None and handle.cancel_event is not None:
         handle.cancel_event.set()

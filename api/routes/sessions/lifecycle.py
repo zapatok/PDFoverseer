@@ -11,6 +11,7 @@ from api.state import SessionManager
 from core.scanners.patterns import count_type_for
 
 from ._common import (
+    _PAGE_COUNT_CACHE,
     _resolve_month_dir,
     _validate_session_id,
     enrich_cell_colado_suspects,
@@ -46,6 +47,10 @@ def create(
 ) -> dict:
     """Open or return an existing session for ``(year, month)``."""
     month_dir = _resolve_month_dir(body.year, body.month)
+    # §B8.5: purge the page-count cache on every session open — see its
+    # comment in _common.py for the (theoretical) staleness hole this closes
+    # and the cross-month growth cap it doubles as.
+    _PAGE_COUNT_CACHE.clear()
     return mgr.open_session(year=body.year, month=body.month, month_root=month_dir)
 
 

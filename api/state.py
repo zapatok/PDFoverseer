@@ -93,9 +93,11 @@ def _synchronized(method):
     read-modify-write del blob de sesión contra escrituras concurrentes (merge
     incremental por-PDF desde el hilo de drain + ediciones HTTP durante un scan).
 
-    RLock (no Lock): ``apply_cell_result`` delega en ``apply_filename_result``,
-    así que un hilo re-adquiere el mismo lock — con un Lock no reentrante eso
-    deadlockea.
+    RLock (no Lock): ``add_reorg_op_validated`` llama a ``add_reorg_op`` +
+    ``recompute_reorg_deltas`` (F4) desde DENTRO de su propio método
+    (``delete_reorg_op_and_refresh`` hace lo mismo con ``delete_reorg_op`` +
+    ``recompute_reorg_deltas``) — el hilo re-adquiere el mismo lock; con un
+    Lock no reentrante eso deadlockea.
     """
 
     @functools.wraps(method)
@@ -946,17 +948,6 @@ class SessionManager:
         removed = self.delete_reorg_op(session_id, op_id)
         self.recompute_reorg_deltas(session_id)
         return removed
-
-    @_synchronized
-    def apply_cell_result(
-        self,
-        session_id: str,
-        hospital: str,
-        sigla: str,
-        result: ScanResult,
-    ) -> None:
-        """Deprecated. Use apply_filename_result for pase 1 results."""
-        self.apply_filename_result(session_id, hospital, sigla, result)
 
     # ── Presence (M2) — ephemeral, shares this manager's RLock (spec §6.1) ──
 

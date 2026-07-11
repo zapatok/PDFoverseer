@@ -35,7 +35,7 @@ def test_open_session_returns_existing(conn, tmp_path):
     assert s1["session_id"] == s2["session_id"]
 
 
-def test_apply_cell_result_persists(conn, tmp_path):
+def test_apply_filename_result_persists(conn, tmp_path):
     from core.scanners.base import ConfidenceLevel, ScanResult
 
     mgr = SessionManager(conn=conn)
@@ -50,7 +50,7 @@ def test_apply_cell_result_persists(conn, tmp_path):
         duration_ms=10,
         files_scanned=767,
     )
-    mgr.apply_cell_result("2026-04", "HPV", "art", result)
+    mgr.apply_filename_result("2026-04", "HPV", "art", result)
     state = mgr.get_session_state("2026-04")
     assert state["cells"]["HPV"]["art"]["filename_count"] == 767
 

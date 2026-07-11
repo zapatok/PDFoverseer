@@ -60,20 +60,14 @@ def test_concurrent_mutations_no_lost_update(mgr):
 
 
 def test_rlock_allows_reentrant_mutator(mgr):
-    """apply_cell_result delega en apply_filename_result; con un Lock NO reentrante
-    esto deadlockea. Con RLock no debe colgar ni lanzar."""
-    if hasattr(mgr, "apply_cell_result"):
-        from core.scanners.base import ConfidenceLevel, ScanResult
-
-        r = ScanResult(
-            count=1,
-            confidence=ConfidenceLevel.HIGH,
-            method="filename_glob",
-            breakdown=None,
-            flags=[],
-            errors=[],
-            duration_ms=0,
-            files_scanned=1,
-            per_file={"x.pdf": 1},
-        )
-        mgr.apply_cell_result("2026-05", "HLL", "odi", r)  # no debe deadlockear
+    """add_reorg_op_validated llama a add_reorg_op + recompute_reorg_deltas
+    desde DENTRO de su propio método @_synchronized — una re-adquisición
+    reentrante genuina (F4). Con un Lock NO reentrante esto deadlockea; con
+    RLock no debe colgar ni lanzar."""
+    op = {
+        "op_type": "move_file",
+        "source": {"hospital": "HLL", "sigla": "odi", "file": "x.pdf"},
+        "dest": {"hospital": "HLL", "sigla": "art"},
+    }
+    created = mgr.add_reorg_op_validated("2026-05", op)  # no debe deadlockear
+    assert created["id"] == "op_001"

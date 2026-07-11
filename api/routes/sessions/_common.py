@@ -133,6 +133,16 @@ def file_origin(
 # measured on HPV|art's 1,300 files, paid again on EVERY save via filesTick —
 # into a stat() sweep (~tens of ms). Failed reads (0) are NOT cached: they
 # retry on the next request.
+#
+# Assumption + its theoretical hole (§B8.5): the (mtime_ns, size) signature
+# detects a rewrite ONLY if at least one of the two actually changes. A
+# hypothetical paso-1 tool run with a "preserve original date" copy mode that
+# ALSO happens to produce the same byte size would leave a stale entry
+# undetected for the lifetime of the process. There is no such tool today —
+# this is a theoretical gap, not an observed bug — but POST /sessions clears
+# the whole cache on every session open as a cheap belt-and-suspenders: it
+# also caps the dict's otherwise-unbounded growth across months (never
+# evicted otherwise), at the cost of one re-read sweep per session open.
 _PAGE_COUNT_CACHE: dict[str, tuple[int, int, int]] = {}
 _PAGE_COUNT_CACHE_LOCK = threading.Lock()
 

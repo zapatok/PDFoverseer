@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from api.routes.sessions import cell_page_counts, get_manager, present_file_names
@@ -24,12 +24,13 @@ router = APIRouter()
 def _method_for_history(cell: dict) -> str:
     """Derive the historical_counts.method value from a cell's state.
 
-    Priority cascade (matches Excel writer in Chunk 1):
+    Priority cascade (matches the Excel writer):
       user_override -> 'override'
-      ocr_count     -> cell['method'] (header_detect / corner_count / page_count_pure / filename_glob)
-      filename_count -> 'filename_glob'
-      legacy count  -> 'filename_glob'
-      none          -> 'filename_glob' (default for un-scanned)
+      ocr_count set -> cell['method'] — one of the live OCR methods in
+                        ``_OCR_METHODS`` (``api/routes/sessions/_common.py``,
+                        the single source of truth for that set — do not
+                        hardcode the list here, it drifts as scanners change)
+      otherwise     -> 'filename_glob' (filename-count, legacy, or never-scanned)
     """
     if cell.get("user_override") is not None:
         return "override"
@@ -213,7 +214,6 @@ def _build_worker_warnings(state: dict) -> list[dict]:
 @router.post("/sessions/{session_id}/output")
 def generate(
     session_id: str,
-    body: dict = Body(default={}),
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     if not _SESSION_ID_RE.match(session_id):
@@ -278,7 +278,11 @@ def generate(
                 confidence=cell.get("confidence") or "low",
                 method=_method_for_history(cell),
             )
-    mgr._conn.commit()
+    # §B8.4: the connection is autocommit (core/db/connection.py, isolation_level=
+    # None) — each upsert_count above already committed on its own. The ~80
+    # upserts here are independent statements, not one transaction: a crash
+    # mid-loop leaves a partial history write, which self-corrects on the next
+    # export (the loop always re-upserts every cell from scratch).
 
     return {
         "output_path": str(result.output_path),

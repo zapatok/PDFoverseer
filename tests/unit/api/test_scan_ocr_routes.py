@@ -79,6 +79,12 @@ def test_cancel_no_active_batch_is_idempotent(client) -> None:
     assert r.json() == {"ok": True}
 
 
+def test_cancel_malformed_session_id_returns_400(client) -> None:
+    """§B8.1: cancel joins the rest of the package's session_id format check."""
+    r = client.post("/api/sessions/does-not-exist/cancel")
+    assert r.status_code == 400
+
+
 def test_scan_ocr_409_when_batch_already_running(client) -> None:
     from api.batch import make_handle
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.integration.conftest import _make_pdf
+
 
 def test_apply_ratio_treats_pending_only(client, session_with_pending_cell):
     """RN: big.pdf (8pg, Pendiente) gets round(8/2)=4; a.pdf (R1) is untouched."""
@@ -76,5 +78,29 @@ def test_apply_ratio_skips_unreadable_pdf(tmp_path, client, session_with_pending
         f["name"]: f for f in client.get(f"/api/sessions/{sid}/cells/{hosp}/{sigla}/files").json()
     }
     assert files["broken.pdf"]["origin"] == "Error"  # skipped, not RN
-    assert files["2026-04-15_odi_big.pdf"]["origin"] == "RN"  # the real pending file still processed
+    assert (
+        files["2026-04-15_odi_big.pdf"]["origin"] == "RN"
+    )  # the real pending file still processed
     assert files["2026-04-10_odi_a.pdf"]["origin"] == "R1"
+
+
+def test_apply_ratio_response_is_enriched(tmp_path, client):
+    """§B8.2: apply_ratio's response goes through the same
+    enrich_cell_worker_count + enrich_cell_colado_suspects pipeline as the
+    cell_updated broadcast (the reconcile_worker_marks pattern,
+    writes.py:320-328) instead of returning the raw state cell — a
+    documents_workers sigla's response now carries the derived worker_count
+    field, which the raw cell dict never has (it's never persisted)."""
+    hosp, sigla = "HPV", "charla"
+    folder = tmp_path / "ABRIL" / hosp / "4.-Charlas"
+    folder.mkdir(parents=True)
+    _make_pdf(folder / "2026-04-15_charla_big.pdf", 8)  # multi-page -> Pendiente
+
+    r = client.post("/api/sessions", json={"year": 2026, "month": 4})
+    assert r.status_code == 200, r.text
+    sid = r.json()["session_id"]
+    client.post(f"/api/sessions/{sid}/scan")
+
+    r2 = client.post(f"/api/sessions/{sid}/cells/{hosp}/{sigla}/apply-ratio", json={"n": 2})
+    assert r2.status_code == 200, r2.text
+    assert "worker_count" in r2.json()

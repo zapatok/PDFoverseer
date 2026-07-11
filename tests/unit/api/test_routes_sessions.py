@@ -105,6 +105,22 @@ def test_get_session_hides_op_suppressed_suspect(tmp_path):
     close_all()
 
 
+def test_create_session_clears_page_count_cache(client, monkeypatch, tmp_path):
+    """§B8.5: POST /sessions purges the module-level page-count cache — belt-
+    and-suspenders against the theoretical preserve_date staleness hole, and
+    caps its otherwise-unbounded cross-month growth."""
+    from api.routes.sessions._common import _PAGE_COUNT_CACHE
+
+    (tmp_path / "ABRIL").mkdir()
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    _PAGE_COUNT_CACHE["/some/stale/path.pdf"] = (123, 456, 7)
+    assert _PAGE_COUNT_CACHE  # sanity: seeded non-empty
+
+    response = client.post("/api/sessions", json={"year": 2026, "month": 4})
+    assert response.status_code in (200, 201)
+    assert _PAGE_COUNT_CACHE == {}
+
+
 def test_create_session(client, monkeypatch, tmp_path):
     # _resolve_month_dir requires INFORME_MENSUAL_ROOT to exist and contain a
     # month-named subfolder; open_session itself only stores month_root as a

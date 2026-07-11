@@ -378,7 +378,9 @@ def test_pase1_skips_human_held_cell(tmp_path, monkeypatch):
         cells = r3.json().get("cells", {})
         odi_cell = cells.get("HRB", {}).get("odi", {})
         # The cell should not have count=5 from the stub (it was skipped).
-        assert odi_cell.get("count") != 5, "apply_cell_result should have been skipped for HRB|odi"
+        assert odi_cell.get("count") != 5, (
+            "apply_filename_result should have been skipped for HRB|odi"
+        )
 
 
 def test_handler_self_lend_scans_launchers_own_cell(tmp_path):
