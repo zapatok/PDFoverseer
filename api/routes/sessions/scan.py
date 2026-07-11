@@ -650,7 +650,16 @@ def scan_ocr(
         finally:
             app.state.batches.pop(session_id, None)
 
-    handle.future = _DISPATCH_POOL.submit(_run)
+    # §B7: register_batch_handle installed the slot above; if submit itself
+    # raises (before _run's own finally ever gets a chance to run), the slot
+    # would otherwise stay registered forever — every later scan for this
+    # session 409s "another batch is already running" until the process
+    # restarts. Release it here and let the error propagate (honest 500).
+    try:
+        handle.future = _DISPATCH_POOL.submit(_run)
+    except Exception:
+        app.state.batches.pop(session_id, None)
+        raise
     return {"accepted": True, "total": len(cells_with_paths), "total_pdfs": total_pdfs}
 
 
@@ -788,5 +797,11 @@ def scan_file_ocr(
         finally:
             app.state.batches.pop(session_id, None)
 
-    handle.future = _DISPATCH_POOL.submit(_run)
+    # §B7: same leak fix as scan_ocr's dispatch — release the slot if submit
+    # itself raises, instead of leaving it registered forever.
+    try:
+        handle.future = _DISPATCH_POOL.submit(_run)
+    except Exception:
+        app.state.batches.pop(session_id, None)
+        raise
     return {"accepted": True, "filename": filename}

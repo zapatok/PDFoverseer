@@ -89,3 +89,25 @@ def test_scan_ocr_409_when_batch_already_running(client) -> None:
         assert r.status_code == 409
     finally:
         client.app.state.batches.pop(sid, None)
+
+
+def test_scan_ocr_releases_batch_handle_when_dispatch_fails(client, monkeypatch) -> None:
+    """§B7: a failed ``_DISPATCH_POOL.submit`` must not leak the batch slot —
+    the route propagates the error (an unhandled exception, not swallowed
+    into a 409), AND a second attempt must NOT 409 ("another batch is
+    already running") since the handle was released on the failed dispatch."""
+    import api.routes.sessions._common as common_mod
+
+    def _raise_submit(fn):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(common_mod._DISPATCH_POOL, "submit", _raise_submit)
+
+    sid = _open_and_scan(client)
+    with pytest.raises(RuntimeError):
+        client.post(f"/api/sessions/{sid}/scan-ocr", json={"cells": [["HPV", "odi"]]})
+    assert sid not in client.app.state.batches  # the slot must be released, not leaked
+
+    # A second attempt must fail the same way (submit still raises) — NOT 409.
+    with pytest.raises(RuntimeError):
+        client.post(f"/api/sessions/{sid}/scan-ocr", json={"cells": [["HPV", "odi"]]})

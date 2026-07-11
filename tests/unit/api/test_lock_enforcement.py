@@ -334,6 +334,37 @@ def test_scan_file_ocr_excludes_concurrent_batch_scan(tmp_path, monkeypatch):
         _await_batch_slot_free(app, sid)
 
 
+def test_scan_file_ocr_releases_batch_handle_when_dispatch_fails(tmp_path, monkeypatch):
+    """§B7: same leak fix for the single-file OCR dispatch site (scan.py's
+    second ``_DISPATCH_POOL.submit`` call) — a failed submit must not leave
+    the batch slot registered forever."""
+    monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
+    monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "b7_file_ocr.db"))
+    app = create_app()
+    with TestClient(app) as c:
+        mgr = app.state.manager
+        from pathlib import Path
+
+        sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
+        folder = tmp_path / "HRB" / "3.-ODI Visitas"
+        folder.mkdir(parents=True)
+        _make_pdf(folder / "a.pdf", 1)
+
+        import api.routes.sessions._common as common_mod
+
+        def _raise_submit(fn):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(common_mod._DISPATCH_POOL, "submit", _raise_submit)
+
+        with pytest.raises(RuntimeError):
+            c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr")
+        assert sid not in app.state.batches  # released, not leaked
+
+        with pytest.raises(RuntimeError):
+            c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr")
+
+
 def test_scan_file_ocr_cancel_stops_the_run_and_frees_the_slot(tmp_path, monkeypatch):
     """U6: POST /cancel cancels an in-flight single-file OCR — the merge never
     happens, and the batch registry slot frees for the next scan."""
