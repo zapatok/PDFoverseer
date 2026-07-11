@@ -226,6 +226,20 @@ def scan_cells_ocr(
                 }
             )
 
+        def _emit_pdf_page(hosp: str, sigla: str, page: int, pages_total: int) -> None:
+            # Progreso por página dentro del PDF en curso (throttleado en el
+            # worker). Los motores lo emiten desde sus hilos de OCR — on_progress
+            # solo agenda corutinas / difunde, seguro fuera del hilo principal.
+            on_progress(
+                {
+                    "type": "pdf_page_progress",
+                    "hospital": hosp,
+                    "sigla": sigla,
+                    "page": page,
+                    "pages_total": pages_total,
+                }
+            )
+
         for ct in cell_tuples:
             if cancel.cancelled:
                 on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})
@@ -233,7 +247,7 @@ def scan_cells_ocr(
             hosp, sigla, _, _ = ct
             cur_cell["h"], cur_cell["s"] = hosp, sigla
             on_progress({"type": "cell_scanning", "hospital": hosp, "sigla": sigla})
-            h, s, result, err = _ocr_worker(ct, on_pdf=_emit_pdf)
+            h, s, result, err = _ocr_worker(ct, on_pdf=_emit_pdf, on_pdf_page=_emit_pdf_page)
             if err == "cancelled":
                 on_progress({"type": "scan_cancelled", "scanned": scanned, "total": total})
                 return results
@@ -313,6 +327,10 @@ def scan_cells_ocr(
                         "near_matches": ev["near_matches"],
                     }
                 )
+            elif ev["type"] == "pdf_page_progress":
+                # Progreso por página del PDF en curso (throttleado en el worker) —
+                # se difunde tal cual: no toca estado, solo honestidad de la barra.
+                on_progress(ev)
             elif ev["type"] == "cell_meta":
                 # Finalización de celda — encolada por el worker tras todos sus
                 # pdf_done, así llega después de fusionar todo su per_file.

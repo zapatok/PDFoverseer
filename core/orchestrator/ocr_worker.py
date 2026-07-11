@@ -44,6 +44,7 @@ def _eta_ms(t0: float, done: int, total: int) -> int | None:
 def _ocr_worker(
     cell_tuple: tuple[str, str, str, list[str]],
     on_pdf: Callable[[str, int | None, str, list[dict]], None] | None = None,
+    on_pdf_page: Callable[[str, str, int, int], None] | None = None,
 ) -> tuple[str, str, ScanResult | None, str | None]:
     """Run OCR for a single cell. Runs in a worker subprocess (multi-worker
     path) or in-process (synchronous ``max_workers==1`` path).
@@ -52,6 +53,13 @@ def _ocr_worker(
     path) or, in the multi-worker path, via the cached IPC queue
     (``_WORKER_PROGRESS_Q``): the worker emits ``cell_started`` when the cell
     actually begins and ``pdf_done`` after each PDF is processed.
+
+    Page-level progress (``pdf_page_progress``): within each PDF the engine's
+    ``on_page`` counter is forwarded — throttled to one event per
+    ``PDF_PAGE_PROGRESS_MIN_INTERVAL_S`` (the final page always emits) — via
+    ``on_pdf_page(hospital, sigla, page_1based, pages_total)`` in the sync
+    path or the IPC queue in the multi-worker path. The engines emit from
+    their OCR worker threads under a lock; ``mp.Queue.put`` is thread-safe.
 
     On a transient failure the scan is retried up to ``OCR_RETRY_COUNT`` times
     with a short backoff (FASE 5 Feature 3). A cancelled token never triggers a
@@ -66,7 +74,11 @@ def _ocr_worker(
     from core.scanners.utils.cell_enumeration import (  # noqa: E402
         enumerate_cell_pdfs,
     )
-    from core.utils import OCR_RETRY_BACKOFF_S, OCR_RETRY_COUNT  # noqa: E402
+    from core.utils import (  # noqa: E402
+        OCR_RETRY_BACKOFF_S,
+        OCR_RETRY_COUNT,
+        PDF_PAGE_PROGRESS_MIN_INTERVAL_S,
+    )
 
     hosp, sigla, folder_str, skip_list = cell_tuple
     folder = Path(folder_str)
@@ -116,6 +128,40 @@ def _ocr_worker(
                 }
             )
 
+    # Resolve the page-progress sink (direct in sync path, queue in multi) and
+    # wrap it with the throttle. The engines call on_page from their OCR worker
+    # threads under a lock, so this closure runs serialized per PDF.
+    page_emit: Callable[[int, int], None] | None = None
+    if on_pdf_page is not None:
+
+        def page_emit(page: int, pages_total: int) -> None:
+            on_pdf_page(hosp, sigla, page, pages_total)
+
+    elif _WORKER_PROGRESS_Q is not None:
+
+        def page_emit(page: int, pages_total: int) -> None:  # noqa: F811
+            _WORKER_PROGRESS_Q.put(
+                {
+                    "type": "pdf_page_progress",
+                    "hospital": hosp,
+                    "sigla": sigla,
+                    "page": page,
+                    "pages_total": pages_total,
+                }
+            )
+
+    page_cb: Callable[[int, int], None] | None = None
+    if page_emit is not None:
+        last_emit = [0.0]
+
+        def page_cb(done_0based: int, pages_total: int) -> None:
+            page = done_0based + 1
+            now = time.perf_counter()
+            if page < pages_total and now - last_emit[0] < PDF_PAGE_PROGRESS_MIN_INTERVAL_S:
+                return
+            last_emit[0] = now
+            page_emit(page, pages_total)
+
     fn = getattr(scanner, "count_ocr", None)
     if fn is None:
         # No OCR technique for this sigla (scan_strategy "none", e.g. reunion):
@@ -161,7 +207,7 @@ def _ocr_worker(
         if token.cancelled:
             return (hosp, sigla, None, "cancelled")
         try:
-            result = fn(folder, cancel=token, on_pdf=retry_pdf_cb, skip=skip)
+            result = fn(folder, cancel=token, on_pdf=retry_pdf_cb, skip=skip, on_page=page_cb)
             return _finish(result)
         except CancelledError:
             return (hosp, sigla, None, "cancelled")

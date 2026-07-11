@@ -20,7 +20,7 @@ def test_orchestrator_invokes_anchors_scanner_count_ocr(tmp_path: Path, monkeypa
 
     called = {"value": False}
 
-    def fake_count_ocr(self, folder, *, cancel, on_pdf=None, skip=None):
+    def fake_count_ocr(self, folder, *, cancel, on_pdf=None, skip=None, on_page=None):
         called["value"] = True
         from core.scanners.base import ConfidenceLevel, ScanResult
 

@@ -1025,15 +1025,32 @@ export const useSessionStore = create((set, get) => ({
         set({ scanProgress: { done: 0, total: event.total_pdfs, unit: "pdf" } });
         break;
       case "pdf_progress":
-        set({
+        // Un PDF terminó: limpia el detalle de página del PDF anterior (el
+        // próximo pdf_page_progress lo repone para el archivo siguiente).
+        set((s) => ({
           scanProgress: {
+            ...(s.scanProgress || {}),
             done: event.done,
             total: event.total,
             pdfName: event.pdf_name,
             etaMs: event.eta_ms,
             unit: "pdf",
+            page: null,
+            pagesTotal: null,
           },
-        });
+        }));
+        break;
+      case "pdf_page_progress":
+        // Detalle honesto dentro del PDF en curso (throttleado en el backend):
+        // "pág X/Y" — un compilado de 2700 páginas ya no parece colgado.
+        set((s) => ({
+          scanProgress: {
+            ...(s.scanProgress || { done: 0, total: 0, unit: "pdf" }),
+            page: event.page,
+            pagesTotal: event.pages_total,
+            pageCell: `${event.hospital}|${event.sigla}`,
+          },
+        }));
         break;
       case "scan_progress":
         // Legacy cell-granularity progress — superseded by pdf_progress

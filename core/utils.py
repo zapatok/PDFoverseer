@@ -27,6 +27,10 @@ OCR_PAGE_THREADS = int(os.getenv("OVERSEER_OCR_THREADS", "0")) or max(
     1, min(6, (os.cpu_count() or 4) - 2)
 )
 
+# Throttle de los eventos pdf_page_progress del batch (un PDF de 2700 páginas
+# no debe emitir 2700 mensajes por el WS). La última página siempre se emite.
+PDF_PAGE_PROGRESS_MIN_INTERVAL_S = 0.3
+
 # OCR auto-retry (FASE 5) — el orquestador reintenta un scan de celda fallido
 # en silencio antes de reportar el error.
 OCR_RETRY_COUNT = 2  # reintentos tras el intento inicial (3 intentos totales)

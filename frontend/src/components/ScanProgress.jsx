@@ -12,7 +12,7 @@ export default function ScanProgress() {
 
   if (!scanProgress) return null;
 
-  const { done, total, etaMs, terminal, pdfName } = scanProgress;
+  const { done, total, etaMs, terminal, pdfName, page, pagesTotal } = scanProgress;
   // Default skipped to [] OUTSIDE the selector to avoid Zustand v5 fresh-literal footgun.
   const skipped = scanProgress.skipped ?? [];
   const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
@@ -56,6 +56,13 @@ export default function ScanProgress() {
         {pdfName && !terminal && (
           <span className="text-xs text-po-text-muted truncate max-w-[180px]" title={pdfName}>
             {pdfName}
+          </span>
+        )}
+        {page != null && pagesTotal != null && !terminal && (
+          // Página en curso del PDF que se está escaneando (pdf_page_progress):
+          // el nombre de arriba es el último PDF TERMINADO, por eso va aparte.
+          <span className="text-xs tabular-nums text-po-text-muted whitespace-nowrap">
+            pág. {page}/{pagesTotal}
           </span>
         )}
         <Badge variant="neutral" className="ml-auto">{done}/{total}</Badge>

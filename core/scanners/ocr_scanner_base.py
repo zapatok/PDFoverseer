@@ -106,11 +106,15 @@ class OcrScannerBase:
             only: Scope the scan to a single filename (per-file re-scan).
             skip: Filenames to NOT scan — already reliable (R1/manual/prior OCR).
             on_page: Optional per-page callback forwarded to the engine. Contract
-                (U7, unified across both engines): ``on_page(idx_0based, total)``,
-                called BEFORE each page is processed — matches
-                ``header_band_anchors.count_covers_by_anchors`` and
+                (U7, unified across both engines): ``on_page(done_0based, total)``
+                — a 0-based monotonic completed-pages counter, emitted under a
+                lock as pages finish (the engines OCR pages on worker threads;
+                the counter sequence is 0..total-1 in both execution modes) —
+                matches ``header_band_anchors.count_covers_by_anchors`` and
                 ``pagination_count.count_documents_by_pagination``. A caller
-                rendering "page N of M" should use ``idx_0based + 1``.
+                rendering "page N of M" should use ``done_0based + 1``. NOTE:
+                the callback may fire from an engine worker thread — keep it
+                small and thread-safe.
 
         Returns:
             A ``ScanResult`` summing the per-PDF counts, with method

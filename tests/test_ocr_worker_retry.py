@@ -12,7 +12,7 @@ class _FlakyScanner:
         self.fail_times = fail_times
         self.calls = 0
 
-    def count_ocr(self, folder, *, cancel, on_pdf=None, skip=None):
+    def count_ocr(self, folder, *, cancel, on_pdf=None, skip=None, on_page=None):
         self.calls += 1
         if self.calls <= self.fail_times:
             raise RuntimeError("transient tesseract crash")
@@ -58,7 +58,7 @@ def test_retry_does_not_double_tick_on_pdf(monkeypatch):
         def __init__(self):
             self.calls = 0
 
-        def count_ocr(self, folder, *, cancel, on_pdf=None, skip=None):
+        def count_ocr(self, folder, *, cancel, on_pdf=None, skip=None, on_page=None):
             self.calls += 1
             for name in ("a.pdf", "b.pdf", "c.pdf"):
                 if on_pdf is not None:
@@ -87,7 +87,7 @@ def test_cancelled_does_not_retry(monkeypatch):
         def __init__(self):
             self.calls = 0
 
-        def count_ocr(self, folder, *, cancel, on_pdf=None, skip=None):
+        def count_ocr(self, folder, *, cancel, on_pdf=None, skip=None, on_page=None):
             self.calls += 1
             raise CancelledError()
 
@@ -98,3 +98,82 @@ def test_cancelled_does_not_retry(monkeypatch):
 
     assert err == "cancelled"
     assert scanner.calls == 1  # sin reintento
+
+
+def test_page_progress_forwarded_and_throttled(monkeypatch):
+    """pdf_page_progress (2026-07-10): el worker reenvía el contador on_page del
+    motor vía on_pdf_page(hosp, sigla, pág_1based, total) — throttleado (una
+    emisión por intervalo mínimo) pero SIEMPRE emitiendo la última página."""
+
+    class _PagedScanner:
+        def count_ocr(self, folder, *, cancel, on_pdf=None, skip=None, on_page=None):
+            for i in range(3):  # 3 páginas seguidas, muy por debajo del intervalo
+                on_page(i, 3)
+            return "OK_RESULT"
+
+    _setup(monkeypatch, _PagedScanner())
+    monkeypatch.setattr(ocr_worker, "_WORKER_PROGRESS_Q", None)
+    seen = []
+    h, s, result, err = ocr_worker._ocr_worker(
+        ("HRB", "art", "/tmp/x", []),
+        on_pdf_page=lambda h2, s2, page, total: seen.append((h2, s2, page, total)),
+    )
+    assert err is None
+    # pág 1 emite (primera), pág 2 se suprime (< intervalo), pág 3 emite (final).
+    assert seen == [("HRB", "art", 1, 3), ("HRB", "art", 3, 3)]
+
+
+def test_page_progress_via_queue_when_no_direct_callback(monkeypatch):
+    """Camino multi-worker: sin on_pdf_page directo, las páginas viajan por la
+    cola IPC como eventos pdf_page_progress con la identidad de la celda."""
+
+    class _Q:
+        def __init__(self):
+            self.items = []
+
+        def put(self, item):
+            self.items.append(item)
+
+    class _FakeConfidence:
+        value = "high"
+
+    class _FakeResult:
+        # Con la cola IPC activa, _finish() serializa el resultado vía
+        # _cell_done_meta — el fake debe exponer esos atributos o el worker
+        # interpreta el AttributeError como fallo transitorio y REINTENTA
+        # (duplicando los eventos de página).
+        count = 2
+        method = "pagination"
+        confidence = _FakeConfidence()
+        duration_ms = 1
+        flags = []
+        errors = []
+        breakdown = None
+
+    class _PagedScanner:
+        def count_ocr(self, folder, *, cancel, on_pdf=None, skip=None, on_page=None):
+            on_page(0, 2)
+            on_page(1, 2)
+            return _FakeResult()
+
+    q = _Q()
+    _setup(monkeypatch, _PagedScanner())
+    monkeypatch.setattr(ocr_worker, "_WORKER_PROGRESS_Q", q)
+    ocr_worker._ocr_worker(("HPV", "odi", "/tmp/x", []))
+    pages = [e for e in q.items if e["type"] == "pdf_page_progress"]
+    assert pages == [
+        {
+            "type": "pdf_page_progress",
+            "hospital": "HPV",
+            "sigla": "odi",
+            "page": 1,
+            "pages_total": 2,
+        },
+        {
+            "type": "pdf_page_progress",
+            "hospital": "HPV",
+            "sigla": "odi",
+            "page": 2,
+            "pages_total": 2,
+        },
+    ]
