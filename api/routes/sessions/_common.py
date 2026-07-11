@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -125,18 +126,40 @@ def file_origin(
     return "R1"
 
 
+# Page counts keyed by absolute path, invalidated by (st_mtime_ns, st_size).
+# The corpus is read-only during a counting session (paso-1 rewrites files
+# between months → the stat signature changes → that file re-reads), so this
+# turns the per-request "open every PDF" cost of the files endpoint — ~0.75 s
+# measured on HPV|art's 1,300 files, paid again on EVERY save via filesTick —
+# into a stat() sweep (~tens of ms). Failed reads (0) are NOT cached: they
+# retry on the next request.
+_PAGE_COUNT_CACHE: dict[str, tuple[int, int, int]] = {}
+_PAGE_COUNT_CACHE_LOCK = threading.Lock()
+
+
 def cell_page_counts(folder: Path) -> dict[str, int]:
     """Lazy per-file page counts for a cell's folder: {pdf.name: page_count}.
-    0 when a PDF can't be opened. Today reads from disk; the Incr-J persistence
-    (per_file_pages) would slot in here without touching callers.
+    0 when a PDF can't be opened. Reads from disk through a stat-invalidated
+    module cache; the Incr-J persistence (per_file_pages) would slot in here
+    without touching callers.
     """
     if not folder.exists():
         return {}  # missing folder → no pages (callers treat as unknowable, never throw)
     out: dict[str, int] = {}
     for pdf in sorted(folder.rglob("*.pdf")):
         try:
+            st = pdf.stat()
+            key = str(pdf)
+            with _PAGE_COUNT_CACHE_LOCK:
+                hit = _PAGE_COUNT_CACHE.get(key)
+            if hit is not None and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
+                out[pdf.name] = hit[2]
+                continue
             with fitz.open(pdf) as doc:
-                out[pdf.name] = doc.page_count
+                pages = doc.page_count
+            with _PAGE_COUNT_CACHE_LOCK:
+                _PAGE_COUNT_CACHE[key] = (st.st_mtime_ns, st.st_size, pages)
+            out[pdf.name] = pages
         except Exception:  # noqa: BLE001 — any fitz/IO failure → unreadable (0)
             out[pdf.name] = 0
     return out
