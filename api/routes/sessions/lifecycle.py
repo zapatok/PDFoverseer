@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.state import SessionManager
 from core.scanners.patterns import count_type_for
@@ -21,18 +22,31 @@ from ._common import (
 router = APIRouter()
 
 
+class OpenSessionRequest(BaseModel):
+    """Body for opening/returning a session (§B6, 2026-07-11).
+
+    Joins the ``extra="forbid"`` doctrine the rest of the write surface
+    follows, and bounds ``year``/``month`` so a typo can't mint an orphan
+    session row (``_validate_session_id`` would reject its id downstream, but
+    only after ``open_session`` already wrote it). Decision: the missing/out-
+    of-range 400 this used to return is now a 422 validation error, consistent
+    with every other forbid-guarded endpoint.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    year: int = Field(ge=2020, le=2100)
+    month: int = Field(ge=1, le=12)
+
+
 @router.post("/sessions")
 def create(
-    body: dict = Body(...),
+    body: OpenSessionRequest,
     mgr: SessionManager = Depends(get_manager),
 ) -> dict:
     """Open or return an existing session for ``(year, month)``."""
-    year = body.get("year")
-    month = body.get("month")
-    if not isinstance(year, int) or not isinstance(month, int):
-        raise HTTPException(400, "year and month required (integers)")
-    month_dir = _resolve_month_dir(year, month)
-    return mgr.open_session(year=year, month=month, month_root=month_dir)
+    month_dir = _resolve_month_dir(body.year, body.month)
+    return mgr.open_session(year=body.year, month=body.month, month_root=month_dir)
 
 
 @router.get("/sessions/{session_id}")

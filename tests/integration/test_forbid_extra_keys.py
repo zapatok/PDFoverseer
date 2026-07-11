@@ -111,6 +111,24 @@ def test_scan_unknown_key_422(client, session_with_pending_cell):
     assert r.status_code == 422, r.text
 
 
+def test_create_session_unknown_key_422(client):
+    """§B6: POST /sessions joins the extra=forbid surface."""
+    r = client.post("/api/sessions", json={"year": 2026, "month": 4, "bogus": 1})
+    assert r.status_code == 422, r.text
+
+
+def test_create_session_year_out_of_range_422(client):
+    """§B6: year must be in [2020, 2100] — no orphan session rows from a typo."""
+    r = client.post("/api/sessions", json={"year": 99999, "month": 4})
+    assert r.status_code == 422, r.text
+
+
+def test_create_session_month_out_of_range_422(client):
+    """§B6: month must be in [1, 12]."""
+    r = client.post("/api/sessions", json={"year": 2026, "month": 13})
+    assert r.status_code == 422, r.text
+
+
 def test_reorg_create_unknown_key_422(client, session_with_pending_cell):
     sid, hosp, sigla = session_with_pending_cell
     # source MUST carry hospital/sigla (ReorgSource requires them, no default)
