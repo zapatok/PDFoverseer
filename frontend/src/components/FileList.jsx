@@ -11,6 +11,7 @@ import OriginChip from "./OriginChip";
 import PresenceBadge from "./PresenceBadge";
 import { fileCountDisplay } from "../lib/file-origin";
 import { countDiffersFromPages, FILTER_ORIGINS, matchesFilters } from "../lib/file-filters";
+import { computeWindow } from "../lib/list-window";
 import { hasOverride, isCappedCountType, perFileCountEditable } from "../lib/cell-status";
 import { SIGLAS } from "../lib/sigla-labels";
 import { DEFAULT_ROTATION_DEG, ROTATION_OPTIONS } from "../lib/rotation-options";
@@ -19,6 +20,12 @@ import { getParticipantId } from "../lib/identity";
 
 // Known hospitals in canonical order.
 const HOSPITALS = ["HPV", "HRB", "HLU", "HLL"];
+
+// Virtualización (celdas art: ~1,300 archivos). La fila se PINNEA a ROW_H px
+// (contenido de una línea, centrado vertical) para que la geometría de la
+// ventana sea exacta; ver lib/list-window.js.
+const ROW_H = 40;
+const ROW_OVERSCAN = 8;
 
 /**
  * Compact popover menu for creating a whole-file reorg op.
@@ -227,6 +234,9 @@ export default function FileList({ hospital, sigla }) {
   const listRef = useRef(null);
   const savedScrollRef = useRef(null);
   const prevCellKeyRef = useRef(null);
+  // Virtualización: la ventana visible se deriva del scrollTop (estado, no
+  // ref — cada frame de scroll re-renderiza el slice, ~30 filas, barato).
+  const [listScrollTop, setListScrollTop] = useState(0);
 
   useEffect(() => {
     if (!session?.session_id || !hospital || !sigla) {
@@ -256,11 +266,16 @@ export default function FileList({ hospital, sigla }) {
   }, [session?.session_id, hospital, sigla, tick]);
 
   // Restore the pre-refetch scroll position once the new <ul> is mounted.
+  // Also sync the virtualization window (listScrollTop) with whatever position
+  // the list actually has: the restored offset on an E1 refetch, or 0 on a
+  // fresh mount after a cell change — otherwise the window would render the
+  // wrong slice until the first scroll event.
   useLayoutEffect(() => {
     if (savedScrollRef.current != null && listRef.current) {
       listRef.current.scrollTop = savedScrollRef.current;
       savedScrollRef.current = null;
     }
+    if (listRef.current) setListScrollTop(listRef.current.scrollTop);
   }, [files]);
 
   // Fetch sigla scan-info to determine if page-cap applies (Incr 2).
@@ -319,6 +334,18 @@ export default function FileList({ hospital, sigla }) {
   // Stable order — files keep the backend's folder/filename order so a row stays
   // put where the operator acts on it (no reordering on edit).
   const filtered = files.filter((f) => matchesFilters(f, search, activeOrigins));
+
+  // Ventana virtual: solo se montan las filas visibles + overscan. El viewport
+  // se estima desde max-h-[60vh] (leer clientHeight en render no es confiable
+  // en el primer mount); el overscan absorbe la diferencia.
+  const win = computeWindow(
+    listScrollTop,
+    Math.ceil(window.innerHeight * 0.6),
+    ROW_H,
+    filtered.length,
+    ROW_OVERSCAN,
+  );
+  const visibleRows = filtered.slice(win.start, win.end);
 
   return (
     <div className="rounded-xl bg-po-panel border border-po-border overflow-hidden">
@@ -387,11 +414,17 @@ export default function FileList({ hospital, sigla }) {
           );
         })}
       </div>
-      <ul ref={listRef} className="max-h-[60vh] overflow-y-auto">
-        {filtered.map((f, i) => (
+      <ul
+        ref={listRef}
+        onScroll={(e) => setListScrollTop(e.currentTarget.scrollTop)}
+        className="max-h-[60vh] overflow-y-auto"
+      >
+        {win.topPad > 0 && <li aria-hidden style={{ height: win.topPad }} />}
+        {visibleRows.map((f, i) => (
           <li
-            key={`${f.name}-${i}`}
-            className="grid grid-cols-[minmax(0,1fr)_3rem_1.25rem_6.5rem_5.5rem_2rem] items-center gap-2 px-3 py-2 hover:bg-po-panel-hover transition"
+            key={`${f.name}-${win.start + i}`}
+            style={{ height: ROW_H }}
+            className="grid grid-cols-[minmax(0,1fr)_3rem_1.25rem_6.5rem_5.5rem_2rem] items-center gap-2 px-3 hover:bg-po-panel-hover transition"
           >
             {/* icon + name — the lightbox trigger; name scrolls horizontally */}
             <button
@@ -509,6 +542,7 @@ export default function FileList({ hospital, sigla }) {
             </div>
           </li>
         ))}
+        {win.bottomPad > 0 && <li aria-hidden style={{ height: win.bottomPad }} />}
       </ul>
       <div className="px-3 py-2 text-xs text-po-text-muted border-t border-po-border">
         {filtered.length} de {files.length}
