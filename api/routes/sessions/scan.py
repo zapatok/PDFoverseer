@@ -345,7 +345,9 @@ def _handle_scan_progress(
 
     if etype == "cell_scanning":
         ctx["current_cell_skipped"] = False  # reset first; the skip path below overwrites to True
-        holder = mgr.agent_claim_cell(session_id, h, s)
+        # Self-lend: the launcher's own hold is borrowed (their panel goes
+        # read-only + Bot badge while the cell scans); anyone else's hold skips.
+        holder = mgr.agent_claim_cell(session_id, h, s, lend_from=ctx.get("launcher_id"))
         if holder is not None:
             ctx["skipped_set"].add((h, s))
             ctx["skipped_cells"].append({"hospital": h, "sigla": s})
@@ -404,11 +406,12 @@ class ScanOcrRequest(BaseModel):
     Mirrors the raw dict keys the handler read today via ``body.get(...)``:
     ``cells`` (the only key actually read; default ``None`` behaves the same as
     the old ``.get("cells", [])`` default — both fail the handler's
-    ``isinstance(cells_pairs, list)`` check and 400). ``participant_id`` is kept
-    for parity with the other M3b-aware bodies (``ApplyRatioRequest`` /
-    ``ScanFileOcrRequest``) though this handler doesn't consume it today — the
-    OCR batch always acts as the fixed Claude agent identity internally
-    (``_handle_scan_progress``), never a per-request participant.
+    ``isinstance(cells_pairs, list)`` check and 400). ``participant_id``
+    identifies the LAUNCHER for the self-lend policy (2026-07-10): a cell held
+    by that same participant is borrowed (scanned with the agent as editor)
+    instead of skipped; any other human's hold still skips. The batch still
+    acts as the fixed Claude agent identity internally
+    (``_handle_scan_progress``).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -492,6 +495,9 @@ def scan_ocr(
         "skipped_cells": [],
         "agent_active": False,
         "current_cell_skipped": False,
+        # Self-lend: the launcher's own per-cell hold is borrowed instead of
+        # skipped (None for legacy clients that send no participant_id).
+        "launcher_id": body.participant_id,
     }
 
     def _safe_broadcast(event: dict) -> None:

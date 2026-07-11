@@ -150,7 +150,9 @@ export const useSessionStore = create((set, get) => ({
       if (!ok) return;
     }
     try {
-      const resp = await api.scanOcr(sessionId, cellPairs);
+      // participant_id: auto-préstamo — la celda que TÚ tienes abierta se
+      // escanea igual (pasa a solo-lectura con el badge del bot mientras dura).
+      const resp = await api.scanOcr(sessionId, cellPairs, getParticipantId());
       // Size the bar from the real PDF count (audit #1); scan_started will
       // confirm it over the WS moments later.
       set({ scanProgress: { done: 0, total: resp?.total_pdfs ?? 0, unit: "pdf" } });

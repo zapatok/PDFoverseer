@@ -374,3 +374,49 @@ def test_pase1_skips_human_held_cell(tmp_path, monkeypatch):
         odi_cell = cells.get("HRB", {}).get("odi", {})
         # The cell should not have count=5 from the stub (it was skipped).
         assert odi_cell.get("count") != 5, "apply_cell_result should have been skipped for HRB|odi"
+
+
+def test_handler_self_lend_scans_launchers_own_cell(tmp_path):
+    """Auto-préstamo (2026-07-10): la celda que el LANZADOR del scan tiene
+    abierta NO se salta — el agente la toma (lanzador demote a viewer, badge
+    del bot vía presence) y el cell_scanning pasa normal."""
+    mgr = _make_manager(tmp_path)
+    sid = "2026-04"
+    _register_human(mgr, sid, pid="human-1", name="Daniel", color="#a")
+    mgr.presence_focus(sid, "human-1", "HRB|odi")
+
+    out: list[dict] = []
+    ctx = _new_ctx()
+    ctx["launcher_id"] = "human-1"
+
+    _handle_scan_progress(
+        mgr, sid, {"type": "cell_scanning", "hospital": "HRB", "sigla": "odi"}, ctx, out.append
+    )
+
+    assert [e["type"] for e in out] == ["presence", "cell_scanning"]
+    assert ctx["skipped_set"] == set()
+    snap = {p["participant_id"]: p for p in out[0]["participants"]}
+    assert snap["human-1"]["mode"] == "viewer"
+    assert snap[AGENT_PARTICIPANT_ID]["mode"] == "editor"
+    assert snap[AGENT_PARTICIPANT_ID]["focused_cell"] == "HRB|odi"
+
+
+def test_handler_self_lend_never_borrows_someone_elses_cell(tmp_path):
+    """Con launcher_id ajeno al holder (Carla edita, Daniel lanza) el skip M3b
+    queda intacto."""
+    mgr = _make_manager(tmp_path)
+    sid = "2026-04"
+    _register_human(mgr, sid, pid="carla", name="Carla", color="#b")
+    mgr.presence_focus(sid, "carla", "HRB|odi")
+
+    out: list[dict] = []
+    ctx = _new_ctx()
+    ctx["launcher_id"] = "daniel"
+
+    _handle_scan_progress(
+        mgr, sid, {"type": "cell_scanning", "hospital": "HRB", "sigla": "odi"}, ctx, out.append
+    )
+
+    assert [e["type"] for e in out] == ["cell_skipped"]
+    assert out[0]["lock_holder"]["participant_id"] == "carla"
+    assert ("HRB", "odi") in ctx["skipped_set"]

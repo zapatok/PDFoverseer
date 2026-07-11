@@ -260,3 +260,57 @@ def test_agent_set_note_claims_free_cell(tmp_path):
     holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
     assert holder is not None
     assert holder["participant_id"] == AGENT_PARTICIPANT_ID
+
+
+# ── Self-lend (2026-07-10): the scan launcher's own hold is borrowed ─────────
+
+
+def test_agent_claim_lend_from_holder_claims_and_demotes(tmp_path):
+    """lend_from == the holder: the launcher yields editorship — the agent claims
+    (returns None), the human drops to viewer, and the agent is the editor."""
+    mgr = _make_manager(tmp_path)
+    mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
+    mgr.presence_focus("2026-04", "p1", "HRB|odi")
+
+    result = mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from="p1")
+
+    assert result is None
+    snap = {p["participant_id"]: p for p in mgr.presence_snapshot("2026-04")}
+    assert snap["p1"]["mode"] == "viewer"
+    assert snap[AGENT_PARTICIPANT_ID]["mode"] == "editor"
+    assert snap[AGENT_PARTICIPANT_ID]["focused_cell"] == "HRB|odi"
+
+
+def test_agent_claim_lend_from_other_participant_still_skips(tmp_path):
+    """lend_from != the holder (Carla protection): unchanged M3b skip."""
+    mgr = _make_manager(tmp_path)
+    mgr.presence_heartbeat("2026-04", "p2", name="Carla", color="#b")
+    mgr.presence_focus("2026-04", "p2", "HRB|odi")
+
+    holder = mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from="p1")
+
+    assert holder is not None
+    assert holder["participant_id"] == "p2"
+    snap = {p["participant_id"]: p for p in mgr.presence_snapshot("2026-04")}
+    assert snap["p2"]["mode"] == "editor"
+    assert AGENT_PARTICIPANT_ID not in snap
+
+
+def test_agent_claim_lend_from_none_keeps_legacy_skip(tmp_path):
+    """No participant_id in the request (legacy client) → strict M3b behavior."""
+    mgr = _make_manager(tmp_path)
+    mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
+    mgr.presence_focus("2026-04", "p1", "HRB|odi")
+
+    holder = mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from=None)
+
+    assert holder is not None
+    assert holder["participant_id"] == "p1"
+
+
+def test_agent_claim_lend_from_free_cell_is_plain_claim(tmp_path):
+    """lend_from on a FREE cell must not break the normal claim."""
+    mgr = _make_manager(tmp_path)
+    assert mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from="p1") is None
+    holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
+    assert holder is not None and holder["participant_id"] == AGENT_PARTICIPANT_ID

@@ -154,6 +154,20 @@ class PresenceRegistry:
             return True
         return changed
 
+    def demote_to_viewer(self, session_id: str, cell: str, participant_id: str) -> bool:
+        """Drop ``participant_id`` from editor to viewer on ``cell`` (lock lend).
+
+        Used only by the self-lend path (``SessionManager.agent_claim_cell`` with
+        ``lend_from``): the scan launcher voluntarily yields their own editorship
+        so the agent's claim can win. Caller holds the RLock. Returns True iff
+        the record changed.
+        """
+        rec = self._participants.get(session_id, {}).get(participant_id)
+        if rec is None or rec["focused_cell"] != cell or rec["mode"] != "editor":
+            return False
+        rec["mode"] = "viewer"
+        return True
+
     def _editor_of(self, session_id: str, cell: str, exclude: str | None = None) -> str | None:
         """participant_id of the live editor of `cell`, or None. Caller purges first."""
         for pid, r in self._participants.get(session_id, {}).items():

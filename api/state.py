@@ -929,7 +929,9 @@ class SessionManager:
         return self._presence.lock_holder(session_id, cell, exclude=exclude)
 
     @_synchronized
-    def agent_claim_cell(self, session_id: str, hospital: str, sigla: str) -> dict | None:
+    def agent_claim_cell(
+        self, session_id: str, hospital: str, sigla: str, lend_from: str | None = None
+    ) -> dict | None:
         """Atomic claim for the Claude scanner/agent (M3b).
 
         Returns the human holder dict if the cell is held by a DIFFERENT
@@ -937,10 +939,18 @@ class SessionManager:
         agent and returns None. Running under the single RLock guarantees no
         TOCTOU between the check and the claim.
 
+        Self-lend (2026-07-10): with ``lend_from`` set, a cell held by exactly
+        that participant is NOT a conflict — the launcher of the scan yields
+        their own editorship (demoted to viewer) and the agent claims. Their UI
+        goes read-only with the Bot badge for the duration, exactly as if
+        another participant were editing; anyone ELSE's hold still skips.
+
         Args:
             session_id: Target session identifier (e.g. ``"2026-04"``).
             hospital: Hospital code (e.g. ``"HRB"``).
             sigla: Category code (e.g. ``"odi"``).
+            lend_from: participant_id whose own hold may be borrowed (the scan
+                launcher), or None for the strict M3b behavior.
 
         Returns:
             None if the claim succeeded; the holder's public-fields dict if the
@@ -949,7 +959,9 @@ class SessionManager:
         cell = f"{hospital}|{sigla}"
         holder = self._presence.lock_holder(session_id, cell, exclude=AGENT_PARTICIPANT_ID)
         if holder is not None:
-            return holder
+            if lend_from is None or holder.get("participant_id") != lend_from:
+                return holder
+            self._presence.demote_to_viewer(session_id, cell, lend_from)
         self._presence.agent_focus(session_id, cell)
         return None
 

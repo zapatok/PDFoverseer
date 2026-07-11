@@ -50,11 +50,13 @@ export const api = {
       body: JSON.stringify({}),
     }).then(jsonOrThrowStructured),
 
-  scanOcr: (sessionId, cells) =>
+  scanOcr: (sessionId, cells, participantId = null) =>
+    // participant_id = el LANZADOR: el backend presta su propio lock de celda
+    // al escáner (auto-préstamo) en vez de saltarla como "en edición".
     fetch(`${BASE}/sessions/${sessionId}/scan-ocr`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cells }),
+      body: JSON.stringify({ cells, participant_id: participantId }),
     }).then(jsonOrThrow),
 
   cancelScan: (sessionId) =>
