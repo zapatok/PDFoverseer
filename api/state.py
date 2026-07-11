@@ -729,6 +729,65 @@ class SessionManager:
         update_session_state(self._conn, session_id, state_json=json.dumps(state))
 
     @_synchronized
+    def recompute_all_reliable(
+        self,
+        session_id: str,
+        hospital: str,
+        sigla: str,
+        folder: Path,
+        *,
+        pages: dict[str, int] | None = None,
+        count_type: str | None = None,
+    ) -> bool:
+        """Atomically recompute + persist ``all_reliable`` (§B4).
+
+        Load→compute→persist happens in ONE ``_load_and_migrate`` →
+        ``update_session_state`` round trip, all under the single RLock — the old
+        two-call ``get_session_state`` + ``set_all_reliable`` released the lock
+        between the read and the write, so a concurrent mutation could interleave
+        and get clobbered by a stale compute (the same race class F4 closed for
+        reorg deltas).
+
+        The anti-colados gate (§4.5) lives HERE, not in the caller: an OPEN,
+        COUNTED suspect blocks the green dot even when every file is otherwise
+        settled. This is the single producer of ``all_reliable`` — callers
+        (``_common.refresh_all_reliable``) delegate to it unchanged.
+
+        Args:
+            session_id: target session.
+            hospital: hospital code.
+            sigla: category code.
+            folder: the cell's resolved category folder — forwarded to
+                ``compute_settled`` for the (rare) caller that has not
+                precomputed ``pages``; pass it even when ``pages`` is given.
+            pages: precomputed ``{filename: page_count}``. Callers should
+                resolve this via disk I/O BEFORE acquiring the lock (the whole
+                point of threading it through) — pass ``None`` only when the
+                caller genuinely has no precomputed pages.
+            count_type: the cell's count_type (checks cells settle on
+                ``worker_status`` instead of per-file provenance).
+
+        Returns:
+            The freshly-computed, persisted ``all_reliable`` value.
+        """
+        # Local import: avoids the api.state <-> api.routes.sessions._common
+        # import cycle (_common imports SessionManager/compute_cell_count from
+        # this module at its own module level).
+        from api.routes.sessions._common import compute_settled
+
+        state, _ = self._load_and_migrate(session_id)
+        cell = state.setdefault("cells", {}).setdefault(hospital, {}).setdefault(sigla, {})
+        reorg_ops = state.get("reorg_ops") or []
+        blocked = has_open_counted_suspects(
+            cell.get("colado_suspects") or [], reorg_ops, hospital, sigla
+        )
+        settled = compute_settled(cell, folder, pages=pages, count_type=count_type)
+        value = settled and not blocked
+        cell["all_reliable"] = value
+        update_session_state(self._conn, session_id, state_json=json.dumps(state))
+        return value
+
+    @_synchronized
     def add_reorg_op(self, session_id: str, op: dict) -> dict:
         """Append a reorg op with a stable, monotonic id (``op_NNN``).
 

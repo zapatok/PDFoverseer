@@ -24,7 +24,7 @@ from api.state import SessionManager, compute_cell_count, compute_worker_count
 from core.domain import CATEGORY_FOLDERS, HOSPITALS, SIGLAS, folder_to_sigla
 from core.orchestrator import _find_category_folder
 from core.scanners.patterns import count_type_for
-from core.scanners.utils.colado_guard import has_open_counted_suspects, open_suspects
+from core.scanners.utils.colado_guard import open_suspects
 
 logger = logging.getLogger(__name__)
 
@@ -324,19 +324,15 @@ def refresh_all_reliable(
     Pass ``count_type`` so checks cells (maquinaria) settle on worker_status.
 
     This is the single chokepoint every interactive write (override/per-file/
-    worker/note) and both OCR completions funnel through, so the anti-colados
-    gate (§4.5 — an open COUNTED suspect blocks green) lives here once.
+    worker/note) and both OCR completions funnel through. Thin delegation to
+    the atomic ``SessionManager.recompute_all_reliable`` (§B4): that does ONE
+    load→compute→persist under the single RLock (the anti-colados §4.5 gate —
+    an open COUNTED suspect blocks green — lives inside it), so a concurrent
+    write can't interleave with a stale compute. This wrapper's public
+    signature is unchanged for its callers.
     """
-    state = mgr.get_session_state(session_id)
-    cell = state["cells"][hospital][sigla]
-    blocked = has_open_counted_suspects(
-        cell.get("colado_suspects") or [], state.get("reorg_ops") or [], hospital, sigla
-    )
-    mgr.set_all_reliable(
-        session_id,
-        hospital,
-        sigla,
-        compute_settled(cell, folder, pages=pages, count_type=count_type) and not blocked,
+    mgr.recompute_all_reliable(
+        session_id, hospital, sigla, folder, pages=pages, count_type=count_type
     )
 
 
