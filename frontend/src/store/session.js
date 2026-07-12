@@ -99,7 +99,11 @@ export const useSessionStore = create((set, get) => ({
       }
       // Nota: _visHandler solo se limpia al volver a llamar openMonth (no hay acción
       // de "cerrar sesión" explícita todavía — limitación conocida de M1).
-      set({ session, loading: false, _ws: ws, _visHandler: visHandler, _heartbeat: null, _unloadHandler: null, scanningCells: new Set(), scanProgress: null, historyDrawer: null, presence: [] });
+      // cellFiles/_cellFilesFetch: the cache key is `hospital|sigla` with NO
+      // session component, so it MUST be cleared on session switch — otherwise
+      // opening MAYO after ABRIL would SWR-render ABRIL's files for the same
+      // cell (and a failed refetch would preserve the wrong month forever).
+      set({ session, loading: false, _ws: ws, _visHandler: visHandler, _heartbeat: null, _unloadHandler: null, scanningCells: new Set(), scanProgress: null, historyDrawer: null, presence: [], cellFiles: {}, _cellFilesFetch: new Map() });
       // M2: start the presence heartbeat for the newly opened session.
       get().startPresence();
       // M2: register pagehide beacon so the server knows we left on hard-close/reload.

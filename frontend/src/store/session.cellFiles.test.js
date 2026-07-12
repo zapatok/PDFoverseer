@@ -4,7 +4,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../lib/api", () => ({
-  api: { getCellFiles: vi.fn() },
+  api: {
+    getCellFiles: vi.fn(),
+    // openMonth's dependencies (session-switch regression test below).
+    createSession: vi.fn(async () => ({})),
+    getSession: vi.fn(async () => ({
+      // Non-empty cells so openMonth never fires the pase-1 auto-scan.
+      session_id: "2026-05",
+      cells: { HPV: { odi: { count: 1 } } },
+    })),
+  },
+}));
+vi.mock("../lib/ws", () => ({
+  createWSClient: vi.fn(() => ({ close: vi.fn() })),
 }));
 
 import { api } from "../lib/api";
@@ -120,5 +132,25 @@ describe("store cellFiles — SWR cache (§A1)", () => {
     await useSessionStore.getState().fetchCellFiles("2026-04", null, "odi");
     await useSessionStore.getState().fetchCellFiles("2026-04", "HPV", null);
     expect(api.getCellFiles).not.toHaveBeenCalled();
+  });
+
+  it("(g) cambio de sesión (openMonth) limpia el cache — nunca archivos del mes anterior", async () => {
+    // El key del cache es `hospital|sigla` SIN componente de sesión: si
+    // openMonth no lo limpia, abrir MAYO tras ABRIL mostraría los archivos de
+    // ABRIL en HPV|odi (SWR: sin Skeleton) mientras vuela el refetch de MAYO —
+    // y si ese refetch falla, los archivos del mes EQUIVOCADO quedan para
+    // siempre. Antes de A1 el efecto local de FileList dependía de session_id
+    // y hacía setFiles(null) al cambiar de sesión; este test repone esa red.
+    useSessionStore.setState({ session: { session_id: "2026-04", cells: {} } });
+    api.getCellFiles.mockResolvedValueOnce([{ name: "abril.pdf" }]);
+    await useSessionStore.getState().fetchCellFiles("2026-04", "HPV", "odi");
+    expect(useSessionStore.getState().cellFiles["HPV|odi"].files).toEqual([{ name: "abril.pdf" }]);
+
+    await useSessionStore.getState().openMonth("2026-05", 2026, 5);
+
+    // Entrada fuera → el consumidor renderiza Skeleton (primer open) y el
+    // próximo fetchCellFiles trae los archivos del mes correcto.
+    expect(useSessionStore.getState().cellFiles).toEqual({});
+    expect(useSessionStore.getState()._cellFilesFetch.size).toBe(0);
   });
 });
