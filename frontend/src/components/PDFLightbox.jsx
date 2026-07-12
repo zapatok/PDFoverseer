@@ -177,6 +177,7 @@ export default function PDFLightbox() {
   const openLightbox = useSessionStore((s) => s.openLightbox);
   const session = useSessionStore((s) => s.session);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
+  const patchCellFile = useSessionStore((s) => s.patchCellFile);
   const scanFileOcr = useSessionStore((s) => s.scanFileOcr);
   const cancelScan = useSessionStore((s) => s.cancelScan);
   const addReorgOp = useSessionStore((s) => s.addReorgOp);
@@ -189,11 +190,16 @@ export default function PDFLightbox() {
   const isLocked = !!(
     lightbox && cellLockHolder(presence, lightbox.hospital, lightbox.sigla, getParticipantId())
   );
-  // Re-fetch after an OCR scan finishes for this cell (G3 / rev-2 #1).
-  const tick = useSessionStore((s) =>
-    lightbox ? (s.filesTick[`${lightbox.hospital}|${lightbox.sigla}`] ?? 0) : 0,
+  // A1: single per-cell files cache (store-owned fetch + SWR) — PDFLightbox
+  // no longer fetches on its own (FileList/HospitalDetail already trigger the
+  // fetch for whichever cell is selected, which is always the cell the
+  // lightbox opens against). Raw entry; never default with `?? {}` inside
+  // the selector (Zustand v5 footgun — closure-captured `lightbox` mirrors
+  // the existing `tick`-selector idiom this replaces).
+  const filesEntry = useSessionStore((s) =>
+    lightbox ? s.cellFiles[`${lightbox.hospital}|${lightbox.sigla}`] : undefined,
   );
-  const [files, setFiles] = useState(null);
+  const files = filesEntry?.files ?? null;
   const [scanInfo, setScanInfo] = useState(null);
 
   // rev-2 #1 — know whether this sigla has an OCR strategy (else disable the button).
@@ -203,13 +209,6 @@ export default function PDFLightbox() {
     api.getScanInfo(lightbox.sigla).then((s) => { if (alive) setScanInfo(s); }).catch(() => {});
     return () => { alive = false; };
   }, [lightbox?.sigla]);
-
-  useEffect(() => {
-    if (!lightbox) { setFiles(null); return; }
-    api.getCellFiles(session.session_id, lightbox.hospital, lightbox.sigla)
-      .then(setFiles)
-      .catch(() => setFiles([]));
-  }, [lightbox?.hospital, lightbox?.sigla, session?.session_id, tick]);
 
   // E4 — step to prev/next file with ←/→ (inspect mode only). Page nav (↑↓/PgUp/Dn)
   // is owned by InspectView; Left/Right are free.
@@ -398,13 +397,11 @@ export default function PDFLightbox() {
                     onCommit={(newCount, opts) => {
                       const name = files?.[lightbox.fileIndex]?.name;
                       if (!name) return;
-                      setFiles((prev) =>
-                        prev?.map((row, idx) =>
-                          idx === lightbox.fileIndex
-                            ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
-                            : row,
-                        ),
-                      );
+                      patchCellFile(lightbox.hospital, lightbox.sigla, name, {
+                        effective_count: newCount,
+                        override_count: newCount,
+                        origin: "Manual",
+                      });
                       savePerFileOverride(session.session_id, lightbox.hospital, lightbox.sigla, name, newCount, {
                         allowOverPages: opts?.allowOverPages,
                       });

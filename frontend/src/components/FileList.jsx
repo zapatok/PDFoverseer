@@ -215,68 +215,37 @@ export default function FileList({ hospital, sigla }) {
   const session = useSessionStore((s) => s.session);
   const openLightbox = useSessionStore((s) => s.openLightbox);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
+  const patchCellFile = useSessionStore((s) => s.patchCellFile);
   const cell = useSessionStore((s) => s.session?.cells?.[hospital]?.[sigla]);
   const saveOverride = useSessionStore((s) => s.saveOverride);
   // M3a: raw presence selector — never `?? []` inside a selector (Zustand v5 footgun).
   const presence = useSessionStore((s) => s.presence);
-  // Re-fetch after an OCR scan finishes for this cell (G3, review #5/#6).
-  const tick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
-  const [files, setFiles] = useState(null);
+  // A1: single per-cell files cache (store-owned fetch + SWR) — FileList no
+  // longer fetches on its own. The raw entry is `undefined` until the first
+  // fetch resolves; never default it with `?? {}` inside the selector
+  // (Zustand v5 footgun — see cellFiles.js/DetailPanel's identical idiom).
+  const filesEntry = useSessionStore((s) => s.cellFiles[`${hospital}|${sigla}`]);
   const [search, setSearch] = useState("");
   const [activeOrigins, setActiveOrigins] = useState([]);
   const [scanInfo, setScanInfo] = useState(null);
-  // E1: a per-file save (savePerFileOverride, all completion paths — success,
-  // 409, generic error) bumps filesTick to force this effect to re-fetch and
-  // show server truth. That refetch sets `files` to null first, which swaps
-  // the <ul> for the Skeleton view (unmount) and later mounts a BRAND NEW <ul>
-  // — a fresh DOM node always starts at scrollTop 0. Without this guard, every
-  // single per-file edit silently scrolls a long list back to the top.
+  // E1 (simplified by A1): the SWR cache means a per-file save no longer nulls
+  // the entry, so the <ul> never unmounts/remounts on save — scroll survives
+  // naturally. The only thing left to handle by hand is a GENUINE cell
+  // change, which must snap the list back to the top.
   const listRef = useRef(null);
-  const savedScrollRef = useRef(null);
   const prevCellKeyRef = useRef(null);
   // Virtualización: la ventana visible se deriva del scrollTop (estado, no
   // ref — cada frame de scroll re-renderiza el slice, ~30 filas, barato).
   const [listScrollTop, setListScrollTop] = useState(0);
 
-  useEffect(() => {
-    if (!session?.session_id || !hospital || !sigla) {
-      setFiles(null);
-      prevCellKeyRef.current = null;
-      return;
-    }
+  useLayoutEffect(() => {
     const cellKey = `${hospital}|${sigla}`;
-    // Only preserve scroll when this run was triggered by a tick bump on the
-    // SAME cell (a per-file save refetch) — not when the operator navigated
-    // to a different hospital/sigla, where resetting to the top is correct.
-    // Two independent decisions: null the snapshot ONLY on a genuine cell
-    // change; refresh it only when the <ul> is actually mounted. When a second
-    // tick bump lands mid-refetch (Skeleton shown, listRef.current === null —
-    // two quick stepper clicks), neither applies: keep the FIRST bump's
-    // snapshot instead of discarding it and snapping the list to the top.
-    if (prevCellKeyRef.current !== cellKey) {
-      savedScrollRef.current = null;
-    } else if (listRef.current) {
-      savedScrollRef.current = listRef.current.scrollTop;
+    if (prevCellKeyRef.current !== null && prevCellKeyRef.current !== cellKey) {
+      if (listRef.current) listRef.current.scrollTop = 0;
+      setListScrollTop(0);
     }
     prevCellKeyRef.current = cellKey;
-    setFiles(null);
-    api.getCellFiles(session.session_id, hospital, sigla)
-      .then(setFiles)
-      .catch((err) => setFiles({ error: String(err) }));
-  }, [session?.session_id, hospital, sigla, tick]);
-
-  // Restore the pre-refetch scroll position once the new <ul> is mounted.
-  // Also sync the virtualization window (listScrollTop) with whatever position
-  // the list actually has: the restored offset on an E1 refetch, or 0 on a
-  // fresh mount after a cell change — otherwise the window would render the
-  // wrong slice until the first scroll event.
-  useLayoutEffect(() => {
-    if (savedScrollRef.current != null && listRef.current) {
-      listRef.current.scrollTop = savedScrollRef.current;
-      savedScrollRef.current = null;
-    }
-    if (listRef.current) setListScrollTop(listRef.current.scrollTop);
-  }, [files]);
+  }, [hospital, sigla]);
 
   // Fetch sigla scan-info to determine if page-cap applies (Incr 2).
   useEffect(() => {
@@ -303,7 +272,8 @@ export default function FileList({ hospital, sigla }) {
     );
   }
 
-  if (files === null) {
+  if (!filesEntry) {
+    // Primer open de la celda — todavía no hay ninguna respuesta cacheada.
     return (
       <div className="space-y-2">
         {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10" />)}
@@ -311,15 +281,20 @@ export default function FileList({ hospital, sigla }) {
     );
   }
 
-  if (files?.error) {
+  if (filesEntry.error && !filesEntry.files) {
     return (
       <EmptyState
         icon={FileX}
         title="No se pudieron cargar los archivos"
-        description={files.error}
+        description={filesEntry.error}
       />
     );
   }
+
+  // SWR: si ya hay un `files` cacheado (aunque el refetch más reciente haya
+  // fallado), se muestra ese dato — nunca un Skeleton ni un error tapando
+  // datos válidos que el operador ya puede ver/usar.
+  const files = filesEntry.files ?? [];
 
   if (files.length === 0) {
     return (
@@ -474,13 +449,11 @@ export default function FileList({ hospital, sigla }) {
                 // toasts+reverts, same honest feedback as any other failed save.
                 const commitStep = (delta) => {
                   const next = Math.max(0, (value ?? 0) + delta);
-                  setFiles((prev) =>
-                    prev.map((row) =>
-                      row.name === f.name
-                        ? { ...row, effective_count: next, override_count: next, origin: "Manual" }
-                        : row,
-                    ),
-                  );
+                  patchCellFile(hospital, sigla, f.name, {
+                    effective_count: next,
+                    override_count: next,
+                    origin: "Manual",
+                  });
                   savePerFileOverride(session.session_id, hospital, sigla, f.name, next);
                 };
                 return (
@@ -501,13 +474,11 @@ export default function FileList({ hospital, sigla }) {
                         disabled={locked}
                         max={isCapped ? (f.page_count ?? null) : null}
                         onCommit={(newCount, opts) => {
-                          setFiles((prev) =>
-                            prev.map((row) =>
-                              row.name === f.name
-                                ? { ...row, effective_count: newCount, override_count: newCount, origin: "Manual" }
-                                : row,
-                            ),
-                          );
+                          patchCellFile(hospital, sigla, f.name, {
+                            effective_count: newCount,
+                            override_count: newCount,
+                            origin: "Manual",
+                          });
                           savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount, {
                             allowOverPages: opts?.allowOverPages,
                           });

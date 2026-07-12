@@ -19,12 +19,23 @@ export default function HospitalDetail({ hospital, onBack }) {
   const [selectedSet, setSelectedSet] = useState(new Set());
 
   const setFocus = useSessionStore((s) => s.setFocus);
+  const fetchCellFiles = useSessionStore((s) => s.fetchCellFiles);
+  const sessionId = useSessionStore((s) => s.session?.session_id);
 
   // Keep store focus in sync with the locally-selected cell.
   useEffect(() => {
     setFocus(selected ? `${hospital}|${selected}` : null);
     return () => setFocus(null); // clear on unmount / hospital change
   }, [hospital, selected, setFocus]);
+
+  // A1 — second fetchCellFiles trigger: a genuine cell-selection change (the
+  // first trigger, filesTick bumps, lives in the store itself). `selected` is
+  // local component state, invisible to the store, so this is the ONE thin
+  // effect that primes the cache on first open — FileList/DetailPanel/
+  // PDFLightbox all read the same cache afterwards, never fetching on their own.
+  useEffect(() => {
+    if (selected && sessionId) fetchCellFiles(sessionId, hospital, selected);
+  }, [hospital, selected, sessionId, fetchCellFiles]);
 
   const cells = session?.cells?.[hospital] || {};
   const total = Object.entries(cells).reduce((s, [sig, c]) => s + computeCellCount(c, countTypeFor(sig)), 0);

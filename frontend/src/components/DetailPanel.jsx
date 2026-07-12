@@ -251,17 +251,16 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const deleteReorgOp = useSessionStore((s) => s.deleteReorgOp);
   const saveOverride = useSessionStore((s) => s.saveOverride);
   const applyRatioCell = useSessionStore((s) => s.applyRatioCell);
-  const filesTick = useSessionStore((s) => s.filesTick[`${hospital}|${sigla}`] ?? 0);
+  // A1: single per-cell files cache (store-owned fetch + SWR) — DetailPanel no
+  // longer fetches on its own. Raw entry, never `?? {}` inside the selector
+  // (Zustand v5 footgun — same idiom as reorgOps/presence above).
+  const filesEntry = useSessionStore((s) => s.cellFiles[`${hospital}|${sigla}`]);
   // M3a: presence for read-only gating. Select the raw array (stable); defaulting
   // with `?? []` INSIDE the selector triggers the same React #185 footgun as
   // reorg_ops. Presence is always initialized to [] in the store, so the raw
   // selector is stable.
   const presence = useSessionStore((s) => s.presence);
   const [scanInfo, setScanInfo] = useState(null);
-  const [totalPages, setTotalPages] = useState(null);
-  // Filenames present in the cell folder — one source, reused for the ≤pages cap
-  // AND the orphan-marks panel (F1). Fetched by the effect below (filesTick-keyed).
-  const [cellFileNames, setCellFileNames] = useState([]);
   const [ratioNOpen, setRatioNOpen] = useState(false);
   const [ratioNValue, setRatioNValue] = useState(2);
   // hasOverride(null) is falsy, so a null cell defaults to "files". These hooks
@@ -276,21 +275,6 @@ export default function DetailPanel({ hospital, sigla, cell }) {
     api.getScanInfo(sigla).then((s) => { if (alive) setScanInfo(s); }).catch(() => {});
     return () => { alive = false; };
   }, [sigla]);
-
-  // Incr 2 — totalPages for the ≤pages cap + the present filenames for the orphan
-  // panel (lazy, re-fetches on tick). One fetch, one source for both.
-  useEffect(() => {
-    if (!sessionId || !hospital || !sigla) { setTotalPages(null); setCellFileNames([]); return; }
-    let alive = true;
-    api.getCellFiles(sessionId, hospital, sigla)
-      .then((files) => {
-        if (!alive) return;
-        setTotalPages(files.reduce((sum, f) => sum + (f.page_count ?? 0), 0));
-        setCellFileNames(files.map((f) => f.name));
-      })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [sessionId, hospital, sigla, filesTick]);
 
   // Re-sync mode from provenance when the selected cell changes; also collapse the
   // ratio-N input so it doesn't leak its open state / value across cells.
@@ -324,6 +308,14 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const total = computeCellCount(cell, countType);
   const label = SIGLA_LABELS[sigla];
   const showLabel = label && label.toLowerCase() !== sigla.toLowerCase();
+
+  // A1 — totalPages for the ≤pages cap + the present filenames for the orphan
+  // panel (F1) both derive from the store's cellFiles cache; no local fetch.
+  const cachedFiles = filesEntry?.files ?? null;
+  const totalPages = cachedFiles
+    ? cachedFiles.reduce((sum, f) => sum + (f.page_count ?? 0), 0)
+    : null;
+  const cellFileNames = cachedFiles ? cachedFiles.map((f) => f.name) : [];
 
   // Incr 2 — cap predicate: document-counting siglas cap overrides at ≤ totalPages.
   const isCapped = isCappedCountType(scanInfo?.count_type);
