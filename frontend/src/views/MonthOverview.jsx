@@ -20,6 +20,9 @@ export default function MonthOverview() {
   const months = useSessionStore((s) => s.months);
   const session = useSessionStore((s) => s.session);
   const loading = useSessionStore((s) => s.loading);
+  // A11: `loading` is shared by openMonth/runScan/generateOutput — the scan
+  // button must only claim "Escaneando…" for the one that's actually a scan.
+  const generating = useSessionStore((s) => s.generating);
   const error = useSessionStore((s) => s.error);
   const loadMonths = useSessionStore((s) => s.loadMonths);
   const openMonth = useSessionStore((s) => s.openMonth);
@@ -123,7 +126,7 @@ export default function MonthOverview() {
                 disabled={loading}
                 onClick={() => runScan(sessionId)}
               >
-                {loading ? "Escaneando…" : "Escanear todos los hospitales"}
+                {loading && !generating ? "Escaneando…" : "Escanear todos los hospitales"}
               </Button>
               <Button
                 icon={FileSpreadsheet}

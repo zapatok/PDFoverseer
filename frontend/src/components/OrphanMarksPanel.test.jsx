@@ -55,6 +55,27 @@ describe("OrphanMarksPanel", () => {
     expect(text).toContain("Descartar");
   });
 
+  it("§A12: the discard-confirm Dialog's close button has an accessible name", () => {
+    const cell = {
+      worker_marks: { "gone.pdf": [{ page: 1, count: 7 }] },
+    };
+    const { container } = mount(
+      <OrphanMarksPanel
+        hospital="HLL"
+        sigla="charla"
+        cell={cell}
+        files={["real.pdf"]}
+        sessionId="2026-04"
+      />,
+    );
+    const descartarBtn = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Descartar",
+    );
+    act(() => descartarBtn.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const closeBtn = document.querySelector('button[aria-label="Cerrar"]');
+    expect(closeBtn).toBeTruthy();
+  });
+
   it("renders null when there are no orphans (all marks belong to present files)", () => {
     const cell = { worker_marks: { "real.pdf": [{ page: 1, count: 3 }] } };
     const { container } = mount(

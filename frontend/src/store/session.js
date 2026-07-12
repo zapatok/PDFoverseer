@@ -17,6 +17,10 @@ export const useSessionStore = create((set, get) => ({
   months: [],
   session: null,
   loading: false,
+  // A11: dedicated flag for generateOutput, distinct from the generic
+  // `loading` — MonthOverview's scan button used to read `loading` alone and
+  // said "Escaneando…" while an Excel export was running too.
+  generating: false,
   error: null,
   historyView: false,
   historyDrawer: null,   // { hospital, sigla } | null — drill-in del SparkGrid
@@ -929,17 +933,17 @@ export const useSessionStore = create((set, get) => ({
   },
 
   generateOutput: async (sessionId) => {
-    set({ loading: true, error: null });
+    set({ loading: true, generating: true, error: null });
     try {
       const result = await api.generateOutput(sessionId);
-      set({ loading: false });
+      set({ loading: false, generating: false });
       invalidateHistory(sessionId);
       return result;
     } catch (error) {
       // A2: no sticky global error banner here — the caller (MonthOverview's
       // onGenerate) already toasts on this same rejection; setting `error`
       // duplicated it as a second, stale-looking surface.
-      set({ loading: false });
+      set({ loading: false, generating: false });
       throw error;
     }
   },

@@ -99,8 +99,10 @@ function ReorgThumbnails({ doc, pageCount, currentPage, reorgStart, reorgEnd, on
 
 /**
  * HUD lateral del modo reorganización: selección de rango + destino + crear op.
+ * Exported (only) so §A10's defaults test can mount it directly — not part
+ * of the module's public API otherwise.
  */
-function ReorgHud({
+export function ReorgHud({
   currentPage,
   pageCount,
   reorgStart,
@@ -114,8 +116,14 @@ function ReorgHud({
   sourceSigla,
 }) {
   const [opType, setOpType] = useState("extract_pages");
-  const [destHospital, setDestHospital] = useState(HOSPITALS[0]);
-  const [destSigla, setDestSigla] = useState(SIGLAS[0]);
+  // §A10: default the destino selects to the SOURCE cell — the guard below
+  // (destino≠origen) already blocks submit until the operator deliberately
+  // picks something else, exactly like FileList's ReorgMenu. The old
+  // HOSPITALS[0]/SIGLAS[0] defaults (always HPV·reunion) let the guard pass
+  // silently whenever the source cell wasn't HPV·reunion, inviting an
+  // extract_pages into the wrong destination.
+  const [destHospital, setDestHospital] = useState(sourceHospital);
+  const [destSigla, setDestSigla] = useState(sourceSigla);
   // DEFAULT_ROTATION_DEG (no 0): el default DEBE ser una opción visible del
   // select, o el usuario ve "90°" elegido mientras el estado sigue en 0 y la
   // op viaja como rotar-0° (el no-op silencioso del 2026-07-10).

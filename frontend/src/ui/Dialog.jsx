@@ -28,7 +28,7 @@ Dialog.Header = function DialogHeader({ children }) {
   return (
     <header className="px-5 py-3 border-b border-po-border flex items-center gap-3">
       <div className="flex-1 min-w-0">{children}</div>
-      <RadixDialog.Close className="text-po-text-muted hover:text-po-text shrink-0">
+      <RadixDialog.Close aria-label="Cerrar" className="text-po-text-muted hover:text-po-text shrink-0">
         <X size={18} strokeWidth={1.75} />
       </RadixDialog.Close>
     </header>
