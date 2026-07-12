@@ -14,6 +14,8 @@ import pytest
 from core.scanners.base import ConfidenceLevel
 from core.scanners.cancellation import CancellationToken, CancelledError
 from core.scanners.pagination_scanner import PaginationScanner
+from core.scanners.patterns import PATTERNS
+from core.scanners.utils.header_band_anchors import AnchorCountResult
 from core.scanners.utils.pagination_count import PaginationCountResult
 
 
@@ -26,6 +28,7 @@ def _pag(
     failed: int = 0,
     cover_code_recovery: bool = False,
     recovered_start_count: int = 0,
+    repeated_pattern_detected: bool = False,
 ) -> PaginationCountResult:
     """Build a PaginationCountResult with sensible defaults for unit tests."""
     if direct is None:
@@ -40,6 +43,7 @@ def _pag(
         codes={},
         cover_code_recovery=cover_code_recovery,
         recovered_start_count=recovered_start_count,
+        repeated_pattern_detected=repeated_pattern_detected,
     )
 
 
@@ -355,3 +359,192 @@ def test_pagination_count_ocr_pre_cancelled_token_no_tick(tmp_path: Path, monkey
     with pytest.raises(CancelledError):
         scanner.count_ocr(tmp_path, cancel=token, on_pdf=lambda *a: ticks.append(a))
     assert ticks == []
+
+
+# --- RCH cover de-dup: detect-and-fallback (Track D / D2, Task 8) ---
+#
+# ``rch_fallback: True`` is an explicit per-sigla opt-in (patterns.py) — these
+# tests inject a synthetic PATTERNS override so the mechanism is proven
+# independently of which real sigla(s) carry the flag. A sigla WITHOUT the
+# flag (e.g. "irl", which does carry cover_flavors + cover_code) must never
+# engage the fallback even if the engine signals repeated_pattern_detected —
+# that would silently change behavior for already-migrated siglas never
+# gated by this round's benchmark.
+
+
+def _fake_flavor():
+    return [{"name": "f_test", "anchors": ["ancla uno", "ancla dos", "ancla tres"], "min_match": 3}]
+
+
+def test_pagination_scanner_rch_fallback_engages_on_pattern_detected(tmp_path: Path, monkeypatch):
+    """rch_fallback=True + repeated_pattern_detected=True → the PDF's count
+    comes from the anchors engine, not pagination; method chip is honest."""
+    pdf = tmp_path / "2026-04_charla.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.PATTERNS",
+        {
+            **PATTERNS,
+            "charla": {
+                "scan_strategy": "pagination",
+                "rch_fallback": True,
+                "cover_flavors": _fake_flavor(),
+            },
+        },
+    )
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda _: 6)
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_documents_by_pagination",
+        lambda *a, **k: _pag(3, pages=6, direct=6, repeated_pattern_detected=True),
+    )
+    anchors_calls = []
+
+    def fake_anchors(pdf_path, *, flavors, top_fraction, cancel, on_page):
+        anchors_calls.append((pdf_path, flavors))
+        return AnchorCountResult(count=2, pages_total=6)
+
+    monkeypatch.setattr("core.scanners.pagination_scanner.count_covers_by_anchors", fake_anchors)
+
+    methods_seen: list[str] = []
+    scanner = PaginationScanner(sigla="charla")
+    r = scanner.count_ocr(
+        tmp_path,
+        cancel=CancellationToken(),
+        on_pdf=lambda name, count, method, nm: methods_seen.append(method),
+    )
+    assert r.count == 2  # the anchors count, NOT the pagination count (3)
+    assert r.method == "pagination"  # cell-level method is still the scanner's
+    assert methods_seen == ["header_band_anchors"]  # per-file chip is honest
+    assert len(anchors_calls) == 1
+
+
+def test_pagination_scanner_rch_fallback_inactive_without_flag(tmp_path: Path, monkeypatch):
+    """irl has cover_flavors + cover_code but NOT rch_fallback — a
+    repeated_pattern_detected signal must be ignored entirely (no anchors
+    call, plain pagination count used) so already-migrated siglas never
+    silently change behavior from this mechanism."""
+    pdf = tmp_path / "2026-04_irl.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda _: 6)
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_documents_by_pagination",
+        lambda *a, **k: _pag(3, pages=6, direct=6, repeated_pattern_detected=True),
+    )
+
+    def _boom(*a, **k):
+        raise AssertionError("anchors engine must not be called without rch_fallback")
+
+    monkeypatch.setattr("core.scanners.pagination_scanner.count_covers_by_anchors", _boom)
+
+    scanner = PaginationScanner(sigla="irl")
+    r = scanner.count_ocr(tmp_path, cancel=CancellationToken())
+    assert r.count == 3  # plain pagination count, unaffected
+
+
+def test_pagination_scanner_rch_fallback_inactive_when_pattern_not_detected(
+    tmp_path: Path, monkeypatch
+):
+    """rch_fallback=True but repeated_pattern_detected=False → plain pagination
+    path, anchors engine not invoked (the normal, full-speed case)."""
+    pdf = tmp_path / "2026-04_charla.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.PATTERNS",
+        {
+            **PATTERNS,
+            "charla": {
+                "scan_strategy": "pagination",
+                "rch_fallback": True,
+                "cover_flavors": _fake_flavor(),
+            },
+        },
+    )
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda _: 6)
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_documents_by_pagination",
+        lambda *a, **k: _pag(3, pages=6, direct=6, repeated_pattern_detected=False),
+    )
+
+    def _boom(*a, **k):
+        raise AssertionError("anchors engine must not be called when no pattern detected")
+
+    monkeypatch.setattr("core.scanners.pagination_scanner.count_covers_by_anchors", _boom)
+
+    scanner = PaginationScanner(sigla="charla")
+    r = scanner.count_ocr(tmp_path, cancel=CancellationToken())
+    assert r.count == 3
+
+
+def test_pagination_scanner_rch_fallback_low_trust_when_anchors_zero_covers(
+    tmp_path: Path, monkeypatch
+):
+    """F8 reused: the fallback's anchors count of 0 is never right at face
+    value for a multi-page PDF — downgrades the cell to LOW."""
+    pdf = tmp_path / "2026-04_charla.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.PATTERNS",
+        {
+            **PATTERNS,
+            "charla": {
+                "scan_strategy": "pagination",
+                "rch_fallback": True,
+                "cover_flavors": _fake_flavor(),
+            },
+        },
+    )
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda _: 6)
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_documents_by_pagination",
+        lambda *a, **k: _pag(3, pages=6, direct=6, repeated_pattern_detected=True),
+    )
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_covers_by_anchors",
+        lambda *a, **k: AnchorCountResult(count=0, pages_total=6),
+    )
+
+    scanner = PaginationScanner(sigla="charla")
+    r = scanner.count_ocr(tmp_path, cancel=CancellationToken())
+    assert r.count == 0
+    assert r.confidence == ConfidenceLevel.LOW
+    assert "pagination_low_confidence" in r.flags
+
+
+def test_pagination_scanner_rch_fallback_engine_failure(tmp_path: Path, monkeypatch):
+    """A RuntimeError from the anchors fallback falls back conservatively to
+    count=1, low-trust, with an error recorded — mirrors the plain-pagination
+    engine-failure test above."""
+    pdf = tmp_path / "2026-04_charla.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n")
+
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.PATTERNS",
+        {
+            **PATTERNS,
+            "charla": {
+                "scan_strategy": "pagination",
+                "rch_fallback": True,
+                "cover_flavors": _fake_flavor(),
+            },
+        },
+    )
+    monkeypatch.setattr("core.scanners.pagination_scanner.get_page_count", lambda _: 6)
+    monkeypatch.setattr(
+        "core.scanners.pagination_scanner.count_documents_by_pagination",
+        lambda *a, **k: _pag(3, pages=6, direct=6, repeated_pattern_detected=True),
+    )
+
+    def _boom(*a, **k):
+        raise RuntimeError("anchors_engine_failed")
+
+    monkeypatch.setattr("core.scanners.pagination_scanner.count_covers_by_anchors", _boom)
+
+    scanner = PaginationScanner(sigla="charla")
+    r = scanner.count_ocr(tmp_path, cancel=CancellationToken())
+    assert r.count == 1
+    assert r.confidence == ConfidenceLevel.LOW
+    assert r.errors

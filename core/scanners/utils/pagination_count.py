@@ -163,6 +163,29 @@ def count_starts(reads: list[PageRead], cover_code: str | None) -> int:
     return sum(1 for r in reads if r.curr == 1)
 
 
+def detect_repeated_pattern(
+    parsed: list[tuple[int | None, int | None, str | None]],
+) -> bool:
+    """True iff two ADJACENT pages both read ``curr == 1`` with the same total.
+
+    This is the exact signature of the RCH template bug (``patterns.py``
+    :data:`CRS_RCH_ANCHORS` docstring, D2 spec §3): "the continuation page
+    also reads Página 1 de N" instead of incrementing. Track D / D2's Fase 0
+    survey (``docs/research/2026-07-12-rch-corner-survey.md``) found ZERO
+    confirmed occurrences of this signature across 136 real charla pages — the
+    trigger is a safety net for a case that, while not reproduced in the
+    measured samples, remains possible (a template revision or scan not
+    covered by ``data/samples/``). ``PaginationScanner`` acts on this only for
+    siglas that opt in via ``PATTERNS[sigla]["rch_fallback"]``.
+    """
+    for i in range(len(parsed) - 1):
+        c1, t1, _ = parsed[i]
+        c2, t2, _ = parsed[i + 1]
+        if c1 == 1 and c2 == 1 and t1 is not None and t1 == t2:
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class PaginationCountResult:
     count: int
@@ -174,6 +197,7 @@ class PaginationCountResult:
     codes: dict[str, int]
     cover_code_recovery: bool  # cover_code set AND >=1 recovered read → caller forces LOW
     recovered_start_count: int  # recovered curr==1 reads (F7) — fabricated-start risk signal
+    repeated_pattern_detected: bool  # RCH bug signature (D2) — caller may re-route to anchors
 
 
 def _corner_text(page: fitz.Page) -> str:
@@ -317,4 +341,5 @@ def count_documents_by_pagination(
         codes=dict(codes),
         cover_code_recovery=bool(cover_code) and recovered > 0,
         recovered_start_count=count_recovered_starts(reads),
+        repeated_pattern_detected=detect_repeated_pattern(parsed),
     )

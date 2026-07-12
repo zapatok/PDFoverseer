@@ -80,10 +80,12 @@ def test_flavor_naming_convention_a9():
 
 
 def test_v4_pagination_migration_state():
-    """v4 pagination-first migration GO-list (benchmark 2026-06-21, see
-    docs/research/2026-06-21-pagination-benchmark-results.md). Pins which siglas
+    """v4/v8 pagination-first migration GO-list (benchmark 2026-06-21 +
+    Track D / D2 2026-07-12, see docs/research/2026-06-21-pagination-benchmark-results.md
+    and docs/research/2026-07-12-rch-pagination-decision.md). Pins which siglas
     moved anchors→pagination so an accidental revert is caught. Migrated siglas keep
-    their anchor flavors on the entry (unused) for one-line reversibility."""
+    their anchor flavors on the entry (unused, except charla's rch_fallback) for
+    one-line reversibility."""
     pagination_expected = {
         "odi",
         "ext",
@@ -97,8 +99,9 @@ def test_v4_pagination_migration_state():
         "altura",
         "insgral",
         "espacios",  # Incr B: new pagination sigla (F-PETS-CRS-08-01 compilations)
+        "charla",  # v8: RCH cover de-dup via detect-and-fallback (rch_fallback=True)
     }
-    anchors_expected = {"charla", "chintegral", "dif_pts", "senal", "chps", "maquinaria"}
+    anchors_expected = {"chintegral", "dif_pts", "senal", "chps", "maquinaria"}
     none_expected = {"reunion", "revdocmaq"}  # revdocmaq: no samples → filename glob
     for sigla in pagination_expected:
         assert PATTERNS[sigla]["scan_strategy"] == "pagination", f"{sigla} must be pagination"
@@ -108,6 +111,11 @@ def test_v4_pagination_migration_state():
         )
     for sigla in none_expected:
         assert PATTERNS[sigla]["scan_strategy"] == "none", f"{sigla} must be none"
+    assert PATTERNS["charla"].get("rch_fallback") is True
+    for sigla in pagination_expected - {"charla"}:
+        assert not PATTERNS[sigla].get("rch_fallback"), (
+            f"{sigla} must NOT opt into rch_fallback — its own gate was never evaluated"
+        )
 
 
 def test_irl_pagination_has_cover_code():

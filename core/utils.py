@@ -81,7 +81,13 @@ SCANNER_PATTERNS_VERSION = (
     #     PDF basename detection surfaced as a flag (F10).
     # v7: irl cover_code corrected F-CRS-ODI-01 → F-CRS-IRL-01 (2026-07-09
     #     counting session found the real cover header; ODI's code matched 0).
-    "v7-irl-cover"
+    # v8: charla anchors → pagination (Track D / D2, 2026-07-12 benchmark) —
+    #     RCH cover de-dup via detect-and-fallback (rch_fallback=True on the
+    #     patterns.py entry; PaginationCountResult.repeated_pattern_detected +
+    #     PaginationScanner._rch_anchors_fallback). chintegral/dif_pts stay on
+    #     anchors — their gate didn't pass (no evidence this round). See
+    #     docs/research/2026-07-12-rch-pagination-decision.md.
+    "v8-charla-pagination"
 )
 
 # Tipos de conteo válidos por sigla (Decisión 4 / grupo F del triage). La

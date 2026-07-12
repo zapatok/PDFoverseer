@@ -10,9 +10,24 @@ applies (1-page PDFs contribute 1 document without OCR). A count that needed
 heavy gap-recovery or produced any unresolved failed read downgrades the cell to
 LOW confidence so the operator reviews it.
 
-The per-PDF I/O (``get_page_count`` + ``count_documents_by_pagination``) is
-deliberately kept in this module so the unit tests' monkeypatches (which target
-``core.scanners.pagination_scanner.*``) take effect.
+**RCH cover de-dup (Track D / D2, Task 8):** the pagination engine flags
+``repeated_pattern_detected`` when a file's corner OCR shows the exact RCH
+template-bug signature (two adjacent pages both reading ``curr == 1`` with the
+same total). For siglas that opt in via ``PATTERNS[sigla]["rch_fallback"]``
+(today: only ``charla`` — the migration gate its two RCH siblings,
+chintegral/dif_pts, did NOT pass; see
+``docs/research/2026-07-12-rch-pagination-decision.md``), that one PDF's count
+is re-derived via the anchors engine instead of trusted from pagination —
+zero count risk on the rare bug occurrence, full pagination speed on every
+other file. Siglas WITHOUT the flag never engage this path, even if the
+signal fires — a deliberate per-sigla opt-in so already-migrated siglas
+(art, odi, irl, …) can't silently change behavior from a mechanism their own
+gate never evaluated.
+
+The per-PDF I/O (``get_page_count`` + ``count_documents_by_pagination`` +
+``count_covers_by_anchors``) is deliberately kept in this module so the unit
+tests' monkeypatches (which target ``core.scanners.pagination_scanner.*``)
+take effect.
 """
 
 from __future__ import annotations
@@ -23,7 +38,8 @@ from pathlib import Path
 
 from core.scanners.cancellation import CancellationToken, CancelledError
 from core.scanners.ocr_scanner_base import OcrScannerBase, _PdfOutcome
-from core.scanners.patterns import PATTERNS
+from core.scanners.patterns import DEFAULT_TOP_FRACTION, PATTERNS
+from core.scanners.utils.header_band_anchors import count_covers_by_anchors
 from core.scanners.utils.pagination_count import (
     RECOVERY_LOW_CONF_RATIO,
     count_documents_by_pagination,
@@ -79,6 +95,10 @@ class PaginationScanner(OcrScannerBase):
                 1, "pagination", [], True, False, f"pagination_failed:{pdf.name}:{exc}"
             )
 
+        pattern = PATTERNS[self.sigla]
+        if pag.repeated_pattern_detected and pattern.get("rch_fallback"):
+            return self._rch_anchors_fallback(pdf, pattern, cancel=cancel)
+
         # A degenerate count of 0 for a multi-page PDF is never right — fall back to 1.
         pdf_count = pag.count if pag.count > 0 else 1
         # Low-trust per-PDF rule: any failed read, heavy recovery, cover_code with
@@ -94,3 +114,45 @@ class PaginationScanner(OcrScannerBase):
             or (cover_code is None and pag.recovered_start_count > 0)
         )
         return _PdfOutcome(pdf_count, "pagination", [], bool(low_trust), False, None)
+
+    def _rch_anchors_fallback(
+        self, pdf: Path, pattern: dict, *, cancel: CancellationToken
+    ) -> _PdfOutcome:
+        """Re-derive one PDF's count via the anchors engine (RCH de-dup, Task 8).
+
+        Reuses this sigla's own ``cover_flavors``/``top_fraction`` (retained on
+        the ``patterns.py`` entry per the one-line-reversibility convention) and
+        the F8 "0 covers on a multi-page PDF is never right" low-trust rule,
+        identical to ``AnchorsScanner``'s own. ``on_page`` is intentionally NOT
+        forwarded here: the pagination read already drove the progress counter
+        for this PDF once — replaying it through a second, independent engine
+        would make the progress bar jump backward mid-file. This is the rare
+        path (the migration gate's benchmark measured 2/7 real samples;
+        ``docs/research/2026-07-12-rch-pagination-decision.md`` §Velocidad).
+        """
+        flavors = pattern.get("cover_flavors", [])
+        top_fraction = pattern.get("top_fraction", DEFAULT_TOP_FRACTION)
+        try:
+            anchors = count_covers_by_anchors(
+                pdf, flavors=flavors, top_fraction=top_fraction, cancel=cancel, on_page=None
+            )
+        except CancelledError:
+            raise
+        except (PdfRenderError, OSError, RuntimeError) as exc:
+            return _PdfOutcome(
+                1, "pagination", [], True, False, f"rch_fallback_failed:{pdf.name}:{exc}"
+            )
+        nms = [
+            {
+                "pdf_name": pdf.name,
+                "page_index": nm.page_index,
+                "flavor_name": nm.flavor_name,
+                "matched_anchors": list(nm.matched_anchors),
+                "missing_anchors": list(nm.missing_anchors),
+            }
+            for nm in anchors.near_matches
+        ]
+        # F8, reused verbatim from AnchorsScanner: 0 covers on a multi-page PDF
+        # is never right at face value.
+        low_trust = anchors.count == 0
+        return _PdfOutcome(anchors.count, "header_band_anchors", nms, low_trust, False, None)

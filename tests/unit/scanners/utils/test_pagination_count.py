@@ -4,6 +4,7 @@ from core.scanners.utils.pagination_count import (
     PageRead,
     count_recovered_starts,
     count_starts,
+    detect_repeated_pattern,
     dominant_total,
     extract_code,
     parse_pagination,
@@ -377,3 +378,71 @@ def test_count_documents_threaded_error_propagates_and_closes_docs(
     assert closed == len(opened_docs), (
         f"{len(opened_docs) - closed} of {len(opened_docs)} fitz.Document(s) leaked open"
     )
+
+
+# --- detect_repeated_pattern (Track D / D2, Task 8 — RCH cover de-dup) ---
+#
+# Ported from eval/pagination_count/engine.py (Task 6 prototype, benchmarked
+# in docs/research/2026-07-12-rch-pagination-decision.md). Detects the exact
+# signature of the RCH template bug: two ADJACENT pages both reading
+# curr == 1 with the same total.
+
+
+def test_detect_repeated_pattern_false_on_clean_alternation():
+    parsed = [(1, 2, "A"), (2, 2, "A"), (1, 2, "A"), (2, 2, "A")]
+    assert detect_repeated_pattern(parsed) is False
+
+
+def test_detect_repeated_pattern_true_on_adjacent_duplicate():
+    parsed = [(1, 2, "A"), (1, 2, "A"), (2, 2, "A")]
+    assert detect_repeated_pattern(parsed) is True
+
+
+def test_detect_repeated_pattern_ignores_non_adjacent_duplicates():
+    parsed = [(1, 2, "A"), (2, 2, "A"), (1, 2, "A"), (2, 2, "A")]
+    assert detect_repeated_pattern(parsed) is False
+
+
+def test_detect_repeated_pattern_requires_matching_totals():
+    # Both curr==1 but different totals — not the RCH bug signature (two
+    # genuinely separate 1pp-cover documents back to back).
+    parsed = [(1, 2, "A"), (1, 3, "A")]
+    assert detect_repeated_pattern(parsed) is False
+
+
+def test_detect_repeated_pattern_empty_and_single_page():
+    assert detect_repeated_pattern([]) is False
+    assert detect_repeated_pattern([(1, 2, "A")]) is False
+
+
+def test_count_documents_exposes_repeated_pattern_detected(
+    tmp_path, make_pagination_pdf, monkeypatch
+):
+    """The engine result surfaces repeated_pattern_detected through the real
+    OCR orchestrator (corner-text mocked for determinism) — mirrors
+    test_count_documents_exposes_recovered_start_count above."""
+    from core.scanners.cancellation import CancellationToken
+    from core.scanners.utils import pagination_count as pc
+
+    pdf = make_pagination_pdf(tmp_path / "rch_bug.pdf", docs=[(2, "F-CRS-RCH-01")] * 2)
+    # Page 1 (the continuation of doc 1) wrongly repeats "Pagina 1 de 2".
+    texts = {
+        0: "Pagina 1 de 2",
+        1: "Pagina 1 de 2",  # BUG
+        2: "Pagina 1 de 2",
+        3: "Pagina 2 de 2",
+    }
+    monkeypatch.setattr(pc, "_corner_text", lambda page: texts[page.number])
+
+    r = pc.count_documents_by_pagination(pdf, cancel=CancellationToken())
+    assert r.repeated_pattern_detected is True
+
+
+def test_count_documents_repeated_pattern_false_when_clean(tmp_path, make_pagination_pdf):
+    """No repeated-pattern signature on a clean, correctly-alternating compilation."""
+    from core.scanners.cancellation import CancellationToken
+    from core.scanners.utils.pagination_count import count_documents_by_pagination
+
+    pdf = make_pagination_pdf(tmp_path / "clean_rch.pdf", docs=[(2, "F-CRS-RCH-01")] * 3)
+    r = count_documents_by_pagination(pdf, cancel=CancellationToken())
+    assert r.repeated_pattern_detected is False

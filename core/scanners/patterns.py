@@ -57,6 +57,18 @@ class SiglaPattern(TypedDict):
         Honored by ``count_pdfs_by_sigla`` and ``SimpleFilenameScanner``'s
         per-file path resolution — both delegate to
         ``filename_glob._matches`` so the two stay in lock-step.
+    `rch_fallback`: pagination only — opt-in for the RCH cover de-dup
+        (Track D / D2, 2026-07-12): when the pagination engine detects the
+        RCH template-bug signature (``PaginationCountResult.repeated_pattern_detected``
+        — two adjacent pages both reading ``curr==1`` with the same total) for
+        one PDF, that PDF's count is re-derived via this sigla's own
+        ``cover_flavors``/``top_fraction`` instead of trusted from pagination.
+        Explicit per-sigla flag (default unset/False) — a sigla's own gate
+        must have measured this before opting in; other pagination siglas
+        that happen to retain ``cover_flavors`` for one-line reversibility
+        must NOT engage this path. See
+        ``docs/research/2026-07-12-rch-pagination-decision.md`` for the
+        per-sigla verdict (only ``charla`` passed).
     """
 
     scan_strategy: ScanStrategy
@@ -65,6 +77,7 @@ class SiglaPattern(TypedDict):
     recursive_glob: NotRequired[bool]
     cover_code: NotRequired[str]
     count_scope: NotRequired[Literal["token", "folder"]]
+    rch_fallback: NotRequired[bool]
 
 
 # Defaults documented as source of truth.
@@ -733,7 +746,17 @@ PATTERNS: dict[str, SiglaPattern] = {
         "cover_flavors": _ODI_ANCHORS,
     },
     "charla": {
-        "scan_strategy": "anchors",
+        # v8: migrated anchors -> pagination (Track D / D2, 2026-07-12
+        # benchmark) — the RCH "continuation repeats Página 1 de N" bug
+        # pinned in CRS_RCH_ANCHORS's docstring did NOT reproduce on any of
+        # the 7 real charla samples measured (Fase 0 survey); plain
+        # pagination tied or beat anchors on every GT-bearing sample with a
+        # realistic 3.6x speedup. rch_fallback=True is the safety net for
+        # the (unmeasured but possible) case: a per-file detect-and-fallback
+        # to this same cover_flavors/top_fraction via the anchors engine.
+        # See docs/research/2026-07-12-rch-pagination-decision.md.
+        "scan_strategy": "pagination",
+        "rch_fallback": True,
         # recursive_glob: True per Fase B audit 2026-05-22. Spec §4 didn't
         # mandate recursive enumeration but the real corpus shows both HPV
         # (338 PDFs) and HRB (46 PDFs) organize charlas by contractor
@@ -752,6 +775,8 @@ PATTERNS: dict[str, SiglaPattern] = {
         # vertically. Raising to 1/3 recovers 4 additional anchors per
         # cover page → reaches min_match=3 reliably. Matches the band
         # already used by dif_pts (shares the same form template family).
+        # KEPT here (unused by pagination itself) for rch_fallback's anchors
+        # call, and for one-line reversibility (flip scan_strategy back).
         "top_fraction": 1 / 3,
         "cover_flavors": _CHARLA_ANCHORS,
     },
