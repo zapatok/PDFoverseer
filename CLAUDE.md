@@ -189,7 +189,15 @@ skipped batch path is verified by code trace but has no HTTP-layer test;
 `tesserocr` is an **optional** dep (Windows wheel, commented in
 `requirements.txt`) — CI/other machines fall back to pytesseract
 automatically, so the ~2x is Daniel's-machine-only until the wheel is
-installed elsewhere.
+installed elsewhere. Track D final-review nits (4 findings, all verified
+NIT / 0 blocking / 0 important): a charla file that hits `_rch_anchors_fallback`
+with 0 covers is tagged `pagination_low_confidence` instead of
+`anchors_low_confidence` (cosmetic — confidence is still correctly LOW, no
+consumer reads the flag string, never affects a count; the "fix" touches the
+`_PdfOutcome` flag plumbing for zero functional gain on a path that never
+fired on the 7 real samples); and that same rare fallback pass runs a second
+full-page OCR with `on_page=None`, so the progress bar sits at the file's
+completion during it (bounded, documented tradeoff — avoids a backward jump).
 
 ---
 
