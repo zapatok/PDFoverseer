@@ -33,7 +33,10 @@ function deferred() {
 }
 
 function resetStore() {
-  useSessionStore.setState({ cellFiles: {}, _cellFilesFetch: new Map() });
+  // session: null también — el guard de respuestas tardías compara contra la
+  // sesión abierta, y una sesión filtrada de un test anterior (openMonth en el
+  // test (g)) bloquearía los fetches "2026-04" de los tests que no la siembran.
+  useSessionStore.setState({ session: null, cellFiles: {}, _cellFilesFetch: new Map() });
 }
 
 describe("store cellFiles — SWR cache (§A1)", () => {
@@ -150,6 +153,48 @@ describe("store cellFiles — SWR cache (§A1)", () => {
 
     // Entrada fuera → el consumidor renderiza Skeleton (primer open) y el
     // próximo fetchCellFiles trae los archivos del mes correcto.
+    expect(useSessionStore.getState().cellFiles).toEqual({});
+    expect(useSessionStore.getState()._cellFilesFetch.size).toBe(0);
+  });
+
+  it("(h) una respuesta TARDÍA de la sesión anterior se descarta (no repuebla el cache limpio)", async () => {
+    // La ventana residual del reset de openMonth: un fetch lanzado bajo ABRIL
+    // que resuelve DESPUÉS del cambio a MAYO escribiría los archivos del mes
+    // viejo en el cache recién limpiado. El guard de sesión lo descarta entero.
+    useSessionStore.setState({ session: { session_id: "2026-04", cells: {} } });
+    const d = deferred();
+    api.getCellFiles.mockReturnValueOnce(d.promise);
+    const late = useSessionStore.getState().fetchCellFiles("2026-04", "HPV", "odi");
+
+    // Cambio de sesión al estilo openMonth: nueva sesión + cache/bookkeeping limpios.
+    useSessionStore.setState({
+      session: { session_id: "2026-05", cells: {} },
+      cellFiles: {},
+      _cellFilesFetch: new Map(),
+    });
+
+    d.resolve([{ name: "abril.pdf" }]);
+    await late;
+
+    expect(useSessionStore.getState().cellFiles).toEqual({});
+    expect(useSessionStore.getState()._cellFilesFetch.size).toBe(0);
+  });
+
+  it("(h2) un ERROR tardío de la sesión anterior tampoco escribe entrada de error", async () => {
+    useSessionStore.setState({ session: { session_id: "2026-04", cells: {} } });
+    const d = deferred();
+    api.getCellFiles.mockReturnValueOnce(d.promise);
+    const late = useSessionStore.getState().fetchCellFiles("2026-04", "HPV", "odi");
+
+    useSessionStore.setState({
+      session: { session_id: "2026-05", cells: {} },
+      cellFiles: {},
+      _cellFilesFetch: new Map(),
+    });
+
+    d.reject(new Error("boom"));
+    await late;
+
     expect(useSessionStore.getState().cellFiles).toEqual({});
     expect(useSessionStore.getState()._cellFilesFetch.size).toBe(0);
   });

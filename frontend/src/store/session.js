@@ -952,6 +952,15 @@ export const useSessionStore = create((set, get) => ({
     } catch (err) {
       error = String(err);
     }
+    // Late-response guard: if the session changed while this fetch was in
+    // flight (openMonth already reset cellFiles/_cellFilesFetch), drop the
+    // whole response — success AND error alike. Writing it would repopulate
+    // the NEW month's cache with the OLD month's files (the exact wrong-data
+    // class the openMonth reset closes). The bookkeeping below is skipped
+    // too: this fetch's entry lived in the Map openMonth discarded, and
+    // touching the fresh Map could delete a NEW in-flight entry for the key.
+    const currentSessionId = get().session?.session_id;
+    if (currentSessionId != null && currentSessionId !== sessionId) return;
     set((prev) => ({
       cellFiles: {
         ...prev.cellFiles,
