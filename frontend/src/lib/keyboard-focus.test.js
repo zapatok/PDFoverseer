@@ -21,6 +21,16 @@ describe("focusIsInInput", () => {
     expect(focusIsInInput()).toBe(true);
   });
 
+  it("is true when a <select> has focus", () => {
+    // Regression (Track D §4 review): ReorgHud hosts <select> controls;
+    // Escape while one has focus is the close-dropdown gesture and must NOT
+    // reach the viewer's shortcuts (it silently wiped the marked range).
+    const select = document.createElement("select");
+    document.body.appendChild(select);
+    select.focus();
+    expect(focusIsInInput()).toBe(true);
+  });
+
   it("is true when a contentEditable element has focus", () => {
     // jsdom sets the `contenteditable` attribute but never implements the
     // isContentEditable IDL getter (jsdom/jsdom#1670) — set the attribute

@@ -3,8 +3,9 @@
 // Track D, Chunk D3, Task 10 — pages inside the marked reorg range carry the
 // po-override-* tint in the (real, unmocked) WorkerThumbnails rail. Uses the
 // same truthy-`doc` + jsdom polyfill idiom as WorkerCountViewer.reorgKeys.test.jsx
-// (ReorgThumbnails — soon WorkerThumbnails too — only checks doc truthiness,
-// never calls a pdf.js method on it).
+// (WorkerThumbnails only checks doc truthiness before rendering the page
+// buttons; Thumb rasterizes lazily behind IntersectionObserver, stubbed
+// below, so no pdf.js method is ever called on the placeholder doc).
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";

@@ -20,10 +20,11 @@ vi.mock("../lib/api", () => ({
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 // pdf.js worker setup (DOMMatrix etc., absent in jsdom) — stub the hooks that
 // pull it in, same as cellFiles.singleFetch.test.jsx. `doc` is a truthy
-// placeholder object: ReorgThumbnails (today's static placeholder — Task 10
-// swaps it for real thumbnails) only checks doc/pageCount truthiness, it
-// never calls a pdf.js method on it, so a plain object is enough to make it
-// render its real page-button list instead of the aria-hidden empty aside.
+// placeholder object: WorkerThumbnails (the single thumbnail rail since Task
+// 10) only checks doc/pageCount truthiness before rendering its page-button
+// list (Thumb rasterizes lazily behind IntersectionObserver, stubbed below),
+// so a plain object is enough to get real page buttons instead of the
+// aria-hidden empty aside.
 vi.mock("../hooks/usePdfDocument", () => ({
   usePdfDocument: () => ({ doc: {}, error: null }),
 }));
@@ -38,10 +39,9 @@ import { useSessionStore } from "../store/session";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 // jsdom implements neither `scrollIntoView` (no layout engine) nor
-// `IntersectionObserver` — both are used by the real thumbnail-rail
-// components (ReorgThumbnails today, WorkerThumbnails) once `doc` is truthy.
-// Stub them so mounting the full (non-placeholder) viewer doesn't crash;
-// scrolling/intersection behavior isn't under test here.
+// `IntersectionObserver` — both are used by the real thumbnail rail
+// (WorkerThumbnails) once `doc` is truthy. Stub them so mounting the full
+// viewer doesn't crash; scrolling/intersection behavior isn't under test here.
 if (!window.HTMLElement.prototype.scrollIntoView) {
   window.HTMLElement.prototype.scrollIntoView = () => {};
 }
@@ -232,6 +232,31 @@ describe("Track D §4 — reorg viewer keyboard range marking", () => {
     // no crash, and the worker-mode HUD (a different "Atajos" legend) is the
     // one actually mounted.
     expect(view.container.textContent).toContain("Atajos");
+    view.unmount();
+  });
+
+  it("Escape while a HUD <select> has focus does NOT wipe the marked range (close-dropdown gesture stays local)", async () => {
+    const view = mount(
+      <WorkerCountViewer sessionId="2026-07" hospital="HRB" sigla="odi" mode="reorg" onCreateOp={vi.fn()} />,
+    );
+    await flush();
+
+    press("[");
+    clickPage(view.container, 3);
+    press("]");
+    expect(findButton(view.container, "Inicio: pág. 1")).toBeTruthy();
+    expect(findButton(view.container, "Fin: pág. 3")).toBeTruthy();
+
+    // Focus the opType <select> (the natural way Escape gets pressed here:
+    // opening the dropdown and closing it) and press Escape on window.
+    const opTypeSelect = view.container.querySelectorAll("select")[0];
+    act(() => {
+      opTypeSelect.focus();
+    });
+    press("Escape");
+
+    expect(findButton(view.container, "Inicio: pág. 1")).toBeTruthy();
+    expect(findButton(view.container, "Fin: pág. 3")).toBeTruthy();
     view.unmount();
   });
 
