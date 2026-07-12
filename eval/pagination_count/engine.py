@@ -9,6 +9,7 @@ synthetic PDFs).
 from __future__ import annotations
 
 import io
+import math
 import os as _os
 import re
 from collections import Counter
@@ -151,6 +152,111 @@ def count_starts(reads: list[PageRead], cover_code: str | None) -> int:
         cc = cover_code.upper()
         return sum(1 for r in reads if r.curr == 1 and r.code and cc in r.code.upper())
     return sum(1 for r in reads if r.curr == 1)
+
+
+# ---------------------------------------------------------------------------
+# RCH de-dup approach prototypes (Track D / D2, spec §3). Three comparable,
+# pure functions — no OCR/PDF dependency — benchmarked in
+# docs/research/2026-07-12-rch-pagination-decision.md against the samples
+# characterized in docs/research/2026-07-12-rch-corner-survey.md (Fase 0).
+# All operate on the same ``parsed: list[(curr, total, code)]`` shape that
+# ``dominant_total``/``recover_sequence`` already consume.
+# ---------------------------------------------------------------------------
+
+_ParsedPage = tuple[int | None, int | None, str | None]
+
+
+def detect_repeated_pattern(parsed: list[_ParsedPage]) -> bool:
+    """True iff two ADJACENT pages both read ``curr == 1`` with the same total.
+
+    This is the literal signature of the pinned RCH template bug ("the
+    continuation page also reads Página 1 de N"). Fase 0
+    (``docs/research/2026-07-12-rch-corner-survey.md``) found ZERO confirmed
+    occurrences of this signature across 136 pages of 3 real homogeneous
+    charla samples — the trigger is a safety net for a case that, while not
+    reproduced in the measured samples, remains possible (Daniel's originally
+    reported sample, or a template revision not covered by the 7 samples in
+    ``data/samples/``).
+    """
+    for i in range(len(parsed) - 1):
+        c1, t1, _ = parsed[i]
+        c2, t2, _ = parsed[i + 1]
+        if c1 == 1 and c2 == 1 and t1 is not None and t1 == t2:
+            return True
+    return False
+
+
+def count_by_arithmetic_dedup(parsed: list[_ParsedPage]) -> int | None:
+    """Approach 1 (spec §3, candidate 1): ``ceil(pages / dominant_total)``.
+
+    Only fires when EVERY page in the file reads ``curr == 1`` (the file-wide
+    "every page thinks it's a cover" signature) — spec: "Solo viable si Fase 0
+    muestra que el patrón repetido es uniforme". Fase 0 found the opposite (the
+    7 real samples alternate curr correctly; this all-curr==1 condition never
+    held on any of them) — kept here as a documented, evidence-rejected
+    candidate for the benchmark comparison. Returns ``None`` when the trigger
+    condition doesn't hold (caller falls back to plain counting).
+    """
+    if not parsed:
+        return None
+    if not all(c == 1 for c, _, _ in parsed):
+        return None
+    dom = dominant_total(parsed)
+    if not dom or dom <= 1:
+        return None
+    return math.ceil(len(parsed) / dom)
+
+
+def count_by_region_discriminator(parsed: list[_ParsedPage], anchor_hits: list[bool]) -> int:
+    """Approach 2 (spec §3, candidate 2): confirm each ``curr == 1`` candidate
+    against a second, cheaper region read.
+
+    ``anchor_hits[i]`` is ``True`` iff page *i* matched >= 2
+    ``CRS_RCH_ANCHORS`` in the discriminator region — the region itself is a
+    Fase-0 correction: the spec's originally proposed "amplified" corner region
+    measured a 0% hit rate on real cover pages (docs/research/2026-07-12-rch-corner-survey.md,
+    Result 2); ``top_left_half`` is the region that actually contains the
+    cover-only fields (52-64% hit rate, 0% false positives on continuations in
+    Fase 0). Undercount-safe by construction: an unconfirmed ``curr==1``
+    candidate silently does not count (never inflates).
+
+    Raises:
+        ValueError: ``anchor_hits`` is not the same length as ``parsed``.
+    """
+    if len(anchor_hits) != len(parsed):
+        raise ValueError("anchor_hits must be the same length as parsed (1 bool per page)")
+    return sum(1 for (c, _, _), hit in zip(parsed, anchor_hits, strict=True) if c == 1 and hit)
+
+
+def count_by_hybrid_fallback(
+    parsed: list[_ParsedPage], *, anchors_fallback_count: int | None
+) -> int:
+    """Approach 3 (spec §3, candidate 3): plain pagination, UNLESS
+    ``detect_repeated_pattern`` fires — then the WHOLE file's count comes from
+    ``anchors_fallback_count`` (the already-proven anchors engine) instead.
+
+    Fase 0's best-supported candidate: zero count risk on any confirmed bug
+    occurrence (delegates to the engine already known correct for RCH), full
+    pagination speed on the 100% of measured real samples where the bug never
+    fired. The "plain" branch reuses ``recover_sequence`` + ``count_starts`` —
+    the same baseline the production engine already applies.
+
+    Args:
+        parsed: Per-page ``(curr, total, code)`` reads from the pagination corner.
+        anchors_fallback_count: The anchors-engine document count for this same
+            file — required (raises) only when the repeated pattern actually
+            fires; a caller that never expects the pattern on its inputs may
+            pass ``None``.
+
+    Raises:
+        ValueError: the repeated pattern fired but no fallback count was given.
+    """
+    if detect_repeated_pattern(parsed):
+        if anchors_fallback_count is None:
+            raise ValueError("detect_repeated_pattern fired but anchors_fallback_count is None")
+        return anchors_fallback_count
+    reads = recover_sequence(parsed)
+    return count_starts(reads, None)
 
 
 @dataclass(frozen=True)
