@@ -51,10 +51,25 @@ export default function CategoryRow({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        // §A7: only the row itself responds to Enter/Space — a nested control
+        // (checkbox, the count editor's button) already has its own native
+        // keyboard behavior, and this event still bubbles up to us; without
+        // this guard, Space-toggling the checkbox would ALSO select the row.
+        // No roving ↑/↓ between rows (YAGNI — Tab already reaches every row).
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
       className={[
-        "flex items-center gap-3 px-3 h-8 cursor-pointer transition",
+        "flex items-center gap-3 px-3 h-8 cursor-pointer transition outline-none",
         "hover:bg-po-panel-hover",
+        "focus-visible:ring-1 focus-visible:ring-po-accent focus-visible:ring-inset",
         selected && "bg-po-panel-hover border-l-2 border-po-accent",
       ].filter(Boolean).join(" ")}
     >
