@@ -53,3 +53,19 @@ Copies real PDFs from the ABRIL corpus into folder-shaped fixtures under
 Dumps every cell's effective count (via `compute_cell_count`/`compute_worker_count`)
 as JSON from a session DB — the audit-remediation output-safety guard (diff
 two dumps to prove a code change didn't move any count).
+
+### survey_form_codes.py
+Read-only deep form-code survey for the anti-colados vertiente-2 gate (spec
+§7). Walks ABRIL+MAYO × 4 hospitals (HRB over-sampled — the misfile hotspot),
+resolves each folder to its sigla, and for every multi-page PDF of a
+pagination sigla OCRs the top-right corner with the production extractor
+(`pagination_count._corner_text` + `extract_code`), aggregating the
+normalized form codes per sigla to propose `expected_codes` and flag
+cross-sigla collisions.
+
+Usage: `python -X utf8 tools/survey_form_codes.py [--months ABRIL MAYO] [--out map.md]`
+
+**Status:** the vertiente-2 gate this fed was **ABORTED** 2026-07-04 (the
+survey itself showed the form code isn't a reliable foreign-sigla
+discriminator — see `docs/research/2026-07-04-anti-colados-v2-survey-abort.md`).
+Kept as a standalone research/maintenance tool, not wired into anything.

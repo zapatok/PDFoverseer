@@ -45,11 +45,13 @@ PAGINATION_SIGLAS = [s for s, p in PATTERNS.items() if p.get("scan_strategy") ==
 
 
 def normalize_code(raw: str) -> str:
-    """TEMP copy of the Task-12 normalization (uppercase → strip non-alnum → OCR fold).
+    """Form-code normalization (uppercase → strip non-alnum → OCR fold).
 
-    Kept identical to the planned ``colado_guard.normalize_code`` so the survey's
-    proposed ``expected_codes`` are already in the comparison space. Replace with
-    the import once Task 12 lands.
+    This survey's own copy — kept as-is permanently, not a TEMP stand-in: the
+    anti-colados vertiente-2 gate this fed (spec §7, "Task 12") was ABORTED
+    2026-07-04 (see ``docs/research/2026-07-04-anti-colados-v2-survey-abort.md``),
+    so there is no ``colado_guard.normalize_code`` to import. The survey script
+    itself stays as a standalone maintenance/research tool.
     """
     folded = raw.upper().translate(_DIGIT)
     return re.sub(r"[^A-Z0-9]", "", folded)
