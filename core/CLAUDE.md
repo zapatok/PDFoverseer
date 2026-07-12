@@ -141,12 +141,13 @@ SIGLAS (enforced by a completeness-gate test,
 | `anchors` | `AnchorsScanner` | OCR the header band, match flavor anchors |
 | `pagination` | `PaginationScanner` | count documents via the pagination engine ("Página N de M" corner OCR + lite recovery) |
 
-Distribution today (20 siglas, after the 2026-06-23 revdocmaq/espacios
-additions): 2 `none` (reunion, revdocmaq — the latter has no OCR samples yet,
-provisional), 6 `anchors` (charla, chintegral, dif_pts — RCH "1 de 2" bug;
-senal — landscape; chps; maquinaria — `count_type=checks`), 12 `pagination`
-(art, irl [`cover_code`], odi, insgral, bodega, caliente, exc, ext, altura,
-herramientas_elec, andamios, espacios).
+Distribution today (20 siglas, after the 2026-07-12 charla migration):
+2 `none` (reunion, revdocmaq — the latter has no OCR samples yet,
+provisional), 5 `anchors` (chintegral, dif_pts — RCH caution, gates not yet
+passed; senal — landscape; chps; maquinaria — `count_type=checks`), 13
+`pagination` (art, irl [`cover_code`], odi, insgral, bodega, caliente, exc,
+ext, altura, herramientas_elec, andamios, espacios, charla
+[`rch_fallback` — hybrid detect-and-fallback, see below]).
 
 ### OcrScannerBase (shared harness)
 
@@ -182,7 +183,7 @@ counter.
 `PaginationScanner` counts documents by their "Página N de M" pagination via
 `utils/pagination_count.count_documents_by_pagination` (the **lite engine**,
 introduced at `SCANNER_PATTERNS_VERSION = v4-pagination`; current version is
-`v7-irl-cover` — see `core/utils.py`). Per page it OCRs only the
+`v8-charla-pagination` — see `core/utils.py`). Per page it OCRs only the
 **top-right corner** (orientation-aware), parses the pagination + the form code,
 and **recovers** unreadable corners by completing the numeric sequence from
 neighbors (plain forward-fill — no autocorrelation / Dempster-Shafer). A document
@@ -209,9 +210,17 @@ pagination 5/5; degraded merged ART −11 → +1 via recovery; herramientas_elec
 > the repo as a **deferred fallback** (spec D10) — no longer wired into any
 > scanner. It supersedes the original `corner_count` helper that undercounted
 > (13/18); the lite engine's recovery layer + honest LOW-confidence routing now
-> close that gap without the full solver. RCH (charla/chintegral/dif_pts) stays on
-> anchors — its template repeats "Página 1 de 2" on continuations (the bug), so
-> pagination would over-count.
+> close that gap without the full solver. **RCH status (2026-07-12, Track D):**
+> the Fase-0 survey found the "repeats Página 1 de 2 on continuations" bug did
+> NOT reproduce on any of the 7 real charla samples (0/136 pages —
+> `docs/research/2026-07-12-rch-corner-survey.md`), so **charla migrated to
+> pagination** with a hybrid safety net: `detect_repeated_pattern` fires on the
+> repeated-pagination signature and routes that FILE to the anchors engine
+> (`rch_fallback: True` on the charla entry; tied anchors 6/6 GT, ~3.6x
+> measured — `docs/research/2026-07-12-rch-pagination-decision.md`).
+> chintegral/dif_pts stay on anchors — their per-sigla gates lacked evidence
+> (chintegral's f_japa/f_previene flavors uncovered; dif_pts has no
+> bug-exercising GT).
 
 ### Anti-colados guard (misfiled-document detection)
 
@@ -252,6 +261,13 @@ colados* panel, where the operator creates the reorg op or dismisses it. Design:
   interpretation runs — counts/telemetry are deterministic in both modes
   (verified A/B on real samples: identical results, 2.9–3.8×). `on_page` is a
   0-based monotonic completed-pages counter and may fire from worker threads.
+- **Pluggable OCR backend (2026-07-12, Track D)** — both engines OCR through
+  `utils/ocr_backend.ocr_image` (env `OVERSEER_OCR_BACKEND`): default
+  **tesserocr** when the package imports (persistent per-thread
+  `PyTessBaseAPI`, kills the ~195 ms/page spawn floor — corner 1.92-3.33x
+  measured, counts GT-identical), automatic **pytesseract** fallback
+  otherwise (machines without the Windows wheel work unchanged). Details +
+  wheel source: `docs/research/2026-07-12-tesserocr-spike.md`.
 - **A7** — a 1-page PDF counts as 1 document, locked, without OCR.
 - **A8** — a missing sigla folder yields count 0 with a `folder_missing` flag,
   never an error.

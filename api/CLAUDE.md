@@ -25,6 +25,7 @@
 | `OVERSEER_OUTPUT_DIR` | `A:/PROJECTS/PDFoverseer/data/outputs` | Where the generated RESUMEN Excel is written |
 | `TESSERACT_CMD` | `C:\Program Files\Tesseract-OCR\tesseract.exe` | Override the Tesseract binary path (hardcoded Windows default in `core/ocr.py` / `pagination_count.py`) |
 | `OVERSEER_OCR_THREADS` | `min(6, cpu-2)` | Per-page OCR thread-pool size for both scanner engines (`core/utils.py::OCR_PAGE_THREADS`); `1` forces the legacy sequential per-page path |
+| `OVERSEER_OCR_BACKEND` | `tesserocr` if importable, else `pytesseract` | OCR engine behind `core/scanners/utils/ocr_backend.py` (Track D). `tesserocr` keeps a persistent per-thread `PyTessBaseAPI` (kills the ~195 ms/page tesseract-spawn floor, ~2x corner); `pytesseract` is the process-spawn path. Absent wheel → automatic pytesseract fallback with a log warning. |
 | `HOST` | `127.0.0.1` | Server bind address (`server.py`) |
 | `PORT` | `8000` | Server port |
 
