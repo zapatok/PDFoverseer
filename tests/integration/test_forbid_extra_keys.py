@@ -2,16 +2,19 @@
 silently ignored (spec 2026-07-09-conteo-session-fixes §2). Regression for
 the note-wipe incident: {note, note_status} returned 200 and cleared text.
 
-§C5 suite-diet (2026-07-11): every test below sends a request engineered to
-422/400 — pydantic's extra="forbid" (or hand-rolled value validation) rejects
-the body BEFORE the route handler runs, so none of these requests ever
-mutates state (the reconcile_worker_marks test's own docstring makes this
+§C5 suite-diet (2026-07-11): every negative-path request below is engineered
+to 422/400 — pydantic's extra="forbid" (or hand-rolled value validation)
+rejects the body BEFORE the route handler runs, so those requests never
+mutate state (the reconcile_worker_marks test's own docstring makes this
 property explicit: "the 422 must come from the unknown key, not from any
-business-logic 404"). That makes one shared app + seeded session safe for the
-whole module — `client`/`session_with_pending_cell` below are module-scoped
-overrides of the function-scoped fixtures in conftest.py (same test-facing
-shape, so no test body below changed), saving ~14s of repeated
-create_app()+scan setup across 15 tests.
+business-logic 404"). One exception: the note-preserved test first PATCHes a
+real note (200, mutates the note field) as its own setup — no other test in
+this module reads that field, so the shared session stays order-independent.
+That makes one shared app + seeded session safe for the whole module —
+`client`/`session_with_pending_cell` below are module-scoped overrides of the
+function-scoped fixtures in conftest.py (same test-facing shape, so no test
+body below changed), saving ~14s of repeated create_app()+scan setup across
+15 tests.
 """
 
 from __future__ import annotations
