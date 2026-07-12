@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from core.scanners.patterns import Flavor
@@ -272,3 +273,32 @@ def test_count_covers_threaded_on_page_monotonic(monkeypatch):
         on_page=lambda d, t: seen.append((d, t)),
     )
     assert seen == [(i, 8) for i in range(8)]
+
+
+def test_count_covers_threaded_error_propagates(monkeypatch):
+    """§C2: a render error on one page mid-pool (ocr_threads>=2) must propagate
+    — never a silently partial/short count — and the executor must not hang."""
+    import core.scanners.utils.header_band_anchors as mod
+    from core.scanners.utils.pdf_render import PdfRenderError
+
+    def fake_render(_path, page_idx, **_):
+        if page_idx == 3:
+            raise PdfRenderError("boom")
+        im = Image.new("RGB", (10, 10), "white")
+        im.info["pi"] = page_idx
+        return im
+
+    monkeypatch.setattr(mod, "get_page_count", lambda _p: 6)
+    monkeypatch.setattr(mod, "render_page_region", fake_render)
+    monkeypatch.setattr(
+        mod.pytesseract,
+        "image_to_string",
+        lambda img, **kw: "ITEM ACTIVIDAD CUMPLE" if isinstance(img, Image.Image) else "",
+    )
+
+    with pytest.raises(PdfRenderError, match="boom"):
+        mod.count_covers_by_anchors(
+            Path("/fake.pdf"),
+            flavors=[{"name": "f", "anchors": ["ITEM", "ACTIVIDAD", "CUMPLE"], "min_match": 3}],
+            ocr_threads=4,
+        )

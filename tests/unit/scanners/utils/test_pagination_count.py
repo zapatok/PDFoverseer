@@ -327,3 +327,44 @@ def test_count_documents_threaded_cancel_propagates(tmp_path, make_pagination_pd
     monkeypatch.setattr(pc, "_corner_text", _text_then_cancel)
     with pytest.raises(CancelledError):
         pc.count_documents_by_pagination(pdf, cancel=cancel, ocr_threads=2)
+
+
+def test_count_documents_threaded_error_propagates_and_closes_docs(
+    tmp_path, make_pagination_pdf, monkeypatch
+):
+    """§C2: an unrelated OCR error mid-pool (not a cancellation) must propagate —
+    never a silently partial/short count — and every thread-local fitz.Document
+    opened by _read_pages_threaded must be closed (no handle leak), even though
+    the pool raised mid-way."""
+    from core.scanners.cancellation import CancellationToken
+    from core.scanners.utils import pagination_count as pc
+
+    pdf = make_pagination_pdf(
+        tmp_path / "boom.pdf", docs=[(4, "F-CRS-ART-01"), (4, "F-CRS-ART-01"), (4, "F-CRS-ART-01")]
+    )
+
+    def _boom(page):
+        if page.number == 5:
+            raise RuntimeError("ocr exploded")
+        return f"Pagina {page.number % 4 + 1} de 4"
+
+    monkeypatch.setattr(pc, "_corner_text", _boom)
+
+    opened_docs = []
+    real_open = pc.fitz.open
+
+    def spy_open(*a, **kw):
+        doc = real_open(*a, **kw)
+        opened_docs.append(doc)
+        return doc
+
+    monkeypatch.setattr(pc.fitz, "open", spy_open)
+
+    with pytest.raises(RuntimeError, match="ocr exploded"):
+        pc.count_documents_by_pagination(pdf, cancel=CancellationToken(), ocr_threads=4)
+
+    assert opened_docs  # at least one doc opened (main-thread page-count read + workers)
+    closed = sum(1 for d in opened_docs if d.is_closed)
+    assert closed == len(opened_docs), (
+        f"{len(opened_docs) - closed} of {len(opened_docs)} fitz.Document(s) leaked open"
+    )
