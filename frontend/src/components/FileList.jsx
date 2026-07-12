@@ -243,6 +243,11 @@ export default function FileList({ hospital, sigla }) {
     if (prevCellKeyRef.current !== null && prevCellKeyRef.current !== cellKey) {
       if (listRef.current) listRef.current.scrollTop = 0;
       setListScrollTop(0);
+      // A8: a filter left active from the previous cell silently hides files
+      // in the next one (the only cue was the "N de M" footer) — reset on a
+      // genuine cell change; a tick bump on the SAME cell must leave it alone.
+      setSearch("");
+      setActiveOrigins([]);
     }
     prevCellKeyRef.current = cellKey;
   }, [hospital, sigla]);
