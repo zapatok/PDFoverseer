@@ -12,6 +12,7 @@ from core.scanners.patterns import count_type_for
 
 from ._common import (
     _PAGE_COUNT_CACHE,
+    _PAGE_COUNT_CACHE_LOCK,
     _resolve_month_dir,
     _validate_session_id,
     enrich_cell_colado_suspects,
@@ -50,7 +51,8 @@ def create(
     # §B8.5: purge the page-count cache on every session open — see its
     # comment in _common.py for the (theoretical) staleness hole this closes
     # and the cross-month growth cap it doubles as.
-    _PAGE_COUNT_CACHE.clear()
+    with _PAGE_COUNT_CACHE_LOCK:
+        _PAGE_COUNT_CACHE.clear()
     return mgr.open_session(year=body.year, month=body.month, month_root=month_dir)
 
 
