@@ -28,6 +28,7 @@ from pathlib import Path
 import fitz
 
 from core.scanners import _build_scanner_for_sigla
+from core.scanners.anchors_scanner import AnchorsScanner
 from core.scanners.cancellation import CancellationToken
 from core.scanners.utils.pagination_count import (
     count_documents_by_pagination as production_count_pagination,
@@ -312,9 +313,14 @@ def run_rch_benchmark(
 
             cancel = CancellationToken()
 
-            # (a) production anchors — today's baseline for charla.
+            # (a) anchors baseline — instantiated DIRECTLY, not via the
+            # registry: since the Task-8 flip, _build_scanner_for_sigla
+            # ("charla") returns PaginationScanner, so routing through it
+            # would silently benchmark pagination against itself. Direct
+            # AnchorsScanner keeps this column an honest, re-runnable
+            # anchors measurement (same bypass idiom as column (b)).
             t0 = time.perf_counter()
-            anchors_result = _build_scanner_for_sigla("charla").count_ocr(sample_dir, cancel=cancel)
+            anchors_result = AnchorsScanner(sigla="charla").count_ocr(sample_dir, cancel=cancel)
             anchors_seconds = time.perf_counter() - t0
             anchors_count = anchors_result.count
 

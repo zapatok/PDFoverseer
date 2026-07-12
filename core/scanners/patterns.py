@@ -209,6 +209,11 @@ _ODI_ANCHORS: list[Flavor] = [
 # code box "F-CRS-RCH-01". Crucially, "Página 1 de N" is **NOT** included
 # in this anchor set — continuation pages (signature grids) of charla also
 # read "Página 1 de 2" (template bug — verified with sample from Daniel).
+# 2026-07-12 Fase-0 nuance: that repeat did NOT reproduce on any of the 7
+# data/samples charla files (0/136 pages — see
+# docs/research/2026-07-12-rch-corner-survey.md), so charla migrated to
+# pagination WITH the rch_fallback safety net; the caution stays valid for
+# chintegral/dif_pts, which remain on anchors.
 #
 # All cover-only field labels normalized to the form _normalize_text emits
 # (lowercase, accent-stripped, separator /-_→space).

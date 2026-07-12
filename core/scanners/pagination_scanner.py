@@ -139,6 +139,10 @@ class PaginationScanner(OcrScannerBase):
         except CancelledError:
             raise
         except (PdfRenderError, OSError, RuntimeError) as exc:
+            # low_trust=True here vs AnchorsScanner's False on its own failure
+            # path: inconsequential — the error string below already forces
+            # ScanResult.confidence=LOW either way (ocr_scanner_base's
+            # `not errors` check); this flag is just more explicit.
             return _PdfOutcome(
                 1, "pagination", [], True, False, f"rch_fallback_failed:{pdf.name}:{exc}"
             )
