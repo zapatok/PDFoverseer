@@ -241,13 +241,14 @@ def test_anchors_scanner_count_ocr_only_and_on_page(tmp_path: Path, monkeypatch)
 
     import core.scanners.anchors_scanner as _mod
     from core.scanners.utils import header_band_anchors as hba
+    from core.scanners.utils import ocr_backend
 
     monkeypatch.setattr(_mod, "PATTERNS", {"andamios": _FAKE_PATTERN})
     monkeypatch.setattr(_mod, "get_page_count", lambda _: 2)  # force the OCR path
     # Stub render + OCR so the real loop runs without I/O and finds no anchors.
     monkeypatch.setattr(hba, "get_page_count", lambda _: 2)
     monkeypatch.setattr(hba, "render_page_region", lambda *a, **k: Image.new("RGB", (1, 1)))
-    monkeypatch.setattr(hba.pytesseract, "image_to_string", lambda *a, **k: "")
+    monkeypatch.setattr(ocr_backend.pytesseract, "image_to_string", lambda *a, **k: "")
 
     pages_seen: list[tuple[int, int]] = []
 

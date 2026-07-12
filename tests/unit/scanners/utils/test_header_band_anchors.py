@@ -8,6 +8,7 @@ import pytest
 from PIL import Image
 
 from core.scanners.patterns import Flavor
+from core.scanners.utils import ocr_backend
 from core.scanners.utils.header_band_anchors import (
     _match_flavor,
     _normalize_text,
@@ -166,7 +167,7 @@ def test_count_covers_uses_first_passing_flavor(monkeypatch):
 
     monkeypatch.setattr(mod, "get_page_count", fake_get_page_count)
     monkeypatch.setattr(mod, "render_page_region", fake_render)
-    monkeypatch.setattr(mod.pytesseract, "image_to_string", patched_ocr)
+    monkeypatch.setattr(ocr_backend.pytesseract, "image_to_string", patched_ocr)
 
     flavors: list[Flavor] = [
         {
@@ -231,7 +232,7 @@ def test_count_covers_threaded_equals_sequential(monkeypatch):
 
     monkeypatch.setattr(mod, "get_page_count", lambda _p: len(page_texts))
     monkeypatch.setattr(mod, "render_page_region", fake_render)
-    monkeypatch.setattr(mod.pytesseract, "image_to_string", patched_ocr)
+    monkeypatch.setattr(ocr_backend.pytesseract, "image_to_string", patched_ocr)
 
     flavors: list[Flavor] = [
         {"name": "f_lch_xx", "anchors": ["ITEM", "ACTIVIDAD", "CUMPLE"], "min_match": 3},
@@ -260,7 +261,7 @@ def test_count_covers_threaded_on_page_monotonic(monkeypatch):
     monkeypatch.setattr(mod, "get_page_count", lambda _p: 8)
     monkeypatch.setattr(mod, "render_page_region", fake_render)
     monkeypatch.setattr(
-        mod.pytesseract,
+        ocr_backend.pytesseract,
         "image_to_string",
         lambda img, **kw: "ITEM ACTIVIDAD CUMPLE" if isinstance(img, Image.Image) else "",
     )
@@ -275,9 +276,37 @@ def test_count_covers_threaded_on_page_monotonic(monkeypatch):
     assert seen == [(i, 8) for i in range(8)]
 
 
-def test_count_covers_threaded_error_propagates(monkeypatch):
+def _stub_ocr_text(monkeypatch, backend, text):
+    """Stub whatever engine ocr_backend routes *backend* to, always returning *text*."""
+    if backend == "tesserocr":
+
+        class _FakeAPI:
+            def SetImage(self, img):  # noqa: N802 - matches tesserocr's real method name
+                pass
+
+            def GetUTF8Text(self):  # noqa: N802 - matches tesserocr's real method name
+                return text
+
+        class _FakeTesserocrModule:
+            def PyTessBaseAPI(self, **kw):  # noqa: N802 - matches tesserocr's real class name
+                return _FakeAPI()
+
+        monkeypatch.setattr(ocr_backend, "tesserocr", _FakeTesserocrModule())
+    else:
+        monkeypatch.setattr(ocr_backend.pytesseract, "image_to_string", lambda img, **kw: text)
+
+
+@pytest.mark.parametrize("backend", ["pytesseract", "tesserocr"])
+def test_count_covers_threaded_error_propagates(monkeypatch, backend):
     """§C2: a render error on one page mid-pool (ocr_threads>=2) must propagate
-    — never a silently partial/short count — and the executor must not hang."""
+    — never a silently partial/short count — and the executor must not hang.
+    Parametrized over both OCR backends (Track D §2-c) — the render error
+    fires before any OCR call, so both params use a fixed OCR stub; the point
+    is proving this thread-pool guarantee also holds with tesserocr live."""
+    if backend == "tesserocr":
+        pytest.importorskip("tesserocr")
+    monkeypatch.setenv("OVERSEER_OCR_BACKEND", backend)
+
     import core.scanners.utils.header_band_anchors as mod
     from core.scanners.utils.pdf_render import PdfRenderError
 
@@ -290,11 +319,7 @@ def test_count_covers_threaded_error_propagates(monkeypatch):
 
     monkeypatch.setattr(mod, "get_page_count", lambda _p: 6)
     monkeypatch.setattr(mod, "render_page_region", fake_render)
-    monkeypatch.setattr(
-        mod.pytesseract,
-        "image_to_string",
-        lambda img, **kw: "ITEM ACTIVIDAD CUMPLE" if isinstance(img, Image.Image) else "",
-    )
+    _stub_ocr_text(monkeypatch, backend, "ITEM ACTIVIDAD CUMPLE")
 
     with pytest.raises(PdfRenderError, match="boom"):
         mod.count_covers_by_anchors(

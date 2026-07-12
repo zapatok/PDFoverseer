@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
-import pytesseract
 from PIL import Image
 
 from core.image import _deskew, clean_for_ocr
@@ -34,6 +33,7 @@ from core.scanners.patterns import (
     DEFAULT_TOP_FRACTION,
     Flavor,
 )
+from core.scanners.utils.ocr_backend import ocr_image
 from core.scanners.utils.pdf_render import get_page_count, render_page_region
 from core.utils import OCR_PAGE_THREADS
 
@@ -224,12 +224,12 @@ def count_covers_by_anchors(
         # with the V4 cascade (deskew + color removal + inpaint + grayscale +
         # unsharp) — lifts degraded scans (andamios/ART) while never re-reading a
         # cover the raw pass already found, so clean cells never regress.
-        raw = pytesseract.image_to_string(pil, config="--psm 6 --oem 1", lang="spa+eng")
+        raw = ocr_image(pil, config="--psm 6 --oem 1", lang="spa+eng")
         owned, page_near = _match_page(_normalize_text(raw), flavors, page_idx)
         if owned is None:
             bgr = cv2.cvtColor(np.asarray(pil.convert("RGB")), cv2.COLOR_RGB2BGR)
             gray = clean_for_ocr(_deskew(bgr))
-            prep = pytesseract.image_to_string(gray, config="--psm 6 --oem 1", lang="spa+eng")
+            prep = ocr_image(gray, config="--psm 6 --oem 1", lang="spa+eng")
             owned, page_near = _match_page(_normalize_text(prep), flavors, page_idx)
 
         owned_by_page[page_idx] = owned

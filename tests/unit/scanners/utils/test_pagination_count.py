@@ -329,13 +329,22 @@ def test_count_documents_threaded_cancel_propagates(tmp_path, make_pagination_pd
         pc.count_documents_by_pagination(pdf, cancel=cancel, ocr_threads=2)
 
 
+@pytest.mark.parametrize("backend", ["pytesseract", "tesserocr"])
 def test_count_documents_threaded_error_propagates_and_closes_docs(
-    tmp_path, make_pagination_pdf, monkeypatch
+    tmp_path, make_pagination_pdf, monkeypatch, backend
 ):
     """§C2: an unrelated OCR error mid-pool (not a cancellation) must propagate —
     never a silently partial/short count — and every thread-local fitz.Document
     opened by _read_pages_threaded must be closed (no handle leak), even though
-    the pool raised mid-way."""
+    the pool raised mid-way. Parametrized over both OCR backends (Track D §2-c):
+    ``_corner_text`` is fully replaced below, so the backend choice doesn't
+    change this test's OCR text — the point is proving the thread-pool
+    error-propagation + fitz cleanup guarantee holds regardless of which
+    backend ``OVERSEER_OCR_BACKEND`` selects."""
+    if backend == "tesserocr":
+        pytest.importorskip("tesserocr")
+    monkeypatch.setenv("OVERSEER_OCR_BACKEND", backend)
+
     from core.scanners.cancellation import CancellationToken
     from core.scanners.utils import pagination_count as pc
 

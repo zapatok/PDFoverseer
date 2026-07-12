@@ -9,7 +9,6 @@ synthetic PDFs).
 from __future__ import annotations
 
 import io
-import os as _os
 import re
 import threading
 from collections import Counter
@@ -20,16 +19,11 @@ from pathlib import Path
 from typing import Literal
 
 import fitz
-import pytesseract
 from PIL import Image
 
 from core.scanners.cancellation import CancellationToken
+from core.scanners.utils.ocr_backend import ocr_image
 from core.utils import OCR_PAGE_THREADS
-
-# Tesseract binary path — mirror core/ocr.py convention
-pytesseract.pytesseract.tesseract_cmd = _os.getenv(
-    "TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
 
 # digit-normalize common OCR confusions, then match
 _DIGIT = str.maketrans(
@@ -195,7 +189,7 @@ def _corner_text(page: fitz.Page) -> str:
         matrix=fitz.Matrix(_OCR_DPI / 72.0, _OCR_DPI / 72.0), clip=clip, alpha=False
     )
     img = Image.open(io.BytesIO(pix.tobytes("png"))).convert("L")
-    return pytesseract.image_to_string(img, config="--psm 6 --oem 1", lang="spa+eng").strip()
+    return ocr_image(img, config="--psm 6 --oem 1", lang="spa+eng").strip()
 
 
 def _read_pages_sequential(
