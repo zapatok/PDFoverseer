@@ -25,7 +25,17 @@ export function getCachedThumb(doc, pageNumber) {
   return THUMB_CACHE.get(doc)?.get(pageNumber) ?? null;
 }
 
-function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores", rotation = 0 }) {
+function Thumb({
+  doc,
+  pageNumber,
+  active,
+  count,
+  onSelect,
+  unit = "trabajadores",
+  rotation = 0,
+  inRange = false,
+  rangeEdge = null, // "start" | "end" | null — Track D §4 Task 10 (reorg mode)
+}) {
   const ref = useRef(null);
   // Composite cache key only when rotated — unrotated pages keep the plain
   // numeric key so existing (pre-rotation) cache entries stay valid.
@@ -74,12 +84,18 @@ function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores"
       ref={ref}
       onClick={() => onSelect(pageNumber)}
       aria-current={active ? "true" : undefined}
-      aria-label={`Página ${pageNumber}${count != null ? `, ${count} ${unit}` : ""}`}
+      aria-label={[
+        `Página ${pageNumber}`,
+        count != null ? `, ${count} ${unit}` : "",
+        rangeEdge === "start" ? " (inicio)" : rangeEdge === "end" ? " (fin)" : "",
+      ].join("")}
       className={[
         "relative block w-full rounded border p-0.5 transition",
         active
           ? "border-po-accent ring-1 ring-po-accent"
-          : "border-po-border hover:border-po-border-strong",
+          : inRange
+            ? "border-po-override-border bg-po-override-bg"
+            : "border-po-border hover:border-po-border-strong",
       ].join(" ")}
     >
       {url ? (
@@ -97,6 +113,11 @@ function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores"
           {count}
         </span>
       )}
+      {rangeEdge && (
+        <span className="absolute right-1 top-1 rounded-full bg-po-dot-override px-1 text-[10px] font-medium text-white">
+          {rangeEdge === "start" ? "A" : "Z"}
+        </span>
+      )}
     </button>
   );
 }
@@ -112,6 +133,10 @@ function Thumb({ doc, pageNumber, active, count, onSelect, unit = "trabajadores"
  * @param {(page:number)=>void} props.onSelect
  * @param {string} [props.unit] - "trabajadores" | "chequeos" (label del aria-label por página).
  * @param {(page:number)=>number} [props.rotationForPage] - grados extra por página (§4), null si no aplica.
+ * @param {number|null} [props.reorgStart] - Track D §4 Task 10: página marcada
+ *   como inicio en modo reorg (RAW — puede ser mayor que `reorgEnd` si se
+ *   marcaron fuera de orden; null fuera de modo reorg o sin marcar).
+ * @param {number|null} [props.reorgEnd] - página marcada como fin en modo reorg (RAW, ver arriba).
  */
 export function WorkerThumbnails({
   doc,
@@ -121,9 +146,20 @@ export function WorkerThumbnails({
   onSelect,
   unit = "trabajadores",
   rotationForPage = null,
+  reorgStart = null,
+  reorgEnd = null,
 }) {
   const countByPage = new Map((marks || []).map((m) => [m.page, m.count]));
   const currentRef = useRef(null);
+  // Range tint band is the NORMALIZED [min,max] of the raw marks — matches
+  // ReorgHud's own "Páginas {min}–{max}" display and handleCreate's
+  // normalizeRange (WorkerCountViewer.jsx), so an out-of-order mark ([ at a
+  // later page than an already-marked ]) still tints the full intended span,
+  // not nothing. The "A"/"Z" edge badges below use the RAW values — they mark
+  // literally which page each bracket key landed on.
+  const rangeLo = reorgStart != null && reorgEnd != null ? Math.min(reorgStart, reorgEnd) : null;
+  const rangeHi = reorgStart != null && reorgEnd != null ? Math.max(reorgStart, reorgEnd) : null;
+  const inRange = (p) => rangeLo != null && p >= rangeLo && p <= rangeHi;
 
   useEffect(() => {
     currentRef.current?.scrollIntoView({ block: "center" });
@@ -150,7 +186,10 @@ export function WorkerThumbnails({
                 active={p === currentPage}
                 count={countByPage.has(p) ? countByPage.get(p) : null}
                 onSelect={onSelect}
+                unit={unit}
                 rotation={rotation}
+                inRange={inRange(p)}
+                rangeEdge={p === reorgStart ? "start" : p === reorgEnd ? "end" : null}
               />
             </li>
           );

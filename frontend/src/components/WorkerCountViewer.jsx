@@ -35,70 +35,6 @@ function markFor(marks, filename, page) {
 }
 
 /**
- * Columna de miniaturas con resaltado de rango de reorg.
- * Extiende WorkerThumbnails visualmente con un fondo de selección en el rango.
- */
-function ReorgThumbnails({ doc, pageCount, currentPage, reorgStart, reorgEnd, onSelect }) {
-  const refs = useRef({});
-  const currentRef = useRef(null);
-
-  useEffect(() => {
-    currentRef.current?.scrollIntoView({ block: "nearest" });
-  }, [currentPage]);
-
-  if (!doc || !pageCount) {
-    return <aside aria-hidden="true" className="w-28 shrink-0 border-r border-po-border bg-po-panel" />;
-  }
-
-  const inRange = (p) =>
-    reorgStart != null && reorgEnd != null && p >= reorgStart && p <= reorgEnd;
-  const isStart = (p) => p === reorgStart;
-  const isEnd = (p) => p === reorgEnd;
-
-  return (
-    <aside className="w-28 shrink-0 overflow-y-auto border-r border-po-border bg-po-panel p-1.5">
-      <ul className="flex flex-col gap-1.5">
-        {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
-          <li
-            key={p}
-            ref={(el) => {
-              refs.current[p] = el;
-              if (p === currentPage) currentRef.current = el;
-            }}
-          >
-            <button
-              onClick={() => onSelect(p)}
-              aria-current={p === currentPage ? "true" : undefined}
-              aria-label={`Página ${p}${isStart(p) ? " (inicio)" : ""}${isEnd(p) ? " (fin)" : ""}`}
-              className={[
-                "relative block w-full rounded border p-0.5 transition",
-                p === currentPage
-                  ? "border-po-accent ring-1 ring-po-accent"
-                  : inRange(p)
-                    ? "border-po-scanning bg-po-scanning-bg"
-                    : "border-po-border hover:border-po-border-strong",
-              ].join(" ")}
-            >
-              <div className="flex aspect-[3/4] w-full items-center justify-center bg-po-bg text-[10px] text-po-text-subtle">
-                …
-              </div>
-              <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] tabular-nums text-white">
-                {p}
-              </span>
-              {(isStart(p) || isEnd(p)) && (
-                <span className="absolute right-1 top-1 rounded-full bg-po-scanning px-1 text-[10px] font-medium text-white">
-                  {isStart(p) ? "A" : "Z"}
-                </span>
-              )}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </aside>
-  );
-}
-
-/**
  * HUD lateral del modo reorganización: selección de rango + destino + crear op.
  * Exported (only) so §A10's defaults test can mount it directly — not part
  * of the module's public API otherwise.
@@ -615,26 +551,21 @@ export function WorkerCountViewer({
 
   return (
     <div className="flex h-full w-full">
-      {mode === "reorg" ? (
-        <ReorgThumbnails
-          doc={error ? null : doc}
-          pageCount={pageCount}
-          currentPage={page}
-          reorgStart={reorgStartPage}
-          reorgEnd={reorgEndPage}
-          onSelect={setPageInFile}
-        />
-      ) : (
-        <WorkerThumbnails
-          doc={error ? null : doc}
-          pageCount={pageCount}
-          currentPage={page}
-          marks={marks[currentFile.name] || []}
-          onSelect={setPageInFile}
-          unit={unit}
-          rotationForPage={rotationForPageFn(reorgOps, hospital, sigla, currentFile.name)}
-        />
-      )}
+      {/* Track D §4 Task 10: reorg mode reuses the SAME lazy thumbnail
+          pipeline as worker-count mode (Thumb + THUMB_CACHE WeakMap) instead
+          of a duplicated placeholder — `reorgStart`/`reorgEnd` (raw, possibly
+          out-of-order marks) drive the range tint only when mode="reorg". */}
+      <WorkerThumbnails
+        doc={error ? null : doc}
+        pageCount={pageCount}
+        currentPage={page}
+        marks={mode === "reorg" ? [] : marks[currentFile.name] || []}
+        onSelect={setPageInFile}
+        unit={unit}
+        rotationForPage={rotationForPageFn(reorgOps, hospital, sigla, currentFile.name)}
+        reorgStart={mode === "reorg" ? reorgStartPage : null}
+        reorgEnd={mode === "reorg" ? reorgEndPage : null}
+      />
       <div ref={panelRef} className="relative flex-1 overflow-auto bg-black">
         {/* Un PDF roto no es un dead-end: el HUD y los atajos siguen vivos
             (spec §10) — el error se muestra en el panel y Re Pág / Av Pág
