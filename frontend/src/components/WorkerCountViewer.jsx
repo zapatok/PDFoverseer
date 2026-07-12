@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 
@@ -13,7 +13,8 @@ import { computeWorkerCount, fileSubtotal } from "../lib/worker-count";
 import { countTypeFor } from "../lib/sigla-info";
 import { focusIsInInput } from "../lib/keyboard-focus";
 import { parseGoToPage } from "../lib/go-to-page";
-import { isValidRange, normalizeRange } from "../lib/reorg-range";
+import { applyRangeKey, isValidRange, normalizeRange } from "../lib/reorg-range";
+import { REORG_SHORTCUTS } from "../lib/reorg-shortcuts";
 import { pageRotation, rotationForPageFn } from "../lib/page-rotation";
 import { DEFAULT_ROTATION_DEG, ROTATION_OPTIONS } from "../lib/rotation-options";
 import Button from "../ui/Button";
@@ -101,8 +102,14 @@ function ReorgThumbnails({ doc, pageCount, currentPage, reorgStart, reorgEnd, on
  * HUD lateral del modo reorganización: selección de rango + destino + crear op.
  * Exported (only) so §A10's defaults test can mount it directly — not part
  * of the module's public API otherwise.
+ *
+ * `forwardRef` exposes `submit()` (Track D §4, Task 9): the viewer's `Enter`
+ * shortcut calls it to trigger the SAME creation flow as the "Crear
+ * operación" button below — same `canCreate` guard, same §A10 dest defaults,
+ * no bypass. Rendering without a `ref` (as the standalone defaults test
+ * does) is unaffected.
  */
-export function ReorgHud({
+export const ReorgHud = forwardRef(function ReorgHud({
   currentPage,
   pageCount,
   reorgStart,
@@ -114,7 +121,7 @@ export function ReorgHud({
   currentFile,
   sourceHospital,
   sourceSigla,
-}) {
+}, ref) {
   const [opType, setOpType] = useState("extract_pages");
   // §A10: default the destino selects to the SOURCE cell — the guard below
   // (destino≠origen) already blocks submit until the operator deliberately
@@ -170,6 +177,8 @@ export function ReorgHud({
       setCreating(false);
     }
   };
+
+  useImperativeHandle(ref, () => ({ submit: handleCreate }));
 
   const selectClass =
     "w-full rounded border border-po-border bg-po-panel px-2 py-1 text-xs text-po-text focus:outline-none focus:ring-1 focus:ring-po-accent";
@@ -294,9 +303,26 @@ export function ReorgHud({
           <Badge variant="blue">{opType}</Badge>
         </div>
       )}
+
+      {/* Leyenda de atajos — espejo de WorkerHud (lib/worker-shortcuts.js) */}
+      <div className="shrink-0 border-t border-po-border pt-3">
+        <p className="mb-1.5 text-xs uppercase tracking-wider text-po-text-muted">Atajos</p>
+        <ul className="flex flex-col gap-1">
+          {REORG_SHORTCUTS.map((s) => (
+            <li key={s.action} className="flex items-center justify-between gap-2 text-xs">
+              <span className="flex shrink-0 gap-1">
+                {s.keys.map((k) => (
+                  <Badge key={k} variant="neutral" className="font-mono">{k}</Badge>
+                ))}
+              </span>
+              <span className="text-right text-po-text-subtle">{s.action}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </aside>
   );
-}
+});
 
 export function WorkerCountViewer({
   sessionId,
@@ -402,6 +428,10 @@ export function WorkerCountViewer({
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
+  // Imperative handle onto ReorgHud (mode="reorg" only) — Enter (§4 keyboard
+  // range marking) calls `hudRef.current.submit()`, the SAME "Crear
+  // operación" flow the button triggers.
+  const hudRef = useRef(null);
 
   // count_type determina si este visor opera en modo "trabajadores" (voice on,
   // label "trabajadores") o modo "chequeos" (sin voz, label "chequeos").
@@ -513,20 +543,58 @@ export function WorkerCountViewer({
     flushSave(marks, next, { file: fileIdx, page });
   };
 
+  // --- reorg-mode helpers ---
+  // Shared by both the mouse ("Marcar inicio/fin" buttons in ReorgHud) and
+  // the keyboard ([ ] Escape, §4 keyboard range marking) — `applyRangeKey`
+  // (lib/reorg-range.js) is the single source of truth so the two input
+  // methods never diverge.
+  const handleMarkStart = () => {
+    const next = applyRangeKey("[", { start: reorgStartPage, end: reorgEndPage }, page);
+    setReorgStartPage(next.start);
+    setReorgEndPage(next.end);
+  };
+  const handleMarkEnd = () => {
+    const next = applyRangeKey("]", { start: reorgStartPage, end: reorgEndPage }, page);
+    setReorgStartPage(next.start);
+    setReorgEndPage(next.end);
+  };
+  const handleClearRange = () => {
+    const next = applyRangeKey("Escape", { start: reorgStartPage, end: reorgEndPage }, page);
+    setReorgStartPage(next.start);
+    setReorgEndPage(next.end);
+  };
+
+  const handleCreateOp = async (opDraft) => {
+    if (onCreateOp) {
+      await onCreateOp(opDraft);
+    }
+  };
+
   // refresca la ref del teclado con los closures de este render. El visor
   // AHORA sí aloja <input>s ("Ir a pág.", calculadora) — el guard §3 de abajo
   // es lo que mantiene la captura segura: mientras uno tenga foco, los
   // dígitos van al campo, no al buffer pendiente. Fuera de eso, captura toda
   // la entrada: los dígitos van al buffer pendiente, Backspace lo corrige, y
   // los atajos de §5.4 a la marca.
-  // GATE: in reorg mode the keyboard handler is a no-op — digits/PageDown must
-  // NOT write worker marks while the operator is selecting a page range.
+  // GATE: in reorg mode the keyboard handler NEVER touches `marks`/`pending`/
+  // `flushSave` (the worker-count save path) — it only drives the page-range
+  // selection ([ ] Escape, §4 keyboard range marking) and requests op
+  // creation (Enter, via ReorgHud's own canCreate guard). Worker-mode
+  // shortcuts (digits/PageDown/Delete/…) are excluded by the early `return`
+  // below; reorg's own keys are handled and then return immediately — they
+  // never fall through to the worker-mode branch.
   keyHandler.current = (e) => {
     // §3 guard (NEW in this round): the viewer now hosts inputs ("Ir a pág.",
     // calculator). While one has focus, counting/nav shortcuts are inert —
     // typing "12" in a field must NOT feed the count buffer.
     if (focusIsInInput()) return;
-    if (mode === "reorg") return;
+    if (mode === "reorg") {
+      if (e.key === "[") { e.preventDefault(); handleMarkStart(); }
+      else if (e.key === "]") { e.preventDefault(); handleMarkEnd(); }
+      else if (e.key === "Escape") { e.preventDefault(); handleClearRange(); }
+      else if (e.key === "Enter") { e.preventDefault(); hudRef.current?.submit(); }
+      return;
+    }
     if (e.key === "PageDown" && e.shiftKey) { e.preventDefault(); setPageInFile(Math.min(page + 10, pageCount)); return; }
     if (e.key === "PageUp" && e.shiftKey) { e.preventDefault(); setPageInFile(Math.max(page - 10, 1)); return; }
     if (e.key === "PageDown") { e.preventDefault(); fixAndAdvance(); }
@@ -542,17 +610,6 @@ export function WorkerCountViewer({
     } else if (/^[0-9]$/.test(e.key)) {
       e.preventDefault();
       setPending((p) => ((p ?? "") + e.key).slice(0, 4)); // tope de 4 dígitos
-    }
-  };
-
-  // --- reorg-mode helpers ---
-  const handleMarkStart = () => setReorgStartPage(page);
-  const handleMarkEnd = () => setReorgEndPage(page);
-  const handleClearRange = () => { setReorgStartPage(null); setReorgEndPage(null); };
-
-  const handleCreateOp = async (opDraft) => {
-    if (onCreateOp) {
-      await onCreateOp(opDraft);
     }
   };
 
@@ -652,6 +709,7 @@ export function WorkerCountViewer({
         />
       ) : (
         <ReorgHud
+          ref={hudRef}
           currentPage={page}
           pageCount={pageCount}
           reorgStart={reorgStartPage}
