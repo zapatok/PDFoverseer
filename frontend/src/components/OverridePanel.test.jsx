@@ -207,6 +207,70 @@ describe("OverridePanel — over-cap confirmation", () => {
     expect(input.select).toHaveBeenCalled();
   });
 
+  it("§A9: typing a valid value + an IMMEDIATE blur (before the debounce fires) never reverts to the old value", () => {
+    vi.useFakeTimers();
+    try {
+      const view = mount(
+        <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: 4 }} maxPages={20} />,
+      );
+      const input = view.container.querySelector("input");
+      focusIn(input);
+      setInputValue(input, "9");
+      // Blur BEFORE any timer advance — saveStatus is still "idle" (the
+      // debounce hasn't started), so a resync gated only on the store's
+      // pendingSaves would still wrongly snap back to "4".
+      focusOut(input);
+      expect(input.value).toBe("9");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("§A9: stays on the typed value through the whole save (debounce fire → network in flight → resolve)", () => {
+    vi.useFakeTimers();
+    try {
+      const view = mount(
+        <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: 4 }} maxPages={20} />,
+      );
+      const input = view.container.querySelector("input");
+      focusIn(input);
+      setInputValue(input, "9");
+      focusOut(input);
+      expect(input.value).toBe("9");
+
+      act(() => vi.advanceTimersByTime(400));
+      expect(saveOverride).toHaveBeenCalledTimes(1);
+      // Simulate the store's own pendingSaves transition (saveOverride is a
+      // spy here, so it doesn't do this itself).
+      act(() => useSessionStore.setState({ pendingSaves: { "HRB|odi": "saving" } }));
+      expect(input.value).toBe("9"); // still mid-flight, no revert
+
+      act(() => useSessionStore.setState({ pendingSaves: {} }));
+      act(() =>
+        view.root.render(
+          <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: 9 }} maxPages={20} />,
+        ),
+      );
+      expect(input.value).toBe("9"); // resync is now a harmless no-op
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("§A9: a LEGITIMATE remote cell update (no local edit, no pending save) still resyncs", () => {
+    const view = mount(
+      <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: 4 }} maxPages={20} />,
+    );
+    const input = view.container.querySelector("input");
+    expect(input.value).toBe("4");
+    act(() =>
+      view.root.render(
+        <OverridePanel hospital="HRB" sigla="odi" cell={{ user_override: 7 }} maxPages={20} />,
+      ),
+    );
+    expect(input.value).toBe("7");
+  });
+
   it("a debounced valid save scheduled on one cell lands on THAT cell after switching", () => {
     // The debounce hook invokes the LATEST render's callback when the timer
     // fires — the cell identity must travel as args (captured at schedule

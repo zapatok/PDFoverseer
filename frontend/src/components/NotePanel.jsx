@@ -21,11 +21,27 @@ export default function NotePanel({ hospital, sigla, cell, locked = false }) {
 
   const [text, setText] = useState(cell?.note ?? "");
   const [focused, setFocused] = useState(false);
+  // §A9: bridges the gap between a keystroke and the debounced save actually
+  // starting — saveStatus only becomes "saving" once the 400 ms timer fires,
+  // so a resync gated on saveStatus alone still reverts an IMMEDIATE blur to
+  // the stale store value for that whole window. Set true on every keystroke,
+  // cleared once saveStatus itself picks up "saving" (below) — from then on
+  // the store's own bookkeeping (reused, not duplicated) covers the rest.
+  const [dirty, setDirty] = useState(false);
+  const hasPendingSave = dirty || saveStatus === "saving";
 
-  // Resync from store when note changes externally, but only if not editing.
+  // Resync from store when note changes externally, but only if not editing
+  // AND no local edit is still in flight (§A9 — see hasPendingSave above).
   useEffect(() => {
-    if (!focused) setText(cell?.note ?? "");
-  }, [cell?.note, focused]);
+    if (!focused && !hasPendingSave) setText(cell?.note ?? "");
+  }, [cell?.note, focused, hasPendingSave]);
+
+  // Once the debounced save (or an explicit markResolved/reopen) actually
+  // starts, saveStatus takes over tracking "in flight" — drop the local
+  // `dirty` bridge so it doesn't stick past this save.
+  useEffect(() => {
+    if (saveStatus === "saving") setDirty(false);
+  }, [saveStatus]);
 
   // The cell identity travels as ARGS, not via the closure: the debounce hook
   // invokes the LATEST render's callback when the timer fires, so a closure
@@ -43,6 +59,7 @@ export default function NotePanel({ hospital, sigla, cell, locked = false }) {
   const onChange = (e) => {
     const v = e.target.value;
     setText(v);
+    setDirty(true);
     flush(hospital, sigla, v, "por_resolver");
   };
 

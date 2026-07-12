@@ -19,11 +19,21 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   // Over-cap confirmation (task 5): holds the pending value while we wait for
   // the operator to confirm "sí, de verdad son N documentos en M páginas".
   const [pendingOverCap, setPendingOverCap] = useState(null);
+  // §A9: bridges the gap between a keystroke and the debounced save actually
+  // starting — saveStatus only becomes "saving" once the 400 ms timer fires,
+  // so a resync gated on saveStatus alone still reverts an IMMEDIATE blur to
+  // the stale store value for that whole window. Set true only on a VALID
+  // keystroke (the one that actually schedules flushSave — an over-cap
+  // keystroke schedules nothing, so it must keep discarding on blur exactly
+  // as before). Cleared once saveStatus itself picks up "saving" (below).
+  const [dirty, setDirty] = useState(false);
+  const hasPendingSave = dirty || saveStatus === "saving";
 
   const inputRef = useRef(null);
 
   // Resync from store when cell changes (e.g., InlineEditCount committed externally),
-  // but ONLY if not currently editing that field. A blur-to-elsewhere also
+  // but ONLY if not currently editing that field AND no local edit is still in
+  // flight (§A9 — see hasPendingSave above). A blur-to-elsewhere also
   // DISCARDS a pending over-cap confirmation — the operator walked away from
   // the question. This cannot race the Confirmar/Cancelar clicks: their
   // onMouseDown preventDefault keeps focus on the input, so clicking them
@@ -31,22 +41,33 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   // the !focused.value guard keeps a remote cell update from wiping their
   // pending state.
   useEffect(() => {
-    if (!focused.value) {
+    if (!focused.value && !hasPendingSave) {
       setValue(cell?.user_override ?? "");
       setInvalid(false); // a fresh cell must not inherit the previous error border
       setPendingOverCap(null);
     }
-  }, [cell?.user_override, focused.value]);
+  }, [cell?.user_override, focused.value, hasPendingSave]);
+
+  // Once the debounced save actually starts, saveStatus takes over tracking
+  // "in flight" — drop the local `dirty` bridge so it doesn't stick past
+  // this save.
+  useEffect(() => {
+    if (saveStatus === "saving") setDirty(false);
+  }, [saveStatus]);
 
   // Identity change: this instance is NOT keyed by cell (DetailPanel reuses it
   // across sigla/hospital switches), so a pending confirmation must die with
   // the cell it was typed for — otherwise Confirmar would save the old cell's
   // value into the NEWLY selected cell with the cap lifted. Same on a flip to
   // disabled (lock / "Por archivos"): drop the stale prompt, resync the draft.
+  // Also drops `dirty` — it only makes sense for whatever cell is CURRENTLY
+  // displayed; the OLD cell's debounced save (if any) still lands correctly
+  // via its captured args, unaffected by resetting this instance's own flag.
   useEffect(() => {
     setPendingOverCap(null);
     setValue(cell?.user_override ?? "");
     setInvalid(false);
+    setDirty(false);
     // Deliberately NOT depending on cell — the sibling effect above owns
     // steady-state resync; this one only fires on identity/disabled changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,6 +101,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
     const { value: parsed, valid, overCap } = parseOverrideInput(raw, { maxPages });
     setInvalid(!valid && !overCap);
     if (valid) {
+      setDirty(true);
       flushSave(hospital, sigla, parsed === null ? "" : String(parsed));
     } else if (overCap) {
       setPendingOverCap(parsed);

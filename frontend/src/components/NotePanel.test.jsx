@@ -39,6 +39,14 @@ function setTextareaValue(textarea, value) {
   act(() => textarea.dispatchEvent(new Event("input", { bubbles: true })));
 }
 
+// React ≥17 maps onFocus/onBlur to the native focusin/focusout events.
+function focusIn(el) {
+  act(() => el.dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
+}
+function focusOut(el) {
+  act(() => el.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+}
+
 const saveNote = vi.fn();
 
 beforeEach(() => {
@@ -79,5 +87,78 @@ describe("NotePanel — debounced save pins the cell identity", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("NotePanel — resync respects a save in flight (§A9)", () => {
+  it("typing + an IMMEDIATE blur (before the 400 ms debounce even fires) never reverts to the old value", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = mount(
+        <NotePanel hospital="HRB" sigla="odi" cell={{ note: "old note", note_status: null }} />,
+      );
+      const textarea = container.querySelector("textarea");
+      focusIn(textarea);
+      setTextareaValue(textarea, "typed note");
+      // Blur BEFORE any timer advance — the debounced save hasn't even started
+      // yet (saveStatus is still "idle"), so a resync gated only on the
+      // store's pendingSaves would still see this as "nothing in flight" and
+      // wrongly snap back to "old note".
+      focusOut(textarea);
+      expect(textarea.value).toBe("typed note");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stays on the typed value through the whole save (debounce fire → network in flight → resolve)", () => {
+    vi.useFakeTimers();
+    try {
+      const { container, root } = mount(
+        <NotePanel hospital="HRB" sigla="odi" cell={{ note: "old note", note_status: null }} />,
+      );
+      const textarea = container.querySelector("textarea");
+      focusIn(textarea);
+      setTextareaValue(textarea, "typed note");
+      focusOut(textarea);
+      expect(textarea.value).toBe("typed note");
+
+      // Debounce fires → saveNote (the store action) is invoked; the real
+      // store action would mark pendingSaves "saving" in that same call —
+      // simulate that here since saveNote is a spy.
+      act(() => vi.advanceTimersByTime(400));
+      expect(saveNote).toHaveBeenCalledTimes(1);
+      act(() =>
+        useSessionStore.setState({ pendingSaves: { "HRB|odi|note": "saving" } }),
+      );
+      expect(textarea.value).toBe("typed note"); // still mid-flight, no revert
+
+      // Save resolves: the store would merge cell.note + clear pendingSaves in
+      // the SAME set() — a re-render with both reflects that.
+      act(() => useSessionStore.setState({ pendingSaves: {} }));
+      act(() =>
+        root.render(
+          <NotePanel hospital="HRB" sigla="odi" cell={{ note: "typed note", note_status: null }} />,
+        ),
+      );
+      expect(textarea.value).toBe("typed note"); // resync is now a harmless no-op
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a LEGITIMATE remote cell_updated (no local edit, no pending save) still resyncs", () => {
+    const { container, root } = mount(
+      <NotePanel hospital="HRB" sigla="odi" cell={{ note: "server v1", note_status: null }} />,
+    );
+    const textarea = container.querySelector("textarea");
+    expect(textarea.value).toBe("server v1");
+    // Nothing typed, nothing pending — a remote note update must still land.
+    act(() =>
+      root.render(
+        <NotePanel hospital="HRB" sigla="odi" cell={{ note: "server v2", note_status: null }} />,
+      ),
+    );
+    expect(textarea.value).toBe("server v2");
   });
 });
