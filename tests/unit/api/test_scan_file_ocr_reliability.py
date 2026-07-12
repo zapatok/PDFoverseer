@@ -19,16 +19,6 @@ from core.scanners.base import ConfidenceLevel, ScanResult, ScanTelemetry
 from core.scanners.pagination_scanner import PaginationScanner
 
 
-def _make_pdf(path, pages: int) -> None:
-    import fitz
-
-    doc = fitz.open()
-    for _ in range(pages):
-        doc.new_page()
-    doc.save(str(path))
-    doc.close()
-
-
 def _seed_settled_cell(mgr, sid, hospital, sigla, filename):
     """Seed a cell whose single file is a settled R1 (filename_glob, 1 page) —
     apply_filename_result computes all_reliable=True for it naturally."""
@@ -47,7 +37,7 @@ def _seed_settled_cell(mgr, sid, hospital, sigla, filename):
     mgr.apply_filename_result(sid, hospital, sigla, result)
 
 
-def test_scan_file_ocr_recomputes_all_reliable_on_low_trust_result(tmp_path, monkeypatch):
+def test_scan_file_ocr_recomputes_all_reliable_on_low_trust_result(tmp_path, monkeypatch, make_pdf):
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "b1_reliability.db"))
     app = create_app()
@@ -56,7 +46,7 @@ def test_scan_file_ocr_recomputes_all_reliable_on_low_trust_result(tmp_path, mon
         sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
-        _make_pdf(folder / "a.pdf", 1)
+        make_pdf(folder / "a.pdf", 1)
 
         _seed_settled_cell(mgr, sid, "HRB", "odi", "a.pdf")
         pre_state = mgr.get_session_state(sid)

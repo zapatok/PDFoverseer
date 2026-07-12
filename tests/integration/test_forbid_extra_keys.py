@@ -1,8 +1,80 @@
 """Integration: unknown JSON keys on write endpoints must 422, not be
 silently ignored (spec 2026-07-09-conteo-session-fixes §2). Regression for
-the note-wipe incident: {note, note_status} returned 200 and cleared text."""
+the note-wipe incident: {note, note_status} returned 200 and cleared text.
+
+§C5 suite-diet (2026-07-11): every test below sends a request engineered to
+422/400 — pydantic's extra="forbid" (or hand-rolled value validation) rejects
+the body BEFORE the route handler runs, so none of these requests ever
+mutates state (the reconcile_worker_marks test's own docstring makes this
+property explicit: "the 422 must come from the unknown key, not from any
+business-logic 404"). That makes one shared app + seeded session safe for the
+whole module — `client`/`session_with_pending_cell` below are module-scoped
+overrides of the function-scoped fixtures in conftest.py (same test-facing
+shape, so no test body below changed), saving ~14s of repeated
+create_app()+scan setup across 15 tests.
+"""
 
 from __future__ import annotations
+
+import fitz
+import pytest
+from fastapi.testclient import TestClient
+
+from api.main import create_app
+
+
+def _draw_pdf(path, pages: int = 1) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = fitz.open()
+    for _ in range(pages):
+        doc.new_page()
+    doc.save(str(path))
+    doc.close()
+
+
+@pytest.fixture(scope="module")
+def _forbid_extra_keys_env(tmp_path_factory):
+    """App + seeded HPV/odi pending cell, built ONCE for this module.
+
+    DB isolation lesson (2026-07-03, see tests/conftest.py::_db_path_isolation):
+    a bare create_app() without an explicit OVERSEER_DB_PATH falls back to the
+    REAL overseer.db. Module-scoped fixtures can't use the function-scoped
+    `monkeypatch` fixture, so `pytest.MonkeyPatch()` is used directly here and
+    pinned to this module's own tmp_path_factory dir for the module's whole
+    lifetime (undone at teardown) — never the real DB.
+    """
+    root = tmp_path_factory.mktemp("forbid_extra_keys")
+    mp = pytest.MonkeyPatch()
+    mp.setenv("INFORME_MENSUAL_ROOT", str(root))
+    mp.setenv("OVERSEER_DB_PATH", str(root / "test.db"))
+    hosp, sigla = "HPV", "odi"
+    folder = root / "ABRIL" / hosp / "3.-ODI Visitas"
+    folder.mkdir(parents=True)
+    # Glob-matching names so pase-1 counts them, same as conftest's
+    # _build_pending_cell (a.pdf=1pg → R1, big.pdf=8pg → Pendiente).
+    _draw_pdf(folder / "2026-04-10_odi_a.pdf", 1)
+    _draw_pdf(folder / "2026-04-15_odi_big.pdf", 8)
+
+    app = create_app()
+    with TestClient(app) as c:
+        r = c.post("/api/sessions", json={"year": 2026, "month": 4})
+        assert r.status_code == 200, r.text
+        sid = r.json()["session_id"]
+        r2 = c.post(f"/api/sessions/{sid}/scan")
+        assert r2.status_code == 200, r2.text
+        yield c, sid, hosp, sigla
+    mp.undo()
+
+
+@pytest.fixture(scope="module")
+def client(_forbid_extra_keys_env):
+    return _forbid_extra_keys_env[0]
+
+
+@pytest.fixture(scope="module")
+def session_with_pending_cell(_forbid_extra_keys_env):
+    _, sid, hosp, sigla = _forbid_extra_keys_env
+    return sid, hosp, sigla
 
 
 def test_note_unknown_keys_422_and_note_preserved(client, session_with_pending_cell):

@@ -2,21 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
-import fitz
 import pytest
 from fastapi.testclient import TestClient
 
 from api.main import create_app
-
-
-def _make_pdf(path: Path, n_pages: int) -> None:
-    doc = fitz.open()
-    for _ in range(n_pages):
-        doc.new_page()
-    doc.save(str(path))
-    doc.close()
 
 
 @pytest.fixture
@@ -28,7 +20,9 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def _build_pending_cell(tmp_path: Path, month_name: str, hosp: str, sigla: str) -> None:
+def _build_pending_cell(
+    make_pdf: Callable, tmp_path: Path, month_name: str, hosp: str, sigla: str
+) -> None:
     """Build a cell folder with one 1-page PDF (→ R1) and one 8-page PDF (→ Pendiente).
 
     odi → "3.-ODI Visitas" (count_type="documents", capped)
@@ -37,8 +31,8 @@ def _build_pending_cell(tmp_path: Path, month_name: str, hosp: str, sigla: str) 
     folder.mkdir(parents=True)
     # Glob-matching names so pase-1 (filename scan) actually counts them, the way
     # real corpus files are named — otherwise per_file stays empty (unrealistic).
-    _make_pdf(folder / "2026-04-10_odi_a.pdf", 1)
-    _make_pdf(folder / "2026-04-15_odi_big.pdf", 8)
+    make_pdf(folder / "2026-04-10_odi_a.pdf", 1)
+    make_pdf(folder / "2026-04-15_odi_big.pdf", 8)
 
 
 def _open_and_scan(client: TestClient, year: int = 2026, month: int = 4) -> str:
@@ -51,30 +45,32 @@ def _open_and_scan(client: TestClient, year: int = 2026, month: int = 4) -> str:
 
 
 @pytest.fixture
-def session_with_pending_cell(tmp_path, client):
+def session_with_pending_cell(tmp_path, client, make_pdf):
     """Session with HPV/odi: a.pdf=1pg (R1), big.pdf=8pg (Pendiente). Total pages = 9."""
     hosp = "HPV"
     sigla = "odi"
-    _build_pending_cell(tmp_path, "ABRIL", hosp, sigla)
+    _build_pending_cell(make_pdf, tmp_path, "ABRIL", hosp, sigla)
     sid = _open_and_scan(client)
     return sid, hosp, sigla
 
 
-def _build_checks_cell(tmp_path: Path, month_name: str, hosp: str, sigla: str) -> None:
+def _build_checks_cell(
+    make_pdf: Callable, tmp_path: Path, month_name: str, hosp: str, sigla: str
+) -> None:
     """Build a maquinaria (checks) cell folder with a small PDF.
 
     maquinaria → "10.-Inspeccion de Maquinaria" (count_type="checks", uncapped)
     """
     folder = tmp_path / month_name / hosp / "10.-Inspeccion de Maquinaria"
     folder.mkdir(parents=True)
-    _make_pdf(folder / "maq.pdf", 2)
+    make_pdf(folder / "maq.pdf", 2)
 
 
 @pytest.fixture
-def session_with_checks_cell(tmp_path, client):
+def session_with_checks_cell(tmp_path, client, make_pdf):
     """Session with HPV/maquinaria: maq.pdf=2pg. count_type='checks' (uncapped)."""
     hosp = "HPV"
     sigla = "maquinaria"
-    _build_checks_cell(tmp_path, "ABRIL", hosp, sigla)
+    _build_checks_cell(make_pdf, tmp_path, "ABRIL", hosp, sigla)
     sid = _open_and_scan(client)
     return sid, hosp, sigla

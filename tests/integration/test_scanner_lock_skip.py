@@ -30,13 +30,6 @@ from core.scanners.pagination_scanner import PaginationScanner
 # ---------------------------------------------------------------------------
 
 
-def _make_manager(tmp_path: Path) -> SessionManager:
-    """Build a real SessionManager backed by a temp SQLite DB."""
-    conn = open_connection(tmp_path / "test_m3b.db")
-    init_schema(conn)
-    return SessionManager(conn=conn)
-
-
 def _register_human(
     mgr: SessionManager,
     session_id: str,
@@ -54,9 +47,9 @@ def _register_human(
 # ---------------------------------------------------------------------------
 
 
-def test_skip_path_human_holds_cell(tmp_path):
+def test_skip_path_human_holds_cell(tmp_path, make_manager):
     """agent_focus returns the holder's snapshot when a human editor holds the cell."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     session_id = "2026-04"
 
     # Register a human participant and focus them on the cell.
@@ -76,9 +69,9 @@ def test_skip_path_human_holds_cell(tmp_path):
     assert AGENT_PARTICIPANT_ID not in pids
 
 
-def test_claim_path_free_cell(tmp_path):
+def test_claim_path_free_cell(tmp_path, make_manager):
     """agent_focus returns None and registers the agent when the cell is free."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     session_id = "2026-04"
 
     holder = mgr.agent_claim_cell(session_id, "HRB", "odi")
@@ -93,16 +86,16 @@ def test_claim_path_free_cell(tmp_path):
     assert agent["mode"] == "editor"
 
 
-def test_inertness_no_participants(tmp_path):
+def test_inertness_no_participants(tmp_path, make_manager):
     """agent_claim_cell succeeds (returns None) when there are zero participants."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     result = mgr.agent_claim_cell("2026-05", "HPV", "charla")
     assert result is None
 
 
-def test_scan_cancelled_releases_agent_no_skipped_field(tmp_path):
+def test_scan_cancelled_releases_agent_no_skipped_field(tmp_path, make_manager):
     """agent_leave removes the agent from the roster."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     session_id = "2026-04"
 
     # Claim a cell.
@@ -117,9 +110,9 @@ def test_scan_cancelled_releases_agent_no_skipped_field(tmp_path):
     assert AGENT_PARTICIPANT_ID not in after
 
 
-def test_skip_then_claim_next_cell(tmp_path):
+def test_skip_then_claim_next_cell(tmp_path, make_manager):
     """Agent skips a human-held cell, then claims the next free cell."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     session_id = "2026-04"
 
     _register_human(mgr, session_id, pid="human-1", name="Daniel", color="#a")
@@ -157,11 +150,11 @@ def _new_ctx() -> dict:
     }
 
 
-def test_handler_skip_sequence_drops_events_and_enriches_complete(tmp_path):
+def test_handler_skip_sequence_drops_events_and_enriches_complete(tmp_path, make_manager):
     """A human-held cell: cell_scanning emits ONE cell_skipped (not cell_scanning);
     later pdf_progress/file_result/cell_done for it are dropped; scan_complete is
     enriched with the skipped list."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     sid = "2026-04"
     _register_human(mgr, sid, pid="human-1", name="Daniel", color="#a")
     mgr.presence_focus(sid, "human-1", "HRB|odi")
@@ -208,10 +201,10 @@ def test_handler_skip_sequence_drops_events_and_enriches_complete(tmp_path):
     assert complete["skipped"] == [{"hospital": "HRB", "sigla": "odi"}]
 
 
-def test_handler_claim_path_emits_presence_then_cell_scanning(tmp_path):
+def test_handler_claim_path_emits_presence_then_cell_scanning(tmp_path, make_manager):
     """A free cell: cell_scanning claims the agent (emits a presence snapshot with the
     Claude badge) then passes the cell_scanning event through."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     sid = "2026-04"
     out: list[dict] = []
     ctx = _new_ctx()
@@ -243,9 +236,9 @@ def test_handler_claim_path_emits_presence_then_cell_scanning(tmp_path):
     assert ctx["agent_active"] is False
 
 
-def test_handler_scan_cancelled_releases_agent_without_skipped_field(tmp_path):
+def test_handler_scan_cancelled_releases_agent_without_skipped_field(tmp_path, make_manager):
     """scan_cancelled releases the agent but must NOT carry a `skipped` field."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     sid = "2026-04"
     out: list[dict] = []
     ctx = _new_ctx()
@@ -269,10 +262,10 @@ def test_handler_scan_cancelled_releases_agent_without_skipped_field(tmp_path):
     assert all(p["participant_id"] != AGENT_PARTICIPANT_ID for p in mgr.presence_snapshot(sid))
 
 
-def test_handler_inertness_no_human_no_skips(tmp_path):
+def test_handler_inertness_no_human_no_skips(tmp_path, make_manager):
     """With no human present, the handler never skips: scan_complete.skipped == []
     and no cell_skipped is ever emitted (the agent badge still appears — that's the feature)."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     sid = "2026-04"
     out: list[dict] = []
     ctx = _new_ctx()
@@ -383,11 +376,11 @@ def test_pase1_skips_human_held_cell(tmp_path, monkeypatch):
         )
 
 
-def test_handler_self_lend_scans_launchers_own_cell(tmp_path):
+def test_handler_self_lend_scans_launchers_own_cell(tmp_path, make_manager):
     """Auto-préstamo (2026-07-10): la celda que el LANZADOR del scan tiene
     abierta NO se salta — el agente la toma (lanzador demote a viewer, badge
     del bot vía presence) y el cell_scanning pasa normal."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     sid = "2026-04"
     _register_human(mgr, sid, pid="human-1", name="Daniel", color="#a")
     mgr.presence_focus(sid, "human-1", "HRB|odi")
@@ -408,10 +401,10 @@ def test_handler_self_lend_scans_launchers_own_cell(tmp_path):
     assert snap[AGENT_PARTICIPANT_ID]["focused_cell"] == "HRB|odi"
 
 
-def test_handler_self_lend_never_borrows_someone_elses_cell(tmp_path):
+def test_handler_self_lend_never_borrows_someone_elses_cell(tmp_path, make_manager):
     """Con launcher_id ajeno al holder (Carla edita, Daniel lanza) el skip M3b
     queda intacto."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     sid = "2026-04"
     _register_human(mgr, sid, pid="carla", name="Carla", color="#b")
     mgr.presence_focus(sid, "carla", "HRB|odi")
@@ -506,11 +499,11 @@ def test_pase1_self_lend_scans_launchers_own_cell(tmp_path, monkeypatch):
         assert cells["HRB"]["art"].get("filename_count") != 5
 
 
-def test_handler_self_lend_promotes_launcher_back_at_scan_complete(tmp_path):
+def test_handler_self_lend_promotes_launcher_back_at_scan_complete(tmp_path, make_manager):
     """§B2: at the batch terminal, the lender (launcher) gets editorship back —
     the scan_complete-triggered presence broadcast shows them as editor again
     and the agent gone."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     sid = "2026-04"
     _register_human(mgr, sid, pid="human-1", name="Daniel", color="#a")
     mgr.presence_focus(sid, "human-1", "HRB|odi")
@@ -537,11 +530,11 @@ def test_handler_self_lend_promotes_launcher_back_at_scan_complete(tmp_path):
     assert AGENT_PARTICIPANT_ID not in snap
 
 
-def test_handler_pdf_page_progress_filtered_by_own_cell_identity(tmp_path):
+def test_handler_pdf_page_progress_filtered_by_own_cell_identity(tmp_path, make_manager):
     """pdf_page_progress trae hospital/sigla: se filtra por SU celda (skipped_set),
     no por el booleano current_cell_skipped de la última celda — con 2 workers
     los eventos de una celda viva no deben caerse porque otra se saltó."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     sid = "2026-04"
     _register_human(mgr, sid, pid="human-1", name="Daniel", color="#a")
     mgr.presence_focus(sid, "human-1", "HRB|odi")
@@ -589,15 +582,6 @@ def test_handler_pdf_page_progress_filtered_by_own_cell_identity(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _make_pdf(path: Path) -> None:
-    import fitz
-
-    doc = fitz.open()
-    doc.new_page()
-    doc.save(str(path))
-    doc.close()
-
-
 def _fake_count_ocr(self, folder, *, cancel, on_pdf=None, only=None, skip=None, on_page=None):
     fname = next(folder.rglob("*.pdf")).name
     return ScanResult(
@@ -613,7 +597,7 @@ def _fake_count_ocr(self, folder, *, cancel, on_pdf=None, only=None, skip=None, 
     )
 
 
-def test_scan_ocr_http_self_lend_end_to_end(tmp_path, monkeypatch):
+def test_scan_ocr_http_self_lend_end_to_end(tmp_path, monkeypatch, make_pdf):
     """The launcher's own held cell is scanned (not skipped) via a real
     POST /scan-ocr; a cell held by someone else is still skipped — observed
     over the real WS's scan_complete.skipped list."""
@@ -625,8 +609,8 @@ def test_scan_ocr_http_self_lend_end_to_end(tmp_path, monkeypatch):
     art_dir = tmp_path / "ABRIL" / "HPV" / "7.-ART"
     odi_dir.mkdir(parents=True)
     art_dir.mkdir(parents=True)
-    _make_pdf(odi_dir / "a.pdf")
-    _make_pdf(art_dir / "b.pdf")
+    make_pdf(odi_dir / "a.pdf")
+    make_pdf(art_dir / "b.pdf")
 
     app = create_app()
     with TestClient(app) as c:
@@ -698,11 +682,11 @@ def _lock_holder_dict(
     }
 
 
-def test_handler_scan_started_flushes_preseeded_skips(tmp_path):
+def test_handler_scan_started_flushes_preseeded_skips(tmp_path, make_manager):
     """§B5: ctx pre-sembrado con 1 skip -> al pasar scan_started se emite el
     evento scan_started seguido de EXACTAMENTE 1 cell_skipped, con el mismo
     shape del skip dinámico (hospital/sigla/reason/lock_holder)."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     sid = "2026-04"
     out: list[dict] = []
     ctx = _new_ctx()
@@ -724,11 +708,11 @@ def test_handler_scan_started_flushes_preseeded_skips(tmp_path):
     assert skip_evt["lock_holder"] == holder
 
 
-def test_handler_preseeded_skip_appears_once_in_scan_complete(tmp_path):
+def test_handler_preseeded_skip_appears_once_in_scan_complete(tmp_path, make_manager):
     """A cell pre-skipped before dispatch never reaches the drain (it was never
     submitted to the pool), so scan_complete.skipped lists it exactly once —
     no duplicate from a later cell_scanning event."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     sid = "2026-04"
     out: list[dict] = []
     ctx = _new_ctx()
@@ -753,7 +737,7 @@ def test_handler_preseeded_skip_appears_once_in_scan_complete(tmp_path):
     assert complete["skipped"] == [{"hospital": "HPV", "sigla": "art"}]
 
 
-def test_scan_ocr_http_pre_skips_locked_cell_before_pool(tmp_path, monkeypatch):
+def test_scan_ocr_http_pre_skips_locked_cell_before_pool(tmp_path, monkeypatch, make_pdf):
     """§B5 end-to-end: a cell held by a DIFFERENT human is excluded from the
     ProcessPool dispatch entirely — the spy on ``scan_cells_ocr`` (patched in
     the scan route's own module namespace) receives ONLY the free cell, and
@@ -765,8 +749,8 @@ def test_scan_ocr_http_pre_skips_locked_cell_before_pool(tmp_path, monkeypatch):
     art_dir = tmp_path / "ABRIL" / "HPV" / "7.-ART"
     odi_dir.mkdir(parents=True)
     art_dir.mkdir(parents=True)
-    _make_pdf(odi_dir / "a.pdf")
-    _make_pdf(art_dir / "b.pdf")
+    make_pdf(odi_dir / "a.pdf")
+    make_pdf(art_dir / "b.pdf")
 
     import api.routes.sessions.scan as scan_mod
 

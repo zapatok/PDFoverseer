@@ -9,23 +9,8 @@ from api.main import create_app
 from core.scanners.base import ConfidenceLevel, ScanResult
 
 
-def _make_pdf(path, pages: int) -> None:
-    """Write a real `pages`-page PDF so the endpoint reports a true page_count.
-
-    The origin rule (spec G1) treats page_count == 0 (an unreadable file) as
-    "Error", so stub bytes no longer suffice where origin is asserted.
-    """
-    import fitz
-
-    doc = fitz.open()
-    for _ in range(pages):
-        doc.new_page()
-    doc.save(str(path))
-    doc.close()
-
-
 @pytest.fixture
-def client_with_pdfs(tmp_path, monkeypatch):
+def client_with_pdfs(tmp_path, monkeypatch, make_pdf):
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test.db"))
     app = create_app()
@@ -41,8 +26,8 @@ def client_with_pdfs(tmp_path, monkeypatch):
         # surfaces "OCR" rather than the page_count==0 "Error" branch.
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
-        _make_pdf(folder / "a.pdf", 5)
-        _make_pdf(folder / "b.pdf", 3)
+        make_pdf(folder / "a.pdf", 5)
+        make_pdf(folder / "b.pdf", 3)
 
         # Apply per-file OCR results (Incr 1A merge) so per_file is populated.
         mgr.apply_per_file_ocr_result(
@@ -77,7 +62,7 @@ def test_get_cell_files_includes_per_file_and_origin(client_with_pdfs):
     assert by_name["b.pdf"]["origin"] == "OCR"
 
 
-def test_get_cell_files_r1_origin_for_filename_glob(tmp_path, monkeypatch):
+def test_get_cell_files_r1_origin_for_filename_glob(tmp_path, monkeypatch, make_pdf):
     """Cells scanned via filename_glob should report origin='R1'."""
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test2.db"))
@@ -92,7 +77,7 @@ def test_get_cell_files_r1_origin_for_filename_glob(tmp_path, monkeypatch):
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
         # Real 1-page PDF: filename_glob + page_count == 1 → "R1".
-        _make_pdf(folder / "c.pdf", 1)
+        make_pdf(folder / "c.pdf", 1)
 
         mgr.apply_filename_result(
             sid,
@@ -122,7 +107,7 @@ def test_get_cell_files_r1_origin_for_filename_glob(tmp_path, monkeypatch):
         assert by_name["c.pdf"]["origin"] == "R1"
 
 
-def test_origin_chip_rule(tmp_path, monkeypatch):
+def test_origin_chip_rule(tmp_path, monkeypatch, make_pdf):
     """_origin_for: a filename_glob 1-page file → R1, a multipage one → Pendiente."""
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test_rule.db"))
@@ -135,8 +120,8 @@ def test_origin_chip_rule(tmp_path, monkeypatch):
 
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
-        _make_pdf(folder / "one.pdf", 1)
-        _make_pdf(folder / "many.pdf", 28)
+        make_pdf(folder / "one.pdf", 1)
+        make_pdf(folder / "many.pdf", 28)
 
         # filename_glob (not OCR): the rule decides per page_count.
         mgr.apply_filename_result(
@@ -206,7 +191,7 @@ def test_effective_count_defaults_to_one_for_unscanned_file(tmp_path, monkeypatc
         assert by_name["b.pdf"]["effective_count"] == 1
 
 
-def test_origin_ocr_and_count_after_scan(tmp_path, monkeypatch):
+def test_origin_ocr_and_count_after_scan(tmp_path, monkeypatch, make_pdf):
     """After an OCR scan, the per-file row reports origin='OCR' and the OCR
     per-file count (review #5/#6: the chip + count surface the scan result)."""
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
@@ -220,7 +205,7 @@ def test_origin_ocr_and_count_after_scan(tmp_path, monkeypatch):
 
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
-        _make_pdf(folder / "x.pdf", 4)  # multipage, OCR found 3 documents
+        make_pdf(folder / "x.pdf", 4)  # multipage, OCR found 3 documents
 
         mgr.apply_per_file_ocr_result(
             sid, "HRB", "odi", "x.pdf", count=3, method="header_band_anchors", near_matches=[]
@@ -231,7 +216,7 @@ def test_origin_ocr_and_count_after_scan(tmp_path, monkeypatch):
         assert rows["x.pdf"]["effective_count"] == 3
 
 
-def test_origin_revisar_when_ocr_finds_zero(tmp_path, monkeypatch):
+def test_origin_revisar_when_ocr_finds_zero(tmp_path, monkeypatch, make_pdf):
     """An OCR-scanned file that read 0 documents (poor scan / no registered
     flavor) shows 'Revisar', not a plain 'OCR' — the operator must check it by
     hand (Bug A)."""
@@ -246,8 +231,8 @@ def test_origin_revisar_when_ocr_finds_zero(tmp_path, monkeypatch):
 
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
-        _make_pdf(folder / "good.pdf", 4)
-        _make_pdf(folder / "bad.pdf", 4)  # readable, but OCR found nothing
+        make_pdf(folder / "good.pdf", 4)
+        make_pdf(folder / "bad.pdf", 4)  # readable, but OCR found nothing
 
         mgr.apply_per_file_ocr_result(
             sid, "HRB", "odi", "good.pdf", count=2, method="header_band_anchors", near_matches=[]
@@ -261,7 +246,7 @@ def test_origin_revisar_when_ocr_finds_zero(tmp_path, monkeypatch):
         assert rows["bad.pdf"]["origin"] == "Revisar"
 
 
-def test_origin_divergent_per_file_method_after_single_file_ocr(tmp_path, monkeypatch):
+def test_origin_divergent_per_file_method_after_single_file_ocr(tmp_path, monkeypatch, make_pdf):
     """rev-2 §3/#1: OCR-ing one file of a filename_glob cell makes that file's
     chip 'OCR' while the rest stay 'Pendiente' — _origin_for reads per_file_method,
     not cell.method."""
@@ -276,8 +261,8 @@ def test_origin_divergent_per_file_method_after_single_file_ocr(tmp_path, monkey
 
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
-        _make_pdf(folder / "a.pdf", 6)
-        _make_pdf(folder / "b.pdf", 6)
+        make_pdf(folder / "a.pdf", 6)
+        make_pdf(folder / "b.pdf", 6)
 
         mgr.apply_filename_result(
             sid,
@@ -311,7 +296,7 @@ def test_origin_divergent_per_file_method_after_single_file_ocr(tmp_path, monkey
         assert rows["b.pdf"]["origin"] == "Pendiente"  # cell method (multipage)
 
 
-def test_scan_file_ocr_endpoint_accept_and_404(tmp_path, monkeypatch):
+def test_scan_file_ocr_endpoint_accept_and_404(tmp_path, monkeypatch, make_pdf):
     """The single-file scan endpoint accepts an existing file, 404s a missing one."""
     monkeypatch.setenv("INFORME_MENSUAL_ROOT", str(tmp_path))
     monkeypatch.setenv("OVERSEER_DB_PATH", str(tmp_path / "test_endpoint.db"))
@@ -324,7 +309,7 @@ def test_scan_file_ocr_endpoint_accept_and_404(tmp_path, monkeypatch):
 
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
-        _make_pdf(folder / "a.pdf", 1)
+        make_pdf(folder / "a.pdf", 1)
 
         ok = c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr")
         assert ok.status_code == 200, ok.text

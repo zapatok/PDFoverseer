@@ -13,16 +13,6 @@ from core.scanners.utils.colado_guard import find_foreign_filename_suspects
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
-def _make_manager(tmp_path):
-    from api.state import SessionManager
-    from core.db.connection import open_connection
-    from core.db.migrations import init_schema
-
-    conn = open_connection(tmp_path / "t.db")
-    init_schema(conn)
-    return SessionManager(conn=conn)
-
-
 def _seed_reliable_cell(mgr, tmp_path, hospital="HRB", sigla="odi"):
     """Open a session and seed a cell whose single file is a settled R1
     (filename_glob, 1 page) — compute_settled must read True for it."""
@@ -45,8 +35,8 @@ def _seed_reliable_cell(mgr, tmp_path, hospital="HRB", sigla="odi"):
 # ── (a) fresh compute persisted under the lock ────────────────────────────────
 
 
-def test_recompute_all_reliable_persists_fresh_settled_true(tmp_path):
-    mgr = _make_manager(tmp_path)
+def test_recompute_all_reliable_persists_fresh_settled_true(tmp_path, make_manager):
+    mgr = make_manager
     _seed_reliable_cell(mgr, tmp_path)
     # Force a stale False so the assertion below can only pass if the method
     # actually recomputed against the fresh state, not an old cached value.
@@ -66,8 +56,8 @@ def test_recompute_all_reliable_persists_fresh_settled_true(tmp_path):
     assert state["cells"]["HRB"]["odi"]["all_reliable"] is True
 
 
-def test_recompute_all_reliable_persists_fresh_settled_false(tmp_path):
-    mgr = _make_manager(tmp_path)
+def test_recompute_all_reliable_persists_fresh_settled_false(tmp_path, make_manager):
+    mgr = make_manager
     _seed_reliable_cell(mgr, tmp_path)
     # A file OCR'd to "Revisar" (per_file count 0, OCR method) breaks settlement.
     mgr.apply_per_file_ocr_result(
@@ -92,12 +82,12 @@ def test_recompute_all_reliable_persists_fresh_settled_false(tmp_path):
 # ── (b) anti-colados gate lives inside the atomic method ──────────────────────
 
 
-def test_recompute_all_reliable_blocked_by_open_counted_suspect(tmp_path):
+def test_recompute_all_reliable_blocked_by_open_counted_suspect(tmp_path, make_manager):
     """A cell whose files are otherwise fully settled (compute_settled → True)
     must still end up all_reliable=False when an OPEN, COUNTED colado suspect
     exists — the §4.5 gate must fire from INSIDE recompute_all_reliable, not
     rely on a separate caller-side check."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))
     # chps hosts a foreign-named file (odi token) — a counted suspect once
     # per_file gives it a positive contribution.
@@ -152,14 +142,14 @@ def _spy_recompute(mgr, monkeypatch):
     return received
 
 
-def test_refresh_all_reliable_resolves_pages_before_delegating(tmp_path, monkeypatch):
+def test_refresh_all_reliable_resolves_pages_before_delegating(tmp_path, monkeypatch, make_manager):
     """§B4's point: with pages=None, the folder walk (cell_page_counts) happens in
     the WRAPPER — before the delegate acquires the RLock — and the atomic method
     receives the already-resolved dict, never None. This test fails if the wrapper
     forwards None and lets compute_settled walk the disk under the lock."""
     from api.routes.sessions import _common
 
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     _seed_reliable_cell(mgr, tmp_path)
 
     walk_calls: list[Path] = []
@@ -182,11 +172,11 @@ def test_refresh_all_reliable_resolves_pages_before_delegating(tmp_path, monkeyp
     assert state["cells"]["HRB"]["odi"]["all_reliable"] is True
 
 
-def test_refresh_all_reliable_precomputed_pages_skip_the_walk(tmp_path, monkeypatch):
+def test_refresh_all_reliable_precomputed_pages_skip_the_walk(tmp_path, monkeypatch, make_manager):
     """When the caller already computed pages, the wrapper must NOT walk again."""
     from api.routes.sessions import _common
 
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     _seed_reliable_cell(mgr, tmp_path)
 
     def boom(folder):
@@ -208,13 +198,13 @@ def test_refresh_all_reliable_precomputed_pages_skip_the_walk(tmp_path, monkeypa
     assert received["pages"] == {"a.pdf": 1}
 
 
-def test_refresh_all_reliable_checks_cells_never_walk_the_folder(tmp_path, monkeypatch):
+def test_refresh_all_reliable_checks_cells_never_walk_the_folder(tmp_path, monkeypatch, make_manager):
     """checks cells settle on worker_status alone (compute_settled short-circuits
     before reading pages) — the old code therefore never walked their folder, and
     the wrapper must not start doing so: it delegates inert empty pages instead."""
     from api.routes.sessions import _common
 
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     _seed_reliable_cell(mgr, tmp_path, sigla="maquinaria")
 
     walk_calls: list[Path] = []

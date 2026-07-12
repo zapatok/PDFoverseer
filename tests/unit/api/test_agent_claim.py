@@ -22,16 +22,6 @@ def _reg():
     return PresenceRegistry(now=lambda: 1000.0)
 
 
-def _make_manager(tmp_path):
-    from api.state import SessionManager
-    from core.db.connection import open_connection
-    from core.db.migrations import init_schema
-
-    conn = open_connection(tmp_path / "t.db")
-    init_schema(conn)
-    return SessionManager(conn=conn)
-
-
 # Presence is fully in-memory (keyed by session_id string); these tests do NOT
 # open a DB session — matching the idiom in test_presence_locks.py.
 
@@ -102,14 +92,14 @@ def test_agent_focus_kind_survives_snapshot():
 # ── Task 2: SessionManager ────────────────────────────────────────────────────
 
 
-def test_agent_claim_free_cell_returns_none(tmp_path):
-    mgr = _make_manager(tmp_path)
+def test_agent_claim_free_cell_returns_none(tmp_path, make_manager):
+    mgr = make_manager
     result = mgr.agent_claim_cell("2026-04", "HRB", "odi")
     assert result is None
 
 
-def test_agent_claim_free_cell_makes_agent_editor(tmp_path):
-    mgr = _make_manager(tmp_path)
+def test_agent_claim_free_cell_makes_agent_editor(tmp_path, make_manager):
+    mgr = make_manager
     mgr.agent_claim_cell("2026-04", "HRB", "odi")
     holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
     assert holder is not None
@@ -117,8 +107,8 @@ def test_agent_claim_free_cell_makes_agent_editor(tmp_path):
     assert holder["kind"] == AGENT_KIND
 
 
-def test_agent_claim_human_held_cell_returns_holder(tmp_path):
-    mgr = _make_manager(tmp_path)
+def test_agent_claim_human_held_cell_returns_holder(tmp_path, make_manager):
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_focus("2026-04", "p1", "HRB|odi")  # human editor
     holder = mgr.agent_claim_cell("2026-04", "HRB", "odi")
@@ -126,8 +116,8 @@ def test_agent_claim_human_held_cell_returns_holder(tmp_path):
     assert holder["participant_id"] == "p1"
 
 
-def test_agent_claim_human_held_cell_does_not_make_agent_editor(tmp_path):
-    mgr = _make_manager(tmp_path)
+def test_agent_claim_human_held_cell_does_not_make_agent_editor(tmp_path, make_manager):
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_focus("2026-04", "p1", "HRB|odi")
     mgr.agent_claim_cell("2026-04", "HRB", "odi")
@@ -139,8 +129,8 @@ def test_agent_claim_human_held_cell_does_not_make_agent_editor(tmp_path):
     assert AGENT_PARTICIPANT_ID not in snap
 
 
-def test_agent_leave_removes_agent(tmp_path):
-    mgr = _make_manager(tmp_path)
+def test_agent_leave_removes_agent(tmp_path, make_manager):
+    mgr = make_manager
     mgr.agent_claim_cell("2026-04", "HRB", "odi")
     # agent should be in the roster
     snap_before = {p["participant_id"]: p for p in mgr.presence_snapshot("2026-04")}
@@ -150,10 +140,10 @@ def test_agent_leave_removes_agent(tmp_path):
     assert AGENT_PARTICIPANT_ID not in snap_after
 
 
-def test_atomic_claim_two_agents_same_free_cell(tmp_path):
+def test_atomic_claim_two_agents_same_free_cell(tmp_path, make_manager):
     """Two concurrent agent_claim_cell on same free cell: both return None (same agent).
     The cell must end up with exactly claude as editor."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
 
     results = []
     barrier = threading.Barrier(2)
@@ -178,10 +168,10 @@ def test_atomic_claim_two_agents_same_free_cell(tmp_path):
     assert len(editors) == 1
 
 
-def test_atomic_claim_agent_vs_human_exactly_one_editor(tmp_path):
+def test_atomic_claim_agent_vs_human_exactly_one_editor(tmp_path, make_manager):
     """One agent_claim_cell vs one human presence_focus on the same free cell.
     Exactly one must end up as the cell's editor."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
 
     barrier = threading.Barrier(2)
@@ -216,9 +206,9 @@ def _make_session(mgr, tmp_path) -> str:
     return state["session_id"]
 
 
-def test_agent_override_claims_free_cell(tmp_path):
+def test_agent_override_claims_free_cell(tmp_path, make_manager):
     """Agent writing to a free cell with participant_id='claude' claims it as editor."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     _make_session(mgr, tmp_path)
     mgr.apply_user_override("2026-04", "HRB", "odi", value=5, participant_id="claude")
     holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
@@ -227,11 +217,11 @@ def test_agent_override_claims_free_cell(tmp_path):
     assert holder["kind"] == AGENT_KIND
 
 
-def test_agent_write_to_human_held_cell_raises(tmp_path):
+def test_agent_write_to_human_held_cell_raises(tmp_path, make_manager):
     """Agent trying to write a human-held cell gets CellLockedError (M3a path)."""
     from api.presence import CellLockedError
 
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     _make_session(mgr, tmp_path)
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_focus("2026-04", "p1", "HRB|odi")  # human editor
@@ -239,9 +229,9 @@ def test_agent_write_to_human_held_cell_raises(tmp_path):
         mgr.apply_user_override("2026-04", "HRB", "odi", value=3, participant_id="claude")
 
 
-def test_human_write_free_cell_does_not_claim(tmp_path):
+def test_human_write_free_cell_does_not_claim(tmp_path, make_manager):
     """A human write to a free cell does NOT auto-claim (only agents claim on write)."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     _make_session(mgr, tmp_path)
     mgr.apply_user_override("2026-04", "HRB", "odi", value=5, participant_id="p1")
     # No heartbeat was issued for p1, so no presence record exists — free cell
@@ -249,9 +239,9 @@ def test_human_write_free_cell_does_not_claim(tmp_path):
     assert holder is None
 
 
-def test_agent_set_note_claims_free_cell(tmp_path):
+def test_agent_set_note_claims_free_cell(tmp_path, make_manager):
     """Agent set_note on a free cell auto-claims it (pattern spans all 6 methods)."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     _make_session(mgr, tmp_path)
     mgr.apply_user_override("2026-04", "HRB", "odi", value=1)  # create cell first (no participant)
     mgr.set_note(
@@ -265,10 +255,10 @@ def test_agent_set_note_claims_free_cell(tmp_path):
 # ── Self-lend (2026-07-10): the scan launcher's own hold is borrowed ─────────
 
 
-def test_agent_claim_lend_from_holder_claims_and_demotes(tmp_path):
+def test_agent_claim_lend_from_holder_claims_and_demotes(tmp_path, make_manager):
     """lend_from == the holder: the launcher yields editorship — the agent claims
     (returns None), the human drops to viewer, and the agent is the editor."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_focus("2026-04", "p1", "HRB|odi")
 
@@ -281,9 +271,9 @@ def test_agent_claim_lend_from_holder_claims_and_demotes(tmp_path):
     assert snap[AGENT_PARTICIPANT_ID]["focused_cell"] == "HRB|odi"
 
 
-def test_agent_claim_lend_from_other_participant_still_skips(tmp_path):
+def test_agent_claim_lend_from_other_participant_still_skips(tmp_path, make_manager):
     """lend_from != the holder (Carla protection): unchanged M3b skip."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p2", name="Carla", color="#b")
     mgr.presence_focus("2026-04", "p2", "HRB|odi")
 
@@ -296,9 +286,9 @@ def test_agent_claim_lend_from_other_participant_still_skips(tmp_path):
     assert AGENT_PARTICIPANT_ID not in snap
 
 
-def test_agent_claim_lend_from_none_keeps_legacy_skip(tmp_path):
+def test_agent_claim_lend_from_none_keeps_legacy_skip(tmp_path, make_manager):
     """No participant_id in the request (legacy client) → strict M3b behavior."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_focus("2026-04", "p1", "HRB|odi")
 
@@ -308,9 +298,9 @@ def test_agent_claim_lend_from_none_keeps_legacy_skip(tmp_path):
     assert holder["participant_id"] == "p1"
 
 
-def test_agent_claim_lend_from_free_cell_is_plain_claim(tmp_path):
+def test_agent_claim_lend_from_free_cell_is_plain_claim(tmp_path, make_manager):
     """lend_from on a FREE cell must not break the normal claim."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     assert mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from="p1") is None
     holder = mgr.presence_lock_holder("2026-04", "HRB|odi", exclude="x")
     assert holder is not None and holder["participant_id"] == AGENT_PARTICIPANT_ID
@@ -383,10 +373,10 @@ def test_promote_to_editor_noop_if_lender_lease_expired():
     assert all(p["participant_id"] != "p1" for p in r.snapshot("m"))
 
 
-def test_agent_claim_lend_out_appends_on_lend(tmp_path):
+def test_agent_claim_lend_out_appends_on_lend(tmp_path, make_manager):
     """agent_claim_cell records (hospital, sigla, lend_from) in lent_out only
     when a real lend happened (holder == lend_from)."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_focus("2026-04", "p1", "HRB|odi")
     lent: list = []
@@ -397,9 +387,9 @@ def test_agent_claim_lend_out_appends_on_lend(tmp_path):
     assert lent == [("HRB", "odi", "p1")]
 
 
-def test_agent_claim_lend_out_untouched_on_free_cell(tmp_path):
+def test_agent_claim_lend_out_untouched_on_free_cell(tmp_path, make_manager):
     """A plain claim on a free cell (no lend) must not append to lent_out."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     lent: list = []
 
     mgr.agent_claim_cell("2026-04", "HRB", "odi", lend_from="p1", lent_out=lent)
@@ -407,9 +397,9 @@ def test_agent_claim_lend_out_untouched_on_free_cell(tmp_path):
     assert lent == []
 
 
-def test_agent_claim_lend_out_untouched_on_skip(tmp_path):
+def test_agent_claim_lend_out_untouched_on_skip(tmp_path, make_manager):
     """A skip (holder != lend_from) must not append to lent_out."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p2", name="Carla", color="#b")
     mgr.presence_focus("2026-04", "p2", "HRB|odi")
     lent: list = []
@@ -420,10 +410,10 @@ def test_agent_claim_lend_out_untouched_on_skip(tmp_path):
     assert lent == []
 
 
-def test_promote_lender_pass_through(tmp_path):
+def test_promote_lender_pass_through(tmp_path, make_manager):
     """SessionManager.promote_lender delegates to PresenceRegistry.promote_to_editor
     under the manager's lock."""
-    mgr = _make_manager(tmp_path)
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_focus("2026-04", "p1", "HRB|odi")
     lent: list = []

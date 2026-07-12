@@ -4,15 +4,6 @@ pagaba ~0.75 s abriendo los 1,300 PDFs de HPV|art en CADA request."""
 from api.routes.sessions import _common
 
 
-def _make_pdf(path, pages=1):
-    real_open = _common.fitz.open
-    doc = real_open()
-    for _ in range(pages):
-        doc.new_page()
-    doc.save(path)
-    doc.close()
-
-
 def _counting_open(monkeypatch):
     real_open = _common.fitz.open
     calls = {"n": 0}
@@ -25,9 +16,9 @@ def _counting_open(monkeypatch):
     return calls
 
 
-def test_second_call_hits_cache_no_reopen(tmp_path, monkeypatch):
-    _make_pdf(tmp_path / "a.pdf", pages=1)
-    _make_pdf(tmp_path / "b.pdf", pages=3)
+def test_second_call_hits_cache_no_reopen(tmp_path, monkeypatch, make_pdf):
+    make_pdf(tmp_path / "a.pdf", pages=1)
+    make_pdf(tmp_path / "b.pdf", pages=3)
     calls = _counting_open(monkeypatch)
 
     first = _common.cell_page_counts(tmp_path)
@@ -39,12 +30,12 @@ def test_second_call_hits_cache_no_reopen(tmp_path, monkeypatch):
     assert calls["n"] == 2  # cache hit: cero opens
 
 
-def test_rewritten_file_invalidates_only_itself(tmp_path, monkeypatch):
-    _make_pdf(tmp_path / "a.pdf", pages=1)
-    _make_pdf(tmp_path / "b.pdf", pages=1)
+def test_rewritten_file_invalidates_only_itself(tmp_path, monkeypatch, make_pdf):
+    make_pdf(tmp_path / "a.pdf", pages=1)
+    make_pdf(tmp_path / "b.pdf", pages=1)
     _common.cell_page_counts(tmp_path)  # poblar cache
 
-    _make_pdf(tmp_path / "a.pdf", pages=2)  # rewrite → stat cambia
+    make_pdf(tmp_path / "a.pdf", pages=2)  # rewrite → stat cambia
     calls = _counting_open(monkeypatch)
     out = _common.cell_page_counts(tmp_path)
     assert out == {"a.pdf": 2, "b.pdf": 1}

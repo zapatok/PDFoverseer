@@ -85,18 +85,8 @@ def test_cell_locked_error_attributes():
     assert "Daniel" in str(err)
 
 
-def _make_manager(tmp_path):
-    from api.state import SessionManager
-    from core.db.connection import open_connection
-    from core.db.migrations import init_schema
-
-    conn = open_connection(tmp_path / "t.db")
-    init_schema(conn)
-    return SessionManager(conn=conn)
-
-
-def test_manager_presence_lock_holder(tmp_path):
-    mgr = _make_manager(tmp_path)
+def test_manager_presence_lock_holder(tmp_path, make_manager):
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_heartbeat("2026-04", "p2", name="Carla", color="#b")
     mgr.presence_focus("2026-04", "p2", "HRB|odi")  # p2 is editor
@@ -114,8 +104,8 @@ def test_manager_presence_lock_holder(tmp_path):
     assert mgr.presence_lock_holder("2026-04", "HRB|art", exclude="p1") is None
 
 
-def test_manager_editor_conflict(tmp_path):
-    mgr = _make_manager(tmp_path)
+def test_manager_editor_conflict(tmp_path, make_manager):
+    mgr = make_manager
     mgr.presence_heartbeat("2026-04", "p1", name="Daniel", color="#a")
     mgr.presence_heartbeat("2026-04", "p2", name="Carla", color="#b")
     mgr.presence_focus("2026-04", "p2", "HRB|odi")  # p2 is editor

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from tests.integration.conftest import _make_pdf
-
 
 def test_apply_ratio_treats_pending_only(client, session_with_pending_cell):
     """RN: big.pdf (8pg, Pendiente) gets round(8/2)=4; a.pdf (R1) is untouched."""
@@ -84,7 +82,7 @@ def test_apply_ratio_skips_unreadable_pdf(tmp_path, client, session_with_pending
     assert files["2026-04-10_odi_a.pdf"]["origin"] == "R1"
 
 
-def test_apply_ratio_response_is_enriched(tmp_path, client):
+def test_apply_ratio_response_is_enriched(tmp_path, client, make_pdf):
     """§B8.2: apply_ratio's response goes through the same
     enrich_cell_worker_count + enrich_cell_colado_suspects pipeline as the
     cell_updated broadcast (the reconcile_worker_marks pattern,
@@ -94,7 +92,7 @@ def test_apply_ratio_response_is_enriched(tmp_path, client):
     hosp, sigla = "HPV", "charla"
     folder = tmp_path / "ABRIL" / hosp / "4.-Charlas"
     folder.mkdir(parents=True)
-    _make_pdf(folder / "2026-04-15_charla_big.pdf", 8)  # multi-page -> Pendiente
+    make_pdf(folder / "2026-04-15_charla_big.pdf", 8)  # multi-page -> Pendiente
 
     r = client.post("/api/sessions", json={"year": 2026, "month": 4})
     assert r.status_code == 200, r.text

@@ -13,20 +13,16 @@ Escenario:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-
-from tests.integration.conftest import _make_pdf
 
 
 @pytest.fixture
-def session_f1(tmp_path, client):
+def session_f1(tmp_path, client, make_pdf):
     """Celda HPV/charla: a.pdf escaneado (en per_file), b.pdf añadido después."""
     folder = tmp_path / "ABRIL" / "HPV" / "4.-Charlas"
     folder.mkdir(parents=True)
     # Solo charla_a presente al momento del escaneo.
-    _make_pdf(folder / "charla_a.pdf", 2)
+    make_pdf(folder / "charla_a.pdf", 2)
 
     r = client.post("/api/sessions", json={"year": 2026, "month": 4})
     assert r.status_code == 200, r.text
@@ -36,7 +32,7 @@ def session_f1(tmp_path, client):
     assert r2.status_code == 200, r2.text
 
     # Ahora añadir charla_b.pdf SIN re-escanear → per_file sigue solo con charla_a.
-    _make_pdf(folder / "charla_b.pdf", 1)
+    make_pdf(folder / "charla_b.pdf", 1)
 
     return sid
 

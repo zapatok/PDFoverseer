@@ -20,17 +20,7 @@ from core.scanners.base import ConfidenceLevel, ScanResult
 from core.scanners.pagination_scanner import PaginationScanner
 
 
-def _make_pdf(path, pages: int) -> None:
-    import fitz
-
-    doc = fitz.open()
-    for _ in range(pages):
-        doc.new_page()
-    doc.save(str(path))
-    doc.close()
-
-
-def test_shutdown_awaits_an_in_flight_single_file_scan(tmp_path, monkeypatch):
+def test_shutdown_awaits_an_in_flight_single_file_scan(tmp_path, monkeypatch, make_pdf):
     """U11: a single-file OCR still "running" when the app shuts down must be
     awaited (not abandoned) before the DB connection closes — otherwise its
     merge silently fails against a closed connection and the count is lost.
@@ -74,7 +64,7 @@ def test_shutdown_awaits_an_in_flight_single_file_scan(tmp_path, monkeypatch):
         sid = mgr.open_session(year=2026, month=4, month_root=Path(tmp_path))["session_id"]
         folder = tmp_path / "HRB" / "3.-ODI Visitas"
         folder.mkdir(parents=True)
-        _make_pdf(folder / "a.pdf", 1)
+        make_pdf(folder / "a.pdf", 1)
 
         r1 = c.post(f"/api/sessions/{sid}/cells/HRB/odi/files/a.pdf/scan-ocr")
         assert r1.status_code == 200, r1.text

@@ -118,19 +118,7 @@ def test_pase1_telemetry_empty_on_missing_folder(tmp_path):
     assert result.telemetry.present_files == []
 
 
-def _make_pdf(path, n_pages):
-    """Real n-page PDF (same fabrication pattern as test_compute_settled)."""
-    import fitz
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    doc = fitz.open()
-    for _ in range(n_pages):
-        doc.new_page()
-    doc.save(str(path))
-    doc.close()
-
-
-def test_duplicate_basenames_corrupt_fixed_page_count(tmp_path):
+def test_duplicate_basenames_corrupt_fixed_page_count(tmp_path, make_pdf):
     """F10 blast radius on a FIXED_PAGE_SIGLA (bodega): count = sum of the
     basename-keyed `pages` dict, so two same-named PDFs collapse to ONE entry
     and the HEADLINE count is corrupted — 3pp A/x + 5pp B/x yields count=5
@@ -140,8 +128,8 @@ def test_duplicate_basenames_corrupt_fixed_page_count(tmp_path):
     radius visible to whoever touches the name-keyed model next. (On a
     variable sigla like art, only the per_file display loses an entry — the
     headline count stays len(matched); fixed-page is the worst case.)"""
-    _make_pdf(tmp_path / "A" / "2026-04_bodega_chequeo.pdf", 3)
-    _make_pdf(tmp_path / "B" / "2026-04_bodega_chequeo.pdf", 5)
+    make_pdf(tmp_path / "A" / "2026-04_bodega_chequeo.pdf", 3)
+    make_pdf(tmp_path / "B" / "2026-04_bodega_chequeo.pdf", 5)
 
     scanner = get("bodega")
     result = scanner.count(tmp_path)
