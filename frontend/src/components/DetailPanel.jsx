@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MousePointer2, FileStack, PenLine, Users, ScanSearch, ClipboardCopy, Info, X, Trash2, Ratio, Copy } from "lucide-react";
 import NotePanel from "./NotePanel";
 import ReorganizacionPanel, { pendingOpsCountForCell } from "./ReorganizacionPanel";
@@ -268,6 +268,22 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const [mode, setMode] = useState(hasOverride(cell) ? "manual" : "files");
   const [focusNonce, setFocusNonce] = useState(0);
 
+  // A1 — totalPages for the ≤pages cap + the present filenames for the orphan
+  // panel (F1) both derive from the store's cellFiles cache; no local fetch.
+  // Memoized: an unrelated store update (presence heartbeat, another cell's
+  // session write) re-renders this panel, and the O(n) pass over an up-to-
+  // ~1,300-file cell (art) shouldn't be repaid each time. MUST stay above the
+  // early return below (Rules of Hooks).
+  const cachedFiles = filesEntry?.files ?? null;
+  const totalPages = useMemo(
+    () => (cachedFiles ? cachedFiles.reduce((sum, f) => sum + (f.page_count ?? 0), 0) : null),
+    [cachedFiles],
+  );
+  const cellFileNames = useMemo(
+    () => (cachedFiles ? cachedFiles.map((f) => f.name) : []),
+    [cachedFiles],
+  );
+
   // rev-2 #5 — what the sigla's OCR looks for, for the method (i) tooltip.
   useEffect(() => {
     if (!sigla) { setScanInfo(null); return; }
@@ -308,14 +324,6 @@ export default function DetailPanel({ hospital, sigla, cell }) {
   const total = computeCellCount(cell, countType);
   const label = SIGLA_LABELS[sigla];
   const showLabel = label && label.toLowerCase() !== sigla.toLowerCase();
-
-  // A1 — totalPages for the ≤pages cap + the present filenames for the orphan
-  // panel (F1) both derive from the store's cellFiles cache; no local fetch.
-  const cachedFiles = filesEntry?.files ?? null;
-  const totalPages = cachedFiles
-    ? cachedFiles.reduce((sum, f) => sum + (f.page_count ?? 0), 0)
-    : null;
-  const cellFileNames = cachedFiles ? cachedFiles.map((f) => f.name) : [];
 
   // Incr 2 — cap predicate: document-counting siglas cap overrides at ≤ totalPages.
   const isCapped = isCappedCountType(scanInfo?.count_type);

@@ -24,7 +24,7 @@ export const useSessionStore = create((set, get) => ({
   // FASE 2 additions
   scanningCells: new Set(),            // "HPV|odi" strings, mirrored in CategoryRow
   scanProgress: null,                  // {done, total, pdfName?, etaMs?, unit?, terminal?} | null
-  filesTick: {},                       // "HPV|odi" → counter; bumped on cell_done so FileList/lightbox re-fetch per_file (G3)
+  filesTick: {},                       // "HPV|odi" → counter; legacy change signal (pre-A1) — the real re-fetch is the fetchCellFiles call next to each bump; kept because tests assert on it
   cellFiles: {},                       // A1: "HPV|odi" → { files, error } — single per-cell files cache (SWR); fed by fetchCellFiles
   _cellFilesFetch: new Map(),          // A1: "HPV|odi" → { inFlight, queued } — in-flight/dedup bookkeeping for fetchCellFiles
   fileScan: null,                      // {hospital, sigla, filename, page, pagesTotal, terminal} | null — single-file OCR (rev-2 #1)
@@ -437,8 +437,9 @@ export const useSessionStore = create((set, get) => ({
         if (cleanedPending.get(key)?.controller === controller) {
           cleanedPending.delete(key);
         }
-        // Bump filesTick so the FileList + lightbox re-fetch this cell and show
-        // the new per-file count + the Manual chip for the edited file (Bug C).
+        // The fetchCellFiles call below re-fetches this cell so FileList + the
+        // lightbox show the new per-file count + Manual chip (Bug C); the
+        // filesTick bump is the legacy signal, kept for test assertions.
         const tickKey = `${hospital}|${sigla}`;
         return {
           session: { ...prev.session, cells },
@@ -469,9 +470,10 @@ export const useSessionStore = create((set, get) => ({
           }
           const np = { ...prev.pendingSaves };
           delete np[key];
-          // Bump filesTick so FileList re-fetches: the per-file InlineEditCount
-          // holds the typed value locally, so after a blocked edit we force a
-          // re-sync to server truth (the success path bumps it for the same reason).
+          // The fetchCellFiles call below re-syncs to server truth: the per-file
+          // InlineEditCount holds the typed value locally, so a blocked edit
+          // must be reverted visibly (the success path re-fetches for the same
+          // reason). filesTick bump = legacy signal, kept for test assertions.
           return {
             _pendingSave: cleanedPending,
             pendingSaves: np,
@@ -484,8 +486,8 @@ export const useSessionStore = create((set, get) => ({
         return;
       }
       // U2: a generic (non-409) failure reverts visibly instead of leaving a
-      // sticky global error banner — toast it + bump filesTick so FileList/the
-      // lightbox re-fetch and drop the optimistic value that never saved.
+      // sticky global error banner — toast it + re-fetch (fetchCellFiles below)
+      // so FileList/the lightbox drop the optimistic value that never saved.
       const tickKey = `${hospital}|${sigla}`;
       set((prev) => {
         const cleanedPending = new Map(prev._pendingSave);
@@ -1045,9 +1047,9 @@ export const useSessionStore = create((set, get) => ({
       case "cell_done": {
         const next = new Set(state.scanningCells);
         next.delete(cellKey(event.hospital, event.sigla));
-        // Bump filesTick: this event just wrote fresh per_file to the DB, so
-        // FileList + lightbox must re-fetch to show the new chip + count (G3,
-        // review #5/#6). Key matches the cellKey/subscription format.
+        // This event just wrote fresh per_file to the DB, so the fetchCellFiles
+        // call below re-fetches to show the new chip + count (G3, review #5/#6).
+        // filesTick bump = legacy signal, kept for test assertions.
         const tickKey = cellKey(event.hospital, event.sigla);
         const filesTick = {
           ...state.filesTick,
@@ -1228,8 +1230,9 @@ export const useSessionStore = create((set, get) => ({
         );
         break;
       case "file_scan_done": {
-        // Backend merged this file's per_file → bump filesTick so the FileList +
-        // lightbox re-fetch (mirror cell_done); mark the bar done, then dismiss.
+        // Backend merged this file's per_file → re-fetch via fetchCellFiles
+        // below (mirror cell_done); mark the bar done, then dismiss. filesTick
+        // bump = legacy signal, kept for test assertions.
         const fkey = `${event.hospital}|${event.sigla}`;
         set((s) => ({
           filesTick: { ...s.filesTick, [fkey]: (s.filesTick[fkey] ?? 0) + 1 },
