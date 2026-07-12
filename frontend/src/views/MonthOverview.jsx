@@ -21,8 +21,11 @@ export default function MonthOverview() {
   const session = useSessionStore((s) => s.session);
   const loading = useSessionStore((s) => s.loading);
   // A11: `loading` is shared by openMonth/runScan/generateOutput — the scan
-  // button must only claim "Escaneando…" for the one that's actually a scan.
-  const generating = useSessionStore((s) => s.generating);
+  // button must only claim "Escaneando…" while a pase-1 scan is actually
+  // running. `scanning` is runScan's own truthful flag (openMonth's
+  // first-open auto-scan fire-and-forgets runScan, which lights it —
+  // correctly); `loading` keeps driving the disabled state of the buttons.
+  const scanning = useSessionStore((s) => s.scanning);
   const error = useSessionStore((s) => s.error);
   const loadMonths = useSessionStore((s) => s.loadMonths);
   const openMonth = useSessionStore((s) => s.openMonth);
@@ -126,7 +129,7 @@ export default function MonthOverview() {
                 disabled={loading}
                 onClick={() => runScan(sessionId)}
               >
-                {loading && !generating ? "Escaneando…" : "Escanear todos los hospitales"}
+                {scanning ? "Escaneando…" : "Escanear todos los hospitales"}
               </Button>
               <Button
                 icon={FileSpreadsheet}

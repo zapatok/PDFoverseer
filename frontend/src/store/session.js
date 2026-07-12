@@ -17,9 +17,14 @@ export const useSessionStore = create((set, get) => ({
   months: [],
   session: null,
   loading: false,
-  // A11: dedicated flag for generateOutput, distinct from the generic
-  // `loading` — MonthOverview's scan button used to read `loading` alone and
-  // said "Escaneando…" while an Excel export was running too.
+  // A11: dedicated flags, distinct from the generic `loading` (which is
+  // shared by openMonth/runScan/generateOutput) — MonthOverview's scan
+  // button used to read `loading` alone and said "Escaneando…" during an
+  // Excel export AND during a plain month open. `scanning` is set ONLY by
+  // runScan (openMonth's first-open auto-scan fire-and-forgets runScan, so
+  // the flag lights exactly when a pase-1 scan is actually running);
+  // `generating` is generateOutput's own.
+  scanning: false,
   generating: false,
   error: null,
   historyView: false,
@@ -140,13 +145,13 @@ export const useSessionStore = create((set, get) => ({
   }),
 
   runScan: async (sessionId) => {
-    set({ loading: true, error: null });
+    set({ loading: true, scanning: true, error: null });
     try {
       await api.scanSession(sessionId, "all", getParticipantId());
       const session = await api.getSession(sessionId);
-      set({ session, loading: false });
+      set({ session, loading: false, scanning: false });
     } catch (error) {
-      set({ error: String(error), loading: false });
+      set({ error: String(error), loading: false, scanning: false });
     }
   },
 

@@ -49,6 +49,7 @@ beforeEach(() => {
     session: { session_id: "2026-04", cells: { HPV: {}, HRB: {}, HLU: {}, HLL: {} } },
     loading: false,
     generating: false,
+    scanning: false,
     error: null,
     historyView: false,
     historyDrawer: null,
@@ -70,8 +71,8 @@ afterEach(() => {
 });
 
 describe("MonthOverview scan button label (§A11)", () => {
-  it("says 'Escaneando…' while runScan's `loading` is true", async () => {
-    useSessionStore.setState({ loading: true, generating: false });
+  it("says 'Escaneando…' while runScan is in flight (`scanning` true)", async () => {
+    useSessionStore.setState({ loading: true, scanning: true });
     const view = mount(<MonthOverview />);
     await flush();
     const btn = findButton(view.container, "Escanear todos los hospitales") ??
@@ -82,6 +83,21 @@ describe("MonthOverview scan button label (§A11)", () => {
 
   it("does NOT say 'Escaneando…' while generateOutput's `generating` is true (loading is also true)", async () => {
     useSessionStore.setState({ loading: true, generating: true });
+    const view = mount(<MonthOverview />);
+    await flush();
+    const btn = findButton(view.container, "Escanear todos los hospitales") ??
+      findButton(view.container, "Escaneando");
+    expect(btn.textContent).not.toContain("Escaneando…");
+    view.unmount();
+  });
+
+  it("does NOT say 'Escaneando…' during a plain month open (openMonth's `loading` without a scan)", async () => {
+    // §A11 second half: openMonth sets loading:true BEFORE deciding whether
+    // to fire the pase-1 scan — a plain re-open of an already-scanned month
+    // never scans, so the button must not claim it does. (When openMonth DOES
+    // fire-and-forget runScan on first open, runScan's own `scanning` flag
+    // lights the label — correctly.)
+    useSessionStore.setState({ loading: true, scanning: false, generating: false });
     const view = mount(<MonthOverview />);
     await flush();
     const btn = findButton(view.container, "Escanear todos los hospitales") ??
