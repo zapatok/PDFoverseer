@@ -1,7 +1,8 @@
 # Spike tesserocr (Track D · D1 · Task 1) — registro
 
-**Fecha:** 2026-07-12 · **Veredicto Task 1: INSTALACIÓN OK, spike 2.23x —
-D1 continúa a Task 2 (seam).**
+**Fecha:** 2026-07-12 · **Veredicto FINAL D1: SHIPPED — seam + gate de
+equivalencia PASADO (conteos idénticos, esquina 1.92-3.33x) + tesserocr es
+el backend default con fallback automático a pytesseract.**
 
 ## Instalación (Windows, Python 3.10.11, venv `.venv-cuda`)
 
@@ -159,8 +160,9 @@ gatillara.
 
 Commit: `eval(ocr): tesserocr equivalence gate + benchmark`.
 
-## Pendiente (Task 4 — condicional, gate pasó)
+## Task 4 — flip de default (hecho, `b5ea0b7`)
 
-Flip de default a `tesserocr` con fallback automático a pytesseract si el
-import falla; línea comentada en `requirements.txt`; suite completa
-`-m "not slow"` + ruff 0.
+Default = `tesserocr` cuando el paquete importa, `pytesseract` si no
+(fallback automático, cero cambios para máquinas sin el wheel — AC-a).
+`requirements.txt` documenta el wheel como línea comentada opcional.
+Suite completa `-m "not slow"` 916/49/0 + ruff 0 con el default nuevo.
