@@ -2,6 +2,13 @@
 anthropic==0.86.0
 PyMuPDF==1.27.2
 pytesseract==0.3.13
+# tesserocr: OPTIONAL, NEVER hard-required — core/scanners/utils/ocr_backend.py
+# falls back to pytesseract automatically when this isn't installed (default
+# OCR backend when present, Track D §2). No PyPI wheel for Windows; install
+# manually from https://github.com/simonflueckiger/tesserocr-windows_build/releases
+# (pick the release matching this venv's Python + a Tesseract 5.x build) —
+# see ocr_backend.py's module docstring for the verified wheel + gotchas.
+# tesserocr==2.10.0
 Pillow==12.0.0
 opencv-contrib-python==4.13.0.92
 fastapi==0.135.1

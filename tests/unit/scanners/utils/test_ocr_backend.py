@@ -45,18 +45,47 @@ class _FakeTesserocrModule:
 
 
 # ---------------------------------------------------------------------------
-# (a) default (OVERSEER_OCR_BACKEND absent) -> pytesseract
+# (a) default (OVERSEER_OCR_BACKEND absent) -> tesserocr if the package is
+# importable, else pytesseract (Track D §2, Task 4 — tesserocr became the
+# default once the equivalence gate passed: docs/research/2026-07-12-tesserocr-spike.md)
 # ---------------------------------------------------------------------------
 
 
-def test_default_backend_uses_pytesseract(monkeypatch):
+def test_default_backend_is_tesserocr_when_package_present(monkeypatch):
+    """Package importable + env unset -> the default routes through tesserocr."""
+    fake_mod = _FakeTesserocrModule()
+    monkeypatch.setattr(ocr_backend, "tesserocr", fake_mod)
+    pytesseract_calls = []
+    monkeypatch.setattr(
+        ocr_backend.pytesseract,
+        "image_to_string",
+        lambda img, **kw: pytesseract_calls.append((img, kw)) or "SHOULD NOT BE CALLED",
+    )
+
+    img = Image.new("L", (4, 4))
+    result = ocr_backend.ocr_image(img, config="--psm 6 --oem 1", lang="spa+eng")
+
+    assert result == "fake tesserocr text"
+    assert not pytesseract_calls
+    assert len(fake_mod.built_apis) == 1
+
+
+def test_default_backend_is_pytesseract_when_package_absent(monkeypatch):
+    """Package NOT importable (simulated absence) + env unset -> pytesseract, no error.
+
+    tesserocr IS installed in this venv (Task 1), so absence is simulated the
+    same way test_tesserocr_flag_without_package_falls_back_with_warning does:
+    monkeypatch ocr_backend's already-resolved ``tesserocr`` name to None —
+    exactly what a real ImportError at module-import time would have left it
+    as, per the try/except at the top of ocr_backend.py.
+    """
+    monkeypatch.setattr(ocr_backend, "tesserocr", None)
     calls = []
-
-    def spy_image_to_string(img, **kwargs):
-        calls.append((img, kwargs))
-        return "raw pytesseract text"
-
-    monkeypatch.setattr(ocr_backend.pytesseract, "image_to_string", spy_image_to_string)
+    monkeypatch.setattr(
+        ocr_backend.pytesseract,
+        "image_to_string",
+        lambda img, **kw: calls.append((img, kw)) or "raw pytesseract text",
+    )
 
     img = object()
     result = ocr_backend.ocr_image(img, config="--psm 6 --oem 1", lang="spa+eng")
@@ -65,8 +94,8 @@ def test_default_backend_uses_pytesseract(monkeypatch):
     assert calls == [(img, {"config": "--psm 6 --oem 1", "lang": "spa+eng"})]
 
 
-def test_explicit_pytesseract_backend_matches_default(monkeypatch):
-    """Setting the flag to the default value explicitly is a no-op."""
+def test_explicit_pytesseract_backend_overrides_the_tesserocr_default(monkeypatch):
+    """An explicit env value always wins over whatever the default would be."""
     monkeypatch.setenv("OVERSEER_OCR_BACKEND", "pytesseract")
     calls = []
     monkeypatch.setattr(

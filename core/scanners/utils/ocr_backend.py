@@ -1,23 +1,28 @@
-"""Pluggable OCR text-extraction backend: pytesseract (default) or tesserocr (opt-in).
+"""Pluggable OCR text-extraction backend: tesserocr (default when installed) or pytesseract (fallback).
 
 pytesseract spawns a fresh ``tesseract.exe`` process on every call — on Windows
 that spawn alone measured ~195 ms/page (2026-07-11 threading spike), on top of
 the OCR itself. ``tesserocr`` (the C-API binding) keeps one Tesseract engine
-loaded per thread and skips the spawn entirely; a same-image micro-benchmark
-against the 3 call-sites below measured 367 -> 164 ms/crop (2.23x,
-``docs/research/2026-07-12-tesserocr-spike.md``).
+loaded per thread and skips the spawn entirely; the equivalence gate
+(``docs/research/2026-07-12-tesserocr-spike.md``, Task 3) measured 1.9x-3.3x
+on the corner engine (identical GT counts on both backends) — the gate
+passed, so tesserocr became the default (Task 4, spec §2.5).
 
 Select the backend with the ``OVERSEER_OCR_BACKEND`` env var:
 
-- unset, or ``"pytesseract"`` (the default): spawns ``tesseract.exe`` per call,
-  exactly today's behavior. Works with zero extra install — this is the
-  CI-safe / no-tesserocr-package path.
-- ``"tesserocr"``: one ``tesserocr.PyTessBaseAPI`` per OCR **thread**
-  (``threading.local()`` — tesserocr is not safe to share across concurrently
-  running threads; mirrors the thread-local ``fitz.Document`` idiom already
-  used in ``pagination_count.py``/``header_band_anchors.py``). If the
-  ``tesserocr`` package is not importable, this falls back to pytesseract
-  automatically (with a log warning) — the flag is always safe to set.
+- unset (the default): ``"tesserocr"`` if the package is importable, else
+  ``"pytesseract"`` — so a machine without the Windows wheel installed (CI,
+  a fresh dev clone) behaves exactly as before Track D, no error, no extra
+  install required.
+- ``"tesserocr"`` (explicit): one ``tesserocr.PyTessBaseAPI`` per OCR
+  **thread** (``threading.local()`` — tesserocr is not safe to share across
+  concurrently running threads; mirrors the thread-local ``fitz.Document``
+  idiom already used in ``pagination_count.py``/``header_band_anchors.py``).
+  If the ``tesserocr`` package is not importable, this falls back to
+  pytesseract automatically (with a log warning) — the flag is always safe
+  to set.
+- ``"pytesseract"`` (explicit): spawns ``tesseract.exe`` per call, unconditionally
+  — always available, useful to force the old engine for comparison/debugging.
 
 Windows install: PyPI has no prebuilt wheel for ``tesserocr`` and building
 from source fails (no local Tesseract/Leptonica dev headers). Use the
@@ -142,14 +147,19 @@ def ocr_image(img: Any, *, config: str, lang: str) -> str:
         lang: Tesseract language string, e.g. ``"spa+eng"``.
 
     Returns:
-        Raw OCR text, unstripped (callers strip if they need to). The backend
-        choice never changes the counting derivation: with the default
-        (pytesseract) backend this call is byte-identical to calling
-        ``pytesseract.image_to_string`` directly. Whitespace may differ
-        between backends; document/page counts derived from it must not
-        (verified by the equivalence gate, Task 3).
+        Raw OCR text, unstripped (callers strip if they need to). Whitespace
+        may differ between backends; document/page counts derived from it
+        must not — verified by the equivalence gate
+        (docs/research/2026-07-12-tesserocr-spike.md, Task 3: identical GT
+        counts on both backends, >=1.5x speedup on the corner engine).
+
+    The default (``OVERSEER_OCR_BACKEND`` unset) is ``tesserocr`` when the
+    package is importable, else ``pytesseract`` — so a machine without the
+    Windows wheel installed behaves exactly as before (AC-a): no error, no
+    extra install required, same engine as pre-Track-D.
     """
-    backend = os.environ.get("OVERSEER_OCR_BACKEND", "pytesseract")
+    default_backend = "tesserocr" if tesserocr is not None else "pytesseract"
+    backend = os.environ.get("OVERSEER_OCR_BACKEND", default_backend)
     if backend == "tesserocr":
         if tesserocr is None:
             logger.warning(
