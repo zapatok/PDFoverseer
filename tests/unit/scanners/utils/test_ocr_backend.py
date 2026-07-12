@@ -184,11 +184,11 @@ def test_tesserocr_backend_preserves_psm_oem_config(
     img = Image.new("L", (4, 4))
     ocr_backend.ocr_image(img, config=config, lang="spa+eng")
 
-    assert fake_mod.built_apis[0].kwargs == {
-        "lang": "spa+eng",
-        "psm": expected_psm,
-        "oem": expected_oem,
-    }
+    kwargs = fake_mod.built_apis[0].kwargs
+    assert kwargs["lang"] == "spa+eng"
+    assert kwargs["psm"] == expected_psm
+    assert kwargs["oem"] == expected_oem
+    assert kwargs["path"].endswith(("/", "\\"))  # tesserocr requires a trailing separator
 
 
 def test_pytesseract_backend_preserves_config_and_lang_literally(monkeypatch):

@@ -165,6 +165,10 @@ def test_count_covers_uses_first_passing_flavor(monkeypatch):
     def patched_ocr(img, **kw):
         return page_texts[current_page["idx"]]
 
+    # Pinned so this test is deterministic regardless of an ambient
+    # OVERSEER_OCR_BACKEND=tesserocr (Task 3 equivalence-gate runs set it
+    # process-wide) — this test exercises the pytesseract stub specifically.
+    monkeypatch.setenv("OVERSEER_OCR_BACKEND", "pytesseract")
     monkeypatch.setattr(mod, "get_page_count", fake_get_page_count)
     monkeypatch.setattr(mod, "render_page_region", fake_render)
     monkeypatch.setattr(ocr_backend.pytesseract, "image_to_string", patched_ocr)
@@ -230,6 +234,10 @@ def test_count_covers_threaded_equals_sequential(monkeypatch):
             return page_texts[img.info["pi"]]
         return ""  # pass-2 preprocessed ndarray — page identity gone, no match
 
+    # Pinned so this test is deterministic regardless of an ambient
+    # OVERSEER_OCR_BACKEND=tesserocr (Task 3 equivalence-gate runs set it
+    # process-wide) — this test exercises the pytesseract stub specifically.
+    monkeypatch.setenv("OVERSEER_OCR_BACKEND", "pytesseract")
     monkeypatch.setattr(mod, "get_page_count", lambda _p: len(page_texts))
     monkeypatch.setattr(mod, "render_page_region", fake_render)
     monkeypatch.setattr(ocr_backend.pytesseract, "image_to_string", patched_ocr)

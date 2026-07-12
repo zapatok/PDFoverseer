@@ -71,6 +71,23 @@ _TESSDATA_PREFIX_DEFAULT = r"C:\Program Files\Tesseract-OCR\tessdata"
 if tesserocr is not None:
     os.environ.setdefault("TESSDATA_PREFIX", _TESSDATA_PREFIX_DEFAULT)
 
+
+def _tessdata_path() -> str:
+    """The tessdata dir tesserocr's ``PyTessBaseAPI(path=...)`` needs (trailing slash).
+
+    Gotcha found during Task 3 (2026-07-12): unlike the Tesseract *binary*,
+    this tesserocr Windows build does NOT fall back to reading
+    ``TESSDATA_PREFIX`` on its own — its ``path`` kwarg defaults to ``"./"``,
+    which fails with ``RuntimeError: Failed to init API, possibly an invalid
+    tessdata path: ./`` outside a tessdata-rooted cwd. So ``path`` must always
+    be passed explicitly; this helper is that single source of truth (reads
+    the same ``TESSDATA_PREFIX`` env var set above, for one configuration
+    knob).
+    """
+    prefix = os.environ.get("TESSDATA_PREFIX", _TESSDATA_PREFIX_DEFAULT)
+    return prefix if prefix.endswith(("/", "\\")) else prefix + "/"
+
+
 _PSM_RX = re.compile(r"--psm\s+(\d+)")
 _OEM_RX = re.compile(r"--oem\s+(\d+)")
 # Tesseract's own defaults when a flag is absent from the config string.
@@ -100,7 +117,7 @@ def _tesserocr_api(*, lang: str, psm: int, oem: int) -> Any:
     """Return this thread's ``PyTessBaseAPI``, (re)built only if its config changed."""
     key = (lang, psm, oem)
     if getattr(_tl, "key", None) != key:
-        _tl.api = tesserocr.PyTessBaseAPI(lang=lang, psm=psm, oem=oem)
+        _tl.api = tesserocr.PyTessBaseAPI(path=_tessdata_path(), lang=lang, psm=psm, oem=oem)
         _tl.key = key
     return _tl.api
 
