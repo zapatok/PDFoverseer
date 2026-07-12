@@ -25,6 +25,8 @@ export const useSessionStore = create((set, get) => ({
   scanningCells: new Set(),            // "HPV|odi" strings, mirrored in CategoryRow
   scanProgress: null,                  // {done, total, pdfName?, etaMs?, unit?, terminal?} | null
   filesTick: {},                       // "HPV|odi" → counter; bumped on cell_done so FileList/lightbox re-fetch per_file (G3)
+  cellFiles: {},                       // A1: "HPV|odi" → { files, error } — single per-cell files cache (SWR); fed by fetchCellFiles
+  _cellFilesFetch: new Map(),          // A1: "HPV|odi" → { inFlight, queued } — in-flight/dedup bookkeeping for fetchCellFiles
   fileScan: null,                      // {hospital, sigla, filename, page, pagesTotal, terminal} | null — single-file OCR (rev-2 #1)
   lightbox: null,                      // {hospital, sigla, fileIndex, mode} | null
   presence: [],                         // M2: participant list from presence WS events
@@ -244,6 +246,7 @@ export const useSessionStore = create((set, get) => ({
           filesTick: { ...prev.filesTick, [tickKey]: (prev.filesTick[tickKey] ?? 0) + 1 },
         };
       });
+      get().fetchCellFiles(sessionId, hospital, sigla);
     } catch (error) {
       if (error.status === 409) {
         const who = error.body?.lock_holder?.name ?? "Otro usuario";
@@ -440,6 +443,7 @@ export const useSessionStore = create((set, get) => ({
           pendingSaves: { ...prev.pendingSaves, [key]: "saved" },
         };
       });
+      get().fetchCellFiles(sessionId, hospital, sigla);
 
       setTimeout(() => {
         set((prev) => {
@@ -470,6 +474,7 @@ export const useSessionStore = create((set, get) => ({
             filesTick: { ...prev.filesTick, [tickKey]: (prev.filesTick[tickKey] ?? 0) + 1 },
           };
         });
+        get().fetchCellFiles(sessionId, hospital, sigla);
         toast.error(`${who} está editando esta celda`);
         get().refetchSession(sessionId);
         return;
@@ -489,6 +494,7 @@ export const useSessionStore = create((set, get) => ({
           filesTick: { ...prev.filesTick, [tickKey]: (prev.filesTick[tickKey] ?? 0) + 1 },
         };
       });
+      get().fetchCellFiles(sessionId, hospital, sigla);
       toast.error(`No se pudo guardar el conteo del archivo: ${String(error)}`);
     }
   },
@@ -906,6 +912,86 @@ export const useSessionStore = create((set, get) => ({
     }
   },
 
+  // A1 — single per-cell files cache with stale-while-revalidate. FileList,
+  // DetailPanel and PDFLightbox all read `cellFiles[key]` instead of each
+  // fetching `api.getCellFiles` on its own; this is now the ONE place that
+  // calls it (WorkerCountViewer keeps its own fetch — out of scope, spec §A1).
+  // SWR: on a refetch of the SAME cell, the previous `files` stay in the
+  // entry until the new fetch resolves — no null flash, no Skeleton remount.
+  // Dedup: a fetch already in flight for `key` doesn't launch a second
+  // request; it just queues ONE follow-up fetch, collapsing any number of
+  // bumps that land while the first is in flight, so the cache still
+  // converges to the latest server state without piling up requests.
+  fetchCellFiles: async (sessionId, hospital, sigla) => {
+    if (!sessionId || !hospital || !sigla) return;
+    const key = `${hospital}|${sigla}`;
+    const existing = get()._cellFilesFetch.get(key);
+    if (existing?.inFlight) {
+      if (!existing.queued) {
+        set((prev) => {
+          const next = new Map(prev._cellFilesFetch);
+          next.set(key, { ...existing, queued: true });
+          return { _cellFilesFetch: next };
+        });
+      }
+      return;
+    }
+    set((prev) => {
+      const next = new Map(prev._cellFilesFetch);
+      next.set(key, { inFlight: true, queued: false });
+      return { _cellFilesFetch: next };
+    });
+    let files = null;
+    let error = null;
+    try {
+      files = await api.getCellFiles(sessionId, hospital, sigla);
+    } catch (err) {
+      error = String(err);
+    }
+    set((prev) => ({
+      cellFiles: {
+        ...prev.cellFiles,
+        // On error, keep whatever files were already cached (SWR: a failed
+        // refetch must not blank out data the operator can still see/use).
+        [key]: error
+          ? { files: prev.cellFiles[key]?.files ?? null, error }
+          : { files, error: null },
+      },
+    }));
+    const queuedFollowup = get()._cellFilesFetch.get(key)?.queued;
+    set((prev) => {
+      const next = new Map(prev._cellFilesFetch);
+      next.delete(key);
+      return { _cellFilesFetch: next };
+    });
+    // A bump landed while this fetch was in flight — fire the ONE queued
+    // follow-up now so the cache doesn't go stale. Fire-and-forget: the
+    // caller of THIS invocation only awaited its own fetch.
+    if (queuedFollowup) {
+      get().fetchCellFiles(sessionId, hospital, sigla);
+    }
+  },
+
+  // A1 — optimistic per-file mutation: the -/+ steppers and InlineEditCount
+  // in FileList/PDFLightbox patch the cached row immediately, before the
+  // save round-trips. No-ops if the cell has no cached entry yet.
+  patchCellFile: (hospital, sigla, filename, patch) => {
+    const key = `${hospital}|${sigla}`;
+    set((prev) => {
+      const entry = prev.cellFiles[key];
+      if (!entry?.files) return {};
+      return {
+        cellFiles: {
+          ...prev.cellFiles,
+          [key]: {
+            ...entry,
+            files: entry.files.map((f) => (f.name === filename ? { ...f, ...patch } : f)),
+          },
+        },
+      };
+    });
+  },
+
   // ---------- WS event handler ----------
   _handleWSEvent: (event) => {
     const state = get();
@@ -974,6 +1060,7 @@ export const useSessionStore = create((set, get) => ({
         } else {
           set({ scanningCells: next, filesTick });
         }
+        get().fetchCellFiles(session?.session_id, event.hospital, event.sigla);
         break;
       }
       case "cell_updated": {
@@ -1004,6 +1091,7 @@ export const useSessionStore = create((set, get) => ({
           [key]: (state.filesTick[key] ?? 0) + 1,
         };
         set({ session: { ...session, cells }, filesTick });
+        get().fetchCellFiles(session.session_id, event.hospital, event.sigla);
         break;
       }
       case "cell_error": {
@@ -1134,6 +1222,7 @@ export const useSessionStore = create((set, get) => ({
           filesTick: { ...s.filesTick, [fkey]: (s.filesTick[fkey] ?? 0) + 1 },
           fileScan: s.fileScan ? { ...s.fileScan, terminal: "done" } : null,
         }));
+        get().fetchCellFiles(state.session?.session_id, event.hospital, event.sigla);
         setTimeout(() => set((s) => (s.fileScan?.terminal === "done" ? { fileScan: null } : s)), 1500);
         break;
       }
@@ -1165,6 +1254,7 @@ export const useSessionStore = create((set, get) => ({
             fileScan: s.fileScan ? { ...s.fileScan, terminal: "cancelled" } : null,
             filesTick: { ...s.filesTick, [tickKey]: (s.filesTick[tickKey] ?? 0) + 1 },
           }));
+          get().fetchCellFiles(state.session?.session_id, event.hospital, event.sigla);
           setTimeout(
             () => set((s) => (s.fileScan?.terminal === "cancelled" ? { fileScan: null } : s)),
             2000,
