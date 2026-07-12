@@ -46,7 +46,7 @@ describe("file_scan_error: cancelled vs real error (U6)", () => {
     expect(state.fileScan.terminal).toBe("cancelled");
   });
 
-  it("a real scan error still sets the sticky global error (unchanged behavior)", () => {
+  it("a real scan error toasts (A2) instead of setting the sticky global error", () => {
     useSessionStore.getState()._handleWSEvent({
       type: "file_scan_error",
       hospital: "HRB",
@@ -56,9 +56,11 @@ describe("file_scan_error: cancelled vs real error (U6)", () => {
     });
 
     expect(toast).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.error.mock.calls[0][0]).toContain("boom");
 
     const state = useSessionStore.getState();
-    expect(state.error).toBe("boom");
+    expect(state.error).toBeNull();
     expect(state.fileScan.terminal).toBe("error");
   });
 });

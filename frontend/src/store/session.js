@@ -163,7 +163,10 @@ export const useSessionStore = create((set, get) => ({
       // confirm it over the WS moments later.
       set({ scanProgress: { done: 0, total: resp?.total_pdfs ?? 0, unit: "pdf" } });
     } catch (error) {
-      set({ error: String(error) });
+      // A2: toast instead of the sticky global error banner — this action
+      // runs from inside a hospital view, where the banner (MonthOverview
+      // only) is never seen.
+      toast.error(`No se pudo iniciar el escaneo OCR: ${String(error)}`);
     }
   },
 
@@ -180,7 +183,9 @@ export const useSessionStore = create((set, get) => ({
         toast.error(`${who} está editando esta celda`);
         return;
       }
-      set({ error: String(error) });
+      // A2: toast instead of the sticky global error banner (this action runs
+      // from inside a hospital view).
+      toast.error(`No se pudo escanear el archivo: ${String(error)}`);
     }
   },
 
@@ -213,7 +218,9 @@ export const useSessionStore = create((set, get) => ({
         get().refetchSession(sessionId);
         return;
       }
-      set({ error: String(error) });
+      // A2: toast instead of the sticky global error banner (this action runs
+      // from inside a hospital view).
+      toast.error(`No se pudieron actualizar los candidatos de esta celda: ${String(error)}`);
     }
   },
 
@@ -230,7 +237,11 @@ export const useSessionStore = create((set, get) => ({
 
   cancelScan: async (sessionId) => {
     try { await api.cancelScan(sessionId); }
-    catch (error) { set({ error: String(error) }); }
+    catch (error) {
+      // A2: toast instead of the sticky global error banner (this action
+      // runs from inside a hospital view, next to the scan progress bar).
+      toast.error(`No se pudo cancelar el escaneo: ${String(error)}`);
+    }
   },
 
   // Incr 2 — apply ratio N to all Pendiente files in a cell, then refresh.
@@ -902,7 +913,10 @@ export const useSessionStore = create((set, get) => ({
       invalidateHistory(sessionId);
       return result;
     } catch (error) {
-      set({ error: String(error), loading: false });
+      // A2: no sticky global error banner here — the caller (MonthOverview's
+      // onGenerate) already toasts on this same rejection; setting `error`
+      // duplicated it as a second, stale-looking surface.
+      set({ loading: false });
       throw error;
     }
   },
@@ -1278,9 +1292,12 @@ export const useSessionStore = create((set, get) => ({
           if (state.session?.session_id) get().refetchSession(state.session.session_id);
           break;
         }
+        // A2: toast instead of the sticky global error banner (this handler
+        // runs while the operator is in a hospital view, next to fileScan's
+        // own progress UI — the banner only renders in MonthOverview).
+        toast.error(`No se pudo escanear el archivo: ${event.error ?? "error desconocido"}`);
         set((s) => ({
           fileScan: s.fileScan ? { ...s.fileScan, terminal: "error" } : null,
-          error: event.error ?? "Error al escanear el archivo",
         }));
         setTimeout(() => set((s) => (s.fileScan?.terminal === "error" ? { fileScan: null } : s)), 4000);
         break;
