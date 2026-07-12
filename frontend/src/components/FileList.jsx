@@ -4,6 +4,7 @@ import { useSessionStore } from "../store/session";
 import { api } from "../lib/api";
 import { toast } from "sonner";
 import EmptyState from "../ui/EmptyState";
+import Popover from "../ui/Popover";
 import Skeleton from "../ui/Skeleton";
 import Tooltip from "../ui/Tooltip";
 import InlineEditCount from "./InlineEditCount";
@@ -29,11 +30,16 @@ const ROW_OVERSCAN = 8;
 
 /**
  * Compact popover menu for creating a whole-file reorg op.
- * Uses <details>/<summary> to avoid needing a portal.
+ * §A3: a portalized Radix Popover (ui/Popover) — the old <details>/<summary>
+ * positioned its form `absolute` INSIDE the virtualized <ul>: low rows
+ * clipped it, and scrolling with the menu open unmounted the row (and its
+ * typed-but-unsaved form) with no warning. The portal fixes both — a row
+ * that scrolls out of view now just closes the popover cleanly (Radix
+ * default), never clips or leaves a phantom input.
  */
 function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated, disabled = false }) {
   const addReorgOp = useSessionStore((s) => s.addReorgOp);
-  const detailsRef = useRef(null);
+  const [open, setOpen] = useState(false);
 
   const [opType, setOpType] = useState("move_file");
   const [destHospital, setDestHospital] = useState(
@@ -46,7 +52,7 @@ function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated, disabled
 
   // Close the popover after a successful submit
   function close() {
-    if (detailsRef.current) detailsRef.current.open = false;
+    setOpen(false);
   }
 
   async function handleSubmit(e) {
@@ -86,38 +92,26 @@ function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated, disabled
   }
 
   return (
-    <details ref={detailsRef} className="relative">
-      <summary
-        aria-disabled={disabled || undefined}
-        onClick={disabled ? (e) => e.preventDefault() : undefined}
-        onKeyDown={
-          disabled
-            ? (e) => {
-                // <details> toggles on Enter/Space too; onClick only blocks the
-                // mouse, so guard the keyboard path or a locked cell's reorg menu
-                // would still open for keyboard users.
-                if (e.key === "Enter" || e.key === " ") e.preventDefault();
-              }
-            : undefined
-        }
-        className={[
-          "list-none flex items-center justify-center w-7 h-7 rounded text-po-text-muted",
-          disabled
-            ? "opacity-50 cursor-not-allowed"
-            : "hover:text-po-text hover:bg-po-panel-hover cursor-pointer",
-        ].join(" ")}
-        title={disabled ? "Bloqueado por otro participante" : "Reorganizar archivo"}
-        aria-label="Reorganizar archivo"
-      >
-        <MoreHorizontal size={14} strokeWidth={1.75} />
-      </summary>
-      {/* Popover card — positioned absolutely; z-10 clears the file list rows */}
-      <form
-        onSubmit={handleSubmit}
-        className="absolute right-0 z-10 mt-1 w-56 rounded-lg border border-po-border bg-po-panel shadow-lg p-3 space-y-2 text-xs"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="font-medium text-po-text truncate">{file.name}</p>
+    <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
+      <Popover.Trigger>
+        <button
+          type="button"
+          disabled={disabled}
+          className={[
+            "flex items-center justify-center w-7 h-7 rounded text-po-text-muted",
+            disabled
+              ? "opacity-50 cursor-not-allowed"
+              : "hover:text-po-text hover:bg-po-panel-hover cursor-pointer",
+          ].join(" ")}
+          title={disabled ? "Bloqueado por otro participante" : "Reorganizar archivo"}
+          aria-label="Reorganizar archivo"
+        >
+          <MoreHorizontal size={14} strokeWidth={1.75} />
+        </button>
+      </Popover.Trigger>
+      <Popover.Content className="w-56 p-3 space-y-2 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-2" onClick={(e) => e.stopPropagation()}>
+          <p className="font-medium text-po-text truncate">{file.name}</p>
 
         {/* op_type */}
         <div className="space-y-0.5">
@@ -206,8 +200,9 @@ function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated, disabled
             Cancelar
           </button>
         </div>
-      </form>
-    </details>
+        </form>
+      </Popover.Content>
+    </Popover>
   );
 }
 
