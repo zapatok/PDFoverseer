@@ -5,6 +5,7 @@ import MonthOverview from "./views/MonthOverview";
 import HospitalDetail from "./views/HospitalDetail";
 import PDFLightbox from "./components/PDFLightbox";
 import ScanProgress from "./components/ScanProgress";
+import ScanConfirmDialog from "./components/ScanConfirmDialog";
 import IdentityDialog from "./components/IdentityDialog";
 import PresenceRoster from "./components/PresenceRoster";
 
@@ -32,6 +33,7 @@ export default function App() {
         </main>
         <PDFLightbox />
         <ScanProgress />
+        <ScanConfirmDialog />
         <IdentityDialog />
         <Toaster position="bottom-right" theme="dark" className="z-[60]" />
       </div>

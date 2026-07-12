@@ -24,6 +24,10 @@ export const useSessionStore = create((set, get) => ({
   // FASE 2 additions
   scanningCells: new Set(),            // "HPV|odi" strings, mirrored in CategoryRow
   scanProgress: null,                  // {done, total, pdfName?, etaMs?, unit?, terminal?} | null
+  // A5: the OCR cost guard's in-app confirm (replaces window.confirm) —
+  // {sessionId, cellPairs, totalPdfs, mins} | null. ScanConfirmDialog renders
+  // it; confirmScanOcr/cancelScanOcr resolve it.
+  pendingScanConfirm: null,
   filesTick: {},                       // "HPV|odi" → counter; legacy change signal (pre-A1) — the real re-fetch is the fetchCellFiles call next to each bump; kept because tests assert on it
   cellFiles: {},                       // A1: "HPV|odi" → { files, error } — single per-cell files cache (SWR); fed by fetchCellFiles
   _cellFilesFetch: new Map(),          // A1: "HPV|odi" → { inFlight, queued } — in-flight/dedup bookkeeping for fetchCellFiles
@@ -145,16 +149,22 @@ export const useSessionStore = create((set, get) => ({
   scanOcr: async (sessionId, cellPairs) => {
     // Cost guard (audit #2): warn before a long OCR run and remind that
     // regime-1 cells are already counted by filename. Estimated from the
-    // pase-1 filename counts the client already holds.
+    // pase-1 filename counts the client already holds. A5: no more
+    // window.confirm (blocks the thread, can't show a breakdown) — over the
+    // threshold this just stages pendingScanConfirm; ScanConfirmDialog
+    // renders it and confirmScanOcr/cancelScanOcr resolve it.
     const totalPdfs = totalPdfsForPairs(get().session, cellPairs);
     if (shouldConfirmScan(totalPdfs, OCR_CONFIRM_PDF_THRESHOLD)) {
       const mins = Math.max(1, Math.round(estimateScanSeconds(totalPdfs) / 60));
-      const ok = window.confirm(
-        `Vas a escanear con OCR ${totalPdfs} PDFs (~${mins} min). En categorías ` +
-          `de régimen 1 el conteo por nombre de archivo ya suele ser correcto. ¿Continuar?`,
-      );
-      if (!ok) return;
+      set({ pendingScanConfirm: { sessionId, cellPairs, totalPdfs, mins } });
+      return;
     }
+    return get()._launchScanOcr(sessionId, cellPairs);
+  },
+
+  // A5: the actual launch, shared by the direct (under-threshold) path and
+  // the confirmed (over-threshold) path — never duplicated between them.
+  _launchScanOcr: async (sessionId, cellPairs) => {
     try {
       // participant_id: auto-préstamo — la celda que TÚ tienes abierta se
       // escanea igual (pasa a solo-lectura con el badge del bot mientras dura).
@@ -169,6 +179,19 @@ export const useSessionStore = create((set, get) => ({
       toast.error(`No se pudo iniciar el escaneo OCR: ${String(error)}`);
     }
   },
+
+  // A5: ScanConfirmDialog's "Confirmar" — launches the staged scan, then
+  // clears the pending confirm regardless of outcome (the launch's own
+  // catch already toasts a failure).
+  confirmScanOcr: async () => {
+    const pending = get().pendingScanConfirm;
+    if (!pending) return;
+    set({ pendingScanConfirm: null });
+    return get()._launchScanOcr(pending.sessionId, pending.cellPairs);
+  },
+
+  // A5: ScanConfirmDialog's "Cancelar" — discards the staged scan.
+  cancelScanOcr: () => set({ pendingScanConfirm: null }),
 
   // rev-2 #1 — OCR-scan a single file of a cell. Progress (file_*) + the merge
   // arrive over the WS; this just kicks it off.

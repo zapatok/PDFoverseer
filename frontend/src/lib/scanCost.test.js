@@ -18,7 +18,7 @@ describe("scanCost", () => {
   });
 
   it("estimates seconds from the per-PDF constant", () => {
-    expect(estimateScanSeconds(10)).toBe(40);
+    expect(estimateScanSeconds(10)).toBe(10); // §A5: recalibrated to 1 s/PDF
   });
 
   it("sums filename_count over the selected pairs", () => {
