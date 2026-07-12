@@ -166,16 +166,19 @@ Common URLs: [PyMuPDF](https://pymupdf.readthedocs.io) | [FastAPI](https://fasta
 
 ## Pending Work
 
-State as of the 2026-07-12 "pulido post-revisión" close (tag
-`pulido-post-revision` — the 26-task plan is fully executed, see Project
-history). **No committed next task** — candidates, Daniel decides:
+State as of the 2026-07-12 Track D handoff (after the `pulido-post-revision`
+close, same day). **COMMITTED NEXT TASK: execute the Track D round** — spec
+`docs/superpowers/specs/2026-07-12-track-d-ocr-speed-design.md` + plan
+`docs/superpowers/plans/2026-07-12-track-d-ocr-speed.md` (D1 tesserocr spike
+~2x, D2 RCH→pagination experiment ~5-8x on charla/chintegral/dif_pts, D3
+reorg-viewer keyboard + real thumbnails; both docs reviewer-approved; the
+plan's "Contexto para el ejecutor" header is binding; execute via
+superpowers:subagent-driven-development). D1/D2 are EXPERIMENTS with
+explicit per-item gates and abort/fail exits — an abort documented in
+`docs/research/` is a valid outcome, not a failure to rationalize past.
+Design approved by Daniel in-session 2026-07-12.
 
-- **Track D spec (future, eval-first, not yet written)** — distilled from the
-  2026-07-11 review round: RCH→pagination experiment (charla/chintegral/
-  dif_pts — the heaviest cells, ~5-8x scan win if the "repeats 1 de 2" bug is
-  solvable), tesserocr spike (~2x, kills the 195 ms/page spawn floor; Windows
-  wheel risk), reorg-mode viewer UX (keyboard + real thumbnails).
-- **FF-merge `master`** (behind by several rounds).
+FF-merge `master`: **DONE 2026-07-12** (`master` == `po_overhaul`, pushed).
 
 Open Daniel-side items: the JUNIO counting decisions from his por_resolver
 notes, the MAYO HPV|chps phantom override.
