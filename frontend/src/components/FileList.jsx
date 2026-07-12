@@ -470,6 +470,7 @@ export default function FileList({ hospital, sigla }) {
                     </button>
                     <span className={tinted ? "[&_button]:text-po-suspect" : ""}>
                       <InlineEditCount
+                        variant="stepper"
                         value={value}
                         placeholder={placeholder}
                         disabled={locked}
