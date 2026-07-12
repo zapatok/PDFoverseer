@@ -5,7 +5,8 @@ import SaveIndicator from "../ui/SaveIndicator";
 import { parseOverrideInput } from "../lib/override-input";
 
 export default function OverridePanel({ hospital, sigla, cell, disabled = false, focusNonce = 0, maxPages = null, countType = null }) {
-  const session = useSessionStore((s) => s.session);
+  // A6: per-field selector — only session_id is used here.
+  const sessionId = useSessionStore((s) => s.session?.session_id);
   const saveOverride = useSessionStore((s) => s.saveOverride);
   const pendingSaves = useSessionStore((s) => s.pendingSaves);
 
@@ -67,7 +68,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   // the value was typed.
   const flushSave = useDebouncedCallback((h, s, v) => {
     const numericValue = v === "" || v === null ? null : parseInt(v, 10);
-    saveOverride(session.session_id, h, s, numericValue);
+    saveOverride(sessionId, h, s, numericValue);
   }, 400);
 
   const onChangeValue = (e) => {
@@ -93,7 +94,7 @@ export default function OverridePanel({ hospital, sigla, cell, disabled = false,
   // concept from this confirmation; the plain-valid path above (flushSave)
   // never sets it either, so this stays consistent for every hospital.
   const confirmOverCap = () => {
-    saveOverride(session.session_id, hospital, sigla, pendingOverCap, {
+    saveOverride(sessionId, hospital, sigla, pendingOverCap, {
       allowOverPages: true,
     });
     setPendingOverCap(null);

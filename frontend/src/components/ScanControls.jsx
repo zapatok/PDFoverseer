@@ -3,7 +3,8 @@ import { useSessionStore } from "../store/session";
 import Button from "../ui/Button";
 
 export default function ScanControls({ hospital, selectedSiglas }) {
-  const session = useSessionStore((s) => s.session);
+  // A6: per-field selector — only session_id is used here.
+  const sessionId = useSessionStore((s) => s.session?.session_id);
   const scanOcr = useSessionStore((s) => s.scanOcr);
 
   const n = selectedSiglas.length;
@@ -11,7 +12,7 @@ export default function ScanControls({ hospital, selectedSiglas }) {
   const onClick = () => {
     if (n === 0) return;
     const pairs = selectedSiglas.map((s) => [hospital, s]);
-    scanOcr(session.session_id, pairs);
+    scanOcr(sessionId, pairs);
   };
 
   let label;

@@ -6,7 +6,8 @@ import { formatEta } from "../lib/scanCost";
 
 export default function ScanProgress() {
   const scanProgress = useSessionStore((s) => s.scanProgress);
-  const session = useSessionStore((s) => s.session);
+  // A6: per-field selector — only session_id is used here.
+  const sessionId = useSessionStore((s) => s.session?.session_id);
   const cancelScan = useSessionStore((s) => s.cancelScan);
   const scanOcr = useSessionStore((s) => s.scanOcr);
 
@@ -37,9 +38,9 @@ export default function ScanProgress() {
   const hasSkipped = terminal === "complete" && skipped.length > 0;
 
   function handleRescan() {
-    if (!session?.session_id) return;
+    if (!sessionId) return;
     const pairs = skipped.map((c) => [c.hospital, c.sigla]);
-    scanOcr(session.session_id, pairs);
+    scanOcr(sessionId, pairs);
   }
 
   function handleDismiss() {
@@ -73,7 +74,7 @@ export default function ScanProgress() {
           <Button
             variant="destructive"
             size="sm"
-            onClick={() => cancelScan(session.session_id)}
+            onClick={() => cancelScan(sessionId)}
           >
             Cancelar
           </Button>

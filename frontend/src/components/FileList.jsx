@@ -207,7 +207,8 @@ function ReorgMenu({ file, srcHospital, srcSigla, sessionId, onCreated, disabled
 }
 
 export default function FileList({ hospital, sigla }) {
-  const session = useSessionStore((s) => s.session);
+  // A6: per-field selector — only session_id is used here.
+  const sessionId = useSessionStore((s) => s.session?.session_id);
   const openLightbox = useSessionStore((s) => s.openLightbox);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
   const patchCellFile = useSessionStore((s) => s.patchCellFile);
@@ -342,7 +343,7 @@ export default function FileList({ hospital, sigla }) {
               onClick={
                 locked
                   ? undefined
-                  : () => saveOverride(session.session_id, hospital, sigla, null)
+                  : () => saveOverride(sessionId, hospital, sigla, null)
               }
               className="underline underline-offset-2 hover:text-po-text disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
             >
@@ -454,7 +455,7 @@ export default function FileList({ hospital, sigla }) {
                     override_count: next,
                     origin: "Manual",
                   });
-                  savePerFileOverride(session.session_id, hospital, sigla, f.name, next);
+                  savePerFileOverride(sessionId, hospital, sigla, f.name, next);
                 };
                 return (
                   <span className="inline-flex items-center gap-0.5">
@@ -479,7 +480,7 @@ export default function FileList({ hospital, sigla }) {
                             override_count: newCount,
                             origin: "Manual",
                           });
-                          savePerFileOverride(session.session_id, hospital, sigla, f.name, newCount, {
+                          savePerFileOverride(sessionId, hospital, sigla, f.name, newCount, {
                             allowOverPages: opts?.allowOverPages,
                           });
                         }}
@@ -506,7 +507,7 @@ export default function FileList({ hospital, sigla }) {
                 file={f}
                 srcHospital={hospital}
                 srcSigla={sigla}
-                sessionId={session?.session_id}
+                sessionId={sessionId}
                 disabled={locked}
                 onCreated={() => {}}
               />

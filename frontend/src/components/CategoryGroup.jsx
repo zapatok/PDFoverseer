@@ -19,12 +19,13 @@ export default function CategoryGroup({
   onCommitNext,
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const session = useSessionStore((s) => s.session);
+  // A6: per-field selector — only session_id is used here.
+  const sessionId = useSessionStore((s) => s.session?.session_id);
   const scanOcr = useSessionStore((s) => s.scanOcr);
 
   const scanAll = () => {
     const pairs = cells.map((c) => [hospital, c.sigla]);
-    scanOcr(session.session_id, pairs);
+    scanOcr(sessionId, pairs);
   };
 
   return (

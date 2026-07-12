@@ -175,7 +175,9 @@ export default function PDFLightbox() {
   const lightbox = useSessionStore((s) => s.lightbox);
   const closeLightbox = useSessionStore((s) => s.closeLightbox);
   const openLightbox = useSessionStore((s) => s.openLightbox);
-  const session = useSessionStore((s) => s.session);
+  // A6: per-field selector — this component only ever reads session_id (plus
+  // the already-separate reorg_ops selector below).
+  const sessionId = useSessionStore((s) => s.session?.session_id);
   const savePerFileOverride = useSessionStore((s) => s.savePerFileOverride);
   const patchCellFile = useSessionStore((s) => s.patchCellFile);
   const scanFileOcr = useSessionStore((s) => s.scanFileOcr);
@@ -232,7 +234,7 @@ export default function PDFLightbox() {
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, files, openLightbox]);
 
-  if (!lightbox || !session) return null;
+  if (!lightbox || !sessionId) return null;
 
   const stepFile = (delta) => {
     if (!files || files.length === 0) return;
@@ -249,7 +251,7 @@ export default function PDFLightbox() {
   const noOcr = scanInfo?.kind === "none";
   const scanningThisFile =
     !!fileScan && fileScan.filename === currentFile?.name && !fileScan.terminal;
-  const pdfUrl = api.cellPdfUrl(session.session_id, lightbox.hospital, lightbox.sigla, lightbox.fileIndex);
+  const pdfUrl = api.cellPdfUrl(sessionId, lightbox.hospital, lightbox.sigla, lightbox.fileIndex);
   const label = SIGLA_LABELS[lightbox.sigla];
   const showLabel = label && label.toLowerCase() !== lightbox.sigla.toLowerCase();
 
@@ -299,7 +301,7 @@ export default function PDFLightbox() {
       <Dialog.Body>
         {lightbox.mode === "count_workers" ? (
           <WorkerCountViewer
-            sessionId={session.session_id}
+            sessionId={sessionId}
             hospital={lightbox.hospital}
             sigla={lightbox.sigla}
             initialFileIndex={lightbox.fileIndex}
@@ -307,13 +309,13 @@ export default function PDFLightbox() {
         ) : lightbox.mode === "reorg" ? (
           <WorkerCountViewer
             mode="reorg"
-            sessionId={session.session_id}
+            sessionId={sessionId}
             hospital={lightbox.hospital}
             sigla={lightbox.sigla}
             initialFileIndex={lightbox.fileIndex}
             onCreateOp={async (draft) => {
               try {
-                await addReorgOp(session.session_id, lightbox.hospital, lightbox.sigla, draft);
+                await addReorgOp(sessionId, lightbox.hospital, lightbox.sigla, draft);
                 toast.success(`Operación creada — ${draft.source?.file ?? ""}`);
                 // Volver al visor de inspección del MISMO archivo (no cerrar el
                 // lightbox): para un rotate, la vista ya endereza la página con
@@ -339,7 +341,7 @@ export default function PDFLightbox() {
                 <FileViewerProgress
                   page={fileScan.page}
                   pagesTotal={fileScan.pagesTotal}
-                  onCancel={() => cancelScan(session.session_id)}
+                  onCancel={() => cancelScan(sessionId)}
                 />
               ) : (
                 <Button
@@ -348,7 +350,7 @@ export default function PDFLightbox() {
                   size="sm"
                   disabled={noOcr || !currentFile || isLocked}
                   onClick={() =>
-                    scanFileOcr(session.session_id, lightbox.hospital, lightbox.sigla, currentFile.name)
+                    scanFileOcr(sessionId, lightbox.hospital, lightbox.sigla, currentFile.name)
                   }
                   className="mt-4 w-full justify-center"
                   title={
@@ -402,7 +404,7 @@ export default function PDFLightbox() {
                         override_count: newCount,
                         origin: "Manual",
                       });
-                      savePerFileOverride(session.session_id, lightbox.hospital, lightbox.sigla, name, newCount, {
+                      savePerFileOverride(sessionId, lightbox.hospital, lightbox.sigla, name, newCount, {
                         allowOverPages: opts?.allowOverPages,
                       });
                     }}

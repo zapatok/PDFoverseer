@@ -8,7 +8,8 @@ import Button from "../ui/Button";
 //  - "Escanear pendientes": OCR only the amber (pendiente) cells.
 //  - "Marcar seleccionadas como listas": confirm the checked cells by hand.
 export default function CategoryBulkActions({ hospital, cells, selectedSiglas, onMarkedReady }) {
-  const session = useSessionStore((s) => s.session);
+  // A6: per-field selector — only session_id is used here.
+  const sessionId = useSessionStore((s) => s.session?.session_id);
   const scanPending = useSessionStore((s) => s.scanPending);
   const confirmCell = useSessionStore((s) => s.confirmCell);
 
@@ -17,13 +18,13 @@ export default function CategoryBulkActions({ hospital, cells, selectedSiglas, o
 
   const onScanPending = () => {
     if (pendingCount === 0) return;
-    scanPending(session.session_id, hospital);
+    scanPending(sessionId, hospital);
   };
 
   const onMarkReady = () => {
     if (selectedCount === 0) return;
     for (const sigla of selectedSiglas) {
-      confirmCell(session.session_id, hospital, sigla, true);
+      confirmCell(sessionId, hospital, sigla, true);
     }
     onMarkedReady?.();
   };

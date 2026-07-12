@@ -27,7 +27,9 @@ export default function CategoryRow({
 }) {
   const scanningCells = useSessionStore((s) => s.scanningCells);
   const pendingSaves = useSessionStore((s) => s.pendingSaves);
-  const session = useSessionStore((s) => s.session);
+  // A6: per-field selector — this component only ever reads session_id, so a
+  // whole-session subscription re-rendered every row on any cell_updated.
+  const sessionId = useSessionStore((s) => s.session?.session_id);
   const saveOverride = useSessionStore((s) => s.saveOverride);
   const presence = useSessionStore((s) => s.presence);
   const here = participantsInCell(presence, hospital, sigla, getParticipantId());
@@ -40,7 +42,7 @@ export default function CategoryRow({
   const placeholder = mode === "manual" ? "—" : null;
 
   const onCommitCount = (v, opts) => {
-    saveOverride(session.session_id, hospital, sigla, v, {
+    saveOverride(sessionId, hospital, sigla, v, {
       manual: mode === "manual",
       allowOverPages: opts?.allowOverPages,
     });

@@ -11,7 +11,8 @@ import SaveIndicator from "../ui/SaveIndicator";
 // locked (M3a): when another participant holds the cell, textarea + buttons
 // are disabled so local edits cannot collide with the remote editor.
 export default function NotePanel({ hospital, sigla, cell, locked = false }) {
-  const session = useSessionStore((s) => s.session);
+  // A6: per-field selector — only session_id is used here.
+  const sessionId = useSessionStore((s) => s.session?.session_id);
   const saveNote = useSessionStore((s) => s.saveNote);
   const pendingSaves = useSessionStore((s) => s.pendingSaves);
 
@@ -34,7 +35,7 @@ export default function NotePanel({ hospital, sigla, cell, locked = false }) {
   // saves to the cell where it was typed. Same fix as OverridePanel's
   // flushSave; markResolved/reopen are safe (they cancel + save synchronously).
   const flush = useDebouncedCallback((hosp, sig, value, nextStatus) => {
-    saveNote(session.session_id, hosp, sig, { text: value, status: nextStatus });
+    saveNote(sessionId, hosp, sig, { text: value, status: nextStatus });
   }, 400);
 
   const readOnly = status === "resuelto";
@@ -49,12 +50,12 @@ export default function NotePanel({ hospital, sigla, cell, locked = false }) {
   // text-save first, or it would fire ~400 ms later and revert the status.
   const markResolved = () => {
     flush.cancel();
-    saveNote(session.session_id, hospital, sigla, { text, status: "resuelto" });
+    saveNote(sessionId, hospital, sigla, { text, status: "resuelto" });
   };
 
   const reopen = () => {
     flush.cancel();
-    saveNote(session.session_id, hospital, sigla, { text, status: "por_resolver" });
+    saveNote(sessionId, hospital, sigla, { text, status: "por_resolver" });
   };
 
   return (
