@@ -174,6 +174,64 @@ describe("InlineEditCount — over-cap confirmation (task 5)", () => {
   });
 });
 
+describe("InlineEditCount — blur commits a valid draft (§A4)", () => {
+  it("typing a valid, different value then blurring commits it (same path as Enter)", () => {
+    const onCommit = vi.fn();
+    const { container } = mount(<InlineEditCount value={3} onCommit={onCommit} autoFocus />);
+    const input = container.querySelector("input");
+    setInputValue(input, "7");
+    act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenCalledWith(7);
+    expect(container.querySelector("input")).toBeNull(); // editor closed
+  });
+
+  it("Escape then blur does NOT commit (Escape stays an explicit discard)", () => {
+    const onCommit = vi.fn();
+    const { container } = mount(<InlineEditCount value={3} onCommit={onCommit} autoFocus />);
+    const input = container.querySelector("input");
+    setInputValue(input, "7");
+    act(() => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    // The editor already closed on Escape; a trailing blur must not resurrect a commit.
+    act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("blur with an invalid draft (negative) does NOT commit and closes the editor", () => {
+    const onCommit = vi.fn();
+    const { container } = mount(<InlineEditCount value={3} onCommit={onCommit} autoFocus />);
+    const input = container.querySelector("input");
+    setInputValue(input, "-5");
+    act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(container.querySelector("input")).toBeNull();
+  });
+
+  it("blur with the draft unchanged from the current value does NOT commit", () => {
+    const onCommit = vi.fn();
+    const { container } = mount(<InlineEditCount value={3} onCommit={onCommit} autoFocus />);
+    const input = container.querySelector("input");
+    // No edit — draft is still "3" (autoFocus seeds it from value).
+    act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("over-cap pending + blur elsewhere still discards (unchanged from before §A4)", () => {
+    const onCommit = vi.fn();
+    const { container } = mount(
+      <InlineEditCount value={3} onCommit={onCommit} max={6} autoFocus />,
+    );
+    const input = container.querySelector("input");
+    setInputValue(input, "12");
+    pressEnter(input);
+    expect(container.textContent).toContain("¿12 docs en 6 págs?");
+    act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(container.querySelector("input")).toBeNull();
+    expect(container.textContent).not.toContain("¿12 docs en 6 págs?");
+  });
+});
+
 describe("InlineEditCount — select-on-focus (triage D1)", () => {
   it("focusing the input selects its full contents", () => {
     const onCommit = vi.fn();

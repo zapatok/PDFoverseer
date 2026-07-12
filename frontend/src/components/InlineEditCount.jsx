@@ -95,12 +95,25 @@ export default function InlineEditCount({ value, onCommit, placeholder = null, a
             setOverCap(null);
           }
         }}
-        // Unconditional close, and a blur-to-elsewhere also DISCARDS a pending
-        // confirmation — else the editor + row would sit stuck open (worst in
-        // CategoryRow's long-lived rows) until someone came back to Escape it.
-        // Clicking Sí/No never blurs: their onMouseDown preventDefault keeps
-        // focus on the input, so this handler never races the buttons.
-        onBlur={() => { setEditing(false); setOverCap(null); }}
+        // §A4: blur commits a valid, changed draft — the same path as Enter —
+        // instead of silently discarding it. This matches OverridePanel,
+        // which autosaves on every keystroke; before this fix, the identical
+        // number behaved differently depending on WHERE it was edited.
+        // A pending over-cap confirmation still discards unconditionally on
+        // blur-to-elsewhere — else the editor + row would sit stuck open
+        // (worst in CategoryRow's long-lived rows) until someone came back to
+        // Escape it. Clicking Sí/No never blurs: their onMouseDown
+        // preventDefault keeps focus on the input, so this handler never
+        // races the buttons.
+        onBlur={() => {
+          if (overCap == null) {
+            const v = parseInt(draft, 10);
+            const validNumber = !Number.isNaN(v) && v >= 0 && (max === null || v <= max);
+            if (validNumber && v !== value) onCommit(v);
+          }
+          setEditing(false);
+          setOverCap(null);
+        }}
         className={`font-mono tabular-nums text-sm w-14 text-right text-po-text bg-po-bg border rounded px-1 focus-visible:outline-none ${
           invalid ? "border-po-error" : overCap != null ? "border-po-suspect-border" : "border-po-accent"
         }`}
