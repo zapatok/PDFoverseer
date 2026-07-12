@@ -43,6 +43,23 @@ export default function NotePanel({ hospital, sigla, cell, locked = false }) {
     if (saveStatus === "saving") setDirty(false);
   }, [saveStatus]);
 
+  // Identity change: this instance is NOT keyed by cell (DetailPanel reuses
+  // it across sigla/hospital switches), so `dirty` must die with the cell it
+  // was typed for — otherwise cell A's in-flight draft would keep rendering
+  // on cell B FOREVER (the steady-state resync above skips while dirty, and
+  // nothing else cleared it before this effect existed — reviewer-confirmed
+  // bug). Resync the draft from the NEW cell's value. The OLD cell's
+  // debounced save (if any) still lands correctly via its captured args,
+  // unaffected by resetting this instance's own flag. Mirrors OverridePanel's
+  // identical identity-change effect.
+  useEffect(() => {
+    setDirty(false);
+    setText(cell?.note ?? "");
+    // Deliberately NOT depending on cell — the steady-state resync above owns
+    // note updates for the SAME cell; this fires only on identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hospital, sigla]);
+
   // The cell identity travels as ARGS, not via the closure: the debounce hook
   // invokes the LATEST render's callback when the timer fires, so a closure
   // read of hospital/sigla would land a note typed on cell X into cell Y if
